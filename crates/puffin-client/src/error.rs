@@ -33,9 +33,6 @@ pub enum PypiClientError {
 
 impl PypiClientError {
     pub fn from_json_err(err: serde_json::Error, url: String) -> Self {
-        Self::BadJson {
-            source: err,
-            url: url.clone(),
-        }
+        Self::BadJson { source: err, url }
     }
 }

@@ -58,7 +58,7 @@ pub struct SimpleJson {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct File {
+pub(crate) struct File {
     core_metadata: Metadata,
     data_dist_info_metadata: Metadata,
     filename: String,
@@ -72,122 +72,27 @@ pub struct File {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Metadata {
+pub(crate) enum Metadata {
     Bool(bool),
     Hashes(Hashes),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Yanked {
+pub(crate) enum Yanked {
     Bool(bool),
     Reason(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Hashes {
+pub(crate) struct Hashes {
     sha256: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Meta {
+pub(crate) struct Meta {
     #[serde(rename = "_last-serial")]
     last_serial: i64,
     api_version: String,
-}
-
-
-/// The metadata for a single package, including the pubishing versions and their artifacts.
-///
-/// In npm, this is referred to as a "packument", which is a portmanteau of "package" and
-/// "document".
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PackageDocument {
-    pub meta: Meta,
-    pub artifacts: Vec<ArtifactInfo>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Meta {
-    pub version: String,
-}
-
-impl Default for Meta {
-    fn default() -> Self {
-        Self {
-            // According to the spec, clients SHOULD introspect each response for the repository
-            // version; if it doesn't exist, clients MUST assume that it is version 1.0.
-            version: "1.0".into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ArtifactInfo {
-    pub name: String,
-    pub url: Url,
-    pub hash: Option<String>,
-    pub requires_python: Option<String>,
-    pub dist_info_metadata: DistInfoMetadata,
-    pub yanked: Yanked,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Option<RawDistInfoMetadata>")]
-pub struct DistInfoMetadata {
-    pub available: bool,
-    pub hash: Option<String>,
-}
-
-impl From<Option<RawDistInfoMetadata>> for DistInfoMetadata {
-    fn from(maybe_raw: Option<RawDistInfoMetadata>) -> Self {
-        match maybe_raw {
-            None => Default::default(),
-            Some(raw) => match raw {
-                RawDistInfoMetadata::NoHashes(available) => Self {
-                    available,
-                    hash: None,
-                },
-                RawDistInfoMetadata::WithHashes(_) => Self {
-                    available: true,
-                    hash: None,
-                },
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum RawDistInfoMetadata {
-    NoHashes(bool),
-    WithHashes(HashMap<String, String>),
-}
-
-#[derive(Debug, Clone, Deserialize)]
-enum RawYanked {
-    NoReason(bool),
-    WithReason(String),
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "RawYanked")]
-pub struct Yanked {
-    pub yanked: bool,
-    pub reason: Option<String>,
-}
-
-impl From<RawYanked> for Yanked {
-    fn from(raw: RawYanked) -> Self {
-        match raw {
-            RawYanked::NoReason(yanked) => Self {
-                yanked,
-                reason: None,
-            },
-            RawYanked::WithReason(reason) => Self {
-                yanked: true,
-                reason: Some(reason),
-            },
-        }
-    }
 }

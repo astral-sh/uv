@@ -1,1 +1,4 @@
-flask==2.0
+flask
+black
+jinja2
+pyyaml

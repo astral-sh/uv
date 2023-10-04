@@ -20,7 +20,7 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
         let packument = client.simple(&requirement.name).await?;
         #[allow(clippy::print_stdout)]
         {
-            println!("{:#?}", packument);
+            println!("{packument:#?}");
             println!("{requirement:#?}");
         }
     }

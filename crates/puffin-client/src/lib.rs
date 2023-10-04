@@ -11,10 +11,6 @@ use url::Url;
 mod api;
 mod error;
 
-fn main() {
-    println!("Hello, world!");
-}
-
 #[derive(Debug, Clone)]
 pub struct PypiClientBuilder {
     registry: Url,
@@ -33,16 +29,19 @@ impl Default for PypiClientBuilder {
 }
 
 impl PypiClientBuilder {
+    #[must_use]
     pub fn registry(mut self, registry: Url) -> Self {
         self.registry = registry;
         self
     }
 
+    #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
         self
     }
 
+    #[must_use]
     pub fn cache(mut self, cache: impl AsRef<Path>) -> Self {
         self.cache = Some(PathBuf::from(cache.as_ref()));
         self
@@ -50,7 +49,7 @@ impl PypiClientBuilder {
 
     pub fn build(self) -> PypiClient {
         let client_raw = {
-            let mut client_core = ClientBuilder::new()
+            let client_core = ClientBuilder::new()
                 .user_agent("puffin")
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(60 * 5));
@@ -62,7 +61,7 @@ impl PypiClientBuilder {
         let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
 
         let mut client_builder =
-            reqwest_middleware::ClientBuilder::new(client_raw.clone()).with(retry_strategy);
+            reqwest_middleware::ClientBuilder::new(client_raw).with(retry_strategy);
 
         if let Some(path) = self.cache {
             client_builder = client_builder.with(Cache(HttpCache {
@@ -84,5 +83,3 @@ pub struct PypiClient {
     pub(crate) registry: Arc<Url>,
     pub(crate) client: ClientWithMiddleware,
 }
-
-impl PypiClient {}
