@@ -1,0 +1,35 @@
+---
+source: crates/puffin-requirements/src/lib.rs
+expression: "Requirements::from_str(r#\"flask==2.0\"#)?"
+---
+Requirements(
+    [
+        Requirement {
+            name: "flask",
+            extras: None,
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: Version {
+                                    epoch: 0,
+                                    release: [
+                                        2,
+                                        0,
+                                    ],
+                                    pre: None,
+                                    post: None,
+                                    dev: None,
+                                    local: None,
+                                },
+                            },
+                        ],
+                    ),
+                ),
+            ),
+            marker: None,
+        },
+    ],
+)
