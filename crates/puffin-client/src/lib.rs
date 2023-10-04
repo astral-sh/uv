@@ -9,6 +9,7 @@ use reqwest_retry::RetryTransientMiddleware;
 use url::Url;
 
 mod api;
+mod error;
 
 fn main() {
     println!("Hello, world!");

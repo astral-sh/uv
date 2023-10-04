@@ -1,62 +1,23 @@
-use crate::PypiClient;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use thiserror::Error;
 use url::Url;
 
-#[derive(Debug, Error)]
-pub enum PypiClientError {
-    /// An invalid URL was provided.
-    #[error(transparent)]
-    UrlParseError(#[from] url::ParseError),
-
-    /// The package was not found in the registry.
-    ///
-    /// Make sure the package name is spelled correctly and that you've
-    /// configured the right registry to fetch it from.
-    #[error("Package `{1}` was not found in registry {0}.")]
-    PackageNotFound(Url, String),
-
-    /// A generic request error happened while making a request. Refer to the
-    /// error message for more details.
-    #[error(transparent)]
-    RequestError(#[from] reqwest::Error),
-
-    /// A generic request middleware error happened while making a request.
-    /// Refer to the error message for more details.
-    #[error(transparent)]
-    RequestMiddlewareError(#[from] reqwest_middleware::Error),
-
-    #[error("Received some unexpected JSON. Unable to parse.")]
-    BadJson {
-        source: serde_json::Error,
-        url: String,
-    },
-}
-
-impl PypiClientError {
-    pub fn from_json_err(err: serde_json::Error, url: String) -> Self {
-        Self::BadJson {
-            source: err,
-            url: url.clone(),
-        }
-    }
-}
+use crate::error::PypiClientError;
+use crate::PypiClient;
 
 impl PypiClient {
     pub async fn simple(
         &self,
         package_name: impl AsRef<str>,
-    ) -> Result<PackageDocument, PypiClientError> {
+    ) -> Result<SimpleJson, PypiClientError> {
         // Format the URL for PyPI.
-        let mut url = self.registry.join("simple")?.join(package_name.as_ref())?;
+        let mut url = self.registry.join("simple")?;
+        url.path_segments_mut().unwrap().push(package_name.as_ref());
+        url.path_segments_mut().unwrap().push("");
         url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 
         // Fetch from the registry.
         let text = self.simple_impl(package_name, &url).await?;
-
-        // Parse.
         serde_json::from_str(&text)
             .map_err(move |e| PypiClientError::from_json_err(e, url.to_string()))
     }
@@ -86,6 +47,56 @@ impl PypiClient {
             .await?)
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimpleJson {
+    files: Vec<File>,
+    meta: Meta,
+    name: String,
+    versions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct File {
+    core_metadata: Metadata,
+    data_dist_info_metadata: Metadata,
+    filename: String,
+    hashes: Hashes,
+    requires_python: Option<String>,
+    size: i64,
+    upload_time: String,
+    url: String,
+    yanked: Yanked,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Metadata {
+    Bool(bool),
+    Hashes(Hashes),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Yanked {
+    Bool(bool),
+    Reason(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Hashes {
+    sha256: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Meta {
+    #[serde(rename = "_last-serial")]
+    last_serial: i64,
+    api_version: String,
+}
+
 
 /// The metadata for a single package, including the pubishing versions and their artifacts.
 ///
