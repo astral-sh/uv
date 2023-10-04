@@ -28,11 +28,12 @@ struct InstallArgs {
     src: PathBuf,
 }
 
-fn main() -> ExitCode {
+#[async_std::main]
+async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let result = match &cli.command {
-        Commands::Install(install) => commands::install(&install.src),
+        Commands::Install(install) => commands::install(&install.src).await,
     };
 
     match result {

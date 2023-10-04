@@ -7,9 +7,14 @@ edition = "2021"
 
 [dependencies]
 puffin-requirements = { path = "../puffin-requirements" }
+puffin-client = { path = "../puffin-client" }
 
 anyhow = "1.0.75"
 clap = { version = "4.4.6", features = ["derive"] }
 colored = { version = "2.0.4" }
 memchr = { version = "2.6.4" }
-pep508_rs = { version = "0.2.3" }
+async-std = { version = "1.12.0", features = [
+    "attributes",
+    "tokio1",
+    "unstable",
+] }
