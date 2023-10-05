@@ -6,10 +6,11 @@ use anyhow::Result;
 use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, StringVersion, VersionOrUrl};
+use pep508_rs::{Requirement, VersionOrUrl};
 use tracing::debug;
 
 use puffin_client::{File, PypiClientBuilder, SimpleJson};
+use puffin_interpreter::PythonExecutable;
 use puffin_requirements::metadata::Metadata21;
 use puffin_requirements::package_name::PackageName;
 use puffin_requirements::wheel::WheelName;
@@ -29,26 +30,18 @@ enum Response {
 }
 
 pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
-    // TODO(charlie): Fetch from the environment.
-    let env = MarkerEnvironment {
-        implementation_name: String::new(),
-        implementation_version: StringVersion::from_str("3.10.0").unwrap(),
-        os_name: String::new(),
-        platform_machine: String::new(),
-        platform_python_implementation: String::new(),
-        platform_release: String::new(),
-        platform_system: String::new(),
-        platform_version: String::new(),
-        python_full_version: StringVersion::from_str("3.10.0").unwrap(),
-        python_version: StringVersion::from_str("3.10.0").unwrap(),
-        sys_platform: String::new(),
-    };
-
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;
 
     // Parse the `requirements.txt` into a list of requirements.
     let requirements = puffin_requirements::Requirements::from_str(&requirements_txt)?;
+
+    // Detect the current Python interpreter.
+    let python = PythonExecutable::from_env()?;
+    debug!(
+        "Using Python interpreter: {}",
+        python.executable().display()
+    );
 
     // Instantiate a client.
     let pypi_client = PypiClientBuilder::default().build();
@@ -130,9 +123,10 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
 
                     // Enqueue its dependencies.
                     for dependency in metadata.requires_dist {
-                        if !dependency
-                            .evaluate_markers(&env, requirement.extras.clone().unwrap_or_default())
-                        {
+                        if !dependency.evaluate_markers(
+                            python.markers(),
+                            requirement.extras.clone().unwrap_or_default(),
+                        ) {
                             debug!("--> ignoring {dependency} due to environment mismatch");
                             continue;
                         }

@@ -1,0 +1,16 @@
+[package]
+name = "puffin-interpreter"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { version = "1.0.75" }
+pep508_rs = { version = "0.2.3", features = ["serde"] }
+serde_json = { version = "1.0.107" }
+tracing = { version = "0.1.37" }
