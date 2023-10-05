@@ -77,7 +77,7 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
 
     // Push all the requirements into the package sink.
     let mut in_flight: HashSet<PackageName> = HashSet::with_capacity(requirements.len());
-    for requirement in requirements.iter() {
+    for requirement in &*requirements {
         debug!("--> adding root dependency: {}", requirement);
         package_sink.unbounded_send(Request::Package(requirement.clone()))?;
         in_flight.insert(PackageName::normalize(&requirement.name));
