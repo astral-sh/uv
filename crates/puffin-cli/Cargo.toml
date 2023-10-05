@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-puffin-requirements = { path = "../puffin-requirements" }
 puffin-client = { path = "../puffin-client" }
+puffin-requirements = { path = "../puffin-requirements" }
 
-anyhow = "1.0.75"
+anyhow = { version = "1.0.75" }
 clap = { version = "4.4.6", features = ["derive"] }
 colored = { version = "2.0.4" }
 memchr = { version = "2.6.4" }
@@ -18,10 +18,9 @@ async-std = { version = "1.12.0", features = [
     "tokio1",
     "unstable",
 ] }
-futures = "0.3.28"
-pep508_rs = "0.2.3"
-pep440_rs = "0.3.12"
-tracing = "0.1.37"
-tracing-tree = "0.2.5"
+futures = { version = "0.3.28" }
+pep508_rs = { version = "0.2.3" }
+pep440_rs = { version = "0.3.12" }
+tracing = { version = "0.1.37" }
+tracing-tree = { version = "0.2.5" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-indicatif = "0.17.7"
