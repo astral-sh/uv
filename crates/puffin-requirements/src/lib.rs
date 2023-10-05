@@ -1,12 +1,14 @@
-pub mod wheel;
 use std::borrow::Cow;
-
 use std::ops::Deref;
 use std::str::FromStr;
 
 use anyhow::Result;
 use memchr::{memchr2, memchr_iter};
-pub use pep508_rs::{Pep508Error, Requirement};
+use pep508_rs::{Pep508Error, Requirement};
+
+pub mod metadata;
+pub mod package_name;
+pub mod wheel;
 
 #[derive(Debug)]
 pub struct Requirements(Vec<Requirement>);
@@ -196,10 +198,10 @@ fn find_newline(text: &str) -> Option<(usize, usize)> {
 mod tests {
     use std::str::FromStr;
 
+    use anyhow::Result;
     use insta::assert_debug_snapshot;
 
     use crate::Requirements;
-    use anyhow::Result;
 
     #[test]
     fn simple() -> Result<()> {

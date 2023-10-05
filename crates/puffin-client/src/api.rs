@@ -2,8 +2,11 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use puffin_requirements::metadata::Metadata21;
+use puffin_requirements::package_name::PackageName;
+
+use crate::client::PypiClient;
 use crate::error::PypiClientError;
-use crate::PypiClient;
 
 impl PypiClient {
     pub async fn simple(
@@ -12,7 +15,9 @@ impl PypiClient {
     ) -> Result<SimpleJson, PypiClientError> {
         // Format the URL for PyPI.
         let mut url = self.registry.join("simple")?;
-        url.path_segments_mut().unwrap().push(package_name.as_ref());
+        url.path_segments_mut()
+            .unwrap()
+            .push(PackageName::normalize(&package_name).as_ref());
         url.path_segments_mut().unwrap().push("");
         url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 
@@ -38,6 +43,44 @@ impl PypiClient {
                     PypiClientError::PackageNotFound(
                         (*self.registry).clone(),
                         package_name.as_ref().to_string(),
+                    )
+                } else {
+                    PypiClientError::RequestError(err)
+                }
+            })?
+            .text()
+            .await?)
+    }
+
+    pub async fn file(&self, file: &File) -> Result<Metadata21, PypiClientError> {
+        // Send to the proxy.
+        let url = self.proxy.join(
+            file.url
+                .strip_prefix("https://files.pythonhosted.org/")
+                .unwrap(),
+        )?;
+
+        // Fetch from the registry.
+        let text = self.file_impl(&file.filename, &url).await?;
+        Metadata21::parse(text.as_bytes()).map_err(std::convert::Into::into)
+    }
+
+    async fn file_impl(
+        &self,
+        filename: impl AsRef<str>,
+        url: &Url,
+    ) -> Result<String, PypiClientError> {
+        Ok(self
+            .client
+            .get(url.clone())
+            .send()
+            .await?
+            .error_for_status()
+            .map_err(|err| {
+                if err.status() == Some(StatusCode::NOT_FOUND) {
+                    PypiClientError::FileNotFound(
+                        (*self.registry).clone(),
+                        filename.as_ref().to_string(),
                     )
                 } else {
                     PypiClientError::RequestError(err)

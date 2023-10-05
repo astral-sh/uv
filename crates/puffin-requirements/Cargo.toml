@@ -6,15 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = { version = "1.0.75" }
 clap = { version = "4.4.6", features = ["derive"] }
 colored = { version = "2.0.4" }
-insta = "1.33.0"
+insta = { version = "1.33.0" }
+mailparse = { version = "0.14.0" }
 memchr = { version = "2.6.4" }
-once_cell = "1.18.0"
-pep440_rs = "0.3.12"
-pep508_rs = { version = "0.2.3" }
-regex = "1.9.6"
+once_cell = { version = "1.18.0" }
+pep440_rs = { version = "0.3.12", features = ["serde"] }
+pep508_rs = { version = "0.2.3", features = ["serde"] }
+regex = { version = "1.9.6" }
+rfc2047-decoder = { version = "1.0.1" }
+serde = { version = "1.0.188" }
+thiserror = { version = "1.0.49" }
 
 [dev-dependencies]
 criterion = "0.5.1"

@@ -1,3 +1,4 @@
+use puffin_requirements::metadata;
 use thiserror::Error;
 use url::Url;
 
@@ -14,6 +15,14 @@ pub enum PypiClientError {
     #[error("Package `{1}` was not found in registry {0}.")]
     PackageNotFound(Url, String),
 
+    /// The metadata file could not be parsed.
+    #[error(transparent)]
+    MetadataParseError(#[from] metadata::Error),
+
+    /// The metadata file was not found in the registry.
+    #[error("File `{1}` was not found in registry {0}.")]
+    FileNotFound(Url, String),
+
     /// A generic request error happened while making a request. Refer to the
     /// error message for more details.
     #[error(transparent)]
@@ -24,7 +33,7 @@ pub enum PypiClientError {
     #[error(transparent)]
     RequestMiddlewareError(#[from] reqwest_middleware::Error),
 
-    #[error("Received some unexpected JSON. Unable to parse.")]
+    #[error("Received some unexpected JSON: {source}")]
     BadJson {
         source: serde_json::Error,
         url: String,

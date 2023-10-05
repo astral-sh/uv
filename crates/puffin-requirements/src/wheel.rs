@@ -46,19 +46,19 @@ impl FromStr for WheelName {
             build_name = captures.get(2).unwrap().as_str().into();
         } else {
             build_number = None;
-            build_name = "".to_owned();
+            build_name = String::new();
         }
 
         let [distribution, version, py_tags, abi_tags, arch_tags] = pieces.as_slice() else {
             bail!("can't parse binary name {s:?}");
         };
 
-        let distribution = distribution.to_string();
+        let distribution = (*distribution).to_string();
         let version = Version::from_str(version)
             .map_err(|e| anyhow!("failed to parse version {:?} from {:?}: {}", version, s, e))?;
-        let py_tags = py_tags.split('.').map(|tag| tag.into()).collect();
-        let abi_tags = abi_tags.split('.').map(|tag| tag.into()).collect();
-        let arch_tags = arch_tags.split('.').map(|tag| tag.into()).collect();
+        let py_tags = py_tags.split('.').map(std::convert::Into::into).collect();
+        let abi_tags = abi_tags.split('.').map(std::convert::Into::into).collect();
+        let arch_tags = arch_tags.split('.').map(std::convert::Into::into).collect();
 
         Ok(Self {
             distribution,

@@ -20,3 +20,7 @@ async-std = { version = "1.12.0", features = [
 ] }
 futures = "0.3.28"
 pep508_rs = "0.2.3"
+pep440_rs = "0.3.12"
+tracing = "0.1.37"
+tracing-tree = "0.2.5"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

@@ -7,6 +7,7 @@ use colored::Colorize;
 use crate::commands::ExitStatus;
 
 mod commands;
+mod logging;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -31,6 +32,8 @@ struct InstallArgs {
 #[async_std::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+
+    let _ = logging::setup_logging();
 
     let result = match &cli.command {
         Commands::Install(install) => commands::install(&install.src).await,
