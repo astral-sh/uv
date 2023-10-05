@@ -18,3 +18,4 @@ async-std = { version = "1.12.0", features = [
     "tokio1",
     "unstable",
 ] }
+futures = "0.3.28"

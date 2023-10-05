@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use memchr::{memchr2, memchr_iter};
-use pep508_rs::{Pep508Error, Requirement};
+pub use pep508_rs::{Pep508Error, Requirement};
 
 #[derive(Debug)]
 pub struct Requirements(Vec<Requirement>);
