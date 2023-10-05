@@ -10,5 +10,3 @@ documentation = "https://astral.sh"
 repository = "https://github.com/astral-sh/puffin"
 authors = ["Astral Software Inc. <hey@astral.sh>"]
 license = "MIT OR Apache-2.0"
-
-[workspace.dependencies]
