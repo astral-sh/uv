@@ -1,4 +1,4 @@
-pub use api::SimpleJson;
+pub use api::{File, SimpleJson};
 pub use client::PypiClientBuilder;
 
 mod api;

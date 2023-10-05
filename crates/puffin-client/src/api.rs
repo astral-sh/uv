@@ -1,5 +1,8 @@
+use std::fmt::Debug;
+
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tracing::trace;
 use url::Url;
 
 use puffin_requirements::metadata::Metadata21;
@@ -13,6 +16,8 @@ impl PypiClient {
         &self,
         package_name: impl AsRef<str>,
     ) -> Result<SimpleJson, PypiClientError> {
+        let start = std::time::Instant::now();
+
         // Format the URL for PyPI.
         let mut url = self.registry.join("simple")?;
         url.path_segments_mut()
@@ -21,10 +26,20 @@ impl PypiClient {
         url.path_segments_mut().unwrap().push("");
         url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 
+        trace!(
+            "fetching metadata for {} from {}",
+            package_name.as_ref(),
+            url
+        );
+
         // Fetch from the registry.
-        let text = self.simple_impl(package_name, &url).await?;
-        serde_json::from_str(&text)
-            .map_err(move |e| PypiClientError::from_json_err(e, url.to_string()))
+        let text = self.simple_impl(&package_name, &url).await?;
+        let payload = serde_json::from_str(&text)
+            .map_err(move |e| PypiClientError::from_json_err(e, "".to_string()));
+
+        trace!("fetched metadata for {} in {:?}", url, start.elapsed());
+
+        payload
     }
 
     async fn simple_impl(
@@ -35,6 +50,7 @@ impl PypiClient {
         Ok(self
             .client
             .get(url.clone())
+            .header("Accept-Encoding", "gzip")
             .send()
             .await?
             .error_for_status()
@@ -52,7 +68,9 @@ impl PypiClient {
             .await?)
     }
 
-    pub async fn file(&self, file: &File) -> Result<Metadata21, PypiClientError> {
+    pub async fn file(&self, file: File) -> Result<Metadata21, PypiClientError> {
+        let start = std::time::Instant::now();
+
         // Send to the proxy.
         let url = self.proxy.join(
             file.url
@@ -60,9 +78,15 @@ impl PypiClient {
                 .unwrap(),
         )?;
 
+        trace!("fetching file {} from {}", file.filename, url);
+
         // Fetch from the registry.
         let text = self.file_impl(&file.filename, &url).await?;
-        Metadata21::parse(text.as_bytes()).map_err(std::convert::Into::into)
+        let payload = Metadata21::parse(text.as_bytes()).map_err(std::convert::Into::into);
+
+        trace!("fetched file {} in {:?}", url, start.elapsed());
+
+        payload
     }
 
     async fn file_impl(
@@ -91,7 +115,7 @@ impl PypiClient {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleJson {
     pub files: Vec<File>,
     pub meta: Meta,
@@ -99,7 +123,7 @@ pub struct SimpleJson {
     pub versions: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {
     pub core_metadata: Metadata,
@@ -113,26 +137,26 @@ pub struct File {
     pub yanked: Yanked,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Metadata {
     Bool(bool),
     Hashes(Hashes),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Yanked {
     Bool(bool),
     Reason(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hashes {
     pub sha256: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Meta {
     #[serde(rename = "_last-serial")]
