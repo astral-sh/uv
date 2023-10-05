@@ -24,3 +24,4 @@ pep440_rs = "0.3.12"
 tracing = "0.1.37"
 tracing-tree = "0.2.5"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+indicatif = "0.17.7"

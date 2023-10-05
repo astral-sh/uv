@@ -35,7 +35,7 @@ impl PypiClient {
         // Fetch from the registry.
         let text = self.simple_impl(&package_name, &url).await?;
         let payload = serde_json::from_str(&text)
-            .map_err(move |e| PypiClientError::from_json_err(e, "".to_string()));
+            .map_err(move |e| PypiClientError::from_json_err(e, String::new()));
 
         trace!("fetched metadata for {} in {:?}", url, start.elapsed());
 

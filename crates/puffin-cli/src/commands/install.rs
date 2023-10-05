@@ -13,14 +13,16 @@ use puffin_client::{File, PypiClientBuilder, SimpleJson};
 use puffin_requirements::metadata::Metadata21;
 use puffin_requirements::package_name::PackageName;
 use puffin_requirements::wheel::WheelName;
-
+use indicatif::{ProgressBar, ProgressStyle};
 use crate::commands::ExitStatus;
 
+#[derive(Debug)]
 enum Request {
     Package(Requirement),
     Version(Requirement, File),
 }
 
+#[derive(Debug)]
 enum Response {
     Package(SimpleJson, Requirement),
     Version(Metadata21, Requirement),
@@ -66,7 +68,7 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
             ),
             Request::Version(requirement, file) => Either::Right(
                 proxy_client
-                    .file(file.clone())
+                    .file(file)
                     .map_ok(move |metadata| Response::Version(metadata, requirement)),
             ),
         })
@@ -83,6 +85,10 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
 
     // Resolve the requirements.
     let mut resolution: HashMap<PackageName, Version> = HashMap::with_capacity(requirements.len());
+
+    let spinner_style = ProgressStyle::with_template("{spinner} {wide_bar} [{pos}/{len}] {msg}").unwrap();
+    let bar = ProgressBar::new(8);
+    bar.set_style(spinner_style);
 
     while let Some(chunk) = package_stream.next().await {
         for result in chunk {
@@ -125,6 +131,7 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
                     let normalized_name = PackageName::normalize(&requirement.name);
                     in_flight.remove(&normalized_name);
                     resolution.insert(normalized_name, metadata.version);
+                    bar.inc(1);
 
                     // Enqueue its dependencies.
                     for dependency in metadata.requires_dist {
