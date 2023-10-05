@@ -29,7 +29,7 @@ enum Response {
     Version(Metadata21, Requirement),
 }
 
-pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
+pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;
 
@@ -44,8 +44,13 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
     );
 
     // Instantiate a client.
-    let pypi_client = PypiClientBuilder::default().build();
-    let proxy_client = PypiClientBuilder::default().build();
+    let pypi_client = {
+        let mut pypi_client = PypiClientBuilder::default();
+        if let Some(cache) = cache {
+            pypi_client = pypi_client.cache(cache);
+        }
+        pypi_client.build()
+    };
 
     // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
     // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
@@ -60,7 +65,7 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
                     .map_ok(move |metadata| Response::Package(metadata, requirement)),
             ),
             Request::Version(requirement, file) => Either::Right(
-                proxy_client
+                pypi_client
                     .file(file)
                     .map_ok(move |metadata| Response::Version(metadata, requirement)),
             ),

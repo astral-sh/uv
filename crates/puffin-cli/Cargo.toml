@@ -23,3 +23,4 @@ pep440_rs = { version = "0.3.12" }
 tracing = { version = "0.1.37" }
 tracing-tree = { version = "0.2.5" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+directories = "5.0.1"

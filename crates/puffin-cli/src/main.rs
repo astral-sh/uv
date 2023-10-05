@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
+use directories::ProjectDirs;
 
 use crate::commands::ExitStatus;
 
@@ -27,6 +28,10 @@ enum Commands {
 struct InstallArgs {
     /// Path to the `requirements.text` file to install.
     src: PathBuf,
+
+    /// Avoid reading from or writing to the cache.
+    #[arg(long)]
+    no_cache: bool,
 }
 
 #[async_std::main]
@@ -35,8 +40,18 @@ async fn main() -> ExitCode {
 
     let _ = logging::setup_logging();
 
+    let dirs = ProjectDirs::from("", "", "puffin");
+
     let result = match &cli.command {
-        Commands::Install(install) => commands::install(&install.src).await,
+        Commands::Install(install) => {
+            commands::install(
+                &install.src,
+                dirs.as_ref()
+                    .map(directories::ProjectDirs::cache_dir)
+                    .filter(|_| !install.no_cache),
+            )
+            .await
+        }
     };
 
     match result {

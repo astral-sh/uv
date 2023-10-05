@@ -16,7 +16,8 @@ serde = { version = "1.0.188" }
 thiserror = { version = "1.0.49" }
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = { version = "0.5.1" }
+insta = { version = "1.33.0" }
 
 [[bench]]
 name = "parser"

@@ -16,8 +16,6 @@ impl PypiClient {
         &self,
         package_name: impl AsRef<str>,
     ) -> Result<SimpleJson, PypiClientError> {
-        let start = std::time::Instant::now();
-
         // Format the URL for PyPI.
         let mut url = self.registry.join("simple")?;
         url.path_segments_mut()
@@ -34,12 +32,8 @@ impl PypiClient {
 
         // Fetch from the registry.
         let text = self.simple_impl(&package_name, &url).await?;
-        let payload = serde_json::from_str(&text)
-            .map_err(move |e| PypiClientError::from_json_err(e, String::new()));
-
-        trace!("fetched metadata for {} in {:?}", url, start.elapsed());
-
-        payload
+        serde_json::from_str(&text)
+            .map_err(move |e| PypiClientError::from_json_err(e, String::new()))
     }
 
     async fn simple_impl(
@@ -69,8 +63,6 @@ impl PypiClient {
     }
 
     pub async fn file(&self, file: File) -> Result<Metadata21, PypiClientError> {
-        let start = std::time::Instant::now();
-
         // Send to the proxy.
         let url = self.proxy.join(
             file.url
@@ -82,11 +74,7 @@ impl PypiClient {
 
         // Fetch from the registry.
         let text = self.file_impl(&file.filename, &url).await?;
-        let payload = Metadata21::parse(text.as_bytes()).map_err(std::convert::Into::into);
-
-        trace!("fetched file {} in {:?}", url, start.elapsed());
-
-        payload
+        Metadata21::parse(text.as_bytes()).map_err(std::convert::Into::into)
     }
 
     async fn file_impl(
