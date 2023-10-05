@@ -19,3 +19,4 @@ async-std = { version = "1.12.0", features = [
     "unstable",
 ] }
 futures = "0.3.28"
+pep508_rs = "0.2.3"

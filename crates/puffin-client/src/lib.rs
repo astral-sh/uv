@@ -11,6 +11,8 @@ use url::Url;
 mod api;
 mod error;
 
+pub use api::SimpleJson;
+
 #[derive(Debug, Clone)]
 pub struct PypiClientBuilder {
     registry: Url,

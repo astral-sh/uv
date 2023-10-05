@@ -1,4 +1,6 @@
+pub mod wheel;
 use std::borrow::Cow;
+
 use std::ops::Deref;
 use std::str::FromStr;
 

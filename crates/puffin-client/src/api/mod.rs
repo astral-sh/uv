@@ -50,49 +50,49 @@ impl PypiClient {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SimpleJson {
-    files: Vec<File>,
-    meta: Meta,
-    name: String,
-    versions: Vec<String>,
+    pub files: Vec<File>,
+    pub meta: Meta,
+    pub name: String,
+    pub versions: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct File {
-    core_metadata: Metadata,
-    data_dist_info_metadata: Metadata,
-    filename: String,
-    hashes: Hashes,
-    requires_python: Option<String>,
-    size: i64,
-    upload_time: String,
-    url: String,
-    yanked: Yanked,
+pub struct File {
+    pub core_metadata: Metadata,
+    pub data_dist_info_metadata: Metadata,
+    pub filename: String,
+    pub hashes: Hashes,
+    pub requires_python: Option<String>,
+    pub size: i64,
+    pub upload_time: String,
+    pub url: String,
+    pub yanked: Yanked,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum Metadata {
+pub enum Metadata {
     Bool(bool),
     Hashes(Hashes),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum Yanked {
+pub enum Yanked {
     Bool(bool),
     Reason(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Hashes {
-    sha256: String,
+pub struct Hashes {
+    pub sha256: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct Meta {
+pub struct Meta {
     #[serde(rename = "_last-serial")]
-    last_serial: i64,
-    api_version: String,
+    pub last_serial: i64,
+    pub api_version: String,
 }

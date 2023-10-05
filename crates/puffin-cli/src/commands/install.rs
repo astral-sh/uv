@@ -3,8 +3,10 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use futures::{StreamExt, TryFutureExt};
+use pep508_rs::VersionOrUrl;
 
-use puffin_client::PypiClientBuilder;
+use puffin_client::{PypiClientBuilder, SimpleJson};
+use puffin_requirements::wheel::WheelName;
 use puffin_requirements::Requirement;
 
 use crate::commands::ExitStatus;
@@ -26,7 +28,7 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
     let mut package_stream = package_stream
         .map(|requirement: Requirement| {
             client
-                .simple(requirement.clone().name)
+                .simple(requirement.name.clone())
                 .map_ok(move |metadata| (metadata, requirement))
         })
         .buffer_unordered(32)
@@ -42,11 +44,33 @@ pub(crate) async fn install(src: &Path) -> Result<ExitStatus> {
     while let Some(chunk) = package_stream.next().await {
         in_flight -= chunk.len();
         for result in chunk {
-            let (metadata, requirement) = result?;
+            let (metadata, requirement): (SimpleJson, Requirement) = result?;
+
+            // TODO(charlie): Support URLs. Right now, we treat a URL as an unpinned dependency.
+            let specifiers = requirement.version_or_url.and_then(|version_or_url| {
+                match version_or_url {
+                    VersionOrUrl::VersionSpecifier(specifiers) => Some(specifiers),
+                    VersionOrUrl::Url(_) => None,
+                }
+            });
+
+            // Pick a version that satisfies the requirement.
+            let Some(file) = metadata.files.iter().rev().find(|file| {
+                // We only support wheels for now.
+                let Ok(name) = WheelName::from_str(file.filename.as_str()) else {
+                    return false;
+                };
+
+                specifiers
+                    .iter()
+                    .all(|specifier| specifier.contains(&name.version))
+            }) else {
+                continue;
+            };
+
             #[allow(clippy::print_stdout)]
             {
-                println!("{metadata:#?}");
-                println!("{requirement:#?}");
+                println!("{}: {:?}", requirement.name, file);
             }
         }
 

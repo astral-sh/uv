@@ -1,4 +1,1 @@
 flask
-black
-jinja2
-pyyaml
