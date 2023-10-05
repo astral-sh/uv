@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.71"
+rust-version = "1.72"
 homepage = "https://astral.sh"
 documentation = "https://astral.sh"
 repository = "https://github.com/astral-sh/puffin"

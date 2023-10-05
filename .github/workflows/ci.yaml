@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  cargo-fmt:
+    name: "cargo fmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup component add rustfmt
+      - name: "rustfmt"
+        run: cargo fmt --all --check
+
+  cargo-clippy:
+    name: "cargo clippy"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: |
+          rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: "Clippy"
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  cargo-test:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
+    name: "cargo test | ${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup show
+      - name: "Install cargo insta"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-insta
+      - uses: Swatinem/rust-cache@v2
+      - name: "Tests (Ubuntu)"
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo insta test --all --all-features --unreferenced reject
+      - name: "Tests (Windows)"
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
+        run: cargo insta test --all --all-features --unreferenced reject
+      - run: cargo doc --all --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"

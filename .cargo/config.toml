@@ -1,0 +1,33 @@
+[target.'cfg(all())']
+rustflags = [
+  # CLIPPY LINT SETTINGS
+  # This is a workaround to configure lints for the entire workspace, pending the ability to configure this via TOML.
+  # See: `https://github.com/rust-lang/cargo/issues/5034`
+  #      `https://github.com/EmbarkStudios/rust-ecosystem/issues/22#issuecomment-947011395`
+  "-Dunsafe_code",
+  "-Wclippy::pedantic",
+  # Allowed pedantic lints
+  "-Wclippy::char_lit_as_u8",
+  "-Aclippy::collapsible_else_if",
+  "-Aclippy::collapsible_if",
+  "-Aclippy::implicit_hasher",
+  "-Aclippy::match_same_arms",
+  "-Aclippy::missing_errors_doc",
+  "-Aclippy::missing_panics_doc",
+  "-Aclippy::module_name_repetitions",
+  "-Aclippy::must_use_candidate",
+  "-Aclippy::similar_names",
+  "-Aclippy::too_many_lines",
+  # Disallowed restriction lints
+  "-Wclippy::print_stdout",
+  "-Wclippy::print_stderr",
+  "-Wclippy::dbg_macro",
+  "-Wclippy::empty_drop",
+  "-Wclippy::empty_structs_with_brackets",
+  "-Wclippy::exit",
+  "-Wclippy::get_unwrap",
+  "-Wclippy::rc_buffer",
+  "-Wclippy::rc_mutex",
+  "-Wclippy::rest_pat_in_fully_bound_structs",
+  "-Wunreachable_pub"
+]
