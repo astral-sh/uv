@@ -1,6 +1,7 @@
-use puffin_requirements::metadata;
 use thiserror::Error;
 use url::Url;
+
+use puffin_package::metadata;
 
 #[derive(Debug, Error)]
 pub enum PypiClientError {

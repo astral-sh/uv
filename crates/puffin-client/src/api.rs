@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use tracing::trace;
 use url::Url;
 
-use puffin_requirements::metadata::Metadata21;
-use puffin_requirements::package_name::PackageName;
+use puffin_package::metadata::Metadata21;
+use puffin_package::package_name::PackageName;
 
 use crate::client::PypiClient;
 use crate::error::PypiClientError;

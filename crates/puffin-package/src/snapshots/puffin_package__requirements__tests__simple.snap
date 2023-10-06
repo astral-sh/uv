@@ -1,5 +1,5 @@
 ---
-source: crates/puffin-requirements/src/lib.rs
+source: crates/puffin-package/src/requirements.rs
 expression: "Requirements::from_str(r#\"flask==2.0\"#)?"
 ---
 Requirements(

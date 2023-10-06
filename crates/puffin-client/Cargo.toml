@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-puffin-requirements = { path = "../puffin-requirements" }
+puffin-package = { path = "../puffin-package" }
 
 http-cache-reqwest = { version = "0.11.3" }
 reqwest = { version = "0.11.22", features = ["json", "gzip", "brotli"] }
