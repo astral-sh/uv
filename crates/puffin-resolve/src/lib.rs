@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -9,7 +9,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use tracing::debug;
 
-use puffin_client::{File, PypiClient, PypiClientBuilder, SimpleJson};
+use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
@@ -20,7 +20,7 @@ use puffin_platform::tags::Tags;
 pub struct Resolution(HashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
-    pub fn iter(&self) -> impl Iterator<Item=(&PackageName, &PinnedPackage)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
         self.0.iter()
     }
 }
@@ -32,6 +32,10 @@ pub struct PinnedPackage {
 }
 
 impl PinnedPackage {
+    pub fn filename(&self) -> &str {
+        &self.file.filename
+    }
+
     pub fn url(&self) -> &str {
         &self.file.url
     }
@@ -48,7 +52,6 @@ pub async fn resolve(
     tags: &Tags,
     client: &PypiClient,
 ) -> Result<Resolution> {
-
     // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
     // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
     let (package_sink, package_stream) = futures::channel::mpsc::unbounded();

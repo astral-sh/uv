@@ -30,7 +30,9 @@ pub use wheel_tags::{Arch, CompatibleTags, Os, WheelFilename};
 mod install_location;
 #[cfg(feature = "python_bindings")]
 mod python_bindings;
+#[allow(clippy::all)]
 mod wheel;
+#[allow(clippy::all)]
 mod wheel_tags;
 
 #[derive(Error, Debug)]

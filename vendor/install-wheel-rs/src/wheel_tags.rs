@@ -130,7 +130,7 @@ impl Deref for CompatibleTags {
     }
 }
 
-/// Returns the compatible tags in a (python_tag, abi_tag, platform_tag) format, ordered from
+/// Returns the compatible tags in a (`python_tag`, `abi_tag`, `platform_tag`) format, ordered from
 /// highest precedence to lowest precedence
 impl CompatibleTags {
     /// Compatible tags for the current operating system and architecture
@@ -248,8 +248,7 @@ impl Os {
                 // runs `ldd --version`
                 let version = glibc_version::get_version().map_err(|err| {
                     Error::OsVersionDetection(format!(
-                        "Failed to determine glibc version with `ldd --version`: {}",
-                        err
+                        "Failed to determine glibc version with `ldd --version`: {err}"
                     ))
                 })?;
                 Os::Manylinux {
@@ -321,8 +320,7 @@ impl Os {
             },
             unsupported => {
                 return Err(Error::OsVersionDetection(format!(
-                    "The operating system {:?} is not supported",
-                    unsupported
+                    "The operating system {unsupported:?} is not supported"
                 )))
             }
         };
@@ -386,8 +384,7 @@ impl Arch {
             target_lexicon::Architecture::S390x => Arch::S390X,
             unsupported => {
                 return Err(Error::OsVersionDetection(format!(
-                    "The architecture {} is not supported",
-                    unsupported
+                    "The architecture {unsupported} is not supported"
                 )));
             }
         };
@@ -473,7 +470,7 @@ fn find_libc() -> Result<PathBuf, Error> {
     let buffer = fs::read("/bin/ls")?;
     let error_str = "Couldn't parse /bin/ls for detecting the ld version";
     let elf = Elf::parse(&buffer)
-        .map_err(|err| Error::OsVersionDetection(format!("{}: {}", error_str, err)))?;
+        .map_err(|err| Error::OsVersionDetection(format!("{error_str}: {err}")))?;
     if let Some(elf_interpreter) = elf.interpreter {
         Ok(PathBuf::from(elf_interpreter))
     } else {
@@ -483,9 +480,9 @@ fn find_libc() -> Result<PathBuf, Error> {
 
 /// Read the musl version from libc library's output. Taken from maturin
 ///
-/// The libc library should output something like this to stderr::
+/// The libc library should output something like this to `stderr::`
 ///
-/// musl libc (x86_64)
+/// musl libc (`x86_64`)
 /// Version 1.2.2
 /// Dynamic Program Loader
 fn get_musl_version(ld_path: impl AsRef<Path>) -> std::io::Result<Option<(u16, u16)>> {
@@ -507,7 +504,7 @@ fn get_musl_version(ld_path: impl AsRef<Path>) -> std::io::Result<Option<(u16, u
 
 /// Returns the compatible platform tags from highest precedence to lowest precedence
 ///
-/// Examples: manylinux_2_17, macosx_11_0_arm64, win_amd64
+/// Examples: `manylinux_2_17`, `macosx_11_0_arm64`, `win_amd64`
 ///
 /// We have two cases: Actual platform specific tags (including "merged" tags such as universal2)
 /// and "any".
@@ -522,16 +519,16 @@ fn compatible_platform_tags(os: &Os, arch: &Arch) -> Result<Vec<String>, Error> 
             platform_tags.extend(
                 (arch.get_minimum_manylinux_minor()..=minor)
                     .rev()
-                    .map(|minor| format!("manylinux_{}_{}_{}", major, minor, arch)),
+                    .map(|minor| format!("manylinux_{major}_{minor}_{arch}")),
             );
             if (arch.get_minimum_manylinux_minor()..=minor).contains(&17) {
-                platform_tags.push(format!("manylinux2014_{}", arch))
+                platform_tags.push(format!("manylinux2014_{arch}"));
             }
             if (arch.get_minimum_manylinux_minor()..=minor).contains(&12) {
-                platform_tags.push(format!("manylinux2010_{}", arch))
+                platform_tags.push(format!("manylinux2010_{arch}"));
             }
             if (arch.get_minimum_manylinux_minor()..=minor).contains(&5) {
-                platform_tags.push(format!("manylinux1_{}", arch))
+                platform_tags.push(format!("manylinux1_{arch}"));
             }
             platform_tags
         }
@@ -541,7 +538,7 @@ fn compatible_platform_tags(os: &Os, arch: &Arch) -> Result<Vec<String>, Error> 
             platform_tags.extend(
                 (1..=minor)
                     .rev()
-                    .map(|minor| format!("musllinux_{}_{}_{}", major, minor, arch)),
+                    .map(|minor| format!("musllinux_{major}_{minor}_{arch}")),
             );
             platform_tags
         }
@@ -554,8 +551,7 @@ fn compatible_platform_tags(os: &Os, arch: &Arch) -> Result<Vec<String>, Error> 
                     // number. The major version was always 10.
                     for minor in (0..=minor).rev() {
                         for binary_format in get_mac_binary_formats(major, minor, arch) {
-                            platform_tags
-                                .push(format!("macosx_{}_{}_{}", major, minor, binary_format));
+                            platform_tags.push(format!("macosx_{major}_{minor}_{binary_format}"));
                         }
                     }
                 }
@@ -578,8 +574,7 @@ fn compatible_platform_tags(os: &Os, arch: &Arch) -> Result<Vec<String>, Error> 
                 }
                 _ => {
                     return Err(Error::OsVersionDetection(format!(
-                        "Unsupported mac os version: {}",
-                        major,
+                        "Unsupported mac os version: {major}",
                     )));
                 }
             }
@@ -640,23 +635,21 @@ fn compatible_platform_tags(os: &Os, arch: &Arch) -> Result<Vec<String>, Error> 
             if let Some((major, other)) = release.split_once('_') {
                 let major_ver: u64 = major.parse().map_err(|err| {
                     Error::OsVersionDetection(format!(
-                        "illumos major version is not a number: {}",
-                        err
+                        "illumos major version is not a number: {err}"
                     ))
                 })?;
                 if major_ver >= 5 {
                     // SunOS 5 == Solaris 2
                     os = "solaris".to_string();
                     release = format!("{}_{}", major_ver - 3, other);
-                    arch = format!("{}_64bit", arch);
+                    arch = format!("{arch}_64bit");
                 }
             }
             vec![format!("{}_{}_{}", os, release, arch)]
         }
         _ => {
             return Err(Error::OsVersionDetection(format!(
-                "Unsupported operating system and architecture combination: {} {}",
-                os, arch
+                "Unsupported operating system and architecture combination: {os} {arch}"
             )));
         }
     };
@@ -806,7 +799,7 @@ mod test {
         Ok(())
     }
 
-    /// Test that incompatible pairs don't pass is_compatible
+    /// Test that incompatible pairs don't pass `is_compatible`
     #[test]
     fn test_compatibility_filter() -> Result<(), Error> {
         let compatible_tags = CompatibleTags::new(
@@ -826,7 +819,7 @@ mod test {
                     .compatibility(&compatible_tags)
                     .is_ok()
             })
-            .cloned()
+            .copied()
             .collect();
         assert_eq!(
             vec![
@@ -858,7 +851,7 @@ mod test {
             )?;
 
             assert!(
-                WheelFilename::from_str(&format!("foo-1.0-{}.whl", tag))?
+                WheelFilename::from_str(&format!("foo-1.0-{tag}.whl"))?
                     .compatibility(&compatible_tags)
                     .is_ok(),
                 "{}",
@@ -881,9 +874,7 @@ mod test {
             Arch::X86_64,
         )?
         .iter()
-        .map(|(python_tag, abi_tag, platform_tag)| {
-            format!("{}-{}-{}", python_tag, abi_tag, platform_tag)
-        })
+        .map(|(python_tag, abi_tag, platform_tag)| format!("{python_tag}-{abi_tag}-{platform_tag}"))
         .collect();
         assert_eq!(expected_tags, actual_tags);
         Ok(())
@@ -917,11 +908,7 @@ mod test {
             let lower_precedence = lower.compatibility(&tags).unwrap();
             assert!(
                 higher_precedence < lower_precedence,
-                "{} {} {} {}",
-                higher_str,
-                higher_precedence,
-                lower_str,
-                lower_precedence
+                "{higher_str} {higher_precedence} {lower_str} {lower_precedence}"
             );
         }
     }

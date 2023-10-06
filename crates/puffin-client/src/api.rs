@@ -13,7 +13,7 @@ use crate::client::PypiClient;
 use crate::error::PypiClientError;
 
 impl PypiClient {
-    /// Fetch a package from the PyPI simple API.
+    /// Fetch a package from the `PyPI` simple API.
     pub async fn simple(
         &self,
         package_name: impl AsRef<str>,
@@ -106,7 +106,10 @@ impl PypiClient {
     }
 
     /// Stream a file from an external URL.
-    pub async fn stream_external(&self, url: &Url) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, PypiClientError> {
+    pub async fn stream_external(
+        &self,
+        url: &Url,
+    ) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, PypiClientError> {
         Ok(Box::new(
             // TODO(charlie): Use an uncached client.
             self.client

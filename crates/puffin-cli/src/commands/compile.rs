@@ -2,12 +2,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use tracing::debug;
 use puffin_client::PypiClientBuilder;
+use tracing::debug;
 
 use puffin_interpreter::PythonExecutable;
-use puffin_platform::Platform;
 use puffin_platform::tags::Tags;
+use puffin_platform::Platform;
 use puffin_resolve::resolve;
 
 use crate::commands::ExitStatus;

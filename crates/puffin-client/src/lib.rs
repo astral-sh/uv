@@ -1,5 +1,5 @@
 pub use api::{File, SimpleJson};
-pub use client::{PypiClientBuilder, PypiClient};
+pub use client::{PypiClient, PypiClientBuilder};
 
 mod api;
 mod client;
