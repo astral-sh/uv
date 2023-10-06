@@ -3,10 +3,10 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use async_std::fs::File;
+use install_wheel_rs::{install_wheel, InstallLocation};
 use tracing::debug;
 use url::Url;
 
-use install_wheel_rs::{install_wheel, InstallLocation};
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_platform::tags::Tags;

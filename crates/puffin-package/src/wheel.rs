@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
-use puffin_platform::tags::Tags;
 use thiserror::Error;
+
+use puffin_platform::tags::Tags;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct WheelFilename {

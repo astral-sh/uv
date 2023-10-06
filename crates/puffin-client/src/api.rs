@@ -111,8 +111,7 @@ impl PypiClient {
         url: &Url,
     ) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, PypiClientError> {
         Ok(Box::new(
-            // TODO(charlie): Use an uncached client.
-            self.client
+            self.uncached_client
                 .get(url.to_string())
                 .send()
                 .await?

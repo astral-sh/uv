@@ -66,7 +66,7 @@ impl PypiClientBuilder {
         let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
 
         let mut client_builder =
-            reqwest_middleware::ClientBuilder::new(client_raw).with(retry_strategy);
+            reqwest_middleware::ClientBuilder::new(client_raw.clone()).with(retry_strategy);
 
         if let Some(path) = self.cache {
             client_builder = client_builder.with(Cache(HttpCache {
@@ -76,10 +76,17 @@ impl PypiClientBuilder {
             }));
         }
 
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(self.retries);
+        let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
+
+        let uncached_client_builder =
+            reqwest_middleware::ClientBuilder::new(client_raw).with(retry_strategy);
+
         PypiClient {
             registry: Arc::new(self.registry),
             proxy: Arc::new(self.proxy),
             client: client_builder.build(),
+            uncached_client: uncached_client_builder.build(),
         }
     }
 }
@@ -89,4 +96,5 @@ pub struct PypiClient {
     pub(crate) registry: Arc<Url>,
     pub(crate) proxy: Arc<Url>,
     pub(crate) client: ClientWithMiddleware,
+    pub(crate) uncached_client: ClientWithMiddleware,
 }
