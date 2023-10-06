@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use pep508_rs::MarkerEnvironment;
+
 use puffin_platform::Platform;
 
 use crate::python_platform::PythonPlatform;

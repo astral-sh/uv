@@ -6,10 +6,6 @@ use anyhow::Result;
 use memchr::{memchr2, memchr_iter};
 use pep508_rs::{Pep508Error, Requirement};
 
-pub mod metadata;
-pub mod package_name;
-pub mod wheel;
-
 #[derive(Debug)]
 pub struct Requirements(Vec<Requirement>);
 
@@ -198,7 +194,7 @@ mod tests {
     use anyhow::Result;
     use insta::assert_debug_snapshot;
 
-    use crate::Requirements;
+    use crate::requirements::Requirements;
 
     #[test]
     fn simple() -> Result<()> {

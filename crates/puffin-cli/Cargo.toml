@@ -7,7 +7,7 @@ edition = "2021"
 puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-platform = { path = "../puffin-platform" }
-puffin-requirements = { path = "../puffin-requirements" }
+puffin-package = { path = "../puffin-package" }
 
 anyhow = { version = "1.0.75" }
 clap = { version = "4.4.6", features = ["derive"] }

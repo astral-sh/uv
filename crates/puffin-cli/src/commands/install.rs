@@ -11,10 +11,10 @@ use tracing::debug;
 
 use puffin_client::{File, PypiClientBuilder, SimpleJson};
 use puffin_interpreter::PythonExecutable;
+use puffin_package::metadata::Metadata21;
+use puffin_package::package_name::PackageName;
+use puffin_package::wheel::WheelFilename;
 use puffin_platform::Platform;
-use puffin_requirements::metadata::Metadata21;
-use puffin_requirements::package_name::PackageName;
-use puffin_requirements::wheel::WheelFilename;
 
 use crate::commands::ExitStatus;
 
@@ -35,7 +35,7 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     let requirements_txt = std::fs::read_to_string(src)?;
 
     // Parse the `requirements.txt` into a list of requirements.
-    let requirements = puffin_requirements::Requirements::from_str(&requirements_txt)?;
+    let requirements = puffin_package::requirements::Requirements::from_str(&requirements_txt)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
