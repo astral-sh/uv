@@ -10,3 +10,41 @@ documentation = "https://astral.sh"
 repository = "https://github.com/astral-sh/puffin"
 authors = ["Astral Software Inc. <hey@astral.sh>"]
 license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+anyhow = { version = "1.0.75" }
+async-std = { version = "1.12.0", features = [
+    "attributes",
+    "tokio1",
+    "unstable",
+] }
+bitflags = { version = "2.4.0" }
+clap = { version = "4.4.6" }
+colored = { version = "2.0.4" }
+directories = { version = "5.0.1" }
+futures = { version = "0.3.28" }
+glibc_version = { version = "0.1.2" }
+goblin = { version = "0.7.1" }
+http-cache-reqwest = { version = "0.11.3" }
+install-wheel-rs = { version = "0.0.1" }
+mailparse = { version = "0.14.0" }
+memchr = { version = "2.6.4" }
+once_cell = { version = "1.18.0" }
+pep440_rs = { version = "0.3.12" }
+pep508_rs = { version = "0.2.3" }
+platform-info = { version = "2.0.2" }
+plist = { version = "1.5.0" }
+regex = { version = "1.9.6" }
+reqwest = { version = "0.11.22", features = ["json", "gzip", "brotli", "stream"] }
+reqwest-middleware = { version = "0.2.3" }
+reqwest-retry = { version = "0.3.0" }
+rfc2047-decoder = { version = "1.0.1" }
+serde = { version = "1.0.188" }
+serde_json = { version = "1.0.107" }
+target-lexicon = { version = "0.12.11" }
+tempfile = { version = "3.8.0" }
+thiserror = { version = "1.0.49" }
+tracing = { version = "0.1.37" }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-tree = { version = "0.2.5" }
+url = { version = "2.4.1" }

@@ -13,13 +13,9 @@ license.workspace = true
 puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
-anyhow = { version = "1.0.75" }
-async-std = { version = "1.12.0", features = [
-    "attributes",
-    "tokio1",
-    "unstable",
-] }
-install-wheel-rs = { version = "0.0.1" }
-tempfile = { version = "3.8.0" }
-tracing = { version = "0.1.37" }
-url = { version = "2.4.1" }
+anyhow = { workspace = true }
+async-std = { workspace = true }
+install-wheel-rs = { workspace = true }
+tempfile = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
