@@ -6,16 +6,16 @@ edition = "2021"
 [dependencies]
 puffin-platform = { path = "../puffin-platform" }
 
-anyhow = { version = "1.0.75" }
-mailparse = { version = "0.14.0" }
-memchr = { version = "2.6.4" }
-once_cell = { version = "1.18.0" }
-pep440_rs = { version = "0.3.12", features = ["serde"] }
-pep508_rs = { version = "0.2.3", features = ["serde"] }
-regex = { version = "1.9.6" }
-rfc2047-decoder = { version = "1.0.1" }
-serde = { version = "1.0.188" }
-thiserror = { version = "1.0.49" }
+anyhow = { workspace = true }
+mailparse = { workspace = true }
+memchr = { workspace = true }
+once_cell = { workspace = true }
+pep440_rs = { workspace = true, features = ["serde"] }
+pep508_rs = { workspace = true, features = ["serde"] }
+regex = { workspace = true }
+rfc2047-decoder = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5.1" }

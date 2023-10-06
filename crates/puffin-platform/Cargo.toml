@@ -9,16 +9,14 @@ repository.workspace = true
 authors.workspace = true
 license.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-glibc_version = "0.1.2"
-goblin = "0.6.0"
-pep440_rs = "0.3.12"
-platform-info = "2.0.2"
-plist = "1.5.0"
-regex = "1.9.6"
-serde = "1.0.188"
-target-lexicon = "0.12.11"
-thiserror = "1.0.49"
-tracing = "0.1.37"
+glibc_version = { workspace = true }
+goblin = { workspace = true }
+pep440_rs = { workspace = true }
+platform-info = { workspace = true }
+plist = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+target-lexicon = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

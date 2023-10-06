@@ -11,21 +11,17 @@ puffin-platform = { path = "../puffin-platform" }
 puffin-package = { path = "../puffin-package" }
 puffin-resolver = { path = "../puffin-resolver" }
 
-anyhow = { version = "1.0.75" }
-async-std = { version = "1.12.0", features = [
-    "attributes",
-    "tokio1",
-    "unstable",
-] }
-clap = { version = "4.4.6", features = ["derive"] }
-colored = { version = "2.0.4" }
-directories = { version = "5.0.1" }
-futures = { version = "0.3.28" }
-install-wheel-rs = { version = "0.0.1" }
-pep508_rs = { version = "0.2.3" }
-pep440_rs = { version = "0.3.12" }
-tracing = { version = "0.1.37" }
-tracing-tree = { version = "0.2.5" }
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-url = { version = "2.4.1" }
-tempfile = { version = "3.8.0" }
+anyhow = { workspace = true }
+async-std = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+colored = { workspace = true }
+directories = { workspace = true }
+futures = { workspace = true }
+install-wheel-rs = { workspace = true }
+pep508_rs = { workspace = true }
+pep440_rs = { workspace = true }
+tracing = { workspace = true }
+tracing-tree = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+tempfile = { workspace = true }

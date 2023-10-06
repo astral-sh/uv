@@ -14,9 +14,9 @@ puffin-client = { path = "../puffin-client" }
 puffin-platform = { path = "../puffin-platform" }
 puffin-package = { path = "../puffin-package" }
 
-pep440_rs = "0.3.12"
-futures = "0.3.28"
-anyhow = "1.0.75"
-tracing = "0.1.37"
-pep508_rs = "0.2.3"
-bitflags = "2.4.0"
+anyhow = { workspace = true }
+bitflags = { workspace = true }
+futures = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+tracing = { workspace = true }
