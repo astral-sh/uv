@@ -11,9 +11,10 @@ use tracing::debug;
 
 use puffin_client::{File, PypiClientBuilder, SimpleJson};
 use puffin_interpreter::PythonExecutable;
+use puffin_platform::Platform;
 use puffin_requirements::metadata::Metadata21;
 use puffin_requirements::package_name::PackageName;
-use puffin_requirements::wheel::WheelName;
+use puffin_requirements::wheel::WheelFilename;
 
 use crate::commands::ExitStatus;
 
@@ -37,11 +38,15 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     let requirements = puffin_requirements::Requirements::from_str(&requirements_txt)?;
 
     // Detect the current Python interpreter.
-    let python = PythonExecutable::from_env()?;
+    let platform = Platform::current()?;
+    let python = PythonExecutable::from_env(&platform)?;
     debug!(
         "Using Python interpreter: {}",
         python.executable().display()
     );
+
+    // Determine the compatible platform tags.
+    let tags = platform.compatible_tags(python.version())?;
 
     // Instantiate a client.
     let pypi_client = {
@@ -102,13 +107,21 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
                     // Pick a version that satisfies the requirement.
                     let Some(file) = metadata.files.iter().rev().find(|file| {
                         // We only support wheels for now.
-                        let Ok(name) = WheelName::from_str(file.filename.as_str()) else {
+                        let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
                             return false;
                         };
 
+                        let Ok(version) = Version::from_str(&name.version) else {
+                            return false;
+                        };
+
+                        if !name.is_compatible(&tags) {
+                            return false;
+                        }
+
                         specifiers
                             .iter()
-                            .all(|specifier| specifier.contains(&name.version))
+                            .all(|specifier| specifier.contains(&version))
                     }) else {
                         continue;
                     };
