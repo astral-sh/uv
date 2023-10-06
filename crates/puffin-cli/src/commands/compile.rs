@@ -12,6 +12,7 @@ use puffin_resolve::resolve;
 
 use crate::commands::ExitStatus;
 
+/// Resolve a set of requirements into a set of pinned versions.
 pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;

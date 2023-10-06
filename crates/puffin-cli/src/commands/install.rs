@@ -15,6 +15,7 @@ use puffin_resolve::resolve;
 
 use crate::commands::ExitStatus;
 
+/// Install a set of requirements into the current Python environment.
 pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;
@@ -46,6 +47,7 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     };
 
     // Resolve the dependencies.
+    // TODO(charlie): When installing, assume `--no-deps`.
     let resolution = resolve(&requirements, markers, &tags, &client).await?;
 
     // Create a temporary directory, in which we'll store the wheels.

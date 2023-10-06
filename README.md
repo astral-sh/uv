@@ -4,8 +4,34 @@ An experimental Python package manager.
 
 ## Usage
 
+To resolve a `requirements.in` file:
+
+```shell
+cargo run -p puffin-cli -- compile requirements.in
+```
+
+To install from a resolved `requirements.txt` file:
+
 ```shell
 cargo run -p puffin-cli -- install requirements.txt
+```
+
+## Benchmarks
+
+To compare a warm run of `puffin` to `pip`:
+
+```shell
+hyperfine --runs 10 --warmup 3 \
+    "./target/release/puffin-cli install requirements.txt" \
+    "pip install -r requirements.txt"
+```
+
+To compare a cold run of `puffin` to `pip`:
+
+```shell
+hyperfine --runs 10 --warmup 3 \
+    "./target/release/puffin-cli install requirements.txt --no-cache" \
+    "pip install -r requirements.txt --ignore-installed --no-cache-dir"
 ```
 
 ## License
