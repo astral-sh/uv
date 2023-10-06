@@ -14,8 +14,9 @@ puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
 anyhow = { workspace = true }
-async-std = { workspace = true }
 install-wheel-rs = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
