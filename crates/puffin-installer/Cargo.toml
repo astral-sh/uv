@@ -1,0 +1,25 @@
+[package]
+name = "puffin-installer"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+puffin-client = { path = "../puffin-client" }
+puffin-interpreter = { path = "../puffin-interpreter" }
+
+anyhow = { version = "1.0.75" }
+async-std = { version = "1.12.0", features = [
+    "attributes",
+    "tokio1",
+    "unstable",
+] }
+install-wheel-rs = { version = "0.0.1" }
+tempfile = { version = "3.8.0" }
+tracing = { version = "0.1.37" }
+url = { version = "2.4.1" }

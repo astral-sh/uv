@@ -1,5 +1,5 @@
 [package]
-name = "puffin-resolve"
+name = "puffin-resolver"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,15 +11,9 @@ license.workspace = true
 
 [dependencies]
 puffin-client = { path = "../puffin-client" }
-puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-platform = { path = "../puffin-platform" }
 puffin-package = { path = "../puffin-package" }
 
-async-std = { version = "1.12.0", features = [
-    "attributes",
-    "tokio1",
-    "unstable",
-] }
 pep440_rs = "0.3.12"
 futures = "0.3.28"
 anyhow = "1.0.75"

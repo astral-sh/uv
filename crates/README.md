@@ -8,6 +8,10 @@ Command-line interface for the Puffin package manager.
 
 Client for interacting with PyPI-compatible HTTP APIs.
 
+## [puffin-installer](./puffin-installer)
+
+Functionality for installing Python packages into a virtual environment.
+
 ## [puffin-interpreter](./puffin-interpreter)
 
 Functionality for detecting and leveraging the current Python interpreter.
@@ -20,6 +24,6 @@ Types and functionality for working with Python packages, e.g., parsing wheel fi
 
 Functionality for detecting the current platform (operating system, architecture, etc.).
 
-## [puffin-resolve](./puffin-resolve)
+## [puffin-resolver](./puffin-resolver)
 
 Functionality for resolving Python packages and their dependencies.
