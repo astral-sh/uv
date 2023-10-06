@@ -10,6 +10,8 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+puffin-platform = { path = "../puffin-platform" }
+
 anyhow = { version = "1.0.75" }
 pep508_rs = { version = "0.2.3", features = ["serde"] }
 serde_json = { version = "1.0.107" }

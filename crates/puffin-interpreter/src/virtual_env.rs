@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use tracing::debug;
 
-use crate::platform::Platform;
+use crate::python_platform::PythonPlatform;
 
 /// Locate the current virtual environment.
-pub(crate) fn detect_virtual_env(target: &Platform) -> Result<PathBuf> {
+pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<PathBuf> {
     match (env::var_os("VIRTUAL_ENV"), env::var_os("CONDA_PREFIX")) {
         (Some(dir), None) => return Ok(PathBuf::from(dir)),
         (None, Some(dir)) => return Ok(PathBuf::from(dir)),
@@ -30,7 +30,7 @@ pub(crate) fn detect_virtual_env(target: &Platform) -> Result<PathBuf> {
                     dot_venv.display()
                 );
             }
-            let python = target.get_venv_python(&dot_venv);
+            let python = target.venv_python(&dot_venv);
             if !python.is_file() {
                 bail!(
                     "Your virtualenv at {} is broken. It contains a pyvenv.cfg but no python at {}",

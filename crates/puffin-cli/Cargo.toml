@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-platform = { path = "../puffin-platform" }
 puffin-requirements = { path = "../puffin-requirements" }
 
 anyhow = { version = "1.0.75" }

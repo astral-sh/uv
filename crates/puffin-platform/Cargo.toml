@@ -1,0 +1,23 @@
+[package]
+name = "puffin-platform"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+glibc_version = "0.1.2"
+goblin = "0.6.0"
+platform-info = "2.0.2"
+plist = "1.5.0"
+regex = "1.9.6"
+serde = "1.0.188"
+target-lexicon = "0.12.11"
+thiserror = "1.0.49"
+tracing = "0.1.37"
