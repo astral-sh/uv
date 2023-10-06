@@ -8,7 +8,6 @@ use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_platform::tags::Tags;
 use puffin_platform::Platform;
-use puffin_resolve::resolve;
 
 use crate::commands::ExitStatus;
 
@@ -44,7 +43,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     };
 
     // Resolve the dependencies.
-    let resolution = resolve(&requirements, markers, &tags, &client).await?;
+    let resolution = puffin_resolver::resolve(&requirements, markers, &tags, &client).await?;
 
     for (name, package) in resolution.iter() {
         #[allow(clippy::print_stdout)]

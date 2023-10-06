@@ -19,8 +19,14 @@ use puffin_platform::tags::Tags;
 pub struct Resolution(HashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
+    /// Iterate over the pinned packages in this resolution.
     pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
         self.0.iter()
+    }
+
+    /// Iterate over the wheels in this resolution.
+    pub fn into_files(self) -> impl Iterator<Item = File> {
+        self.0.into_values().map(|package| package.file)
     }
 }
 
@@ -31,14 +37,6 @@ pub struct PinnedPackage {
 }
 
 impl PinnedPackage {
-    pub fn filename(&self) -> &str {
-        &self.file.filename
-    }
-
-    pub fn url(&self) -> &str {
-        &self.file.url
-    }
-
     pub fn version(&self) -> &Version {
         &self.metadata.version
     }
