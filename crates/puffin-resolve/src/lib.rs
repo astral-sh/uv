@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -9,7 +9,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use tracing::debug;
 
-use puffin_client::{File, PypiClientBuilder, SimpleJson};
+use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
@@ -17,11 +17,31 @@ use puffin_package::wheel::WheelFilename;
 use puffin_platform::tags::Tags;
 
 #[derive(Debug)]
-pub struct Resolution(HashMap<PackageName, Version>);
+pub struct Resolution(HashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &Version)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
         self.0.iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct PinnedPackage {
+    metadata: Metadata21,
+    file: File,
+}
+
+impl PinnedPackage {
+    pub fn filename(&self) -> &str {
+        &self.file.filename
+    }
+
+    pub fn url(&self) -> &str {
+        &self.file.url
+    }
+
+    pub fn version(&self) -> &Version {
+        &self.metadata.version
     }
 }
 
@@ -30,17 +50,8 @@ pub async fn resolve(
     requirements: &Requirements,
     markers: &MarkerEnvironment,
     tags: &Tags,
-    cache: Option<&Path>,
+    client: &PypiClient,
 ) -> Result<Resolution> {
-    // Instantiate a client.
-    let pypi_client = {
-        let mut pypi_client = PypiClientBuilder::default();
-        if let Some(cache) = cache {
-            pypi_client = pypi_client.cache(cache);
-        }
-        pypi_client.build()
-    };
-
     // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
     // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
     let (package_sink, package_stream) = futures::channel::mpsc::unbounded();
@@ -49,14 +60,16 @@ pub async fn resolve(
     let mut package_stream = package_stream
         .map(|request: Request| match request {
             Request::Package(requirement) => Either::Left(
-                pypi_client
+                client
+                    // TODO(charlie): Remove this clone.
                     .simple(requirement.name.clone())
-                    .map_ok(move |metadata| Response::Package(metadata, requirement)),
+                    .map_ok(move |metadata| Response::Package(requirement, metadata)),
             ),
             Request::Version(requirement, file) => Either::Right(
-                pypi_client
-                    .file(file)
-                    .map_ok(move |metadata| Response::Version(metadata, requirement)),
+                client
+                    // TODO(charlie): Remove this clone.
+                    .file(file.clone())
+                    .map_ok(move |metadata| Response::Version(requirement, file, metadata)),
             ),
         })
         .buffer_unordered(32)
@@ -71,13 +84,14 @@ pub async fn resolve(
     }
 
     // Resolve the requirements.
-    let mut resolution: HashMap<PackageName, Version> = HashMap::with_capacity(requirements.len());
+    let mut resolution: HashMap<PackageName, PinnedPackage> =
+        HashMap::with_capacity(requirements.len());
 
     while let Some(chunk) = package_stream.next().await {
         for result in chunk {
             let result: Response = result?;
             match result {
-                Response::Package(metadata, requirement) => {
+                Response::Package(requirement, metadata) => {
                     // TODO(charlie): Support URLs. Right now, we treat a URL as an unpinned dependency.
                     let specifiers =
                         requirement
@@ -112,7 +126,7 @@ pub async fn resolve(
 
                     package_sink.unbounded_send(Request::Version(requirement, file.clone()))?;
                 }
-                Response::Version(metadata, requirement) => {
+                Response::Version(requirement, file, metadata) => {
                     debug!(
                         "--> selected version {} for {}",
                         metadata.version, requirement
@@ -121,12 +135,20 @@ pub async fn resolve(
                     // Add to the resolved set.
                     let normalized_name = PackageName::normalize(&requirement.name);
                     in_flight.remove(&normalized_name);
-                    resolution.insert(normalized_name, metadata.version);
+                    resolution.insert(
+                        normalized_name,
+                        PinnedPackage {
+                            // TODO(charlie): Remove this clone.
+                            metadata: metadata.clone(),
+                            file,
+                        },
+                    );
 
                     // Enqueue its dependencies.
                     for dependency in metadata.requires_dist {
                         if !dependency.evaluate_markers(
                             markers,
+                            // TODO(charlie): Remove this clone.
                             requirement.extras.clone().unwrap_or_default(),
                         ) {
                             debug!("--> ignoring {dependency} due to environment mismatch");
@@ -167,6 +189,6 @@ enum Request {
 
 #[derive(Debug)]
 enum Response {
-    Package(SimpleJson, Requirement),
-    Version(Metadata21, Requirement),
+    Package(Requirement, SimpleJson),
+    Version(Requirement, File, Metadata21),
 }

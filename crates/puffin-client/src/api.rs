@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use futures::{AsyncRead, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::trace;
@@ -12,6 +13,7 @@ use crate::client::PypiClient;
 use crate::error::PypiClientError;
 
 impl PypiClient {
+    /// Fetch a package from the `PyPI` simple API.
     pub async fn simple(
         &self,
         package_name: impl AsRef<str>,
@@ -62,6 +64,7 @@ impl PypiClient {
             .await?)
     }
 
+    /// Fetch the metadata from a wheel file.
     pub async fn file(&self, file: File) -> Result<Metadata21, PypiClientError> {
         // Send to the proxy.
         let url = self.proxy.join(
@@ -100,6 +103,27 @@ impl PypiClient {
             })?
             .text()
             .await?)
+    }
+
+    /// Stream a file from an external URL.
+    pub async fn stream_external(
+        &self,
+        url: &Url,
+    ) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, PypiClientError> {
+        Ok(Box::new(
+            // TODO(charlie): Use an uncached client.
+            self.client
+                .get(url.to_string())
+                .send()
+                .await?
+                .error_for_status()?
+                .bytes_stream()
+                .map(|r| match r {
+                    Ok(bytes) => Ok(bytes),
+                    Err(err) => Err(std::io::Error::new(std::io::ErrorKind::Other, err)),
+                })
+                .into_async_read(),
+        ))
     }
 }
 
