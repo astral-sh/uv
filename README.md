@@ -13,7 +13,7 @@ cargo run -p puffin-cli -- compile requirements.in
 To install from a resolved `requirements.txt` file:
 
 ```shell
-cargo run -p puffin-cli -- install requirements.txt
+cargo run -p puffin-cli -- sync requirements.txt
 ```
 
 ## Benchmarks
