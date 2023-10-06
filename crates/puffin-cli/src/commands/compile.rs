@@ -5,6 +5,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use puffin_interpreter::PythonExecutable;
+use puffin_platform::tags::Tags;
 use puffin_platform::Platform;
 use puffin_resolve::resolve;
 
@@ -25,15 +26,14 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
         python.executable().display()
     );
 
+    // Determine the current environment markers.
+    let markers = python.markers();
+
+    // Determine the compatible platform tags.
+    let tags = Tags::from_env(&platform, python.version())?;
+
     // Resolve the dependencies.
-    let resolution = resolve(
-        &requirements,
-        python.version(),
-        python.markers(),
-        &platform,
-        cache,
-    )
-    .await?;
+    let resolution = resolve(&requirements, markers, &tags, cache).await?;
 
     for (name, version) in resolution.iter() {
         #[allow(clippy::print_stdout)]
