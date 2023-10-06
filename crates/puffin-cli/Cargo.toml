@@ -9,6 +9,7 @@ puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-platform = { path = "../puffin-platform" }
 puffin-package = { path = "../puffin-package" }
 puffin-resolve = { path = "../puffin-resolve" }
+install-wheel-rs = { path = "../../vendor/install-wheel-rs" }
 
 anyhow = { version = "1.0.75" }
 clap = { version = "4.4.6", features = ["derive"] }
@@ -25,3 +26,4 @@ tracing = { version = "0.1.37" }
 tracing-tree = { version = "0.2.5" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 directories = "5.0.1"
+rayon = "1.8.0"

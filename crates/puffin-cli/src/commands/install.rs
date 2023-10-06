@@ -1,10 +1,13 @@
-use std::path::Path;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
 use tracing::debug;
+use install_wheel_rs::{install_wheel, InstallLocation};
 
 use puffin_interpreter::PythonExecutable;
+use puffin_package::wheel::WheelFilename;
 use puffin_platform::tags::Tags;
 use puffin_platform::Platform;
 use puffin_resolve::resolve;
@@ -35,7 +38,11 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     // Resolve the dependencies.
     let resolution = resolve(&requirements, markers, &tags, cache).await?;
 
-    // Install each package into the current virtual environment.
+    // Download each wheel.
+    for (name, package) in resolution.iter() {
+        for package
+
+    }
 
 
     Ok(ExitStatus::Success)

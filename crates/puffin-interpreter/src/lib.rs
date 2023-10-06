@@ -15,6 +15,7 @@ mod virtual_env;
 /// A Python executable and its associated platform markers.
 #[derive(Debug)]
 pub struct PythonExecutable {
+    venv: PathBuf,
     executable: PathBuf,
     markers: MarkerEnvironment,
 }
@@ -24,13 +25,19 @@ impl PythonExecutable {
     pub fn from_env(platform: &Platform) -> Result<Self> {
         let platform = PythonPlatform::from(platform);
         let venv = virtual_env::detect_virtual_env(&platform)?;
-        let executable = platform.venv_python(venv);
+        let executable = platform.venv_python(&venv);
         let markers = markers::detect_markers(&executable)?;
 
         Ok(Self {
+            venv,
             executable,
             markers,
         })
+    }
+
+        /// Returns the path to the Python virtual environment.
+    pub fn venv(&self) -> &Path {
+        self.venv.as_path()
     }
 
     /// Returns the path to the Python executable.
@@ -46,5 +53,10 @@ impl PythonExecutable {
     /// Returns the Python version.
     pub fn version(&self) -> &Version {
         &self.markers.python_version.version
+    }
+
+    /// Returns the Python version as a simple tuple.
+    pub fn simple_version(&self) -> (u8, u8) {
+        (self.version().release.0, self.version().release.1)
     }
 }

@@ -101,6 +101,25 @@ impl PypiClient {
             .text()
             .await?)
     }
+
+    pub async fn stream_external(&self, url: &Url) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, PypiClientError> {
+        Ok(Box::new(
+            // NOTE: We don't want to cache these requests. If you want to
+            // cache them, cache them manually.
+            self.client_uncached
+                .get(url.to_string())
+                .header("X-Oro-Registry", self.registry.to_string())
+                .send()
+                .await?
+                .error_for_status()?
+                .bytes_stream()
+                .map(|r| match r {
+                    Ok(bytes) => Ok(bytes),
+                    Err(err) => Err(std::io::Error::new(std::io::ErrorKind::Other, err)),
+                })
+                .into_async_read(),
+        ))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
