@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use puffin_platform::tags::Tags;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -39,8 +40,8 @@ impl FromStr for WheelFilename {
 
 impl WheelFilename {
     /// Returns `true` if the wheel is compatible with the given tags.
-    pub fn is_compatible(&self, compatible_tags: &[(String, String, String)]) -> bool {
-        for tag in compatible_tags {
+    pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
+        for tag in compatible_tags.iter() {
             if self.python_tag.contains(&tag.0)
                 && self.abi_tag.contains(&tag.1)
                 && self.platform_tag.contains(&tag.2)

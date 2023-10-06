@@ -14,8 +14,9 @@ use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
 use puffin_package::wheel::WheelFilename;
-use puffin_platform::Platform;
+use puffin_platform::tags::Tags;
 
+#[derive(Debug)]
 pub struct Resolution(HashMap<PackageName, Version>);
 
 impl Resolution {
@@ -27,9 +28,8 @@ impl Resolution {
 /// Resolve a set of requirements into a set of pinned versions.
 pub async fn resolve(
     requirements: &Requirements,
-    python_version: &Version,
     markers: &MarkerEnvironment,
-    platform: &Platform,
+    tags: &Tags,
     cache: Option<&Path>,
 ) -> Result<Resolution> {
     // Instantiate a client.
@@ -70,9 +70,6 @@ pub async fn resolve(
         in_flight.insert(PackageName::normalize(&requirement.name));
     }
 
-    // Determine the compatible platform tags.
-    let tags = platform.compatible_tags(python_version)?;
-
     // Resolve the requirements.
     let mut resolution: HashMap<PackageName, Version> = HashMap::with_capacity(requirements.len());
 
@@ -102,7 +99,7 @@ pub async fn resolve(
                             return false;
                         };
 
-                        if !name.is_compatible(&tags) {
+                        if !name.is_compatible(tags) {
                             return false;
                         }
 
