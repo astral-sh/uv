@@ -46,7 +46,7 @@ struct SyncArgs {
     no_cache: bool,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 

@@ -9,8 +9,7 @@ pub(crate) fn setup_logging() -> Result<()> {
     let targets = Targets::new()
         .with_target("hyper", LevelFilter::WARN)
         .with_target("reqwest", LevelFilter::WARN)
-        .with_target("async_io", LevelFilter::WARN)
-        .with_target("async_std", LevelFilter::WARN)
+        .with_target("tokio", LevelFilter::WARN)
         .with_target("blocking", LevelFilter::OFF)
         .with_default(LevelFilter::TRACE);
 

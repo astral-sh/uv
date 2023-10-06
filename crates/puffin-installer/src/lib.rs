@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use install_wheel_rs::{install_wheel, InstallLocation};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 
 use puffin_client::{File, PypiClient};
@@ -24,9 +25,8 @@ pub async fn install(
         let reader = client.stream_external(&url).await?;
 
         // TODO(charlie): Stream the unzip.
-        let mut writer =
-            async_std::fs::File::create(tmp_dir.path().join(&wheel.hashes.sha256)).await?;
-        async_std::io::copy(reader, &mut writer).await?;
+        let mut writer = tokio::fs::File::create(tmp_dir.path().join(&wheel.hashes.sha256)).await?;
+        tokio::io::copy(&mut reader.compat(), &mut writer).await?;
     }
 
     // Install each wheel.
