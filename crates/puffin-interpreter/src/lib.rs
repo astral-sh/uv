@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 
 use puffin_platform::Platform;
@@ -42,13 +43,8 @@ impl PythonExecutable {
         &self.markers
     }
 
-    /// Returns the Python version as a tuple of (major, minor).
-    pub fn version(&self) -> (u8, u8) {
-        // TODO(charlie): Use `Version`.
-        let python_version = &self.markers.python_version;
-        (
-            u8::try_from(python_version.release[0]).expect("Python major version is too large"),
-            u8::try_from(python_version.release[1]).expect("Python minor version is too large"),
-        )
+    /// Returns the Python version.
+    pub fn version(&self) -> &Version {
+        &self.markers.python_version.version
     }
 }

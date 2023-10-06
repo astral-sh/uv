@@ -38,7 +38,7 @@ impl Platform {
 
     pub fn compatible_tags(
         &self,
-        python_version: (u8, u8),
+        python_version: &pep440_rs::Version,
     ) -> Result<Vec<(String, String, String)>, PlatformError> {
         compatible_tags(python_version, &self.os, self.arch)
     }
@@ -476,11 +476,12 @@ pub fn compatible_platform_tags(os: &Os, arch: Arch) -> Result<Vec<String>, Plat
 
 /// Returns the compatible tags in a (`python_tag`, `abi_tag`, `platform_tag`) format
 pub fn compatible_tags(
-    python_version: (u8, u8),
+    python_version: &pep440_rs::Version,
     os: &Os,
     arch: Arch,
 ) -> Result<Vec<(String, String, String)>, PlatformError> {
-    assert_eq!(python_version.0, 3);
+    let python_version = (python_version.release[0], python_version.release[1]);
+
     let mut tags = Vec::new();
     let platform_tags = compatible_platform_tags(os, arch)?;
     // 1. This exact c api version

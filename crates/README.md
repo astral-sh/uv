@@ -19,3 +19,7 @@ Types and functionality for working with Python packages, e.g., parsing wheel fi
 ## [puffin-platform](./puffin-platform)
 
 Functionality for detecting the current platform (operating system, architecture, etc.).
+
+## [puffin-resolve](./puffin-resolve)
+
+Functionality for resolving Python packages and their dependencies.
