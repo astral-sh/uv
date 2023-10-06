@@ -1,0 +1,32 @@
+[project]
+name = "pep508_rs"
+version = "0.2.2"
+description = "A library for python dependency specifiers, better known as PEP 508"
+readme = "Readme.md"
+
+[tool.poetry]
+name = "pep508_rs"
+version = "0.1.1"
+description = ""
+authors = ["konstin <konstin@mailbox.org>"]
+readme = "Readme.md"
+
+[tool.poetry.dependencies]
+python = ">=3.7"
+
+[tool.poetry.group.dev.dependencies]
+black = { extras = ["jupyter"], version = "^23.1.0" }
+maturin = "^1.0.0"
+pytest = "^7.2.0"
+ruff = "^0.0.270"
+
+[tool.maturin]
+features = ["pyo3"]
+
+[tool.pytest.ini_options]
+minversion = "7.2.0"
+addopts = "--tb=short"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
