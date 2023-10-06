@@ -17,6 +17,6 @@ puffin-package = { path = "../puffin-package" }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 futures = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
 tracing = { workspace = true }

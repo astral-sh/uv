@@ -25,8 +25,6 @@ install-wheel-rs = { version = "0.0.1" }
 mailparse = { version = "0.14.0" }
 memchr = { version = "2.6.4" }
 once_cell = { version = "1.18.0" }
-pep440_rs = { version = "0.3.12" }
-pep508_rs = { version = "0.2.3" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.5.0" }
 regex = { version = "1.9.6" }
@@ -44,4 +42,5 @@ tokio-util = { version = "0.7.9", features = ["compat"] }
 tracing = { version = "0.1.37" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 tracing-tree = { version = "0.2.5" }
+unicode-width = { version = "0.1.8" }
 url = { version = "2.4.1" }

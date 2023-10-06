@@ -10,10 +10,10 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
 puffin-platform = { path = "../puffin-platform" }
 
 anyhow = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

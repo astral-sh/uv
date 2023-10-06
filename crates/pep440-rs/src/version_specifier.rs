@@ -2,7 +2,7 @@
 use crate::version::PyVersion;
 use crate::version::VERSION_RE_INNER;
 use crate::{version, Operator, Pep440Error, Version};
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     exceptions::{PyIndexError, PyNotImplementedError, PyValueError},
@@ -27,14 +27,14 @@ use unicode_width::UnicodeWidthStr;
 #[cfg(feature = "tracing")]
 use tracing::warn;
 
-lazy_static! {
-    /// Matches a python version specifier, such as `>=1.19.a1` or `4.1.*`. Extends the PEP 440
-    /// version regex to version specifiers
-    static ref VERSION_SPECIFIER_RE: Regex = Regex::new(&format!(
-        r#"(?xi)^(?:\s*)(?P<operator>(~=|==|!=|<=|>=|<|>|===))(?:\s*){}(?:\s*)$"#,
-        VERSION_RE_INNER
-    )).unwrap();
-}
+/// Matches a python version specifier, such as `>=1.19.a1` or `4.1.*`. Extends the PEP 440
+/// version regex to version specifiers
+static VERSION_SPECIFIER_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(
+        r#"(?xi)^(?:\s*)(?P<operator>(~=|==|!=|<=|>=|<|>|===))(?:\s*){VERSION_RE_INNER}(?:\s*)$"#,
+    ))
+    .unwrap()
+});
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -91,10 +91,10 @@ impl Display for VersionSpecifiers {
         for (idx, version_specifier) in self.0.iter().enumerate() {
             // Separate version specifiers by comma, but we need one comma less than there are
             // specifiers
-            if idx != 0 {
-                write!(f, ", {}", version_specifier)?;
+            if idx == 0 {
+                write!(f, "{version_specifier}")?;
             } else {
-                write!(f, "{}", version_specifier)?;
+                write!(f, ", {version_specifier}")?;
             }
         }
         Ok(())
@@ -125,8 +125,8 @@ impl VersionSpecifiersIter {
 impl VersionSpecifiers {
     /// PEP 440 parsing
     #[new]
-    pub fn __new__(version_specifiers: String) -> PyResult<Self> {
-        Self::from_str(&version_specifiers).map_err(|err| PyValueError::new_err(err.to_string()))
+    pub fn __new__(version_specifiers: &str) -> PyResult<Self> {
+        Self::from_str(version_specifiers).map_err(|err| PyValueError::new_err(err.to_string()))
     }
 
     /// PEP 440 serialization
@@ -150,6 +150,7 @@ impl VersionSpecifiers {
         })
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<VersionSpecifiersIter>> {
         let iter = VersionSpecifiersIter {
             inner: slf.0.clone().into_iter(),
@@ -207,8 +208,8 @@ impl Serialize for VersionSpecifiers {
 /// let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 /// assert!(version_specifier.contains(&version));
 /// ```
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
     pub(crate) operator: Operator,
@@ -222,8 +223,8 @@ impl VersionSpecifier {
     // Since we don't bring FromStr to python
     /// Parse a PEP 440 version
     #[new]
-    pub fn parse(version_specifier: String) -> PyResult<Self> {
-        Self::from_str(&version_specifier).map_err(PyValueError::new_err)
+    pub fn parse(version_specifier: &str) -> PyResult<Self> {
+        Self::from_str(version_specifier).map_err(PyValueError::new_err)
     }
 
     /// See [VersionSpecifier::contains]
@@ -244,7 +245,7 @@ impl VersionSpecifier {
 
     /// Returns the normalized representation
     pub fn __repr__(&self) -> String {
-        format!(r#"<VersionSpecifier("{}")>"#, self)
+        format!(r#"<VersionSpecifier("{self}")>"#)
     }
 
     fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
@@ -265,7 +266,7 @@ impl VersionSpecifier {
     }
 }
 
-/// https://github.com/serde-rs/serde/issues/1316#issue-332908452
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for VersionSpecifier {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -277,7 +278,7 @@ impl<'de> Deserialize<'de> for VersionSpecifier {
     }
 }
 
-/// https://github.com/serde-rs/serde/issues/1316#issue-332908452
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
 impl Serialize for VersionSpecifier {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -309,7 +310,7 @@ impl VersionSpecifier {
                     operator,
                     local
                         .iter()
-                        .map(|x| x.to_string())
+                        .map(std::string::ToString::to_string)
                         .collect::<Vec<String>>()
                         .join(".")
                 ));
@@ -323,8 +324,7 @@ impl VersionSpecifier {
                 Operator::NotEqual => Operator::NotEqualStar,
                 other => {
                     return Err(format!(
-                        "Operator {} must not be used in version ending with a star",
-                        other
+                        "Operator {other} must not be used in version ending with a star"
                     ))
                 }
             }
@@ -489,7 +489,7 @@ impl FromStr for VersionSpecifier {
     fn from_str(spec: &str) -> Result<Self, Self::Err> {
         let captures = VERSION_SPECIFIER_RE
             .captures(spec)
-            .ok_or_else(|| format!("Version specifier `{}` doesn't match PEP 440 rules", spec))?;
+            .ok_or_else(|| format!("Version specifier `{spec}` doesn't match PEP 440 rules"))?;
         let (version, star) = Version::parse_impl(&captures)?;
         // operator but we don't know yet if it has a star
         let operator = Operator::from_str(&captures["operator"])?;
@@ -509,7 +509,7 @@ impl Display for VersionSpecifier {
 
 /// Parses a list of specifiers such as `>= 1.0, != 1.3.*, < 2.0`.
 ///
-/// I recommend using [VersionSpecifiers::from_str] instead.
+/// I recommend using [`VersionSpecifiers::from_str`] instead.
 ///
 /// ```rust
 /// use std::str::FromStr;
@@ -625,8 +625,8 @@ mod test {
         "1!1.2.rev33+123456",
     ];
 
-    /// https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L666-L707
-    /// https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L709-L750
+    /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L666-L707>
+    /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L709-L750>
     ///
     /// These tests are a lot shorter than the pypa/packaging version since we implement all
     /// comparisons through one method
@@ -667,7 +667,7 @@ mod test {
         .collect();
 
         for (a, b, ordering) in operations {
-            assert_eq!(a.cmp(b), ordering, "{} {:?} {}", a, ordering, b);
+            assert_eq!(a.cmp(b), ordering, "{a} {ordering:?} {b}");
         }
     }
 
@@ -792,7 +792,7 @@ mod test {
 
     /// Test for tilde equal (~=) and star equal (== x.y.*) recorded from pypa/packaging
     ///
-    /// Well, except for https://github.com/pypa/packaging/issues/617
+    /// Well, except for <https://github.com/pypa/packaging/issues/617>
     #[test]
     fn test_operators_other() {
         let versions: Vec<Version> = VERSIONS_0
@@ -809,9 +809,10 @@ mod test {
                 .iter()
                 .map(|specifier| specifier.contains(version))
                 .collect::<Vec<bool>>();
-            for ((actual, expected), specifier) in actual.iter().zip(expected).zip(SPECIFIERS_OTHER)
+            for ((actual, expected), _specifier) in
+                actual.iter().zip(expected).zip(SPECIFIERS_OTHER)
             {
-                assert_eq!(actual, expected, "{} {}", version, specifier);
+                assert_eq!(actual, expected);
             }
         }
     }
@@ -924,9 +925,7 @@ mod test {
                 VersionSpecifier::from_str(specifier)
                     .unwrap()
                     .contains(&Version::from_str(version).unwrap()),
-                "{} {}",
-                version,
-                specifier
+                "{version} {specifier}"
             );
         }
     }
@@ -1027,9 +1026,7 @@ mod test {
                 !VersionSpecifier::from_str(specifier)
                     .unwrap()
                     .contains(&Version::from_str(version).unwrap()),
-                "{} {}",
-                version,
-                specifier
+                "{version} {specifier}"
             );
         }
     }
@@ -1246,15 +1243,12 @@ mod test {
         ];
         for (specifier, error) in specifiers {
             if let Some(error) = error {
-                assert_eq!(VersionSpecifier::from_str(specifier).unwrap_err(), error)
+                assert_eq!(VersionSpecifier::from_str(specifier).unwrap_err(), error);
             } else {
                 assert_eq!(
                     VersionSpecifier::from_str(specifier).unwrap_err(),
-                    format!(
-                        "Version specifier `{}` doesn't match PEP 440 rules",
-                        specifier
-                    )
-                )
+                    format!("Version specifier `{specifier}` doesn't match PEP 440 rules",)
+                );
             }
         }
     }

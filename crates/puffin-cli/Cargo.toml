@@ -17,8 +17,8 @@ colored = { workspace = true }
 directories = { workspace = true }
 futures = { workspace = true }
 install-wheel-rs = { workspace = true }
-pep508_rs = { workspace = true }
-pep440_rs = { workspace = true }
+pep508_rs = { path = "../pep508-rs" }
+pep440_rs = { path = "../pep440-rs" }
 tracing = { workspace = true }
 tracing-tree = { workspace = true }
 tracing-subscriber = { workspace = true }

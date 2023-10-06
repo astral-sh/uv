@@ -24,8 +24,8 @@ use std::str::FromStr;
 use tracing::warn;
 
 /// Ways in which marker evaluation can fail
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub enum MarkerWarningKind {
     /// Using an old name from PEP 345 instead of the modern equivalent
     /// <https://peps.python.org/pep-0345/#environment-markers>
@@ -46,12 +46,14 @@ pub enum MarkerWarningKind {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl MarkerWarningKind {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn __hash__(&self) -> u8 {
         *self as u8
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
-        op.matches(self.cmp(other))
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn __richcmp__(&self, other: Self, op: CompareOp) -> bool {
+        op.matches(self.cmp(&other))
     }
 }
 
@@ -84,15 +86,15 @@ pub enum MarkerValueString {
     ImplementationName,
     /// `os_name`
     OsName,
-    /// /// Deprecated `os.name` from https://peps.python.org/pep-0345/#environment-markers
+    /// Deprecated `os.name` from <https://peps.python.org/pep-0345/#environment-markers>
     OsNameDeprecated,
     /// `platform_machine`
     PlatformMachine,
-    /// /// Deprecated `platform.machine` from https://peps.python.org/pep-0345/#environment-markers
+    /// Deprecated `platform.machine` from <https://peps.python.org/pep-0345/#environment-markers>
     PlatformMachineDeprecated,
     /// `platform_python_implementation`
     PlatformPythonImplementation,
-    /// /// Deprecated `platform.python_implementation` from https://peps.python.org/pep-0345/#environment-markers
+    /// Deprecated `platform.python_implementation` from <https://peps.python.org/pep-0345/#environment-markers>
     PlatformPythonImplementationDeprecated,
     /// `platform_release`
     PlatformRelease,
@@ -100,11 +102,11 @@ pub enum MarkerValueString {
     PlatformSystem,
     /// `platform_version`
     PlatformVersion,
-    /// /// Deprecated `platform.version` from https://peps.python.org/pep-0345/#environment-markers
+    /// Deprecated `platform.version` from <https://peps.python.org/pep-0345/#environment-markers>
     PlatformVersionDeprecated,
     /// `sys_platform`
     SysPlatform,
-    /// /// Deprecated `sys.platform` from https://peps.python.org/pep-0345/#environment-markers
+    /// Deprecated `sys.platform` from <https://peps.python.org/pep-0345/#environment-markers>
     SysPlatformDeprecated,
 }
 
@@ -184,7 +186,7 @@ impl FromStr for MarkerValue {
             "sys_platform" => Self::MarkerEnvString(MarkerValueString::SysPlatform),
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
             "extra" => Self::Extra,
-            _ => return Err(format!("Invalid key: {}", s)),
+            _ => return Err(format!("Invalid key: {s}")),
         };
         Ok(value)
     }
@@ -196,7 +198,7 @@ impl Display for MarkerValue {
             Self::MarkerEnvVersion(marker_value_version) => marker_value_version.fmt(f),
             Self::MarkerEnvString(marker_value_string) => marker_value_string.fmt(f),
             Self::Extra => f.write_str("extra"),
-            Self::QuotedString(value) => write!(f, "'{}'", value),
+            Self::QuotedString(value) => write!(f, "'{value}'"),
         }
     }
 }
@@ -267,7 +269,7 @@ impl FromStr for MarkerOperator {
             {
                 Self::NotIn
             }
-            other => return Err(format!("Invalid comparator: {}", other)),
+            other => return Err(format!("Invalid comparator: {other}")),
         };
         Ok(value)
     }
@@ -290,8 +292,8 @@ impl Display for MarkerOperator {
 }
 
 /// Helper type with a [Version] and its original text
-#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 pub struct StringVersion {
     /// Original unchanged string
     pub string: String,
@@ -344,7 +346,7 @@ impl Deref for StringVersion {
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
 ///
 /// Some are `(String, Version)` because we have to support version comparison
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::unsafe_derive_deserialize)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -431,20 +433,17 @@ impl MarkerEnvironment {
         let implementation_version =
             StringVersion::from_str(implementation_version).map_err(|err| {
                 PyValueError::new_err(format!(
-                    "implementation_version is not a valid PEP440 version: {}",
-                    err
+                    "implementation_version is not a valid PEP440 version: {err}"
                 ))
             })?;
         let python_full_version = StringVersion::from_str(python_full_version).map_err(|err| {
             PyValueError::new_err(format!(
-                "python_full_version is not a valid PEP440 version: {}",
-                err
+                "python_full_version is not a valid PEP440 version: {err}"
             ))
         })?;
         let python_version = StringVersion::from_str(python_version).map_err(|err| {
             PyValueError::new_err(format!(
-                "python_version is not a valid PEP440 version: {}",
-                err
+                "python_version is not a valid PEP440 version: {err}"
             ))
         })?;
         Ok(Self {
@@ -483,10 +482,10 @@ impl MarkerEnvironment {
             info.getattr("major")?.extract::<usize>()?,
             info.getattr("minor")?.extract::<usize>()?,
             info.getattr("micro")?.extract::<usize>()?,
-            if kind != "final" {
-                format!("{}{}", kind, info.getattr("serial")?.extract::<usize>()?)
+            if kind == "final" {
+                String::new()
             } else {
-                "".to_string()
+                format!("{}{}", kind, info.getattr("serial")?.extract::<usize>()?)
             }
         );
         let python_full_version: String = platform.getattr("python_version")?.call0()?.extract()?;
@@ -496,20 +495,17 @@ impl MarkerEnvironment {
         let implementation_version =
             StringVersion::from_str(&implementation_version).map_err(|err| {
                 PyValueError::new_err(format!(
-                    "Broken python implementation, implementation_version is not a valid PEP440 version: {}",
-                    err
+                    "Broken python implementation, implementation_version is not a valid PEP440 version: {err}"
                 ))
             })?;
         let python_full_version = StringVersion::from_str(&python_full_version).map_err(|err| {
             PyValueError::new_err(format!(
-                "Broken python implementation, python_full_version is not a valid PEP440 version: {}",
-                err
+                "Broken python implementation, python_full_version is not a valid PEP440 version: {err}"
             ))
         })?;
         let python_version = StringVersion::from_str(&python_version).map_err(|err| {
             PyValueError::new_err(format!(
-                "Broken python implementation, python_version is not a valid PEP440 version: {}",
-                err
+                "Broken python implementation, python_version is not a valid PEP440 version: {err}"
             ))
         })?;
         Ok(Self {
@@ -546,7 +542,7 @@ pub struct MarkerExpression {
 }
 
 impl MarkerExpression {
-    /// Evaluate a <marker_value> <marker_op> <marker_value> expression
+    /// Evaluate a <`marker_value`> <`marker_op`> <`marker_value`> expression
     fn evaluate(
         &self,
         env: &MarkerEnvironment,
@@ -592,7 +588,7 @@ impl MarkerExpression {
                     Err(err) => {
                         reporter(
                             MarkerWarningKind::Pep440Error,
-                            format!("Invalid operator/version combination: {}", err),
+                            format!("Invalid operator/version combination: {err}"),
                             self,
                         );
                         return false;
@@ -664,7 +660,7 @@ impl MarkerExpression {
                                 Err(err) => {
                                     reporter(
                                         MarkerWarningKind::Pep440Error,
-                                        format!("Invalid operator/version combination: {}", err),
+                                        format!("Invalid operator/version combination: {err}"),
                                         self,
                                     );
                                     return false;
@@ -685,8 +681,7 @@ impl MarkerExpression {
                         // Not even pypa/packaging 22.0 supports this
                         // https://github.com/pypa/packaging/issues/632
                         reporter(MarkerWarningKind::StringStringComparison, format!(
-                            "Comparing two quoted strings with each other doesn't make sense: {}, evaluating to false",
-                            self
+                            "Comparing two quoted strings with each other doesn't make sense: {self}, evaluating to false"
                         ), self);
                         false
                     }
@@ -703,7 +698,7 @@ impl MarkerExpression {
     /// `python_version <pep PEP 440 operator> '...'` and
     /// `'...' <pep PEP 440 operator>  python_version`.
     ///
-    /// Note that unlike [Self::evaluate] this does not perform any checks for bogus expressions but
+    /// Note that unlike [`Self::evaluate`] this does not perform any checks for bogus expressions but
     /// will simply return true.
     ///
     /// ```rust
@@ -809,7 +804,7 @@ impl MarkerExpression {
             MarkerOperator::GreaterThan => {
                 reporter(
                     MarkerWarningKind::LexicographicComparison,
-                    format!("Comparing {} and {} lexicographically", l_string, r_string),
+                    format!("Comparing {l_string} and {r_string} lexicographically"),
                     self,
                 );
                 l_string > r_string
@@ -817,7 +812,7 @@ impl MarkerExpression {
             MarkerOperator::GreaterEqual => {
                 reporter(
                     MarkerWarningKind::LexicographicComparison,
-                    format!("Comparing {} and {} lexicographically", l_string, r_string),
+                    format!("Comparing {l_string} and {r_string} lexicographically"),
                     self,
                 );
                 l_string >= r_string
@@ -825,7 +820,7 @@ impl MarkerExpression {
             MarkerOperator::LessThan => {
                 reporter(
                     MarkerWarningKind::LexicographicComparison,
-                    format!("Comparing {} and {} lexicographically", l_string, r_string),
+                    format!("Comparing {l_string} and {r_string} lexicographically"),
                     self,
                 );
                 l_string < r_string
@@ -833,7 +828,7 @@ impl MarkerExpression {
             MarkerOperator::LessEqual => {
                 reporter(
                     MarkerWarningKind::LexicographicComparison,
-                    format!("Comparing {} and {} lexicographically", l_string, r_string),
+                    format!("Comparing {l_string} and {r_string} lexicographically"),
                     self,
                 );
                 l_string <= r_string
@@ -841,7 +836,7 @@ impl MarkerExpression {
             MarkerOperator::TildeEqual => {
                 reporter(
                     MarkerWarningKind::LexicographicComparison,
-                    format!("Can't compare {} and {} with `~=`", l_string, r_string),
+                    format!("Can't compare {l_string} and {r_string} with `~=`"),
                     self,
                 );
                 false
@@ -880,8 +875,7 @@ impl FromStr for MarkerExpression {
         if let Some((pos, unexpected)) = chars.next() {
             return Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Unexpected character '{}', expected end of input",
-                    unexpected
+                    "Unexpected character '{unexpected}', expected end of input"
                 )),
                 start: pos,
                 len: chars.chars.clone().count(),
@@ -937,7 +931,7 @@ impl MarkerTree {
         }
     }
 
-    /// Same as [Self::evaluate], but instead of using logging to warn, you can pass your own
+    /// Same as [`Self::evaluate`], but instead of using logging to warn, you can pass your own
     /// handler for warnings
     pub fn evaluate_reporter(
         &self,
@@ -971,7 +965,7 @@ impl MarkerTree {
     /// environment markers, i.e. if there is potentially an environment that could activate this
     /// requirement.
     ///
-    /// Note that unlike [Self::evaluate] this does not perform any checks for bogus expressions but
+    /// Note that unlike [`Self::evaluate`] this does not perform any checks for bogus expressions but
     /// will simply return true. As caller you should separately perform a check with an environment
     /// and forward all warnings.
     pub fn evaluate_extras_and_python_version(
@@ -992,7 +986,7 @@ impl MarkerTree {
         }
     }
 
-    /// Same as [Self::evaluate], but instead of using logging to warn, you get a Vec with all
+    /// Same as [`Self::evaluate`], but instead of using logging to warn, you get a Vec with all
     /// warnings collected
     pub fn evaluate_collect_warnings(
         &self,
@@ -1001,7 +995,7 @@ impl MarkerTree {
     ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
         let mut warnings = Vec::new();
         let mut reporter = |kind, warning, marker: &MarkerExpression| {
-            warnings.push((kind, warning, marker.to_string()))
+            warnings.push((kind, warning, marker.to_string()));
         };
         self.report_deprecated_options(&mut reporter);
         let result = self.evaluate_reporter_impl(env, extras, &mut reporter);
@@ -1066,12 +1060,12 @@ impl MarkerTree {
             }
             MarkerTree::And(expressions) => {
                 for expression in expressions {
-                    expression.report_deprecated_options(reporter)
+                    expression.report_deprecated_options(reporter);
                 }
             }
             MarkerTree::Or(expressions) => {
                 for expression in expressions {
-                    expression.report_deprecated_options(reporter)
+                    expression.report_deprecated_options(reporter);
                 }
             }
         }
@@ -1082,13 +1076,13 @@ impl Display for MarkerTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let format_inner = |expression: &MarkerTree| {
             if matches!(expression, MarkerTree::Expression(_)) {
-                format!("{}", expression)
+                format!("{expression}")
             } else {
-                format!("({})", expression)
+                format!("({expression})")
             }
         };
         match self {
-            MarkerTree::Expression(expression) => write!(f, "{}", expression),
+            MarkerTree::Expression(expression) => write!(f, "{expression}"),
             MarkerTree::And(and_list) => f.write_str(
                 &and_list
                     .iter()
@@ -1131,8 +1125,7 @@ fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508E
             Some((pos, other)) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Expected whitespace after 'not', found '{}'",
-                        other
+                        "Expected whitespace after 'not', found '{other}'"
                     )),
                     start: pos,
                     len: 1,
@@ -1147,8 +1140,7 @@ fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508E
     }
     MarkerOperator::from_str(&operator).map_err(|_| Pep508Error {
         message: Pep508ErrorSource::String(format!(
-            "Expected a valid marker operator (such as '>=' or 'not in'), found '{}'",
-            operator
+            "Expected a valid marker operator (such as '>=' or 'not in'), found '{operator}'"
         )),
         start,
         len,
@@ -1156,10 +1148,10 @@ fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508E
     })
 }
 
-/// Either a single or double quoted string or one of 'python_version', 'python_full_version',
-/// 'os_name', 'sys_platform', 'platform_release', 'platform_system', 'platform_version',
-/// 'platform_machine', 'platform_python_implementation', 'implementation_name',
-/// 'implementation_version', 'extra'
+/// Either a single or double quoted string or one of '`python_version`', '`python_full_version`',
+/// '`os_name`', '`sys_platform`', '`platform_release`', '`platform_system`', '`platform_version`',
+/// '`platform_machine`', '`platform_python_implementation`', '`implementation_name`',
+/// '`implementation_version`', 'extra'
 fn parse_marker_value(chars: &mut CharIter) -> Result<MarkerValue, Pep508Error> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
     // > that backslash escapes are not defined, but existing implementations do support them. They
@@ -1189,8 +1181,7 @@ fn parse_marker_value(chars: &mut CharIter) -> Result<MarkerValue, Pep508Error> 
             });
             MarkerValue::from_str(&key).map_err(|_| Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected a valid marker name, found '{}'",
-                    key
+                    "Expected a valid marker name, found '{key}'"
                 )),
                 start,
                 len,
@@ -1303,8 +1294,7 @@ pub(crate) fn parse_markers_impl(chars: &mut CharIter) -> Result<MarkerTree, Pep
         // character was neither "and" nor "or"
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(format!(
-                "Unexpected character '{}', expected 'and', 'or' or end of input",
-                unexpected
+                "Unexpected character '{unexpected}', expected 'and', 'or' or end of input"
             )),
             start: pos,
             len: chars.chars.clone().count(),
@@ -1337,14 +1327,14 @@ mod test {
         let v37 = StringVersion::from_str("3.7").unwrap();
 
         MarkerEnvironment {
-            implementation_name: "".to_string(),
+            implementation_name: String::new(),
             implementation_version: v37.clone(),
             os_name: "linux".to_string(),
-            platform_machine: "".to_string(),
-            platform_python_implementation: "".to_string(),
-            platform_release: "".to_string(),
-            platform_system: "".to_string(),
-            platform_version: "".to_string(),
+            platform_machine: String::new(),
+            platform_python_implementation: String::new(),
+            platform_release: String::new(),
+            platform_system: String::new(),
+            platform_version: String::new(),
             python_full_version: v37.clone(),
             python_version: v37,
             sys_platform: "linux".to_string(),
@@ -1383,9 +1373,7 @@ mod test {
             assert_eq!(
                 MarkerTree::from_str(a).unwrap(),
                 MarkerTree::from_str(b).unwrap(),
-                "{} {}",
-                a,
-                b
+                "{a} {b}"
             );
         }
     }
@@ -1394,14 +1382,14 @@ mod test {
     fn test_marker_evaluation() {
         let v27 = StringVersion::from_str("2.7").unwrap();
         let env27 = MarkerEnvironment {
-            implementation_name: "".to_string(),
+            implementation_name: String::new(),
             implementation_version: v27.clone(),
             os_name: "linux".to_string(),
-            platform_machine: "".to_string(),
-            platform_python_implementation: "".to_string(),
-            platform_release: "".to_string(),
-            platform_system: "".to_string(),
-            platform_version: "".to_string(),
+            platform_machine: String::new(),
+            platform_python_implementation: String::new(),
+            platform_release: String::new(),
+            platform_system: String::new(),
+            platform_version: String::new(),
             python_full_version: v27.clone(),
             python_version: v27,
             sys_platform: "linux".to_string(),
