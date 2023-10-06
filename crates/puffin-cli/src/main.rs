@@ -20,13 +20,25 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Install dependencies from a `requirements.text` file.
+    /// Compile a `requirements.in` file to a `requirements.txt` file.
+    Compile(CompileArgs),
+    /// Install dependencies from a `requirements.txt` file.
     Install(InstallArgs),
 }
 
 #[derive(Args)]
+struct CompileArgs {
+    /// Path to the `requirements.txt` file to compile.
+    src: PathBuf,
+
+    /// Avoid reading from or writing to the cache.
+    #[arg(long)]
+    no_cache: bool,
+}
+
+#[derive(Args)]
 struct InstallArgs {
-    /// Path to the `requirements.text` file to install.
+    /// Path to the `requirements.txt` file to install.
     src: PathBuf,
 
     /// Avoid reading from or writing to the cache.
@@ -43,12 +55,21 @@ async fn main() -> ExitCode {
     let dirs = ProjectDirs::from("", "", "puffin");
 
     let result = match &cli.command {
-        Commands::Install(install) => {
-            commands::install(
-                &install.src,
+        Commands::Compile(args) => {
+            commands::compile(
+                &args.src,
                 dirs.as_ref()
                     .map(directories::ProjectDirs::cache_dir)
-                    .filter(|_| !install.no_cache),
+                    .filter(|_| !args.no_cache),
+            )
+            .await
+        }
+        Commands::Install(args) => {
+            commands::install(
+                &args.src,
+                dirs.as_ref()
+                    .map(directories::ProjectDirs::cache_dir)
+                    .filter(|_| !args.no_cache),
             )
             .await
         }

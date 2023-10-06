@@ -1,7 +1,9 @@
 use std::process::ExitCode;
 
+pub(crate) use compile::compile;
 pub(crate) use install::install;
 
+mod compile;
 mod install;
 
 #[derive(Copy, Clone)]

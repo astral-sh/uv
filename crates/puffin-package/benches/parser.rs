@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use puffin_package::Requirements;
+use puffin_package::requirements::Requirements;
 
 const REQUIREMENTS_TXT: &str = r"
 #

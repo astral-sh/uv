@@ -16,3 +16,4 @@ anyhow = { version = "1.0.75" }
 pep508_rs = { version = "0.2.3", features = ["serde"] }
 serde_json = { version = "1.0.107" }
 tracing = { version = "0.1.37" }
+pep440_rs = "0.3.12"
