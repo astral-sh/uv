@@ -1,0 +1,25 @@
+[package]
+name = "pep440_rs"
+version = "0.3.12"
+description = "A library for python version numbers and specifiers, implementing PEP 440"
+edition = "2021"
+include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
+# Same license as pypa/packaging where the tests are from
+license = "Apache-2.0 OR BSD-2-Clause"
+repository = "https://github.com/konstin/pep440-rs"
+readme = "Readme.md"
+
+[lib]
+name = "pep440_rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+lazy_static = "1.4.0"
+pyo3 = { version = "0.19", optional = true, features = ["extension-module", "abi3-py37"] }
+regex = { version = "1.8.1", default-features = false, features = ["std", "perf", "unicode-case", "unicode-perl"] }
+serde = { version = "1.0.162", features = ["derive"], optional = true }
+tracing = { version = "0.1.37", optional = true }
+unicode-width = "0.1.10"
+
+[dev-dependencies]
+indoc = "2.0.1"

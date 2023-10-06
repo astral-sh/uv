@@ -1,0 +1,15 @@
+[project]
+name = "pep440_rs"
+readme = "python/Readme.md"
+
+[build-system]
+requires = ["maturin>=1.0.0,<2.0.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["pyo3"]
+python-source = "python"
+module-name = "pep440_rs._pep440_rs"
+
+[tool.ruff.per-file-ignores]
+"python/pep440_rs/__init__.py" = ["F403", "F405"]
