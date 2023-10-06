@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::Result;
+use bitflags::bitflags;
 use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
 use pep440_rs::Version;
@@ -42,12 +43,21 @@ impl PinnedPackage {
     }
 }
 
+bitflags! {
+    #[derive(Debug, Copy, Clone, Default)]
+    pub struct Flags: u8 {
+        /// Don't install package dependencies.
+        const NO_DEPS = 1 << 0;
+    }
+}
+
 /// Resolve a set of requirements into a set of pinned versions.
 pub async fn resolve(
     requirements: &Requirements,
     markers: &MarkerEnvironment,
     tags: &Tags,
     client: &PypiClient,
+    flags: Flags,
 ) -> Result<Resolution> {
     // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
     // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
@@ -141,31 +151,33 @@ pub async fn resolve(
                         },
                     );
 
-                    // Enqueue its dependencies.
-                    for dependency in metadata.requires_dist {
-                        if !dependency.evaluate_markers(
-                            markers,
-                            // TODO(charlie): Remove this clone.
-                            requirement.extras.clone().unwrap_or_default(),
-                        ) {
-                            debug!("--> ignoring {dependency} due to environment mismatch");
-                            continue;
+                    if !flags.intersects(Flags::NO_DEPS) {
+                        // Enqueue its dependencies.
+                        for dependency in metadata.requires_dist {
+                            if !dependency.evaluate_markers(
+                                markers,
+                                // TODO(charlie): Remove this clone.
+                                requirement.extras.clone().unwrap_or_default(),
+                            ) {
+                                debug!("--> ignoring {dependency} due to environment mismatch");
+                                continue;
+                            }
+
+                            let normalized_name = PackageName::normalize(&dependency.name);
+
+                            if resolution.contains_key(&normalized_name) {
+                                continue;
+                            }
+
+                            if !in_flight.insert(normalized_name) {
+                                continue;
+                            }
+
+                            debug!("--> adding transitive dependency: {}", dependency);
+
+                            package_sink.unbounded_send(Request::Package(dependency))?;
                         }
-
-                        let normalized_name = PackageName::normalize(&dependency.name);
-
-                        if resolution.contains_key(&normalized_name) {
-                            continue;
-                        }
-
-                        if !in_flight.insert(normalized_name) {
-                            continue;
-                        }
-
-                        debug!("--> adding transitive dependency: {}", dependency);
-
-                        package_sink.unbounded_send(Request::Package(dependency))?;
-                    }
+                    };
                 }
             }
         }

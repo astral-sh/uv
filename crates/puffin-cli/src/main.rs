@@ -22,8 +22,8 @@ struct Cli {
 enum Commands {
     /// Compile a `requirements.in` file to a `requirements.txt` file.
     Compile(CompileArgs),
-    /// Install dependencies from a `requirements.txt` file.
-    Install(InstallArgs),
+    /// Sync dependencies from a `requirements.txt` file.
+    Sync(SyncArgs),
 }
 
 #[derive(Args)]
@@ -37,7 +37,7 @@ struct CompileArgs {
 }
 
 #[derive(Args)]
-struct InstallArgs {
+struct SyncArgs {
     /// Path to the `requirements.txt` file to install.
     src: PathBuf,
 
@@ -59,16 +59,16 @@ async fn main() -> ExitCode {
             commands::compile(
                 &args.src,
                 dirs.as_ref()
-                    .map(directories::ProjectDirs::cache_dir)
+                    .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
             )
             .await
         }
-        Commands::Install(args) => {
-            commands::install(
+        Commands::Sync(args) => {
+            commands::sync(
                 &args.src,
                 dirs.as_ref()
-                    .map(directories::ProjectDirs::cache_dir)
+                    .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
             )
             .await

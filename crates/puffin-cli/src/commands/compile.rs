@@ -43,7 +43,14 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     };
 
     // Resolve the dependencies.
-    let resolution = puffin_resolver::resolve(&requirements, markers, &tags, &client).await?;
+    let resolution = puffin_resolver::resolve(
+        &requirements,
+        markers,
+        &tags,
+        &client,
+        puffin_resolver::Flags::default(),
+    )
+    .await?;
 
     for (name, package) in resolution.iter() {
         #[allow(clippy::print_stdout)]

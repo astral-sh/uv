@@ -1,10 +1,10 @@
 use std::process::ExitCode;
 
 pub(crate) use compile::compile;
-pub(crate) use install::install;
+pub(crate) use sync::sync;
 
 mod compile;
-mod install;
+mod sync;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

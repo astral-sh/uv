@@ -11,8 +11,8 @@ use puffin_platform::Platform;
 
 use crate::commands::ExitStatus;
 
-/// Install a set of requirements into the current Python environment.
-pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
+/// Install a set of locked requirements into the current Python environment.
+pub(crate) async fn sync(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;
 
@@ -43,12 +43,23 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     };
 
     // Resolve the dependencies.
-    // TODO(charlie): When installing, assume `--no-deps`.
-    let resolution = puffin_resolver::resolve(&requirements, markers, &tags, &client).await?;
+    let resolution = puffin_resolver::resolve(
+        &requirements,
+        markers,
+        &tags,
+        &client,
+        puffin_resolver::Flags::NO_DEPS,
+    )
+    .await?;
 
     // Install into the current environment.
     let wheels = resolution.into_files().collect::<Vec<_>>();
     puffin_installer::install(&wheels, &python, &client).await?;
+
+    #[allow(clippy::print_stdout)]
+    {
+        println!("Installed {} wheels", wheels.len());
+    }
 
     Ok(ExitStatus::Success)
 }
