@@ -27,3 +27,4 @@ tracing-tree = { version = "0.2.5" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 directories = "5.0.1"
 rayon = "1.8.0"
+url = "2.4.1"

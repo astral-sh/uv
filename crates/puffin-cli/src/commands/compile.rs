@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use tracing::debug;
+use puffin_client::PypiClientBuilder;
 
 use puffin_interpreter::PythonExecutable;
 use puffin_platform::Platform;
@@ -32,8 +33,17 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     // Determine the compatible platform tags.
     let tags = Tags::from_env(&platform, python.version())?;
 
+    // Instantiate a client.
+    let client = {
+        let mut pypi_client = PypiClientBuilder::default();
+        if let Some(cache) = cache {
+            pypi_client = pypi_client.cache(cache);
+        }
+        pypi_client.build()
+    };
+
     // Resolve the dependencies.
-    let resolution = resolve(&requirements, markers, &tags, cache).await?;
+    let resolution = resolve(&requirements, markers, &tags, &client).await?;
 
     for (name, package) in resolution.iter() {
         #[allow(clippy::print_stdout)]

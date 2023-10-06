@@ -57,6 +57,7 @@ impl PythonExecutable {
 
     /// Returns the Python version as a simple tuple.
     pub fn simple_version(&self) -> (u8, u8) {
-        (self.version().release.0, self.version().release.1)
+        (u8::try_from(self.version().release[0]).expect("invalid major version"),
+            u8::try_from(self.version().release[1]).expect("invalid minor version"))
     }
 }

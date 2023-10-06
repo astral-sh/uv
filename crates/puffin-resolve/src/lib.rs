@@ -9,7 +9,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use tracing::debug;
 
-use puffin_client::{File, PypiClientBuilder, SimpleJson};
+use puffin_client::{File, PypiClient, PypiClientBuilder, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
@@ -20,7 +20,7 @@ use puffin_platform::tags::Tags;
 pub struct Resolution(HashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
+    pub fn iter(&self) -> impl Iterator<Item=(&PackageName, &PinnedPackage)> {
         self.0.iter()
     }
 }
@@ -32,6 +32,10 @@ pub struct PinnedPackage {
 }
 
 impl PinnedPackage {
+    pub fn url(&self) -> &str {
+        &self.file.url
+    }
+
     pub fn version(&self) -> &Version {
         &self.metadata.version
     }
@@ -42,16 +46,8 @@ pub async fn resolve(
     requirements: &Requirements,
     markers: &MarkerEnvironment,
     tags: &Tags,
-    cache: Option<&Path>,
+    client: &PypiClient,
 ) -> Result<Resolution> {
-    // Instantiate a client.
-    let pypi_client = {
-        let mut pypi_client = PypiClientBuilder::default();
-        if let Some(cache) = cache {
-            pypi_client = pypi_client.cache(cache);
-        }
-        pypi_client.build()
-    };
 
     // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
     // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
@@ -61,13 +57,13 @@ pub async fn resolve(
     let mut package_stream = package_stream
         .map(|request: Request| match request {
             Request::Package(requirement) => Either::Left(
-                pypi_client
+                client
                     // TODO(charlie): Remove this clone.
                     .simple(requirement.name.clone())
                     .map_ok(move |metadata| Response::Package(requirement, metadata)),
             ),
             Request::Version(requirement, file) => Either::Right(
-                pypi_client
+                client
                     // TODO(charlie): Remove this clone.
                     .file(file.clone())
                     .map_ok(move |metadata| Response::Version(requirement, file, metadata)),
