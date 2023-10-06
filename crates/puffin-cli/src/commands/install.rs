@@ -35,12 +35,8 @@ pub(crate) async fn install(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     // Resolve the dependencies.
     let resolution = resolve(&requirements, markers, &tags, cache).await?;
 
-    for (name, version) in resolution.iter() {
-        #[allow(clippy::print_stdout)]
-        {
-            println!("{name}=={version}");
-        }
-    }
+    // Install each package into the current virtual environment.
+
 
     Ok(ExitStatus::Success)
 }
