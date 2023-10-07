@@ -1,0 +1,6 @@
+.ipynb_checkpoints
+.venv
+/pypi_analysis/pipy_requires_dist.ndjson
+/pypi_analysis/pypi_all.ndjson
+__pycache__
+target

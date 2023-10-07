@@ -4,6 +4,10 @@
 
 Utilities for interacting with Python version numbers and specifiers.
 
+## [pep508-rs](./pep508-rs)
+
+Utilities for interacting with [PEP 508](https://peps.python.org/pep-0508/) dependency specifiers.
+
 ## [puffin-cli](./puffin-cli)
 
 Command-line interface for the Puffin package manager.

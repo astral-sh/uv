@@ -1,0 +1,49 @@
+[package]
+name = "pep508_rs"
+version = "0.2.3"
+description = "A library for python dependency specifiers, better known as PEP 508"
+edition = "2021"
+include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
+# Same license as pypa/packaging where the tests are from
+license = "Apache-2.0 OR BSD-2-Clause"
+readme = "Readme.md"
+repository = "https://github.com/konstin/pep508_rs"
+
+[dependencies]
+anyhow = { version = "1.0.75", optional = true }
+once_cell = "1.18.0"
+pep440_rs = "0.3.11"
+pyo3 = { version = "0.19.2", optional = true, features = ["abi3", "extension-module"] }
+pyo3-log = { version = "0.8.3", optional = true }
+regex = { version = "1.9.5", default-features = false, features = ["std"] }
+serde = { version = "1.0.188", features = ["derive"], optional = true }
+serde_json = { version = "1.0.107", optional = true }
+thiserror = "1.0.49"
+toml = { version = "0.8.1", optional = true }
+tracing = { version = "0.1.37", features = ["log"] }
+unicode-width = "0.1.11"
+url = { version = "2.4.1", features = ["serde"] }
+
+[dev-dependencies]
+indoc = "2.0.4"
+log = "0.4.20"
+testing_logger = "0.1.1"
+serde_json = "1.0.107"
+
+[features]
+pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log"]
+serde = ["dep:serde", "pep440_rs/serde"]
+modern = ["serde", "toml", "anyhow"]
+default = []
+
+[lib]
+name = "pep508_rs"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+debug = true
+
+[profile.maturin]
+inherits = "release"
+strip = true
+
