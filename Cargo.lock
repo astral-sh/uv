@@ -1773,6 +1773,7 @@ dependencies = [
  "platform-tags",
  "puffin-client",
  "puffin-package",
+ "thiserror",
  "tracing",
  "wheel-filename",
 ]
