@@ -15,6 +15,7 @@ platform-host = { path = "../platform-host" }
 puffin-resolver = { path = "../puffin-resolver" }
 
 anyhow = { workspace = true }
+cacache = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 colored = { workspace = true }
 directories = { workspace = true }

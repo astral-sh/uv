@@ -24,6 +24,8 @@ enum Commands {
     Compile(CompileArgs),
     /// Sync dependencies from a `requirements.txt` file.
     Sync(SyncArgs),
+    /// Clear the cache.
+    Clean,
 }
 
 #[derive(Args)]
@@ -73,6 +75,7 @@ async fn main() -> ExitCode {
             )
             .await
         }
+        Commands::Clean => commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir)).await,
     };
 
     match result {

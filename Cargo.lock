@@ -1670,6 +1670,7 @@ name = "puffin-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cacache",
  "clap",
  "colored",
  "directories",

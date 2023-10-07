@@ -14,6 +14,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 anyhow = { version = "1.0.75" }
 bitflags = { version = "2.4.0" }
+cacache = { version = "11.7.1", default-features = false, features = ["tokio-runtime"] }
 clap = { version = "4.4.6" }
 colored = { version = "2.0.4" }
 configparser = { version = "3.0.2" }
