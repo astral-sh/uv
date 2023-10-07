@@ -70,15 +70,7 @@ Options:
 
 ### Resolution
 
-To compare a warm run of `puffin` to `pip-compile`:
-
-```shell
-hyperfine --runs 10 --warmup 3 --prepare "rm -f /tmp/tmp.txt" \
-    "./target/release/puffin-cli compile requirements.txt" \
-    "pip-compile requirements.txt -o /tmp/tmp.txt"
-```
-
-To compare a cold run of `puffin` to `pip-compile`:
+To compare with a cold cache:
 
 ```shell
 hyperfine --runs 10 --warmup 3 --prepare "rm -f /tmp/tmp.txt" \
@@ -86,17 +78,17 @@ hyperfine --runs 10 --warmup 3 --prepare "rm -f /tmp/tmp.txt" \
     "pip-compile requirements.txt --rebuild --pip-args '--no-cache-dir' -o /tmp/tmp.txt"
 ```
 
-### Installation
-
-To compare a warm run of `puffin` to `pip`:
+To compare with a warm cache:
 
 ```shell
-hyperfine --runs 10 --warmup 3 \
-    "./target/release/puffin-cli sync requirements.txt --ignore-installed" \
-    "pip install -r requirements.txt --ignore-installed --no-deps"
+hyperfine --runs 10 --warmup 3 --prepare "rm -f /tmp/tmp.txt" \
+    "./target/release/puffin-cli compile requirements.txt" \
+    "pip-compile requirements.txt -o /tmp/tmp.txt"
 ```
 
-To compare a cold run of `puffin` to `pip`:
+### Installation
+
+To compare with a cold cache:
 
 ```shell
 hyperfine --runs 10 --warmup 3 \
@@ -104,7 +96,16 @@ hyperfine --runs 10 --warmup 3 \
     "pip install -r requirements.txt --ignore-installed --no-cache-dir --no-deps"
 ```
 
-To compare a run in which all requirements are already installed:
+To compare with a warm cache:
+
+```shell
+hyperfine --runs 10 --warmup 3 \
+    "./target/release/puffin-cli sync requirements.txt --ignore-installed" \
+    "pip install -r requirements.txt --ignore-installed --no-deps"
+```
+
+
+To compare with all dependencies already installed:
 
 ```shell
 hyperfine --runs 10 --warmup 3 \
