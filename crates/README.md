@@ -1,5 +1,9 @@
 # Crates
 
+## [pep440-rs](./pep440-rs)
+
+Utilities for interacting with Python version numbers and specifiers.
+
 ## [puffin-cli](./puffin-cli)
 
 Command-line interface for the Puffin package manager.
