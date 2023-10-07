@@ -49,7 +49,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
         markers,
         &tags,
         &client,
-        puffin_resolver::Flags::default(),
+        puffin_resolver::ResolveFlags::default(),
     )
     .await?;
 
