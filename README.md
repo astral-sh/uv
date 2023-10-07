@@ -43,7 +43,7 @@ To compare a warm run of `puffin` to `pip`:
 ```shell
 hyperfine --runs 10 --warmup 3 \
     "./target/release/puffin-cli sync requirements.txt" \
-    "pip install -r requirements.txt"
+    "pip install -r requirements.txt --ignore-installed --no-deps"
 ```
 
 To compare a cold run of `puffin` to `pip`:
