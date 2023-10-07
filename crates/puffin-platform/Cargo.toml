@@ -12,7 +12,7 @@ license.workspace = true
 [dependencies]
 glibc_version = { workspace = true }
 goblin = { workspace = true }
-pep440_rs = { workspace = true }
+pep440_rs = { path = "../pep440-rs" }
 platform-info = { workspace = true }
 plist = { workspace = true }
 regex = { workspace = true }

@@ -1,4 +1,4 @@
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, FromPyObject, IntoPy, PyAny,
@@ -53,12 +53,9 @@ pub(crate) const VERSION_RE_INNER: &str = r"
 (?P<trailing_dot_star>\.\*)?                          # allow for version matching `.*`
 ";
 
-lazy_static! {
-    /// Matches a python version, such as `1.19.a1`. Based on the PEP 440 regex
-    static ref VERSION_RE: Regex = Regex::new(&format!(
-        r#"(?xi)^(?:\s*){}(?:\s*)$"#, VERSION_RE_INNER
-    )).unwrap();
-}
+/// Matches a python version, such as `1.19.a1`. Based on the PEP 440 regex
+static VERSION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(&format!(r#"(?xi)^(?:\s*){VERSION_RE_INNER}(?:\s*)$"#)).unwrap());
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
 #[derive(Eq, PartialEq, Debug, Hash, Clone)]
@@ -115,8 +112,7 @@ impl FromStr for Operator {
             // Should be forbidden by the regex if called from normal parsing
             other => {
                 return Err(format!(
-                    "No such comparison operator '{}', must be one of ~= == != <= >= < > ===",
-                    other
+                    "No such comparison operator '{other}', must be one of ~= == != <= >= < > ===",
                 ));
             }
         };
@@ -125,7 +121,7 @@ impl FromStr for Operator {
 }
 
 impl Display for Operator {
-    /// Note the EqualStar is also `==`
+    /// Note the `EqualStar` is also `==`.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let operator = match self {
             Operator::Equal => "==",
@@ -142,7 +138,7 @@ impl Display for Operator {
             Operator::GreaterThanEqual => ">=",
         };
 
-        write!(f, "{}", operator)
+        write!(f, "{operator}")
     }
 }
 
@@ -181,8 +177,7 @@ impl FromStr for PreRelease {
             "b" | "beta" => Ok(Self::Beta),
             "c" | "rc" | "pre" | "preview" => Ok(Self::Rc),
             _ => Err(format!(
-                "'{}' isn't recognized as alpha, beta or release candidate",
-                prerelease
+                "'{prerelease}' isn't recognized as alpha, beta or release candidate",
             )),
         }
     }
@@ -212,7 +207,7 @@ impl Display for PreRelease {
 /// > shorter local version’s segments match the beginning of the longer local version’s segments
 /// > exactly.
 ///
-/// Luckily the default Ord impl for Vec<LocalSegment> matches the PEP 440 rules
+/// Luckily the default `Ord` implementation for `Vec<LocalSegment>` matches the PEP 440 rules.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum LocalSegment {
     /// Not-parseable as integer segment of local version
@@ -224,8 +219,8 @@ pub enum LocalSegment {
 impl Display for LocalSegment {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::String(string) => write!(f, "{}", string),
-            Self::Number(number) => write!(f, "{}", number),
+            Self::String(string) => write!(f, "{string}"),
+            Self::Number(number) => write!(f, "{number}"),
         }
     }
 }
@@ -254,9 +249,9 @@ impl FromStr for LocalSegment {
 ///
 /// Beware that the sorting implemented with [Ord] and [Eq] is not consistent with the operators
 /// from PEP 440, i.e. compare two versions in rust with `>` gives a different result than a
-/// VersionSpecifier with `>` as operator.
+/// `VersionSpecifier` with `>` as operator.
 ///
-/// Parse with [Version::from_str]:
+/// Parse with [`Version::from_str`]:
 ///
 /// ```rust
 /// use std::str::FromStr;
@@ -360,25 +355,25 @@ impl PyVersion {
     #[getter]
     #[allow(clippy::get_first)]
     pub fn major(&self) -> usize {
-        self.release().get(0).cloned().unwrap_or_default()
+        self.release().get(0).copied().unwrap_or_default()
     }
     /// The second item of release or 0 if unavailable.
     #[getter]
     pub fn minor(&self) -> usize {
-        self.release().get(1).cloned().unwrap_or_default()
+        self.release().get(1).copied().unwrap_or_default()
     }
     /// The third item of release or 0 if unavailable.
     #[getter]
     pub fn micro(&self) -> usize {
-        self.release().get(2).cloned().unwrap_or_default()
+        self.release().get(2).copied().unwrap_or_default()
     }
 
     /// Parses a PEP 440 version string
     #[cfg(feature = "pyo3")]
     #[new]
-    pub fn parse(version: String) -> PyResult<Self> {
+    pub fn parse(version: &str) -> PyResult<Self> {
         Ok(Self(
-            Version::from_str(&version).map_err(PyValueError::new_err)?,
+            Version::from_str(version).map_err(PyValueError::new_err)?,
         ))
     }
 
@@ -386,8 +381,8 @@ impl PyVersion {
     /// Parse a PEP 440 version optionally ending with `.*`
     #[cfg(feature = "pyo3")]
     #[staticmethod]
-    pub fn parse_star(version_specifier: String) -> PyResult<(Self, bool)> {
-        Version::from_str_star(&version_specifier)
+    pub fn parse_star(version_specifier: &str) -> PyResult<(Self, bool)> {
+        Version::from_str_star(version_specifier)
             .map_err(PyValueError::new_err)
             .map(|(version, star)| (Self(version), star))
     }
@@ -422,7 +417,7 @@ impl PyVersion {
     }
 }
 
-/// https://github.com/serde-rs/serde/issues/1316#issue-332908452
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Version {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -434,7 +429,7 @@ impl<'de> Deserialize<'de> for Version {
     }
 }
 
-/// https://github.com/serde-rs/serde/issues/1316#issue-332908452
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
 impl Serialize for Version {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -500,29 +495,26 @@ impl Version {
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let epoch = if self.epoch == 0 {
-            "".to_string()
+            String::new()
         } else {
             format!("{}!", self.epoch)
         };
         let release = self
             .release
             .iter()
-            .map(|x| x.to_string())
+            .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join(".");
         let pre = self
             .pre
             .as_ref()
-            .map(|(pre_kind, pre_version)| format!("{}{}", pre_kind, pre_version))
+            .map(|(pre_kind, pre_version)| format!("{pre_kind}{pre_version}"))
             .unwrap_or_default();
         let post = self
             .post
-            .map(|post| format!(".post{}", post))
+            .map(|post| format!(".post{post}"))
             .unwrap_or_default();
-        let dev = self
-            .dev
-            .map(|dev| format!(".dev{}", dev))
-            .unwrap_or_default();
+        let dev = self.dev.map(|dev| format!(".dev{dev}")).unwrap_or_default();
         let local = self
             .local
             .as_ref()
@@ -531,19 +523,19 @@ impl Display for Version {
                     "+{}",
                     segments
                         .iter()
-                        .map(|x| x.to_string())
+                        .map(std::string::ToString::to_string)
                         .collect::<Vec<String>>()
                         .join(".")
                 )
             })
             .unwrap_or_default();
-        write!(f, "{}{}{}{}{}{}", epoch, release, pre, post, dev, local)
+        write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
     }
 }
 
 /// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` == `1.1` and
 /// `1.16` < `1.19`
-pub fn compare_release(this: &[usize], other: &[usize]) -> Ordering {
+pub(crate) fn compare_release(this: &[usize], other: &[usize]) -> Ordering {
     // "When comparing release segments with different numbers of components, the shorter segment
     // is padded out with additional zeros as necessary"
     let iterator: Vec<(&usize, &usize)> = if this.len() < other.len() {
@@ -632,7 +624,7 @@ impl PartialEq<Self> for Version {
 impl Eq for Version {}
 
 impl Hash for Version {
-    /// Custom implementation to ignoring trailing zero because PartialEq zero pads
+    /// Custom implementation to ignoring trailing zero because `PartialEq` zero pads
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.epoch.hash(state);
         // Skip trailing zeros
@@ -693,11 +685,11 @@ impl FromStr for Version {
     /// Parses a version such as `1.19`, `1.0a1`,`1.0+abc.5` or `1!2012.2`
     ///
     /// Note that this variant doesn't allow the version to end with a star, see
-    /// [Self::from_str_star] if you want to parse versions for specifiers
+    /// [`Self::from_str_star`] if you want to parse versions for specifiers
     fn from_str(version: &str) -> Result<Self, Self::Err> {
         let captures = VERSION_RE
             .captures(version)
-            .ok_or_else(|| format!("Version `{}` doesn't match PEP 440 rules", version))?;
+            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
         let (version, star) = Version::parse_impl(&captures)?;
         if star {
             return Err("A star (`*`) must not be used in a fixed version (use `Version::from_string_star` otherwise)".to_string());
@@ -707,7 +699,7 @@ impl FromStr for Version {
 }
 
 impl Version {
-    /// Like [Self::from_str], but also allows the version to end with a star and returns whether it
+    /// Like [`Self::from_str`], but also allows the version to end with a star and returns whether it
     /// did. This variant is for use in specifiers.
     ///  * `1.2.3` -> false
     ///  * `1.2.3.*` -> true
@@ -716,7 +708,7 @@ impl Version {
     pub fn from_str_star(version: &str) -> Result<(Self, bool), String> {
         let captures = VERSION_RE
             .captures(version)
-            .ok_or_else(|| format!("Version `{}` doesn't match PEP 440 rules", version))?;
+            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
         let (version, star) = Version::parse_impl(&captures)?;
         Ok((version, star))
     }
@@ -895,7 +887,7 @@ mod test {
         ];
         for version in versions {
             Version::from_str(version).unwrap();
-            VersionSpecifier::from_str(&format!("=={}", version)).unwrap();
+            VersionSpecifier::from_str(&format!("=={version}")).unwrap();
         }
     }
 
@@ -915,14 +907,11 @@ mod test {
         for version in versions {
             assert_eq!(
                 Version::from_str(version).unwrap_err(),
-                format!("Version `{}` doesn't match PEP 440 rules", version)
+                format!("Version `{version}` doesn't match PEP 440 rules")
             );
             assert_eq!(
-                VersionSpecifier::from_str(&format!("=={}", version)).unwrap_err(),
-                format!(
-                    "Version specifier `=={}` doesn't match PEP 440 rules",
-                    version
-                )
+                VersionSpecifier::from_str(&format!("=={version}")).unwrap_err(),
+                format!("Version specifier `=={version}` doesn't match PEP 440 rules")
             );
         }
     }
@@ -1048,19 +1037,17 @@ mod test {
             let version = Version::from_str(version_str).unwrap();
             let normalized = Version::from_str(normalized_str).unwrap();
             // Just test version parsing again
-            assert_eq!(version, normalized, "{} {}", version_str, normalized_str);
+            assert_eq!(version, normalized, "{version_str} {normalized_str}");
             // Test version normalization
             assert_eq!(
                 version.to_string(),
                 normalized.to_string(),
-                "{} {}",
-                version_str,
-                normalized_str
+                "{version_str} {normalized_str}"
             );
         }
     }
 
-    /// https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L229-L277
+    /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L229-L277>
     #[test]
     fn test_equality_and_normalization2() {
         let versions = [
@@ -1115,22 +1102,18 @@ mod test {
         for (version_str, normalized_str) in versions {
             let version = Version::from_str(version_str).unwrap();
             let normalized = Version::from_str(normalized_str).unwrap();
-            assert_eq!(version, normalized, "{} {}", version_str, normalized_str);
+            assert_eq!(version, normalized, "{version_str} {normalized_str}");
             // Test version normalization
             assert_eq!(
                 version.to_string(),
                 normalized_str,
-                "{} {}",
-                version_str,
-                normalized_str
+                "{version_str} {normalized_str}"
             );
             // Since we're already at it
             assert_eq!(
                 version.to_string(),
                 normalized.to_string(),
-                "{} {}",
-                version_str,
-                normalized_str
+                "{version_str} {normalized_str}"
             );
         }
     }

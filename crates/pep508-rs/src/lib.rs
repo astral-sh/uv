@@ -16,8 +16,6 @@
 #![deny(missing_docs)]
 
 mod marker;
-#[cfg(feature = "modern")]
-pub mod modern;
 
 pub use marker::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
@@ -125,8 +123,8 @@ create_exception!(
 );
 
 /// A PEP 508 dependency specification
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub struct Requirement {
     /// The distribution name such as `numpy` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
@@ -159,18 +157,18 @@ impl Display for Requirement {
                 }
                 VersionOrUrl::Url(url) => {
                     // We add the space for markers later if necessary
-                    write!(f, " @ {}", url)?;
+                    write!(f, " @ {url}")?;
                 }
             }
         }
         if let Some(marker) = &self.marker {
-            write!(f, " ; {}", marker)?;
+            write!(f, " ; {marker}")?;
         }
         Ok(())
     }
 }
 
-/// https://github.com/serde-rs/serde/issues/908#issuecomment-298027413
+/// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Requirement {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -182,7 +180,7 @@ impl<'de> Deserialize<'de> for Requirement {
     }
 }
 
-/// https://github.com/serde-rs/serde/issues/1316#issue-332908452
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
 impl Serialize for Requirement {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -214,7 +212,7 @@ impl Requirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
     pub fn marker(&self) -> Option<String> {
-        self.marker.as_ref().map(|m| m.to_string())
+        self.marker.as_ref().map(std::string::ToString::to_string)
     }
 
     /// Parses a PEP 440 string
@@ -241,7 +239,7 @@ impl Requirement {
     }
 
     fn __repr__(&self) -> String {
-        format!(r#""{}""#, self)
+        format!(r#""{self}""#)
     }
 
     fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
@@ -263,9 +261,10 @@ impl Requirement {
     }
 
     /// Returns whether the markers apply for the given environment
+    #[allow(clippy::needless_pass_by_value)]
     #[pyo3(name = "evaluate_markers")]
     pub fn py_evaluate_markers(&self, env: &MarkerEnvironment, extras: Vec<String>) -> bool {
-        self.evaluate_markers(env, extras)
+        self.evaluate_markers(env, &extras)
     }
 
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
@@ -274,6 +273,7 @@ impl Requirement {
     /// Note that unlike [Self::evaluate_markers] this does not perform any checks for bogus
     /// expressions but will simply return true. As caller you should separately perform a check
     /// with an environment and forward all warnings.
+    #[allow(clippy::needless_pass_by_value)]
     #[pyo3(name = "evaluate_extras_and_python_version")]
     pub fn py_evaluate_extras_and_python_version(
         &self,
@@ -281,28 +281,29 @@ impl Requirement {
         python_versions: Vec<PyVersion>,
     ) -> bool {
         self.evaluate_extras_and_python_version(
-            extras,
-            python_versions
+            &extras,
+            &python_versions
                 .into_iter()
                 .map(|py_version| py_version.0)
-                .collect(),
+                .collect::<Vec<_>>(),
         )
     }
 
     /// Returns whether the markers apply for the given environment
+    #[allow(clippy::needless_pass_by_value)]
     #[pyo3(name = "evaluate_markers_and_report")]
     pub fn py_evaluate_markers_and_report(
         &self,
         env: &MarkerEnvironment,
         extras: Vec<String>,
     ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
-        self.evaluate_markers_and_report(env, extras)
+        self.evaluate_markers_and_report(env, &extras)
     }
 }
 
 impl Requirement {
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: Vec<String>) -> bool {
+    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[String]) -> bool {
         if let Some(marker) = &self.marker {
             marker.evaluate(
                 env,
@@ -316,16 +317,16 @@ impl Requirement {
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
     /// if there is potentially an environment that could activate this requirement.
     ///
-    /// Note that unlike [Self::evaluate_markers] this does not perform any checks for bogus
+    /// Note that unlike [`Self::evaluate_markers`] this does not perform any checks for bogus
     /// expressions but will simply return true. As caller you should separately perform a check
     /// with an environment and forward all warnings.
     pub fn evaluate_extras_and_python_version(
         &self,
-        extras: HashSet<String>,
-        python_versions: Vec<Version>,
+        extras: &HashSet<String>,
+        python_versions: &[Version],
     ) -> bool {
         if let Some(marker) = &self.marker {
-            marker.evaluate_extras_and_python_version(&extras, &python_versions)
+            marker.evaluate_extras_and_python_version(extras, python_versions)
         } else {
             true
         }
@@ -335,12 +336,15 @@ impl Requirement {
     pub fn evaluate_markers_and_report(
         &self,
         env: &MarkerEnvironment,
-        extras: Vec<String>,
+        extras: &[String],
     ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
         if let Some(marker) = &self.marker {
             marker.evaluate_collect_warnings(
                 env,
-                &extras.iter().map(|x| x.as_str()).collect::<Vec<&str>>(),
+                &extras
+                    .iter()
+                    .map(std::string::String::as_str)
+                    .collect::<Vec<&str>>(),
             )
         } else {
             (true, Vec::new())
@@ -448,11 +452,11 @@ impl<'a> CharIter<'a> {
         while let Some(char) = self.peek_char() {
             if !condition(char) {
                 break;
-            } else {
-                substring.push(char);
-                self.next();
-                len += 1;
             }
+
+            substring.push(char);
+            self.next();
+            len += 1;
         }
         (substring, start, len)
     }
@@ -461,8 +465,7 @@ impl<'a> CharIter<'a> {
         match self.next() {
             None => Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected '{}', found end of dependency specification",
-                    expected
+                    "Expected '{expected}', found end of dependency specification"
                 )),
                 start: span_start,
                 len: 1,
@@ -471,8 +474,7 @@ impl<'a> CharIter<'a> {
             Some((_, value)) if value == expected => Ok(()),
             Some((pos, other)) => Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected '{}', found '{}'",
-                    expected, other
+                    "Expected '{expected}', found '{other}'"
                 )),
                 start: pos,
                 len: 1,
@@ -502,8 +504,7 @@ fn parse_name(chars: &mut CharIter) -> Result<String, Pep508Error> {
         } else {
             return Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected package name starting with an alphanumeric character, found '{}'",
-                    char
+                    "Expected package name starting with an alphanumeric character, found '{char}'"
                 )),
                 start: index,
                 len: 1,
@@ -528,8 +529,7 @@ fn parse_name(chars: &mut CharIter) -> Result<String, Pep508Error> {
                 if chars.peek().is_none() && matches!(char, '.' | '-' | '_') {
                     return Err(Pep508Error {
                         message: Pep508ErrorSource::String(format!(
-                            "Package name must end with an alphanumeric character, not '{}'",
-                            char
+                            "Package name must end with an alphanumeric character, not '{char}'"
                         )),
                         start: index,
                         len: 1,
@@ -544,9 +544,8 @@ fn parse_name(chars: &mut CharIter) -> Result<String, Pep508Error> {
 
 /// parses extras in the `[extra1,extra2] format`
 fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error> {
-    let bracket_pos = match chars.eat('[') {
-        Some(pos) => pos,
-        None => return Ok(None),
+    let Some(bracket_pos) = chars.eat('[') else {
+        return Ok(None);
     };
     let mut extras = Vec::new();
 
@@ -568,14 +567,13 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error
         match chars.next() {
             // letterOrDigit
             Some((_, alphanumeric @ ('a'..='z' | 'A'..='Z' | '0'..='9'))) => {
-                buffer.push(alphanumeric)
+                buffer.push(alphanumeric);
             }
             Some((pos, other)) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Expected an alphanumeric character starting the extra name, found '{}'",
-                        other
-                    )),
+                    "Expected an alphanumeric character starting the extra name, found '{other}'"
+                )),
                     start: pos,
                     len: 1,
                     input: chars.copy_chars(),
@@ -598,7 +596,7 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error
             Some((pos, char)) if char != ',' && char != ']' && !char.is_whitespace() => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found '{}'", char
+                        "Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found '{char}'"
                     )),
                     start: pos,
                     len: 1,
@@ -786,8 +784,7 @@ fn parse(chars: &mut CharIter) -> Result<Requirement, Pep508Error> {
         Some(other) => {
             return Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `{}`",
-                    other
+                    "Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `{other}`"
                 )),
                 start: chars.get_pos(),
                 len: 1,
@@ -811,9 +808,9 @@ fn parse(chars: &mut CharIter) -> Result<Requirement, Pep508Error> {
     if let Some((pos, char)) = chars.next() {
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(if marker.is_none() {
-                format!(r#"Expected end of input or ';', found '{}'"#, char)
+                format!(r#"Expected end of input or ';', found '{char}'"#)
             } else {
-                format!(r#"Expected end of input, found '{}'"#, char)
+                format!(r#"Expected end of input, found '{char}'"#)
             }),
             start: pos,
             len: 1,
@@ -854,7 +851,7 @@ pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-/// Half of these tests are copied from https://github.com/pypa/packaging/pull/624
+/// Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 #[cfg(test)]
 mod tests {
     use crate::marker::{

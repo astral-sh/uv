@@ -156,8 +156,7 @@ pub async fn resolve(
                         for dependency in metadata.requires_dist {
                             if !dependency.evaluate_markers(
                                 markers,
-                                // TODO(charlie): Remove this clone.
-                                requirement.extras.clone().unwrap_or_default(),
+                                requirement.extras.as_ref().map_or(&[], Vec::as_slice),
                             ) {
                                 debug!("--> ignoring {dependency} due to environment mismatch");
                                 continue;
