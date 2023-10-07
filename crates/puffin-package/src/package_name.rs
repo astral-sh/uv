@@ -5,7 +5,7 @@ use std::ops::Deref;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageName(String);
 
 impl Display for PackageName {

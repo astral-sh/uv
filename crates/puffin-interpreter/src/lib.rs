@@ -7,14 +7,17 @@ use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 
 use crate::python_platform::PythonPlatform;
+pub use crate::site_packages::SitePackages;
 
 mod markers;
 mod python_platform;
+mod site_packages;
 mod virtual_env;
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug)]
 pub struct PythonExecutable {
+    platform: PythonPlatform,
     venv: PathBuf,
     executable: PathBuf,
     markers: MarkerEnvironment,
@@ -22,17 +25,29 @@ pub struct PythonExecutable {
 
 impl PythonExecutable {
     /// Detect the current Python executable from the host environment.
-    pub fn from_env(platform: &Platform) -> Result<Self> {
+    pub fn from_env(platform: Platform) -> Result<Self> {
         let platform = PythonPlatform::from(platform);
         let venv = virtual_env::detect_virtual_env(&platform)?;
         let executable = platform.venv_python(&venv);
         let markers = markers::detect_markers(&executable)?;
 
         Ok(Self {
+            platform,
             venv,
             executable,
             markers,
         })
+    }
+
+    /// Returns the path to the Python virtual environment.
+    pub fn platform(&self) -> &Platform {
+        &self.platform
+    }
+
+    /// Returns the path to the `site-packages` directory inside a virtual environment.
+    pub fn site_packages(&self) -> PathBuf {
+        self.platform
+            .venv_site_packages(self.venv(), self.simple_version())
     }
 
     /// Returns the path to the Python virtual environment.

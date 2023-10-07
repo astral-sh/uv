@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -5,9 +6,9 @@ use platform_host::{Os, Platform};
 
 /// A Python-aware wrapper around [`Platform`].
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct PythonPlatform<'a>(&'a Platform);
+pub(crate) struct PythonPlatform(Platform);
 
-impl PythonPlatform<'_> {
+impl PythonPlatform {
     /// Returns the path to the `python` executable inside a virtual environment.
     pub(crate) fn venv_python(&self, venv_base: impl AsRef<Path>) -> PathBuf {
         let python = if matches!(self.0.os(), Os::Windows) {
@@ -38,10 +39,34 @@ impl PythonPlatform<'_> {
             venv.join("bin")
         }
     }
+
+    /// Returns the path to the `site-packages` directory inside a virtual environment.
+    pub(crate) fn venv_site_packages(
+        &self,
+        venv_base: impl AsRef<Path>,
+        version: (u8, u8),
+    ) -> PathBuf {
+        let venv = venv_base.as_ref();
+        if matches!(self.0.os(), Os::Windows) {
+            venv.join("Lib").join("site-packages")
+        } else {
+            venv.join("lib")
+                .join(format!("python{}.{}", version.0, version.1))
+                .join("site-packages")
+        }
+    }
 }
 
-impl<'a> From<&'a Platform> for PythonPlatform<'a> {
-    fn from(platform: &'a Platform) -> Self {
+impl From<Platform> for PythonPlatform {
+    fn from(platform: Platform) -> Self {
         Self(platform)
+    }
+}
+
+impl Deref for PythonPlatform {
+    type Target = Platform;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
