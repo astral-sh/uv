@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use puffin_platform::Platform;
+use platform_host::{Os, Platform};
 
 /// A Python-aware wrapper around [`Platform`].
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -10,7 +10,7 @@ pub(crate) struct PythonPlatform<'a>(&'a Platform);
 impl PythonPlatform<'_> {
     /// Returns the path to the `python` executable inside a virtual environment.
     pub(crate) fn venv_python(&self, venv_base: impl AsRef<Path>) -> PathBuf {
-        let python = if self.0.is_windows() {
+        let python = if matches!(self.0.os(), Os::Windows) {
             "python.exe"
         } else {
             "python"
@@ -21,7 +21,7 @@ impl PythonPlatform<'_> {
     /// Returns the directory in which the binaries are stored inside a virtual environment.
     pub(crate) fn venv_bin_dir(&self, venv_base: impl AsRef<Path>) -> PathBuf {
         let venv = venv_base.as_ref();
-        if self.0.is_windows() {
+        if matches!(self.0.os(), Os::Windows) {
             let bin_dir = venv.join("Scripts");
             if bin_dir.join("python.exe").exists() {
                 return bin_dir;

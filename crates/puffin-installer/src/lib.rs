@@ -2,13 +2,14 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use install_wheel_rs::{install_wheel, InstallLocation};
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 
+use install_wheel_rs::{install_wheel, InstallLocation};
 use puffin_client::{File, PypiClient};
 use puffin_interpreter::PythonExecutable;
+use wheel_filename::WheelFilename;
 
 /// Install a set of wheels into a Python virtual environment.
 pub async fn install(
@@ -40,13 +41,14 @@ pub async fn install(
     let locked_dir = location.acquire_lock()?;
     for wheel in wheels {
         let path = tmp_dir.path().join(&wheel.hashes.sha256);
-        let filename = install_wheel_rs::WheelFilename::from_str(&wheel.filename)?;
+        let filename = WheelFilename::from_str(&wheel.filename)?;
 
         // TODO(charlie): Should this be async?
         install_wheel(
             &locked_dir,
             std::fs::File::open(path)?,
-            filename,
+            &filename,
+            false,
             false,
             &[],
             "",

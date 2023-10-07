@@ -1,6 +1,6 @@
 #![allow(clippy::format_push_string)] // I will not replace clear and infallible with fallible, io looking code
 
-use crate::{install_wheel, CompatibleTags, Error, InstallLocation, LockedDir, WheelFilename};
+use crate::{install_wheel, Error, InstallLocation, LockedDir};
 use pyo3::create_exception;
 use pyo3::types::PyModule;
 use pyo3::{pyclass, pymethods, pymodule, PyErr, PyResult, Python};
@@ -8,6 +8,7 @@ use std::env;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use wheel_filename::WheelFilename;
 
 create_exception!(
     install_wheel_rs,
@@ -17,11 +18,11 @@ create_exception!(
 
 impl From<Error> for PyErr {
     fn from(err: Error) -> Self {
-        let mut accumulator = format!("Failed to install wheels: {}", err);
+        let mut accumulator = format!("Failed to install wheels: {err}");
 
         let mut current_err: &dyn std::error::Error = &err;
         while let Some(cause) = current_err.source() {
-            accumulator.push_str(&format!("\n  Caused by: {}", cause));
+            accumulator.push_str(&format!("\n  Caused by: {cause}"));
             current_err = cause;
         }
         PyWheelInstallerError::new_err(accumulator)
@@ -36,7 +37,8 @@ struct LockedVenv {
 #[pymethods]
 impl LockedVenv {
     #[new]
-    pub fn new(py: Python, venv: PathBuf) -> PyResult<Self> {
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn new(py: Python, venv: PathBuf) -> PyResult<Self> {
         Ok(Self {
             location: InstallLocation::Venv {
                 venv_base: LockedDir::acquire(&venv)?,
@@ -45,7 +47,7 @@ impl LockedVenv {
         })
     }
 
-    pub fn install_wheel(&self, py: Python, wheel: PathBuf) -> PyResult<()> {
+    pub(crate) fn install_wheel(&self, py: Python, wheel: PathBuf) -> PyResult<()> {
         // Would be nicer through https://docs.python.org/3/c-api/init.html#c.Py_GetProgramFullPath
         let sys_executable: String = py.import("sys")?.getattr("executable")?.extract()?;
 
@@ -56,13 +58,10 @@ impl LockedVenv {
                 .ok_or_else(|| Error::InvalidWheel("Expected a file".to_string()))?
                 .to_string_lossy();
             let filename = WheelFilename::from_str(&filename)?;
-            let compatible_tags = CompatibleTags::current(self.location.get_python_version())?;
-            filename.compatibility(&compatible_tags)?;
-
             install_wheel(
                 &self.location,
                 File::open(wheel)?,
-                filename,
+                &filename,
                 true,
                 true,
                 &[],
@@ -76,7 +75,7 @@ impl LockedVenv {
 }
 
 #[pymodule]
-pub fn install_wheel_rs(_py: Python, m: &PyModule) -> PyResult<()> {
+pub(crate) fn install_wheel_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     // Good enough for now
     if env::var_os("RUST_LOG").is_some() {
         tracing_subscriber::fmt::init();

@@ -5,10 +5,11 @@ use std::io;
 use std::str::FromStr;
 
 use mailparse::{MailHeaderMap, MailParseError};
-use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
-use pep508_rs::{Pep508Error, Requirement};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
+use pep508_rs::{Pep508Error, Requirement};
 
 /// Python Package Metadata 2.1 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>
