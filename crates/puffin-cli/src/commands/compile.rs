@@ -21,7 +21,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(&platform)?;
+    let python = PythonExecutable::from_env(platform)?;
     debug!(
         "Using Python interpreter: {}",
         python.executable().display()
@@ -31,7 +31,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     let markers = python.markers();
 
     // Determine the compatible platform tags.
-    let tags = Tags::from_env(&platform, python.simple_version())?;
+    let tags = Tags::from_env(python.platform(), python.simple_version())?;
 
     // Instantiate a client.
     let client = {

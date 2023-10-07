@@ -2,10 +2,12 @@ use std::process::ExitCode;
 
 pub(crate) use clean::clean;
 pub(crate) use compile::compile;
+pub(crate) use freeze::freeze;
 pub(crate) use sync::sync;
 
 mod clean;
 mod compile;
+mod freeze;
 mod sync;
 
 #[derive(Copy, Clone)]

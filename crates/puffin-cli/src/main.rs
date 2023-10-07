@@ -26,6 +26,8 @@ enum Commands {
     Sync(SyncArgs),
     /// Clear the cache.
     Clean,
+    /// Enumerate the installed packages in the current environment.
+    Freeze,
 }
 
 #[derive(Args)]
@@ -76,6 +78,7 @@ async fn main() -> ExitCode {
             .await
         }
         Commands::Clean => commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir)).await,
+        Commands::Freeze => commands::freeze().await,
     };
 
     match result {

@@ -1734,7 +1734,9 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "platform-host",
+ "puffin-package",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
