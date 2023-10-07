@@ -8,6 +8,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
+use puffin_package::requirements::Requirements;
 
 use crate::commands::ExitStatus;
 
@@ -17,7 +18,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     let requirements_txt = std::fs::read_to_string(src)?;
 
     // Parse the `requirements.txt` into a list of requirements.
-    let requirements = puffin_package::requirements::Requirements::from_str(&requirements_txt)?;
+    let requirements = Requirements::from_str(&requirements_txt)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;

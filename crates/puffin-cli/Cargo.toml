@@ -15,14 +15,15 @@ platform-host = { path = "../platform-host" }
 puffin-resolver = { path = "../puffin-resolver" }
 
 anyhow = { workspace = true }
+bitflags = { workspace = true }
 cacache = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 colored = { workspace = true }
 directories = { workspace = true }
 futures = { workspace = true }
-tracing = { workspace = true }
-tracing-tree = { workspace = true }
-tracing-subscriber = { workspace = true }
-url = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-tree = { workspace = true }
+url = { workspace = true }

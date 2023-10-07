@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::ops::Deref;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -10,23 +9,50 @@ use pep508_rs::{Pep508Error, Requirement};
 #[derive(Debug)]
 pub struct Requirements(Vec<Requirement>);
 
+impl Requirements {
+    pub fn new(requirements: Vec<Requirement>) -> Self {
+        Self(requirements)
+    }
+
+    /// Filter the requirements.
+    #[must_use]
+    pub fn filter<F>(self, mut f: F) -> Self
+    where
+        F: FnMut(&Requirement) -> bool,
+    {
+        Self(
+            self.0
+                .into_iter()
+                .filter(|requirement| f(requirement))
+                .collect(),
+        )
+    }
+
+    /// Return the number of requirements.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Return `true` if there are no requirements.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Return an iterator over the requirements.
+    pub fn iter(&self) -> impl Iterator<Item = &Requirement> {
+        self.0.iter()
+    }
+}
+
 impl FromStr for Requirements {
     type Err = Pep508Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(
+        Ok(Self::new(
             RequirementsIterator::new(s)
                 .map(|requirement| Requirement::from_str(requirement.as_str()))
                 .collect::<Result<Vec<Requirement>, Pep508Error>>()?,
         ))
-    }
-}
-
-impl Deref for Requirements {
-    type Target = [Requirement];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 

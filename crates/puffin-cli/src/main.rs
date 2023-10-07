@@ -48,6 +48,10 @@ struct SyncArgs {
     /// Avoid reading from or writing to the cache.
     #[arg(long)]
     no_cache: bool,
+
+    /// Ignore any installed packages, forcing a re-installation.
+    #[arg(long)]
+    ignore_installed: bool,
 }
 
 #[tokio::main]
@@ -74,6 +78,11 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                if args.ignore_installed {
+                    commands::SyncFlags::IGNORE_INSTALLED
+                } else {
+                    commands::SyncFlags::empty()
+                },
             )
             .await
         }

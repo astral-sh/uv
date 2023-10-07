@@ -42,7 +42,7 @@ To compare a warm run of `puffin` to `pip`:
 
 ```shell
 hyperfine --runs 10 --warmup 3 \
-    "./target/release/puffin-cli sync requirements.txt" \
+    "./target/release/puffin-cli sync requirements.txt --ignore-installed" \
     "pip install -r requirements.txt --ignore-installed --no-deps"
 ```
 
@@ -50,8 +50,16 @@ To compare a cold run of `puffin` to `pip`:
 
 ```shell
 hyperfine --runs 10 --warmup 3 \
-    "./target/release/puffin-cli sync requirements.txt --no-cache" \
+    "./target/release/puffin-cli sync requirements.txt --ignore-installed --no-cache" \
     "pip install -r requirements.txt --ignore-installed --no-cache-dir --no-deps"
+```
+
+To compare a run in which all requirements are already installed:
+
+```shell
+hyperfine --runs 10 --warmup 3 \
+    "./target/release/puffin-cli sync requirements.txt" \
+    "pip install -r requirements.txt --no-deps"
 ```
 
 ## License

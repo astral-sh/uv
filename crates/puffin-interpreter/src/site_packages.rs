@@ -33,6 +33,11 @@ impl SitePackages {
     pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &Version)> {
         self.0.iter()
     }
+
+    /// Returns the version of the given package, if it is installed.
+    pub fn get(&self, name: &PackageName) -> Option<&Version> {
+        self.0.get(name)
+    }
 }
 
 #[derive(Debug)]
