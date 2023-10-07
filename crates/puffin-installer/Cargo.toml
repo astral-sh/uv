@@ -21,3 +21,4 @@ tracing = { workspace = true }
 url = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+cacache = { version = "11.7.1", default-features = false, features = ["tokio-runtime"] }

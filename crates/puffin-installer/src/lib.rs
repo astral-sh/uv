@@ -2,8 +2,10 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
+use cacache::{Algorithm, Integrity};
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::debug;
 use url::Url;
 
 use install_wheel_rs::{install_wheel, InstallLocation};
@@ -16,21 +18,20 @@ pub async fn install(
     wheels: &[File],
     python: &PythonExecutable,
     client: &PypiClient,
+    cache: Option<&Path>,
 ) -> Result<()> {
-    // Create a temporary directory, in which we'll store the wheels.
-    let tmp_dir = tempfile::tempdir()?;
-
-    // Download the wheels in parallel.
-    let mut downloads = JoinSet::new();
+    // Fetch the wheels in parallel.
+    let mut fetches = JoinSet::new();
+    let mut results = Vec::with_capacity(wheels.len());
     for wheel in wheels {
-        downloads.spawn(do_download(
+        fetches.spawn(fetch_wheel(
             wheel.clone(),
             client.clone(),
-            tmp_dir.path().join(&wheel.hashes.sha256),
+            cache.map(Path::to_path_buf),
         ));
     }
-    while let Some(result) = downloads.join_next().await.transpose()? {
-        result?;
+    while let Some(result) = fetches.join_next().await.transpose()? {
+        results.push(result?);
     }
 
     // Install each wheel.
@@ -39,14 +40,14 @@ pub async fn install(
         python_version: python.simple_version(),
     };
     let locked_dir = location.acquire_lock()?;
-    for wheel in wheels {
-        let path = tmp_dir.path().join(&wheel.hashes.sha256);
-        let filename = WheelFilename::from_str(&wheel.filename)?;
+    for wheel in results {
+        let reader = std::io::Cursor::new(wheel.buffer);
+        let filename = WheelFilename::from_str(&wheel.file.filename)?;
 
         // TODO(charlie): Should this be async?
         install_wheel(
             &locked_dir,
-            std::fs::File::open(path)?,
+            reader,
             &filename,
             false,
             false,
@@ -59,15 +60,41 @@ pub async fn install(
     Ok(())
 }
 
+#[derive(Debug)]
+struct FetchedWheel {
+    file: File,
+    buffer: Vec<u8>,
+}
+
 /// Download a wheel to a given path.
-async fn do_download(wheel: File, client: PypiClient, path: impl AsRef<Path>) -> Result<File> {
-    // TODO(charlie): Store these in a content-addressed cache.
-    let url = Url::parse(&wheel.url)?;
+async fn fetch_wheel(
+    file: File,
+    client: PypiClient,
+    cache: Option<impl AsRef<Path>>,
+) -> Result<FetchedWheel> {
+    // Parse the wheel's SRI.
+    let sri = Integrity::from_hex(&file.hashes.sha256, Algorithm::Sha256)?;
+
+    // Read from the cache, if possible.
+    if let Some(cache) = cache.as_ref() {
+        if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
+            debug!("Extracted wheel from cache: {:?}", file.filename);
+            return Ok(FetchedWheel { file, buffer });
+        }
+    }
+
+    let url = Url::parse(&file.url)?;
     let reader = client.stream_external(&url).await?;
 
-    // TODO(charlie): Stream the unzip.
-    let mut writer = tokio::fs::File::create(path).await?;
-    tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+    // Read into a buffer.
+    let mut buffer = Vec::with_capacity(file.size);
+    let mut reader = tokio::io::BufReader::new(reader.compat());
+    tokio::io::copy(&mut reader, &mut buffer).await?;
 
-    Ok(wheel)
+    // Write the buffer to the cache, if possible.
+    if let Some(cache) = cache.as_ref() {
+        cacache::write_hash(&cache, &buffer).await?;
+    }
+
+    Ok(FetchedWheel { file, buffer })
 }

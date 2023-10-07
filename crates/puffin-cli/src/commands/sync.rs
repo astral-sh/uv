@@ -54,7 +54,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>) -> Result<ExitStatus>
 
     // Install into the current environment.
     let wheels = resolution.into_files().collect::<Vec<_>>();
-    puffin_installer::install(&wheels, &python, &client).await?;
+    puffin_installer::install(&wheels, &python, &client, cache).await?;
 
     #[allow(clippy::print_stdout)]
     {
