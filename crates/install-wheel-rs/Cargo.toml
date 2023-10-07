@@ -11,7 +11,7 @@ keywords = ["wheel", "python"]
 name = "install_wheel_rs"
 
 [dependencies]
-puffin-platform = { path = "../puffin-platform" }
+platform-host = { path = "../platform-host" }
 wheel-filename = { path = "../wheel-filename" }
 
 clap = { workspace = true, optional = true, features = ["derive", "env"] }

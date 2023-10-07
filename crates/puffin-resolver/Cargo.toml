@@ -13,7 +13,7 @@ license.workspace = true
 platform-tags = { path = "../platform-tags" }
 puffin-client = { path = "../puffin-client" }
 puffin-package = { path = "../puffin-package" }
-puffin-platform = { path = "../puffin-platform" }
+platform-host = { path = "../platform-host" }
 wheel-filename = { path = "../wheel-filename" }
 
 anyhow = { workspace = true }

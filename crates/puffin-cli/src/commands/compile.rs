@@ -4,10 +4,10 @@ use std::str::FromStr;
 use anyhow::Result;
 use tracing::debug;
 
+use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
-use puffin_platform::Platform;
 
 use crate::commands::ExitStatus;
 

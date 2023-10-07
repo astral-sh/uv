@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-
-use puffin_platform::Platform;
+use platform_host::Platform;
 
 use crate::python_platform::PythonPlatform;
 

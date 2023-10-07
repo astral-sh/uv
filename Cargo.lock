@@ -1123,9 +1123,9 @@ dependencies = [
  "indoc 2.0.4",
  "mailparse",
  "once_cell",
+ "platform-host",
  "platform-info",
  "plist",
- "puffin-platform",
  "pyo3",
  "rayon",
  "regex",
@@ -1567,6 +1567,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
+name = "platform-host"
+version = "0.1.0"
+dependencies = [
+ "glibc_version",
+ "goblin",
+ "pep440_rs",
+ "platform-info",
+ "plist",
+ "regex",
+ "serde",
+ "target-lexicon",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "platform-info"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1580,7 +1596,7 @@ dependencies = [
 name = "platform-tags"
 version = "0.1.0"
 dependencies = [
- "puffin-platform",
+ "platform-host",
 ]
 
 [[package]]
@@ -1660,12 +1676,12 @@ dependencies = [
  "futures",
  "pep440_rs",
  "pep508_rs",
+ "platform-host",
  "platform-tags",
  "puffin-client",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-package",
- "puffin-platform",
  "puffin-resolver",
  "tempfile",
  "tokio",
@@ -1715,7 +1731,7 @@ dependencies = [
  "anyhow",
  "pep440_rs",
  "pep508_rs",
- "puffin-platform",
+ "platform-host",
  "serde_json",
  "tracing",
 ]
@@ -1732,27 +1748,11 @@ dependencies = [
  "once_cell",
  "pep440_rs",
  "pep508_rs",
- "puffin-platform",
+ "platform-host",
  "regex",
  "rfc2047-decoder",
  "serde",
  "thiserror",
-]
-
-[[package]]
-name = "puffin-platform"
-version = "0.1.0"
-dependencies = [
- "glibc_version",
- "goblin",
- "pep440_rs",
- "platform-info",
- "plist",
- "regex",
- "serde",
- "target-lexicon",
- "thiserror",
- "tracing",
 ]
 
 [[package]]
@@ -1764,10 +1764,10 @@ dependencies = [
  "futures",
  "pep440_rs",
  "pep508_rs",
+ "platform-host",
  "platform-tags",
  "puffin-client",
  "puffin-package",
- "puffin-platform",
  "tracing",
  "wheel-filename",
 ]

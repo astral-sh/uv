@@ -10,4 +10,4 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-puffin-platform = { path = "../puffin-platform"}
+platform-host = { path = "../platform-host" }

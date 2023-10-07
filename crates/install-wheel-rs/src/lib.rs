@@ -7,7 +7,7 @@ use thiserror::Error;
 use zip::result::ZipError;
 
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
-use puffin_platform::{Arch, Os};
+use platform_host::{Arch, Os};
 pub use wheel::{
     get_script_launcher, install_wheel, parse_key_value_file, read_record_file, relative_to,
     Script, SHEBANG_PYTHON,

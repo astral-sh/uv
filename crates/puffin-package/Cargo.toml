@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
-puffin-platform = { path = "../puffin-platform" }
+platform-host = { path = "../platform-host" }
 
 anyhow = { workspace = true }
 mailparse = { workspace = true }

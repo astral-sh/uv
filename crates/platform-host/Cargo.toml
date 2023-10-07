@@ -1,5 +1,5 @@
 [package]
-name = "puffin-platform"
+name = "platform-host"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -10,9 +10,10 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+pep440_rs = { path = "../pep440-rs" }
+
 glibc_version = { workspace = true }
 goblin = { workspace = true }
-pep440_rs = { path = "../pep440-rs" }
 platform-info = { workspace = true }
 plist = { workspace = true }
 regex = { workspace = true }

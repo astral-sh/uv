@@ -1,4 +1,4 @@
-use puffin_platform::{Arch, Os, Platform, PlatformError};
+use platform_host::{Arch, Os, Platform, PlatformError};
 
 /// A set of compatible tags for a given Python version and platform, in
 /// (`python_tag`, `abi_tag`, `platform_tag`) format.

@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use puffin_platform::{Os, Platform};
+use platform_host::{Os, Platform};
 
 /// A Python-aware wrapper around [`Platform`].
 #[derive(Debug, Clone, Eq, PartialEq)]
