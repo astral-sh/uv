@@ -1713,6 +1713,7 @@ name = "puffin-installer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cacache",
  "install-wheel-rs",
  "puffin-client",
  "puffin-interpreter",

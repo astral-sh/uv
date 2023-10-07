@@ -147,7 +147,7 @@ pub struct File {
     pub filename: String,
     pub hashes: Hashes,
     pub requires_python: Option<String>,
-    pub size: i64,
+    pub size: usize,
     pub upload_time: String,
     pub url: String,
     pub yanked: Yanked,
