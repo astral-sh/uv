@@ -5,6 +5,7 @@ use anyhow::Result;
 use bitflags::bitflags;
 use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
+use thiserror::Error;
 use tracing::debug;
 
 use pep440_rs::Version;
@@ -45,9 +46,27 @@ impl PinnedPackage {
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Default)]
-    pub struct Flags: u8 {
+    pub struct ResolveFlags: u8 {
         /// Don't install package dependencies.
         const NO_DEPS = 1 << 0;
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ResolveError {
+    #[error("Failed to find a version of {0} that satisfies the requirement")]
+    NotFound(Requirement),
+
+    #[error(transparent)]
+    Client(#[from] puffin_client::PypiClientError),
+
+    #[error(transparent)]
+    TrySend(#[from] futures::channel::mpsc::SendError),
+}
+
+impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
+    fn from(value: futures::channel::mpsc::TrySendError<T>) -> Self {
+        value.into_send_error().into()
     }
 }
 
@@ -57,8 +76,8 @@ pub async fn resolve(
     markers: &MarkerEnvironment,
     tags: &Tags,
     client: &PypiClient,
-    flags: Flags,
-) -> Result<Resolution> {
+    flags: ResolveFlags,
+) -> Result<Resolution, ResolveError> {
     // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
     // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
     let (package_sink, package_stream) = futures::channel::mpsc::unbounded();
@@ -128,7 +147,7 @@ pub async fn resolve(
                             .iter()
                             .all(|specifier| specifier.contains(&version))
                     }) else {
-                        continue;
+                        return Err(ResolveError::NotFound(requirement));
                     };
 
                     package_sink.unbounded_send(Request::Version(requirement, file.clone()))?;
@@ -151,7 +170,7 @@ pub async fn resolve(
                         },
                     );
 
-                    if !flags.intersects(Flags::NO_DEPS) {
+                    if !flags.intersects(ResolveFlags::NO_DEPS) {
                         // Enqueue its dependencies.
                         for dependency in metadata.requires_dist {
                             if !dependency.evaluate_markers(

@@ -82,7 +82,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         markers,
         &tags,
         &client,
-        puffin_resolver::Flags::NO_DEPS,
+        puffin_resolver::ResolveFlags::NO_DEPS,
     )
     .await?;
 
