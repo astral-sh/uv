@@ -24,3 +24,4 @@ tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }
 ripunzip = "0.4.0"
+rayon = "1.8.0"
