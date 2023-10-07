@@ -66,12 +66,17 @@ impl PypiClient {
 
     /// Fetch the metadata from a wheel file.
     pub async fn file(&self, file: File) -> Result<Metadata21, PypiClientError> {
-        // Send to the proxy.
-        let url = self.proxy.join(
-            file.url
-                .strip_prefix("https://files.pythonhosted.org/")
-                .unwrap(),
-        )?;
+        // Per PEP 658, if `data-dist-info-metadata` is available, we can request it directly;
+        // otherwise, send to our dedicated caching proxy.
+        let url = if file.data_dist_info_metadata.is_available() {
+            Url::parse(&format!("{}.metadata", file.url))?
+        } else {
+            self.proxy.join(
+                file.url
+                    .strip_prefix("https://files.pythonhosted.org/")
+                    .unwrap(),
+            )?
+        };
 
         trace!("fetching file {} from {}", file.filename, url);
 
@@ -153,6 +158,15 @@ pub struct File {
 pub enum Metadata {
     Bool(bool),
     Hashes(Hashes),
+}
+
+impl Metadata {
+    pub fn is_available(&self) -> bool {
+        match self {
+            Self::Bool(is_available) => *is_available,
+            Self::Hashes(_) => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
