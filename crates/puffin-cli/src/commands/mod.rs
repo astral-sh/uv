@@ -3,7 +3,7 @@ use std::process::ExitCode;
 pub(crate) use clean::clean;
 pub(crate) use compile::compile;
 pub(crate) use freeze::freeze;
-pub(crate) use sync::sync;
+pub(crate) use sync::{sync, SyncFlags};
 
 mod clean;
 mod compile;
