@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
+platform-tags = { path = "../platform-tags" }
 puffin-client = { path = "../puffin-client" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-platform = { path = "../puffin-platform" }
 puffin-package = { path = "../puffin-package" }
+puffin-platform = { path = "../puffin-platform" }
 puffin-resolver = { path = "../puffin-resolver" }
 
 anyhow = { workspace = true }
@@ -16,9 +19,6 @@ clap = { workspace = true, features = ["derive"] }
 colored = { workspace = true }
 directories = { workspace = true }
 futures = { workspace = true }
-install-wheel-rs = { workspace = true }
-pep508_rs = { path = "../pep508-rs" }
-pep440_rs = { path = "../pep440-rs" }
 tracing = { workspace = true }
 tracing-tree = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -4,9 +4,9 @@ use std::str::FromStr;
 use anyhow::Result;
 use tracing::debug;
 
+use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
-use puffin_platform::tags::Tags;
 use puffin_platform::Platform;
 
 use crate::commands::ExitStatus;
@@ -31,7 +31,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>) -> Result<ExitStatus>
     let markers = python.markers();
 
     // Determine the compatible platform tags.
-    let tags = Tags::from_env(&platform, python.version())?;
+    let tags = Tags::from_env(&platform, python.simple_version())?;
 
     // Instantiate a client.
     let client = {

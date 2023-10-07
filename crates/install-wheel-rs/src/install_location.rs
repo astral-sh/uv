@@ -139,11 +139,11 @@ impl<T: Deref<Target = Path>> InstallLocation<T> {
                         .join("site-packages")
                 };
                 site_packages
-                    .join(format!("{}-{}.dist-info", normalized_name, version))
+                    .join(format!("{normalized_name}-{version}.dist-info"))
                     .is_dir()
             }
             InstallLocation::Monotrail { monotrail_root, .. } => monotrail_root
-                .join(format!("{}-{}", normalized_name, version))
+                .join(format!("{normalized_name}-{version}"))
                 .is_dir(),
         }
     }

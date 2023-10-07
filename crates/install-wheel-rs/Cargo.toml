@@ -9,36 +9,37 @@ keywords = ["wheel", "python"]
 
 [lib]
 name = "install_wheel_rs"
-# https://github.com/PyO3/maturin/issues/1080 :((
-#crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-clap = { version = "4.4.6", optional = true, features = ["derive", "env"] }
-configparser = "3.0.2"
-csv = "1.2.2"
-data-encoding = "2.4.0"
+puffin-platform = { path = "../puffin-platform" }
+wheel-filename = { path = "../wheel-filename" }
+
+clap = { workspace = true, optional = true, features = ["derive", "env"] }
+configparser = { workspace = true }
+csv = { workspace = true }
+data-encoding = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
-glibc_version = "0.1.2"
-goblin = "0.7.1"
-mailparse = "0.14.0"
-once_cell = "1.18.0"
-platform-info = "2.0.2"
-plist = "1.5.0"
-pyo3 = { workspace = true, features = ["extension-module", "abi3-py37"], optional = true }
+glibc_version = { workspace = true }
+goblin = { workspace = true }
+mailparse = { workspace = true }
+once_cell = { workspace = true }
+platform-info = { workspace = true }
+plist = { workspace = true }
+pyo3 = { version = "0.19.2", features = ["extension-module", "abi3-py37"], optional = true }
 rayon = { version = "1.8.0", optional = true }
 regex = { workspace = true }
-rfc2047-decoder = "1.0.1"
+rfc2047-decoder = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-target-lexicon = "0.12.11"
+target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 walkdir = { workspace = true }
-zip = { version = "0.6.6", default-features = false, features = ["deflate"] } # no default features for zstd
+zip = { workspace = true }
 
 [features]
 default = ["cli", "parallel"]
@@ -47,7 +48,4 @@ cli = ["clap"]
 parallel = ["rayon"]
 
 [dev-dependencies]
-indoc = { workspace = true }
-
-[package.metadata.dist]
-dist = false
+indoc = {version = "2.0.4"}

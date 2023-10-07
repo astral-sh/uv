@@ -11,8 +11,6 @@ use serde::Deserialize;
 use thiserror::Error;
 use tracing::trace;
 
-pub mod tags;
-
 #[derive(Error, Debug)]
 pub enum PlatformError {
     #[error(transparent)]
@@ -34,8 +32,12 @@ impl Platform {
         Ok(Self { os, arch })
     }
 
-    pub fn is_windows(&self) -> bool {
-        matches!(self.os, Os::Windows)
+    pub fn os(&self) -> &Os {
+        &self.os
+    }
+
+    pub fn arch(&self) -> Arch {
+        self.arch
     }
 }
 

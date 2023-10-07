@@ -1,10 +1,11 @@
 use clap::Parser;
 use fs_err::File;
-use install_wheel_rs::{install_wheel, CompatibleTags, Error, InstallLocation, WheelFilename};
+use install_wheel_rs::{install_wheel, Error, InstallLocation};
 #[cfg(feature = "rayon")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::path::PathBuf;
 use std::str::FromStr;
+use wheel_filename::WheelFilename;
 
 /// Low level install CLI, mainly used for testing
 #[derive(Parser)]
@@ -45,8 +46,6 @@ fn main() -> Result<(), Error> {
                 .ok_or_else(|| Error::InvalidWheel("Expected a file".to_string()))?
                 .to_string_lossy();
             let filename = WheelFilename::from_str(&filename)?;
-            let compatible_tags = CompatibleTags::current(location.get_python_version())?;
-            filename.compatibility(&compatible_tags)?;
             Ok((wheel, filename))
         })
         .collect::<Result<_, Error>>()?;
@@ -66,7 +65,7 @@ fn main() -> Result<(), Error> {
             install_wheel(
                 &locked_dir,
                 File::open(wheel)?,
-                filename,
+                &filename,
                 args.compile,
                 !args.skip_hashes,
                 &[],

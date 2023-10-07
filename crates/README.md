@@ -35,3 +35,7 @@ Functionality for detecting the current platform (operating system, architecture
 ## [puffin-resolver](./puffin-resolver)
 
 Functionality for resolving Python packages and their dependencies.
+
+## [wheel-filename](./wheel-filename)
+
+Functionality for parsing wheel filenames as per [PEP 427](https://www.python.org/dev/peps/pep-0427/).

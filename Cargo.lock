@@ -1111,20 +1111,23 @@ dependencies = [
 [[package]]
 name = "install-wheel-rs"
 version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd8c1fd75d1c686f0e18aa3dd60532f119578b32501517576dd539e0be65f1e"
 dependencies = [
- "base64 0.21.4",
+ "clap",
  "configparser",
  "csv",
+ "data-encoding",
  "fs-err",
  "fs2",
  "glibc_version",
  "goblin",
+ "indoc 2.0.4",
  "mailparse",
  "once_cell",
  "platform-info",
  "plist",
+ "puffin-platform",
+ "pyo3",
+ "rayon",
  "regex",
  "rfc2047-decoder",
  "serde",
@@ -1134,7 +1137,9 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "walkdir",
+ "wheel-filename",
  "zip",
 ]
 
@@ -1572,6 +1577,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "platform-tags"
+version = "0.1.0"
+dependencies = [
+ "puffin-platform",
+]
+
+[[package]]
 name = "plist"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1646,9 +1658,9 @@ dependencies = [
  "colored",
  "directories",
  "futures",
- "install-wheel-rs",
  "pep440_rs",
  "pep508_rs",
+ "platform-tags",
  "puffin-client",
  "puffin-installer",
  "puffin-interpreter",
@@ -1693,6 +1705,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "wheel-filename",
 ]
 
 [[package]]
@@ -1751,10 +1764,12 @@ dependencies = [
  "futures",
  "pep440_rs",
  "pep508_rs",
+ "platform-tags",
  "puffin-client",
  "puffin-package",
  "puffin-platform",
  "tracing",
+ "wheel-filename",
 ]
 
 [[package]]
@@ -2876,6 +2891,14 @@ checksum = "9b85cbef8c220a6abc02aefd892dfc0fc23afb1c6a426316ec33253a3877249b"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "wheel-filename"
+version = "0.1.0"
+dependencies = [
+ "platform-tags",
+ "thiserror",
 ]
 
 [[package]]

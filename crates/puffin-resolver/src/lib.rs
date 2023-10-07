@@ -5,16 +5,16 @@ use anyhow::Result;
 use bitflags::bitflags;
 use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use tracing::debug;
 
+use pep440_rs::Version;
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use platform_tags::Tags;
 use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
-use puffin_package::wheel::WheelFilename;
-use puffin_platform::tags::Tags;
+use wheel_filename::WheelFilename;
 
 #[derive(Debug)]
 pub struct Resolution(HashMap<PackageName, PinnedPackage>);
