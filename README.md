@@ -29,6 +29,7 @@ Puffin does not yet support:
 - VCS dependencies
 - URL dependencies
 - Uninstalling packages
+- Windows
 - ...
 
 Like `pip-compile`, Puffin generates a platform-specific `requirements.txt` file (unlike, e.g.,
@@ -64,52 +65,6 @@ Commands:
 Options:
   -h, --help     Print help
   -V, --version  Print version
-```
-
-## Benchmarks
-
-### Resolution
-
-To compare with a cold cache:
-
-```shell
-hyperfine --runs 10 --warmup 3 --prepare "rm -f /tmp/tmp.txt" \
-    "./target/release/puffin-cli compile requirements.txt --no-cache" \
-    "pip-compile requirements.txt --rebuild --pip-args '--no-cache-dir' -o /tmp/tmp.txt"
-```
-
-To compare with a warm cache:
-
-```shell
-hyperfine --runs 10 --warmup 3 --prepare "rm -f /tmp/tmp.txt" \
-    "./target/release/puffin-cli compile requirements.txt" \
-    "pip-compile requirements.txt -o /tmp/tmp.txt"
-```
-
-### Installation
-
-To compare with a cold cache:
-
-```shell
-hyperfine --runs 10 --warmup 3 --prepare "rm -rf .venv && virtualenv .venv && source .venv/bin/activate" \
-    "./target/release/puffin-cli sync requirements.txt --ignore-installed --no-cache" \
-    "pip install -r requirements.txt --ignore-installed --no-cache-dir --no-deps"
-```
-
-To compare with a warm cache:
-
-```shell
-hyperfine --runs 10 --warmup 3 --prepare "rm -rf .venv && virtualenv .venv && source .venv/bin/activate" \
-    "./target/release/puffin-cli sync requirements.txt --ignore-installed" \
-    "pip install -r requirements.txt --ignore-installed --no-deps"
-```
-
-To compare with all dependencies already installed:
-
-```shell
-hyperfine --runs 10 --warmup 3 --prepare "rm -rf .venv && virtualenv .venv && source .venv/bin/activate" \
-    "./target/release/puffin-cli sync requirements.txt" \
-    "pip install -r requirements.txt --no-deps"
 ```
 
 ## License
