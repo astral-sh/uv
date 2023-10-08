@@ -16,6 +16,14 @@ mod logging;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    /// Do not print any output.
+    #[arg(global = true, long, short, conflicts_with = "verbose")]
+    quiet: bool,
+
+    /// Use verbose output.
+    #[arg(global = true, long, short, conflicts_with = "quiet")]
+    verbose: bool,
 }
 
 #[derive(Subcommand)]
@@ -65,7 +73,13 @@ struct FreezeArgs {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    let _ = logging::setup_logging();
+    logging::setup_logging(if cli.quiet {
+        logging::Level::Quiet
+    } else if cli.verbose {
+        logging::Level::Verbose
+    } else {
+        logging::Level::Default
+    });
 
     let dirs = ProjectDirs::from("", "", "puffin");
 

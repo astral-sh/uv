@@ -7,7 +7,7 @@ use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, info};
 use url::Url;
 use zip::ZipArchive;
 
@@ -35,6 +35,10 @@ pub async fn install(
         tokio::fs::create_dir_all(cache.join(WHEEL_CACHE)).await?;
     }
 
+    if wheels.is_empty() {
+        return Ok(());
+    }
+
     // Phase 1: Fetch the wheels in parallel.
     debug!("Phase 1: Fetching wheels");
     let mut fetches = JoinSet::new();
@@ -44,12 +48,12 @@ pub async fn install(
         let key = cache_key(wheel)?;
         if let Some(cache) = cache {
             if cache.join(WHEEL_CACHE).join(&key).exists() {
-                debug!("Found wheel in cache: {:?}", wheel.filename);
+                debug!("Found wheel in cache: {}", wheel.filename);
                 continue;
             }
         }
 
-        debug!("Fetching wheel: {:?}", wheel.filename);
+        debug!("Downloading: {}", wheel.filename);
 
         fetches.spawn(fetch_wheel(
             wheel.clone(),
@@ -57,6 +61,12 @@ pub async fn install(
             cache.map(Path::to_path_buf),
         ));
     }
+
+    if !fetches.is_empty() {
+        let s = if fetches.len() == 1 { "" } else { "s" };
+        info!("Downloading {} wheel{}", fetches.len(), s);
+    }
+
     while let Some(result) = fetches.join_next().await.transpose()? {
         downloads.push(result?);
     }
@@ -69,7 +79,7 @@ pub async fn install(
         let filename = wheel.file.filename.clone();
         let key = cache_key(&wheel.file)?;
 
-        debug!("Unpacking wheel: {:?}", filename);
+        debug!("Unpacking: {}", filename);
 
         // Unzip the wheel.
         tokio::task::spawn_blocking({
@@ -80,7 +90,7 @@ pub async fn install(
 
         // Write the unzipped wheel to the cache (atomically).
         if let Some(cache) = cache {
-            debug!("Caching wheel: {:?}", filename);
+            debug!("Caching wheel: {}", filename);
             tokio::fs::rename(
                 temp_dir.path().join(&key),
                 cache.join(WHEEL_CACHE).join(&key),
@@ -88,6 +98,17 @@ pub async fn install(
             .await?;
         }
     }
+
+    let s = if wheels.len() == 1 { "" } else { "s" };
+    info!(
+        "Linking package{}: {}",
+        s,
+        wheels
+            .iter()
+            .map(cache_key)
+            .collect::<Result<Vec<_>>>()?
+            .join(" ")
+    );
 
     // Phase 3: Install each wheel.
     debug!("Phase 3: Installing wheels");

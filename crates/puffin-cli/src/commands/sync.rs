@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bitflags::bitflags;
-use tracing::debug;
+use tracing::{debug, info};
 
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -12,7 +12,7 @@ use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
 
-use crate::commands::ExitStatus;
+use crate::commands::{elapsed, ExitStatus};
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Default)]
@@ -24,14 +24,16 @@ bitflags! {
 
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> Result<ExitStatus> {
+    let start = std::time::Instant::now();
+
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;
 
     // Parse the `requirements.txt` into a list of requirements.
     let requirements = Requirements::from_str(&requirements_txt)?;
+    let initial_requirements = requirements.len();
 
     // Detect the current Python interpreter.
-    // TODO(charlie): This is taking a _lot_ of time, like 20ms.
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
     debug!(
@@ -49,7 +51,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
             if let Some(version) = site_packages.get(&package) {
                 #[allow(clippy::print_stdout)]
                 {
-                    println!("Requirement already satisfied: {package} ({version})");
+                    info!("Requirement already satisfied: {package} ({version})");
                 }
                 false
             } else {
@@ -59,6 +61,13 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
     };
 
     if requirements.is_empty() {
+        let s = if initial_requirements == 1 { "" } else { "s" };
+        info!(
+            "Audited {} package{} in {}",
+            initial_requirements,
+            s,
+            elapsed(start.elapsed())
+        );
         return Ok(ExitStatus::Success);
     }
 
@@ -91,10 +100,13 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
     let wheels = resolution.into_files().collect::<Vec<_>>();
     puffin_installer::install(&wheels, &python, &client, cache).await?;
 
-    #[allow(clippy::print_stdout)]
-    {
-        println!("Installed {} wheels", wheels.len());
-    }
+    let s = if requirements.len() == 1 { "" } else { "s" };
+    info!(
+        "Installed {} package{} in {}",
+        requirements.len(),
+        s,
+        elapsed(start.elapsed())
+    );
 
     Ok(ExitStatus::Success)
 }

@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use tracing::debug;
+use tracing::{debug, info};
 
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -10,15 +10,22 @@ use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_package::requirements::Requirements;
 
-use crate::commands::ExitStatus;
+use crate::commands::{elapsed, ExitStatus};
 
 /// Resolve a set of requirements into a set of pinned versions.
 pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
+    let start = std::time::Instant::now();
+
     // Read the `requirements.txt` from disk.
     let requirements_txt = std::fs::read_to_string(src)?;
 
     // Parse the `requirements.txt` into a list of requirements.
     let requirements = Requirements::from_str(&requirements_txt)?;
+
+    if requirements.is_empty() {
+        info!("No requirements found");
+        return Ok(ExitStatus::Success);
+    }
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -52,6 +59,14 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
         puffin_resolver::ResolveFlags::default(),
     )
     .await?;
+
+    let s = if resolution.len() == 1 { "" } else { "s" };
+    info!(
+        "Resolved {} package{} in {}",
+        resolution.len(),
+        s,
+        elapsed(start.elapsed())
+    );
 
     for (name, package) in resolution.iter() {
         #[allow(clippy::print_stdout)]
