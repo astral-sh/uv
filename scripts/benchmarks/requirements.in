@@ -1,3 +1,6 @@
+###
+# A small set of pure-Python packages.
+###
 packaging>=23.1
 pygls>=1.0.1
 lsprotocol>=2023.0.0a1
