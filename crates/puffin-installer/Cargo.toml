@@ -13,6 +13,7 @@ license.workspace = true
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
 puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-package = { path = "../puffin-package" }
 wheel-filename = { path = "../wheel-filename" }
 
 anyhow = { workspace = true }
