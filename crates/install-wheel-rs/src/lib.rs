@@ -1,10 +1,12 @@
 //! Takes a wheel and installs it, either in a venv or for monotrail.
 
 use std::io;
+use std::io::{Read, Seek};
 
 use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
+use zip::ZipArchive;
 
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use platform_host::{Arch, Os};
@@ -64,4 +66,15 @@ impl Error {
             _ => Self::Zip(file, value),
         }
     }
+}
+
+
+pub fn do_thing(reader: impl Read + Seek) -> Result<(), Error> {
+    let x = tempfile::tempdir()?;
+    let mut archive =
+        ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
+
+    archive.extract(x.path()).unwrap();
+
+    Ok(())
 }

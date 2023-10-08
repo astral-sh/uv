@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
+use ripunzip::{NullProgressReporter, UnzipOptions};
 use cacache::{Algorithm, Integrity, WriteOpts};
 use rayon::iter::ParallelBridge;
 use tokio::io::AsyncWriteExt;
@@ -14,7 +15,9 @@ use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
-use url::Url;use rayon::iter::ParallelIterator;
+use url::Url;
+use std::io::Write;
+use rayon::iter::ParallelIterator;
 use zip::result::ZipError;
 use zip::ZipArchive;
 
@@ -114,7 +117,7 @@ pub async fn install(
         //     std::io::copy(&mut file, &mut out_file).with_context(|| "Failed to write directory")?;
         //     progress_updater.finish();
         // }
-        println!("Time to unzip: {:?}", start.elapsed());
+        // println!("Time to unzip: {:?}", start.elapsed());
     }
 
 
@@ -126,7 +129,35 @@ pub async fn install(
     };
     let locked_dir = location.acquire_lock()?;
 
+    let tmp_dir = tempfile::tempdir()?;
+
     for wheel in &results {
+        // Write the wheel to a file.
+        let path = tmp_dir.path().join(&wheel.file.filename);
+        let mut file = std::fs::File::create(&path)?;
+        file.write_all(&wheel.buffer)?;
+
+        println!("installing {}", wheel.file.filename);
+
+        let start = std::time::Instant::now();
+        let foo = tempfile::tempdir()?;
+        let file = std::fs::File::open(&path)?;
+        ripunzip::UnzipEngine::for_file(
+            file,
+            UnzipOptions {
+                output_directory: Some(foo.path().to_path_buf()),
+                single_threaded: false,
+            },
+            NullProgressReporter,
+        )?
+            .unzip()?;
+        println!("ripunzip {} in {:?}", wheel.file.filename, start.elapsed());
+
+        let start = std::time::Instant::now();
+        install_wheel_rs::do_thing(std::io::Cursor::new(&wheel.buffer))?;
+        println!("unzip {} in {:?}",  wheel.file.filename, start.elapsed());
+
+        let start = std::time::Instant::now();
         let reader = std::io::Cursor::new(&wheel.buffer);
         let filename = WheelFilename::from_str(&wheel.file.filename)?;
 
@@ -141,6 +172,10 @@ pub async fn install(
             "",
             python.executable(),
         )?;
+
+        println!("install {} in {:?}",  wheel.file.filename, start.elapsed());
+
+        println!();
     }
 
     println!("Time to install: {:?}", start.elapsed());
@@ -163,16 +198,17 @@ fn cache_wheel(
     };
 
     let start = std::time::Instant::now();
-    println!("Unzipping wheel");
+    // println!("Unzipping wheel: {:?}", wheel.file.filename);
 
     let reader = std::io::Cursor::new(wheel.buffer);
 
     // Read the zip.
     let mut archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
 
+    let temp = Path::new(".tmp");
+
     // Parallelize the unzip.
-    (0..archive.len()).par_bridge().map( |file_number| {
-        println!("Unzipping file {}", file_number);
+    (0..archive.len()).par_bridge().map(|file_number| {
         let mut archive = archive.clone();
         let mut file = archive.by_index(file_number)?;
 
@@ -181,7 +217,17 @@ fn cache_wheel(
             Some(path) => path.to_owned(),
             None => return Ok::<(), anyhow::Error>(())
         };
+
         let file_path = file_path.to_string_lossy().to_string();
+        //
+        // let out_path = temp.join(&file_path);
+        // if let Some(parent) = out_path.parent() {
+        //     std::fs::create_dir_all(parent)?;
+        // }
+        // let mut outfile = std::fs::File::create(&out_path)?;
+        // std::io::copy(&mut file, &mut outfile)?;
+
+        // println!("unzipped {} to {}", file_path, out_path.display());
 
         // Write the file to the content-addressed cache.
         let mut writer = WriteOpts::new()
@@ -196,12 +242,8 @@ fn cache_wheel(
             mode: file.unix_mode(),
         };
 
-
-
         Ok::<(), anyhow::Error>(())
-
-
-    }).collect::<Vec<_>>();
+    }).collect::<Result<Vec<_>>>()?;
 
     // for file_number in 0..archive.len() {
     //     let mut file = archive.by_index(file_number)?;
@@ -230,7 +272,7 @@ fn cache_wheel(
     //     index.files.insert(file_path, metadata);
     // }
 
-    println!("Done! {:?}", start.elapsed());
+    println!("Parallel unzipped {} in {:?}", wheel.file.filename, start.elapsed());
 
     Ok(index)
 }
