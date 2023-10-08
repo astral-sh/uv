@@ -21,6 +21,8 @@ mod install_location;
 #[cfg(feature = "python_bindings")]
 mod python_bindings;
 mod record;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod reflink;
 mod script;
 pub mod unpacked;
 mod wheel;
