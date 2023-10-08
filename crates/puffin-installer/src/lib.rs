@@ -7,7 +7,7 @@ use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info};
+use tracing::{debug, info, span, Level};
 use url::Url;
 use zip::ZipArchive;
 
@@ -40,7 +40,6 @@ pub async fn install(
     }
 
     // Phase 1: Fetch the wheels in parallel.
-    debug!("Phase 1: Fetching wheels");
     let mut fetches = JoinSet::new();
     let mut downloads = Vec::with_capacity(wheels.len());
     for wheel in wheels {
@@ -71,10 +70,14 @@ pub async fn install(
         downloads.push(result?);
     }
 
+    if !downloads.is_empty() {
+        let s = if downloads.len() == 1 { "" } else { "s" };
+        debug!("Unpacking {} wheel{}", downloads.len(), s);
+    }
+
     let temp_dir = tempfile::tempdir()?;
 
     // Phase 2: Unpack the wheels into the cache.
-    debug!("Phase 2: Unpacking wheels");
     for wheel in downloads {
         let filename = wheel.file.filename.clone();
         let key = cache_key(&wheel.file)?;
@@ -111,7 +114,6 @@ pub async fn install(
     );
 
     // Phase 3: Install each wheel.
-    debug!("Phase 3: Installing wheels");
     let location = InstallLocation::Venv {
         venv_base: python.venv().to_path_buf(),
         python_version: python.simple_version(),
