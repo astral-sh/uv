@@ -9,7 +9,6 @@ use fs_err as fs;
 use fs_err::File;
 use mailparse::MailHeaderMap;
 use tracing::{debug, span, Level};
-use walkdir::WalkDir;
 
 use wheel_filename::WheelFilename;
 
@@ -78,7 +77,7 @@ pub fn install_wheel(
     // We always install in the same virtualenv site packages
     debug!(name = name.as_str(), "Extracting file");
     let num_unpacked = unpack_wheel_files(&site_packages, wheel)?;
-    debug!(name = name.as_str(), "Extracted {num_unpacked} files",);
+    debug!(name = name.as_str(), "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
     let mut record_file = File::open(&wheel.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
@@ -244,16 +243,46 @@ fn parse_scripts(
     Ok((console_scripts, gui_scripts))
 }
 
+/// Extract all files from the wheel into the site packages.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn unpack_wheel_files(site_packages: &Path, wheel: &Path) -> Result<usize, Error> {
+    use crate::reflink::reflink;
+
+    let mut count = 0usize;
+
+    // On macOS, directly can be recursively copied with a single `clonefile` call.
+    // So we only need to iterate over the top-level of the directory, and copy each file or
+    // subdirectory.
+    for entry in std::fs::read_dir(wheel)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = site_packages.join(from.strip_prefix(wheel).unwrap());
+
+        // Delete the destination if it already exists.
+        if let Ok(metadata) = to.metadata() {
+            if metadata.is_dir() {
+                fs::remove_dir_all(&to)?;
+            } else if metadata.is_file() {
+                fs::remove_file(&to)?;
+            }
+        }
+
+        // Copy the file.
+        reflink(&from, &to)?;
+
+        count += 1;
+    }
+
+    Ok(count)
+}
+
 /// Extract all files from the wheel into the site packages
-///
-/// Matches with the RECORD entries
-///
-/// Returns paths relative to site packages
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 fn unpack_wheel_files(site_packages: &Path, wheel: &Path) -> Result<usize, Error> {
     let mut count = 0usize;
 
     // Walk over the directory.
-    for entry in WalkDir::new(wheel) {
+    for entry in walkdir::WalkDir::new(wheel) {
         let entry = entry?;
         let relative = entry.path().strip_prefix(wheel).unwrap();
         let out_path = site_packages.join(relative);
