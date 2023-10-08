@@ -1,0 +1,61 @@
+[package]
+name = "gourgeist"
+version = "0.0.4"
+edition = "2021"
+description = "virtualenv creation implemented in rust"
+repository = "https://github.com/konstin/gourgeist"
+license = "MIT OR Apache-2.0"
+keywords = ["virtualenv", "venv", "python"]
+readme = "Readme.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+camino = { version = "1.1.6", features = ["serde1"] }
+clap = { version = "4.4.5", features = ["derive"] }
+configparser = "3.0.2"
+dirs = "5.0.1"
+fs-err = "2.9.0"
+install-wheel-rs = { version = "0.0.1", optional = true }
+minreq = { version = "2.10.0", optional = true, features = ["https"] }
+rayon = { version = "1.8.0", optional = true }
+seahash = "4.1.0"
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.107"
+tempfile = "3.8.0"
+thiserror = "1.0.49"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+which = "4.4.2"
+
+[features]
+default = ["install"]
+install = ["install-wheel-rs", "minreq"]
+parallel = ["rayon"]
+
+# zip implementation
+[profile.dev.package.adler]
+opt-level = 3
+
+[profile.profiling]
+inherits = "release"
+lto = "thin"
+debug = true
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.3.1"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = ["shell", "powershell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"

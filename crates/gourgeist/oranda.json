@@ -1,0 +1,8 @@
+{
+  "styles": {
+    "theme": "axo_light"
+  },
+  "build": {
+    "path_prefix": "gourgeist"
+  }
+}
