@@ -31,8 +31,9 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
     let requirements = Requirements::from_str(&requirements_txt)?;
 
     // Detect the current Python interpreter.
+    // TODO(charlie): This is taking a _lot_ of time, like 20ms.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform)?;
+    let python = PythonExecutable::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
         python.executable().display()

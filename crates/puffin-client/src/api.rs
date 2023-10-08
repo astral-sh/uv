@@ -139,6 +139,7 @@ pub struct SimpleJson {
     pub versions: Vec<String>,
 }
 
+// TODO(charlie): Can we rename this? What does this look like for source distributions?
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {

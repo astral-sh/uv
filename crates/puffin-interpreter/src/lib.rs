@@ -25,11 +25,11 @@ pub struct PythonExecutable {
 
 impl PythonExecutable {
     /// Detect the current Python executable from the host environment.
-    pub fn from_env(platform: Platform) -> Result<Self> {
+    pub fn from_env(platform: Platform, cache: Option<&Path>) -> Result<Self> {
         let platform = PythonPlatform::from(platform);
         let venv = virtual_env::detect_virtual_env(&platform)?;
         let executable = platform.venv_python(&venv);
-        let markers = markers::detect_markers(&executable)?;
+        let markers = markers::detect_cached_markers(&executable, cache)?;
 
         Ok(Self {
             platform,

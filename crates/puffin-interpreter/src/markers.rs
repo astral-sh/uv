@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use anyhow::{Context, Result};
+use tracing::debug;
 
 use pep508_rs::MarkerEnvironment;
 
@@ -10,6 +11,55 @@ use pep508_rs::MarkerEnvironment;
 pub(crate) fn detect_markers(python: impl AsRef<Path>) -> Result<MarkerEnvironment> {
     let output = call_python(python.as_ref(), ["-c", CAPTURE_MARKERS_SCRIPT])?;
     Ok(serde_json::from_slice::<MarkerEnvironment>(&output.stdout)?)
+}
+
+/// A wrapper around [`markers::detect_markers`] to cache the computed markers.
+///
+/// Running a Python script is (relatively) expensive, and the markers won't change
+/// unless the Python executable changes, so we use the executable's last modified
+/// time as a cache key.
+pub(crate) fn detect_cached_markers(
+    executable: &Path,
+    cache: Option<&Path>,
+) -> Result<MarkerEnvironment> {
+    // Read from the cache.
+    let key = if let Some(cache) = cache {
+        if let Ok(key) = cache_key(executable) {
+            if let Ok(data) = cacache::read_sync(cache, &key) {
+                debug!("Using cached markers for {}", executable.display());
+                return Ok(serde_json::from_slice::<MarkerEnvironment>(&data)?);
+            }
+            Some(key)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Otherwise, run the Python script.
+    debug!("Detecting markers for {}", executable.display());
+    let markers = detect_markers(executable)?;
+
+    // Write to the cache.
+    if let Some(cache) = cache {
+        if let Some(key) = key {
+            cacache::write_sync(cache, key, serde_json::to_vec(&markers)?)?;
+        }
+    }
+
+    Ok(markers)
+}
+
+/// Create a cache key for the Python executable, consisting of the executable's
+/// last modified time and the executable's path.
+fn cache_key(executable: &Path) -> Result<String> {
+    let modified = executable
+        .metadata()?
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis();
+    Ok(format!("puffin:v0:{}:{}", executable.display(), modified))
 }
 
 const CAPTURE_MARKERS_SCRIPT: &str = "
