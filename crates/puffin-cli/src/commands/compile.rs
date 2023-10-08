@@ -22,7 +22,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform)?;
+    let python = PythonExecutable::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
         python.executable().display()

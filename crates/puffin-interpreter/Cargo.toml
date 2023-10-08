@@ -16,6 +16,7 @@ platform-host = { path = "../platform-host" }
 puffin-package = { path = "../puffin-package" }
 
 anyhow = { workspace = true }
+cacache = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

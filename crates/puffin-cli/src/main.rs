@@ -27,7 +27,7 @@ enum Commands {
     /// Clear the cache.
     Clean,
     /// Enumerate the installed packages in the current environment.
-    Freeze,
+    Freeze(FreezeArgs),
 }
 
 #[derive(Args)]
@@ -52,6 +52,13 @@ struct SyncArgs {
     /// Ignore any installed packages, forcing a re-installation.
     #[arg(long)]
     ignore_installed: bool,
+}
+
+#[derive(Args)]
+struct FreezeArgs {
+    /// Avoid reading from or writing to the cache.
+    #[arg(long)]
+    no_cache: bool,
 }
 
 #[tokio::main]
@@ -87,7 +94,14 @@ async fn main() -> ExitCode {
             .await
         }
         Commands::Clean => commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir)).await,
-        Commands::Freeze => commands::freeze().await,
+        Commands::Freeze(args) => {
+            commands::freeze(
+                dirs.as_ref()
+                    .map(ProjectDirs::cache_dir)
+                    .filter(|_| !args.no_cache),
+            )
+            .await
+        }
     };
 
     match result {

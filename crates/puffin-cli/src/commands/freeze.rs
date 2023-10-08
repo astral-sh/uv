@@ -1,15 +1,18 @@
+use std::path::Path;
+
 use anyhow::Result;
+use tracing::debug;
+
 use platform_host::Platform;
 use puffin_interpreter::{PythonExecutable, SitePackages};
-use tracing::debug;
 
 use crate::commands::ExitStatus;
 
 /// Enumerate the installed packages in the current environment.
-pub(crate) async fn freeze() -> Result<ExitStatus> {
+pub(crate) async fn freeze(cache: Option<&Path>) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform)?;
+    let python = PythonExecutable::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
         python.executable().display()
