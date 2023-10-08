@@ -1,22 +1,28 @@
+mod cloneable_seekable_reader;
+
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::iter::Zip;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
 use cacache::{Algorithm, Integrity, WriteOpts};
+use rayon::iter::ParallelBridge;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
-use url::Url;
+use url::Url;use rayon::iter::ParallelIterator;
+use zip::result::ZipError;
 use zip::ZipArchive;
 
 use install_wheel_rs::{install_wheel, InstallLocation};
 use puffin_client::{File, PypiClient};
 use puffin_interpreter::PythonExecutable;
 use wheel_filename::WheelFilename;
+use crate::cloneable_seekable_reader::{CloneableSeekableReader, HasLength};
 
 struct ZipFileMetadata {
     sri: String,
@@ -48,46 +54,33 @@ pub async fn install(
         results.push(result?);
     }
 
+    let x = results.clone();
+
     if let Some(cache) = cache {
         let start = std::time::Instant::now();
 
-        let mut index = ZipIndex {
-            files: HashMap::new(),
-        };
-
-        for wheel in &results {
-            let reader = std::io::Cursor::new(&wheel.buffer);
-
-            // Read the zip.
-            let mut archive = ZipArchive::new(reader)?;
-
-            for file_number in 0..archive.len() {
-                let mut file = archive.by_index(file_number)?;
-
-                // Determine the path of the file within the wheel.
-                let file_path = match file.enclosed_name() {
-                    Some(path) => path.to_owned(),
-                    None => continue,
-                };
-                let file_path = file_path.to_string_lossy().to_string();
-
-                // Write the file to the content-addressed cache.
-                let mut writer = WriteOpts::new()
-                    .algorithm(cacache::Algorithm::Xxh3)
-                    .open_hash_sync(cache)?;
-                std::io::copy(&mut file, &mut writer)?;
-                let sri = writer.commit()?;
-
-                // Record the file's metadata.
-                let metadata = ZipFileMetadata {
-                    sri: sri.to_string(),
-                    mode: file.unix_mode(),
-                };
-
-                // Insert into the index.
-                index.files.insert(file_path, metadata);
-            }
+        for wheel in x {
+            let cache = cache.to_path_buf();
+            tokio::task::spawn_blocking(move || {
+                cache_wheel(
+                    wheel,
+                    cache.to_path_buf(),
+                )
+            }).await??;
         }
+
+        // // Fetch the wheels in parallel.
+        // let mut fetches = JoinSet::new();
+        // let mut indexes = Vec::with_capacity(wheels.len());
+        // for wheel in x {
+        //     fetches.spawn(cache_wheel(
+        //         wheel,
+        //         cache.to_path_buf(),
+        //     ));
+        // }
+        // while let Some(result) = fetches.join_next().await.transpose()? {
+        //     indexes.push(result?);
+        // }
 
         //
         // if file.name().ends_with('/') {
@@ -155,34 +148,45 @@ pub async fn install(
     Ok(())
 }
 
-async fn cache_wheel(
-    wheel: &FetchedWheel,
-    cache: &Path,
+impl HasLength for std::io::Cursor<Vec<u8>> {
+    fn len(&self) -> u64 {
+        self.get_ref().len() as u64
+    }
+}
+
+fn cache_wheel(
+    wheel: FetchedWheel,
+    cache: PathBuf,
 ) -> Result<ZipIndex> {
     let mut index = ZipIndex {
         files: HashMap::new(),
     };
 
+    let start = std::time::Instant::now();
+    println!("Unzipping wheel");
 
-    let reader = std::io::Cursor::new(&wheel.buffer);
+    let reader = std::io::Cursor::new(wheel.buffer);
 
     // Read the zip.
-    let mut archive = ZipArchive::new(reader)?;
+    let mut archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
 
-    for file_number in 0..archive.len() {
+    // Parallelize the unzip.
+    (0..archive.len()).par_bridge().map( |file_number| {
+        println!("Unzipping file {}", file_number);
+        let mut archive = archive.clone();
         let mut file = archive.by_index(file_number)?;
 
         // Determine the path of the file within the wheel.
         let file_path = match file.enclosed_name() {
             Some(path) => path.to_owned(),
-            None => continue,
+            None => return Ok::<(), anyhow::Error>(())
         };
         let file_path = file_path.to_string_lossy().to_string();
 
         // Write the file to the content-addressed cache.
         let mut writer = WriteOpts::new()
             .algorithm(cacache::Algorithm::Xxh3)
-            .open_hash_sync(cache)?;
+            .open_hash_sync::<PathBuf>(cache.clone())?;
         std::io::copy(&mut file, &mut writer)?;
         let sri = writer.commit()?;
 
@@ -192,14 +196,46 @@ async fn cache_wheel(
             mode: file.unix_mode(),
         };
 
-        // Insert into the index.
-        index.files.insert(file_path, metadata);
-    }
+
+
+        Ok::<(), anyhow::Error>(())
+
+
+    }).collect::<Vec<_>>();
+
+    // for file_number in 0..archive.len() {
+    //     let mut file = archive.by_index(file_number)?;
+    //
+    //     // Determine the path of the file within the wheel.
+    //     let file_path = match file.enclosed_name() {
+    //         Some(path) => path.to_owned(),
+    //         None => continue,
+    //     };
+    //     let file_path = file_path.to_string_lossy().to_string();
+    //
+    //     // Write the file to the content-addressed cache.
+    //     let mut writer = WriteOpts::new()
+    //         .algorithm(cacache::Algorithm::Xxh3)
+    //         .open_hash_sync(cache.as_ref())?;
+    //     std::io::copy(&mut file, &mut writer)?;
+    //     let sri = writer.commit()?;
+    //
+    //     // Record the file's metadata.
+    //     let metadata = ZipFileMetadata {
+    //         sri: sri.to_string(),
+    //         mode: file.unix_mode(),
+    //     };
+    //
+    //     // Insert into the index.
+    //     index.files.insert(file_path, metadata);
+    // }
+
+    println!("Done! {:?}", start.elapsed());
 
     Ok(index)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct FetchedWheel {
     file: File,
     buffer: Vec<u8>,
