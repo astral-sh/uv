@@ -1128,6 +1128,7 @@ dependencies = [
  "plist",
  "pyo3",
  "rayon",
+ "reflink-copy",
  "regex",
  "rfc2047-decoder",
  "serde",
@@ -1719,12 +1720,14 @@ dependencies = [
  "install-wheel-rs",
  "puffin-client",
  "puffin-interpreter",
+ "rayon",
  "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
  "url",
  "wheel-filename",
+ "zip",
 ]
 
 [[package]]
@@ -1954,9 +1957,9 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9e3947399fd46f412918bafde71ec68f9b3505f11ef082eeb80bc7fdf4d7caf"
+checksum = "d7e3e017e993f86feeddf8a7fb609ca49f89082309e328e27aefd4a25bb317a4"
 dependencies = [
  "cfg-if",
  "ioctl-sys",
