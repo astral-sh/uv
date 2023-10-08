@@ -40,10 +40,10 @@ impl LockedVenv {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn new(py: Python, venv: PathBuf) -> PyResult<Self> {
         Ok(Self {
-            location: InstallLocation::Venv {
-                venv_base: LockedDir::acquire(&venv)?,
-                python_version: (py.version_info().major, py.version_info().minor),
-            },
+            location: InstallLocation::new(
+                LockedDir::acquire(&venv)?,
+                (py.version_info().major, py.version_info().minor),
+            ),
         })
     }
 
@@ -65,8 +65,6 @@ impl LockedVenv {
                 true,
                 true,
                 &[],
-                // unique_version can be anything since it's only used to monotrail
-                "",
                 Path::new(&sys_executable),
             )
         })?;

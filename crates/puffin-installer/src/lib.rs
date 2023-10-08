@@ -114,10 +114,7 @@ pub async fn install(
     );
 
     // Phase 3: Install each wheel.
-    let location = InstallLocation::Venv {
-        venv_base: python.venv().to_path_buf(),
-        python_version: python.simple_version(),
-    };
+    let location = InstallLocation::new(python.venv().to_path_buf(), python.simple_version());
     let locked_dir = location.acquire_lock()?;
 
     for wheel in wheels {
