@@ -17,8 +17,8 @@ use crate::commands::{elapsed, ExitStatus};
 bitflags! {
     #[derive(Debug, Copy, Clone, Default)]
     pub struct SyncFlags: u8 {
-        /// Ignore any installed packages, forcing a re-installation.
-        const IGNORE_INSTALLED = 1 << 0;
+        /// Reinstall all packages, even if they're already up-to-date.
+        const FORCE_REINSTALL = 1 << 0;
     }
 }
 
@@ -42,7 +42,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
     );
 
     // Remove any already-installed packages.
-    let requirements = if flags.intersects(SyncFlags::IGNORE_INSTALLED) {
+    let requirements = if flags.intersects(SyncFlags::FORCE_REINSTALL) {
         requirements
     } else {
         let site_packages = SitePackages::from_executable(&python).await?;

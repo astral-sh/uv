@@ -17,66 +17,11 @@ use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
 use wheel_filename::WheelFilename;
 
-#[derive(Debug)]
-pub struct Resolution(HashMap<PackageName, PinnedPackage>);
-
-impl Resolution {
-    /// Iterate over the pinned packages in this resolution.
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
-        self.0.iter()
-    }
-
-    /// Iterate over the wheels in this resolution.
-    pub fn into_files(self) -> impl Iterator<Item = File> {
-        self.0.into_values().map(|package| package.file)
-    }
-
-    /// Return the number of pinned packages in this resolution.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Return `true` if there are no pinned packages in this resolution.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-#[derive(Debug)]
-pub struct PinnedPackage {
-    metadata: Metadata21,
-    file: File,
-}
-
-impl PinnedPackage {
-    pub fn version(&self) -> &Version {
-        &self.metadata.version
-    }
-}
-
 bitflags! {
     #[derive(Debug, Copy, Clone, Default)]
     pub struct ResolveFlags: u8 {
         /// Don't install package dependencies.
         const NO_DEPS = 1 << 0;
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum ResolveError {
-    #[error("Failed to find a version of {0} that satisfies the requirement")]
-    NotFound(Requirement),
-
-    #[error(transparent)]
-    Client(#[from] puffin_client::PypiClientError),
-
-    #[error(transparent)]
-    TrySend(#[from] futures::channel::mpsc::SendError),
-}
-
-impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
-    fn from(value: futures::channel::mpsc::TrySendError<T>) -> Self {
-        value.into_send_error().into()
     }
 }
 
@@ -221,6 +166,61 @@ pub async fn resolve(
     }
 
     Ok(Resolution(resolution))
+}
+
+#[derive(Debug)]
+pub struct Resolution(HashMap<PackageName, PinnedPackage>);
+
+impl Resolution {
+    /// Iterate over the pinned packages in this resolution.
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
+        self.0.iter()
+    }
+
+    /// Iterate over the wheels in this resolution.
+    pub fn into_files(self) -> impl Iterator<Item = File> {
+        self.0.into_values().map(|package| package.file)
+    }
+
+    /// Return the number of pinned packages in this resolution.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Return `true` if there are no pinned packages in this resolution.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+#[derive(Debug)]
+pub struct PinnedPackage {
+    metadata: Metadata21,
+    file: File,
+}
+
+impl PinnedPackage {
+    pub fn version(&self) -> &Version {
+        &self.metadata.version
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ResolveError {
+    #[error("Failed to find a version of {0} that satisfies the requirement")]
+    NotFound(Requirement),
+
+    #[error(transparent)]
+    Client(#[from] puffin_client::PypiClientError),
+
+    #[error(transparent)]
+    TrySend(#[from] futures::channel::mpsc::SendError),
+}
+
+impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
+    fn from(value: futures::channel::mpsc::TrySendError<T>) -> Self {
+        value.into_send_error().into()
+    }
 }
 
 #[derive(Debug)]

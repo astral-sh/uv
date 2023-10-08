@@ -57,9 +57,9 @@ struct SyncArgs {
     #[arg(long)]
     no_cache: bool,
 
-    /// Ignore any installed packages, forcing a re-installation.
+    /// Reinstall all packages, even if they're already up-to-date.
     #[arg(long)]
-    ignore_installed: bool,
+    force_reinstall: bool,
 }
 
 #[derive(Args)]
@@ -99,8 +99,8 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
-                if args.ignore_installed {
-                    commands::SyncFlags::IGNORE_INSTALLED
+                if args.force_reinstall {
+                    commands::SyncFlags::FORCE_REINSTALL
                 } else {
                     commands::SyncFlags::empty()
                 },

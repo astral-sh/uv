@@ -92,7 +92,7 @@ To compare with a cold cache:
 
 ```shell
 hyperfine --runs 10 --warmup 3 --prepare "rm -rf .venv && virtualenv .venv && source .venv/bin/activate" \
-    "./target/release/puffin-cli sync requirements.txt --ignore-installed --no-cache" \
+    "./target/release/puffin-cli sync requirements.txt --force-reinstall --no-cache" \
     "pip install -r requirements.txt --ignore-installed --no-cache-dir --no-deps"
 ```
 
@@ -100,7 +100,7 @@ To compare with a warm cache:
 
 ```shell
 hyperfine --runs 10 --warmup 3 --prepare "rm -rf .venv && virtualenv .venv && source .venv/bin/activate" \
-    "./target/release/puffin-cli sync requirements.txt --ignore-installed" \
+    "./target/release/puffin-cli sync requirements.txt --force-reinstall" \
     "pip install -r requirements.txt --ignore-installed --no-deps"
 ```
 
