@@ -6,7 +6,7 @@ use bitflags::bitflags;
 use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, info};
 
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
@@ -29,6 +29,16 @@ impl Resolution {
     /// Iterate over the wheels in this resolution.
     pub fn into_files(self) -> impl Iterator<Item = File> {
         self.0.into_values().map(|package| package.file)
+    }
+
+    /// Return the number of pinned packages in this resolution.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Return `true` if there are no pinned packages in this resolution.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
@@ -156,6 +166,11 @@ pub async fn resolve(
                     debug!(
                         "--> selected version {} for {}",
                         metadata.version, requirement
+                    );
+
+                    info!(
+                        "Selecting: {}=={} ({})",
+                        metadata.name, metadata.version, file.filename
                     );
 
                     // Add to the resolved set.

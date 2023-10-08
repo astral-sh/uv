@@ -12,10 +12,11 @@ pub(crate) async fn clean(cache: Option<&Path>) -> Result<ExitStatus> {
     };
 
     if !cache.exists() {
+        info!("No cache found at: {}", cache.display());
         return Ok(ExitStatus::Success);
     }
 
-    info!("Clearing cache at {}", cache.display());
+    info!("Clearing cache at: {}", cache.display());
 
     for entry in cache
         .read_dir()
