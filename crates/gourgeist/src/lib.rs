@@ -1,12 +1,14 @@
-use crate::bare::create_bare_venv;
+use std::io;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use dirs::cache_dir;
-use interpreter::InterpreterInfo;
-use std::io;
 use tempfile::PersistError;
 use thiserror::Error;
 
+use interpreter::InterpreterInfo;
 pub use interpreter::{get_interpreter_info, parse_python_cli};
+
+use crate::bare::create_bare_venv;
 
 mod bare;
 mod interpreter;
@@ -40,7 +42,7 @@ pub enum Error {
     },
     #[cfg(feature = "install")]
     #[error("Failed to contact pypi")]
-    MinReq(#[from] minreq::Error),
+    Request(#[from] reqwest::Error),
     #[cfg(feature = "install")]
     #[error("Failed to install {package}")]
     InstallWheel {

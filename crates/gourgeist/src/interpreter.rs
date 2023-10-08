@@ -1,13 +1,15 @@
-use crate::{crate_cache_dir, Error};
-use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
-use fs_err as fs;
-use fs_err::File;
-use serde::{Deserialize, Serialize};
 use std::io;
 use std::io::{BufReader, Write};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
+
+use camino::{Utf8Path, Utf8PathBuf};
+use fs_err as fs;
+use fs_err::File;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
+
+use crate::{crate_cache_dir, Error};
 
 const QUERY_PYTHON: &str = include_str!("query_python.py");
 
@@ -44,20 +46,19 @@ pub fn get_interpreter_info(interpreter: &Utf8Path) -> Result<InterpreterInfo, E
                 debug!("Using cache entry {cache_file}");
                 if modified == cache_entry.modified && interpreter == cache_entry.interpreter {
                     return Ok(cache_entry.interpreter_info);
-                } else {
-                    debug!(
-                        "Removing mismatching cache entry {cache_file} ({} {} {} {})",
-                        modified, cache_entry.modified, interpreter, cache_entry.interpreter
-                    );
-                    if let Err(remove_err) = fs::remove_file(&cache_file) {
-                        warn!("Failed to mismatching cache file at {cache_file}: {remove_err}")
-                    }
+                }
+                debug!(
+                    "Removing mismatching cache entry {cache_file} ({} {} {} {})",
+                    modified, cache_entry.modified, interpreter, cache_entry.interpreter
+                );
+                if let Err(remove_err) = fs::remove_file(&cache_file) {
+                    warn!("Failed to mismatching cache file at {cache_file}: {remove_err}");
                 }
             }
             Err(cache_err) => {
                 debug!("Removing broken cache entry {cache_file} ({cache_err})");
                 if let Err(remove_err) = fs::remove_file(&cache_file) {
-                    warn!("Failed to remove broken cache file at {cache_file}: {remove_err} (original error: {cache_err})")
+                    warn!("Failed to remove broken cache file at {cache_file}: {remove_err} (original error: {cache_err})");
                 }
             }
         }
@@ -188,7 +189,7 @@ pub fn parse_python_cli(cli_python: Option<Utf8PathBuf>) -> Result<Utf8PathBuf, 
                 )
             })?
             .try_into()
-            .map_err(|err: FromPathBufError| err.into_io_error())?;
+            .map_err(camino::FromPathBufError::into_io_error)?;
         info!("Resolved {python} to {python_in_path}");
         python_in_path
     };

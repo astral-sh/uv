@@ -1,14 +1,16 @@
 //! Create a bare virtualenv without any packages install
 
-use crate::interpreter::InterpreterInfo;
+use std::io;
+use std::io::{BufWriter, Write};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
 use fs_err::File;
-use std::io;
-use std::io::{BufWriter, Write};
 use tracing::info;
+
+use crate::interpreter::InterpreterInfo;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -27,27 +29,34 @@ const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(&str, String); 8]) -> io::Result<()> {
     for (key, value) in data {
-        writeln!(f, "{} = {}", key, value)?;
+        writeln!(f, "{key} = {value}")?;
     }
     Ok(())
 }
 
 /// Absolute paths of the virtualenv
 #[derive(Debug)]
-pub struct VenvPaths {
+pub(crate) struct VenvPaths {
     /// The location of the virtualenv, e.g. `.venv`
-    pub root: Utf8PathBuf,
+    #[allow(unused)]
+    pub(crate) root: Utf8PathBuf,
+
     /// The python interpreter.rs inside the virtualenv, on unix `.venv/bin/python`
-    pub interpreter: Utf8PathBuf,
+    #[allow(unused)]
+    pub(crate) interpreter: Utf8PathBuf,
+
     /// The directory with the scripts, on unix `.venv/bin`
-    pub bin: Utf8PathBuf,
+    #[allow(unused)]
+    pub(crate) bin: Utf8PathBuf,
+
     /// The site-packages directory where all the packages are installed to, on unix
     /// and python 3.11 `.venv/lib/python3.11/site-packages`
-    pub site_packages: Utf8PathBuf,
+    #[allow(unused)]
+    pub(crate) site_packages: Utf8PathBuf,
 }
 
 /// Write all the files that belong to a venv without any packages installed.
-pub fn create_bare_venv(
+pub(crate) fn create_bare_venv(
     location: &Utf8Path,
     base_python: &Utf8Path,
     info: &InterpreterInfo,

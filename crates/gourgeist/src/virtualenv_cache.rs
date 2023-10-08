@@ -1,12 +1,14 @@
 //! Deprecated, use only as template when implementing caching
 
-use crate::Error;
+use std::io;
+use std::path::Path;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use dirs::data_dir;
 use fs_err as fs;
-use std::io;
-use std::path::Path;
 use tracing::debug;
+
+use crate::Error;
 
 /// Install wheel, pip and setuptools from the cache
 pub(crate) fn install_base_packages(

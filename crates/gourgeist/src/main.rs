@@ -1,13 +1,15 @@
-use camino::Utf8PathBuf;
-use clap::Parser;
-use gourgeist::{create_venv, get_interpreter_info, parse_python_cli};
 use std::error::Error;
 use std::process::ExitCode;
 use std::time::Instant;
+
+use camino::Utf8PathBuf;
+use clap::Parser;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+
+use gourgeist::{create_venv, get_interpreter_info, parse_python_cli};
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -38,10 +40,17 @@ fn main() -> ExitCode {
     let result = run();
     info!("Took {}ms", start.elapsed().as_millis());
     if let Err(err) = result {
-        eprintln!("💥 virtualenv creator failed");
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("💥 virtualenv creator failed");
+        }
+
         let mut last_error: Option<&(dyn Error + 'static)> = Some(&err);
         while let Some(err) = last_error {
-            eprintln!("  Caused by: {}", err);
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("  Caused by: {err}");
+            }
             last_error = err.source();
         }
         ExitCode::FAILURE

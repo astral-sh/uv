@@ -1,19 +1,23 @@
-use crate::bare::VenvPaths;
-use crate::interpreter::InterpreterInfo;
-use crate::{crate_cache_dir, Error};
-use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
-use fs_err as fs;
-use fs_err::File;
-use install_wheel_rs::{install_wheel, InstallLocation, WheelFilename};
-#[cfg(feature = "parallel")]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::io;
 use std::io::BufWriter;
 use std::str::FromStr;
+
+use camino::{Utf8Path, Utf8PathBuf};
+use fs_err as fs;
+use fs_err::File;
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tempfile::NamedTempFile;
 use tracing::info;
 
-pub fn download_wheel_cached(filename: &str, url: &str) -> Result<Utf8PathBuf, Error> {
+use install_wheel_rs::{install_wheel, InstallLocation};
+use wheel_filename::WheelFilename;
+
+use crate::bare::VenvPaths;
+use crate::interpreter::InterpreterInfo;
+use crate::{crate_cache_dir, Error};
+
+pub(crate) fn download_wheel_cached(filename: &str, url: &str) -> Result<Utf8PathBuf, Error> {
     let wheels_cache = crate_cache_dir()?.join("wheels");
     let cached_wheel = wheels_cache.join(filename);
     if cached_wheel.is_file() {
@@ -28,8 +32,8 @@ pub fn download_wheel_cached(filename: &str, url: &str) -> Result<Utf8PathBuf, E
         .path()
         .to_path_buf()
         .try_into()
-        .map_err(|err: FromPathBufError| err.into_io_error())?;
-    let mut response = minreq::get(url).send_lazy()?;
+        .map_err(camino::FromPathBufError::into_io_error)?;
+    let mut response = reqwest::blocking::get(url)?;
     io::copy(&mut response, &mut BufWriter::new(&mut tempfile)).map_err(|err| {
         Error::WheelDownload {
             url: url.to_string(),
@@ -42,7 +46,7 @@ pub fn download_wheel_cached(filename: &str, url: &str) -> Result<Utf8PathBuf, E
 }
 
 /// Install pip, setuptools and wheel from cache pypi with atm fixed wheels
-pub fn install_base_packages(
+pub(crate) fn install_base_packages(
     location: &Utf8Path,
     info: &InterpreterInfo,
     paths: &VenvPaths,
@@ -71,7 +75,8 @@ pub fn install_base_packages(
             install_wheel(
                 &install_location,
                 File::open(wheel_file)?,
-                parsed_filename,
+                &parsed_filename,
+                false,
                 false,
                 &[],
                 // Only relevant for monotrail style installation
