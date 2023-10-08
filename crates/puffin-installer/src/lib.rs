@@ -3,15 +3,22 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use cacache::{Algorithm, Integrity};
+use rayon::iter::ParallelBridge;
+use rayon::iter::ParallelIterator;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 use url::Url;
+use zip::ZipArchive;
 
-use install_wheel_rs::{install_wheel, InstallLocation};
+use install_wheel_rs::{unpacked, InstallLocation};
 use puffin_client::{File, PypiClient};
 use puffin_interpreter::PythonExecutable;
 use wheel_filename::WheelFilename;
+
+use crate::vendor::CloneableSeekableReader;
+
+mod vendor;
 
 /// Install a set of wheels into a Python virtual environment.
 pub async fn install(
@@ -20,10 +27,24 @@ pub async fn install(
     client: &PypiClient,
     cache: Option<&Path>,
 ) -> Result<()> {
-    // Fetch the wheels in parallel.
+    // Phase 1: Fetch the wheels in parallel.
+    debug!("Phase 1: Fetching wheels");
     let mut fetches = JoinSet::new();
-    let mut results = Vec::with_capacity(wheels.len());
+    let mut downloads = Vec::with_capacity(wheels.len());
     for wheel in wheels {
+        let sha256 = wheel.hashes.sha256.clone();
+        let filename = wheel.filename.clone();
+
+        // If the unzipped wheel exists in the cache, skip it.
+        if let Some(cache) = cache {
+            if cache.join(&sha256).exists() {
+                debug!("Found wheel in cache: {:?}", filename);
+                continue;
+            }
+        }
+
+        debug!("Fetching wheel: {:?}", filename);
+
         fetches.spawn(fetch_wheel(
             wheel.clone(),
             client.clone(),
@@ -31,36 +52,55 @@ pub async fn install(
         ));
     }
     while let Some(result) = fetches.join_next().await.transpose()? {
-        results.push(result?);
+        downloads.push(result?);
     }
 
-    // Install each wheel.
+    let temp_dir = tempfile::tempdir()?;
+
+    // Phase 2: Unpack the wheels into the cache.
+    debug!("Phase 2: Unpacking wheels");
+    for wheel in downloads {
+        let sha256 = wheel.file.hashes.sha256.clone();
+        let filename = wheel.file.filename.clone();
+
+        debug!("Unpacking wheel: {:?}", filename);
+
+        // Unzip the wheel.
+        tokio::task::spawn_blocking({
+            let target = temp_dir.path().join(&sha256);
+            move || unzip_wheel(wheel, &target)
+        })
+        .await??;
+
+        // Write the unzipped wheel to the cache (atomically).
+        if let Some(cache) = cache {
+            debug!("Caching wheel: {:?}", filename);
+            tokio::fs::rename(temp_dir.path().join(&sha256), cache.join(&sha256)).await?;
+        }
+    }
+
+    // Phase 3: Install each wheel.
+    debug!("Phase 3: Installing wheels");
     let location = InstallLocation::Venv {
         venv_base: python.venv().to_path_buf(),
         python_version: python.simple_version(),
     };
     let locked_dir = location.acquire_lock()?;
-    for wheel in results {
-        let reader = std::io::Cursor::new(wheel.buffer);
-        let filename = WheelFilename::from_str(&wheel.file.filename)?;
+
+    for wheel in wheels {
+        let dir = cache
+            .unwrap_or_else(|| temp_dir.path())
+            .join(&wheel.hashes.sha256);
+        let filename = WheelFilename::from_str(&wheel.filename)?;
 
         // TODO(charlie): Should this be async?
-        install_wheel(
-            &locked_dir,
-            reader,
-            &filename,
-            false,
-            false,
-            &[],
-            "",
-            python.executable(),
-        )?;
+        unpacked::install_wheel(&locked_dir, &dir, &filename)?;
     }
 
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct FetchedWheel {
     file: File,
     buffer: Vec<u8>,
@@ -97,4 +137,49 @@ async fn fetch_wheel(
     }
 
     Ok(FetchedWheel { file, buffer })
+}
+
+/// Write a wheel into the target directory.
+fn unzip_wheel(wheel: FetchedWheel, target: &Path) -> Result<()> {
+    // Read the wheel into a buffer.
+    let reader = std::io::Cursor::new(wheel.buffer);
+    let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
+
+    // Unzip in parallel.
+    (0..archive.len())
+        .par_bridge()
+        .map(|file_number| {
+            let mut archive = archive.clone();
+            let mut file = archive.by_index(file_number)?;
+
+            // Determine the path of the file within the wheel.
+            let file_path = match file.enclosed_name() {
+                Some(path) => path.to_owned(),
+                None => return Ok(()),
+            };
+
+            // Create necessary parent directories.
+            let path = target.join(file_path);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            // Write the file.
+            let mut outfile = std::fs::File::create(&path)?;
+            std::io::copy(&mut file, &mut outfile)?;
+
+            // Set permissions.
+            #[cfg(unix)]
+            {
+                use std::fs::Permissions;
+                use std::os::unix::fs::PermissionsExt;
+
+                if let Some(mode) = file.unix_mode() {
+                    std::fs::set_permissions(&path, Permissions::from_mode(mode))?;
+                }
+            }
+
+            Ok(())
+        })
+        .collect::<Result<_>>()
 }

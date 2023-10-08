@@ -17,8 +17,10 @@ wheel-filename = { path = "../wheel-filename" }
 
 anyhow = { workspace = true }
 cacache = { workspace = true }
+rayon = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+zip = { workspace = true }

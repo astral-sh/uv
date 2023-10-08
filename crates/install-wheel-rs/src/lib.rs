@@ -1,21 +1,28 @@
 //! Takes a wheel and installs it, either in a venv or for monotrail.
 
 use std::io;
+use std::io::{Read, Seek};
 
 use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
+use zip::ZipArchive;
 
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use platform_host::{Arch, Os};
+pub use record::RecordEntry;
+pub use script::Script;
 pub use wheel::{
     get_script_launcher, install_wheel, parse_key_value_file, read_record_file, relative_to,
-    Script, SHEBANG_PYTHON,
+    SHEBANG_PYTHON,
 };
 
 mod install_location;
 #[cfg(feature = "python_bindings")]
 mod python_bindings;
+mod record;
+mod script;
+pub mod unpacked;
 mod wheel;
 
 #[derive(Error, Debug)]
@@ -64,4 +71,14 @@ impl Error {
             _ => Self::Zip(file, value),
         }
     }
+}
+
+pub fn do_thing(reader: impl Read + Seek) -> Result<(), Error> {
+    let x = tempfile::tempdir()?;
+    let mut archive =
+        ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
+
+    archive.extract(x.path()).unwrap();
+
+    Ok(())
 }

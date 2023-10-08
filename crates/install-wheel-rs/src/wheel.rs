@@ -1,5 +1,3 @@
-#![allow(clippy::needless_borrow)]
-
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
@@ -12,8 +10,6 @@ use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use mailparse::MailHeaderMap;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
 use tracing::{debug, error, span, warn, Level};
@@ -25,6 +21,8 @@ use zip::{ZipArchive, ZipWriter};
 use wheel_filename::WheelFilename;
 
 use crate::install_location::{InstallLocation, LockedDir};
+use crate::record::RecordEntry;
+use crate::script::Script;
 use crate::{normalize_name, Error};
 
 /// `#!/usr/bin/env python`
@@ -33,93 +31,6 @@ pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
 pub(crate) const LAUNCHER_T32: &[u8] = include_bytes!("../windows-launcher/t32.exe");
 pub(crate) const LAUNCHER_T64: &[u8] = include_bytes!("../windows-launcher/t64.exe");
 pub(crate) const LAUNCHER_T64_ARM: &[u8] = include_bytes!("../windows-launcher/t64-arm.exe");
-
-/// Line in a RECORD file
-/// <https://www.python.org/dev/peps/pep-0376/#record>
-///
-/// ```csv
-/// tqdm/cli.py,sha256=x_c8nmc4Huc-lKEsAXj78ZiyqSJ9hJ71j7vltY67icw,10509
-/// tqdm-4.62.3.dist-info/RECORD,,
-/// ```
-#[derive(Deserialize, Serialize, PartialOrd, PartialEq, Ord, Eq)]
-pub struct RecordEntry {
-    pub path: String,
-    pub hash: Option<String>,
-    #[allow(dead_code)]
-    pub size: Option<u64>,
-}
-
-/// Minimal `direct_url.json` schema
-///
-/// <https://packaging.python.org/en/latest/specifications/direct-url/>
-/// <https://www.python.org/dev/peps/pep-0610/>
-#[derive(Serialize)]
-struct DirectUrl {
-    #[allow(clippy::zero_sized_map_values)]
-    archive_info: HashMap<(), ()>,
-    url: String,
-}
-
-/// A script defining the name of the runnable entrypoint and the module and function that should be
-/// run.
-#[cfg(feature = "python_bindings")]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[pyo3::pyclass(dict)]
-pub struct Script {
-    #[pyo3(get)]
-    pub script_name: String,
-    #[pyo3(get)]
-    pub module: String,
-    #[pyo3(get)]
-    pub function: String,
-}
-
-/// A script defining the name of the runnable entrypoint and the module and function that should be
-/// run.
-#[cfg(not(feature = "python_bindings"))]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Script {
-    pub script_name: String,
-    pub module: String,
-    pub function: String,
-}
-
-impl Script {
-    /// Parses a script definition like `foo.bar:main` or `foomod:main_bar [bar,baz]`
-    ///
-    /// <https://packaging.python.org/en/latest/specifications/entry-points/>
-    ///
-    /// Extras are supposed to be ignored, which happens if you pass None for extras
-    pub fn from_value(
-        script_name: &str,
-        value: &str,
-        extras: Option<&[String]>,
-    ) -> Result<Option<Script>, Error> {
-        let script_regex = Regex::new(r"^(?P<module>[\w\d_\-.]+):(?P<function>[\w\d_\-.]+)(?:\s+\[(?P<extras>(?:[^,]+,?\s*)+)\])?$").unwrap();
-
-        let captures = script_regex
-            .captures(value)
-            .ok_or_else(|| Error::InvalidWheel(format!("invalid console script: '{value}'")))?;
-        if let Some(script_extras) = captures.name("extras") {
-            let script_extras = script_extras
-                .as_str()
-                .split(',')
-                .map(|extra| extra.trim().to_string())
-                .collect::<HashSet<String>>();
-            if let Some(extras) = extras {
-                if !script_extras.is_subset(&extras.iter().cloned().collect()) {
-                    return Ok(None);
-                }
-            }
-        }
-
-        Ok(Some(Script {
-            script_name: script_name.to_string(),
-            module: captures.name("module").unwrap().as_str().to_string(),
-            function: captures.name("function").unwrap().as_str().to_string(),
-        }))
-    }
-}
 
 /// Wrapper script template function
 ///
@@ -139,7 +50,7 @@ if __name__ == "__main__":
 }
 
 /// Part of entrypoints parsing
-fn read_scripts_from_section(
+pub(crate) fn read_scripts_from_section(
     scripts_section: &HashMap<String, Option<String>>,
     section_name: &str,
     extras: Option<&[String]>,
@@ -268,7 +179,7 @@ fn unpack_wheel_files<R: Read + Seek>(
 
         if let Some(p) = out_path.parent() {
             if !created_dirs.contains(p) {
-                fs::create_dir_all(&p)?;
+                fs::create_dir_all(p)?;
                 created_dirs.insert(p.to_path_buf());
             }
         }
@@ -350,7 +261,7 @@ fn unpack_wheel_files<R: Read + Seek>(
     Ok(extracted_paths)
 }
 
-fn get_shebang(location: &InstallLocation<LockedDir>) -> String {
+pub(crate) fn get_shebang(location: &InstallLocation<LockedDir>) -> String {
     if matches!(location, InstallLocation::Venv { .. }) {
         let path = location.get_python().display().to_string();
         let path = if cfg!(windows) {
@@ -380,7 +291,7 @@ fn get_shebang(location: &InstallLocation<LockedDir>) -> String {
 /// TODO: a nice, reproducible-without-distlib rust solution
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
-fn windows_script_launcher(launcher_python_script: &str) -> Result<Vec<u8>, Error> {
+pub(crate) fn windows_script_launcher(launcher_python_script: &str) -> Result<Vec<u8>, Error> {
     let launcher_bin = match env::consts::ARCH {
         "x84" => LAUNCHER_T32,
         "x86_64" => LAUNCHER_T64,
@@ -419,7 +330,7 @@ fn windows_script_launcher(launcher_python_script: &str) -> Result<Vec<u8>, Erro
 /// We also pass `venv_base` so we can write the same path as pip does
 ///
 /// TODO: Test for this launcher directly in install-wheel-rs
-fn write_script_entrypoints(
+pub(crate) fn write_script_entrypoints(
     site_packages: &Path,
     location: &InstallLocation<LockedDir>,
     entrypoints: &[Script],
@@ -444,7 +355,7 @@ fn write_script_entrypoints(
         let launcher_python_script = get_script_launcher(
             &entrypoint.module,
             &entrypoint.function,
-            &get_shebang(&location),
+            &get_shebang(location),
         );
         if cfg!(windows) {
             let launcher = windows_script_launcher(&launcher_python_script)?;
@@ -470,7 +381,7 @@ fn write_script_entrypoints(
     Ok(())
 }
 
-fn bin_rel() -> PathBuf {
+pub(crate) fn bin_rel() -> PathBuf {
     if cfg!(windows) {
         // windows doesn't have the python part, only Lib/site-packages
         Path::new("..").join("..").join("Scripts")
@@ -484,7 +395,7 @@ fn bin_rel() -> PathBuf {
 ///
 /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
 /// > basic key: value format:
-fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
+pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
     // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
     let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
 
@@ -548,7 +459,7 @@ fn bytecode_compile(
     let mut retries = 3;
     let (status, lines) = loop {
         let (status, lines) =
-            bytecode_compile_inner(site_packages, &py_source_paths, &sys_executable)?;
+            bytecode_compile_inner(site_packages, &py_source_paths, sys_executable)?;
         retries -= 1;
         if status.success() || retries == 0 {
             break (status, lines);
@@ -624,7 +535,7 @@ fn bytecode_compile_inner(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .current_dir(&site_packages)
+        .current_dir(site_packages)
         .spawn()
         .map_err(Error::PythonSubcommand)?;
 
@@ -696,21 +607,21 @@ pub fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
 }
 
 /// Moves the files and folders in src to dest, updating the RECORD in the process
-fn move_folder_recorded(
+pub(crate) fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
     if !dest_dir.is_dir() {
-        fs::create_dir_all(&dest_dir)?;
+        fs::create_dir_all(dest_dir)?;
     }
-    for entry in WalkDir::new(&src_dir) {
+    for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src = entry.path();
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
-        let relative_to_data = src.strip_prefix(&src_dir).expect("Prefix must no change");
+        let relative_to_data = src.strip_prefix(src_dir).expect("Prefix must no change");
         // This is the path stored in RECORD
         // e.g. for data it's with .data/data/
         let relative_to_site_packages = src
@@ -733,7 +644,7 @@ fn move_folder_recorded(
                         src.display()
                     ))
                 })?;
-            entry.path = relative_to(&target, &site_packages)?.display().to_string();
+            entry.path = relative_to(&target, site_packages)?.display().to_string();
         }
     }
     Ok(())
@@ -775,7 +686,7 @@ fn install_script(
     start.resize(placeholder_python.len(), 0);
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = get_shebang(&location).as_bytes().to_vec();
+        let start = get_shebang(location).as_bytes().to_vec();
         let mut target = File::create(site_packages.join(&target_path))?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         fs::remove_file(&path)?;
@@ -783,7 +694,7 @@ fn install_script(
     } else {
         // reading and writing is slow especially for large binaries, so we move them instead
         drop(script);
-        fs::rename(&path, &site_packages.join(&target_path))?;
+        fs::rename(&path, site_packages.join(&target_path))?;
         None
     };
     #[cfg(unix)]
@@ -821,7 +732,7 @@ fn install_script(
 
 /// Move the files from the .data directory to the right location in the venv
 #[allow(clippy::too_many_arguments)]
-fn install_data(
+pub(crate) fn install_data(
     venv_base: &Path,
     site_packages: &Path,
     data_dir: &Path,
@@ -858,7 +769,7 @@ fn install_data(
                         continue;
                     }
 
-                    install_script(site_packages, record, &file, &location)?;
+                    install_script(site_packages, record, &file, location)?;
                 }
             }
             Some("headers") => {
@@ -894,7 +805,7 @@ fn install_data(
 ///
 /// We still the path in the absolute path to the site packages and the relative path in the
 /// site packages because we must only record the relative path in RECORD
-fn write_file_recorded(
+pub(crate) fn write_file_recorded(
     site_packages: &Path,
     relative_path: &Path,
     content: impl AsRef<[u8]>,
@@ -912,7 +823,7 @@ fn write_file_recorded(
 }
 
 /// Adds INSTALLER, REQUESTED and `direct_url.json` to the .dist-info dir
-fn extra_dist_info(
+pub(crate) fn extra_dist_info(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
@@ -933,24 +844,6 @@ fn extra_dist_info(
         )?;
     }
 
-    // https://github.com/python-poetry/poetry/issues/6356
-    /*
-    let wheel_path_url = format!("file://{}", wheel_path.canonicalize()?.display());
-    let direct_url = DirectUrl {
-        archive_info: HashMap::new(),
-        url: wheel_path_url,
-    };
-
-    // Map explicitly because we special cased that error
-    let direct_url_json =
-        serde_json::to_string(&direct_url).map_err(WheelInstallerError::DirectUrlSerdeJsonError)?;
-    write_file_recorded(
-        site_packages,
-        &dist_info.join("direct_url.json"),
-        &direct_url_json,
-        record,
-    )?;
-    */
     Ok(())
 }
 
@@ -1071,7 +964,7 @@ pub fn install_wheel(
         ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
 
     debug!(name = name.as_str(), "Getting wheel metadata");
-    let dist_info_prefix = find_dist_info(&filename, &mut archive)?;
+    let dist_info_prefix = find_dist_info(filename, &mut archive)?;
     let (name, _version) = read_metadata(&dist_info_prefix, &mut archive)?;
     // TODO: Check that name and version match
 
@@ -1112,8 +1005,8 @@ pub fn install_wheel(
 
     debug!(name = name.as_str(), "Writing entrypoints");
     let (console_scripts, gui_scripts) = parse_scripts(&mut archive, &dist_info_prefix, None)?;
-    write_script_entrypoints(&site_packages, &location, &console_scripts, &mut record)?;
-    write_script_entrypoints(&site_packages, &location, &gui_scripts, &mut record)?;
+    write_script_entrypoints(&site_packages, location, &console_scripts, &mut record)?;
+    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record)?;
 
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
@@ -1125,7 +1018,7 @@ pub fn install_wheel(
             &site_packages,
             &data_dir,
             &name,
-            &location,
+            location,
             &console_scripts,
             &gui_scripts,
             &mut record,
