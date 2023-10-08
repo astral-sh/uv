@@ -51,10 +51,7 @@ pub(crate) fn install_base_packages(
     info: &InterpreterInfo,
     paths: &VenvPaths,
 ) -> Result<(), Error> {
-    let install_location = InstallLocation::Venv {
-        venv_base: location.canonicalize()?,
-        python_version: (info.major, info.minor),
-    };
+    let install_location = InstallLocation::new(location.canonicalize()?, (info.major, info.minor));
     let install_location = install_location.acquire_lock()?;
 
     // TODO: Use the json api instead
@@ -79,8 +76,6 @@ pub(crate) fn install_base_packages(
                 false,
                 false,
                 &[],
-                // Only relevant for monotrail style installation
-                "",
                 paths.interpreter.as_std_path(),
             )
             .map_err(|err| Error::InstallWheel {

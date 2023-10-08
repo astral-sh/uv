@@ -34,26 +34,19 @@ pub fn install_wheel(
     let name = &filename.distribution;
     let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_str());
 
-    let InstallLocation::Venv {
-        venv_base: base_location,
-        ..
-    } = location
-    else {
-        return Err(Error::InvalidWheel(
-            "Monotrail installation is not supported yet".to_string(),
-        ));
-    };
+    let base_location = location.venv_base();
 
     // TODO(charlie): Pass this in.
     let site_packages_python = format!(
         "python{}.{}",
-        location.get_python_version().0,
-        location.get_python_version().1
+        location.python_version().0,
+        location.python_version().1
     );
     let site_packages = if cfg!(target_os = "windows") {
-        base_location.join("Lib").join("site-packages")
+        base_location.as_ref().join("Lib").join("site-packages")
     } else {
         base_location
+            .as_ref()
             .join("lib")
             .join(site_packages_python)
             .join("site-packages")
@@ -94,7 +87,7 @@ pub fn install_wheel(
     if data_dir.is_dir() {
         debug!(name = name.as_str(), "Installing data");
         install_data(
-            base_location,
+            base_location.as_ref(),
             &site_packages,
             &data_dir,
             &name,

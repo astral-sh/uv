@@ -1,11 +1,8 @@
-//! Multiplexing between venv install and monotrail install
+use std::io;
+use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
-use fs_err as fs;
 use fs_err::File;
-use std::io;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use tracing::{error, warn};
 
 const INSTALL_LOCKFILE: &str = "install-wheel-rs.lock";
@@ -65,124 +62,65 @@ impl Drop for LockedDir {
     }
 }
 
-impl Deref for LockedDir {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<Path> for LockedDir {
+    fn as_ref(&self) -> &Path {
         &self.path
     }
 }
 
-/// Multiplexing between venv install and monotrail install
-///
-/// For monotrail, we have a structure that is {monotrail}/{normalized(name)}/{version}/tag
+/// A virtual environment into which a wheel can be installed.
 ///
 /// We use a lockfile to prevent multiple instance writing stuff on the same time
 /// As of pip 22.0, e.g. `pip install numpy; pip install numpy; pip install numpy` will
-/// nondeterministically fail
-///
-/// I was also thinking about making a shared lock on the import side, but monotrail install
-/// is supposedly atomic (by directory renaming), while for venv installation there can't be
-/// atomicity (we need to add lots of different file without a top level directory / key-turn
-/// file we could rename) and the locking would also need to happen in the import mechanism
-/// itself to ensure
-pub enum InstallLocation<T: Deref<Target = Path>> {
-    Venv {
-        /// absolute path
-        venv_base: T,
-        python_version: (u8, u8),
-    },
-    Monotrail {
-        monotrail_root: T,
-        python: PathBuf,
-        python_version: (u8, u8),
-    },
+/// non-deterministically fail.
+pub struct InstallLocation<T: AsRef<Path>> {
+    /// absolute path
+    venv_base: T,
+    python_version: (u8, u8),
 }
 
-impl<T: Deref<Target = Path>> InstallLocation<T> {
-    /// Returns the location of the python interpreter
-    pub fn get_python(&self) -> PathBuf {
-        match self {
-            InstallLocation::Venv { venv_base, .. } => {
-                if cfg!(windows) {
-                    venv_base.join("Scripts").join("python.exe")
-                } else {
-                    // canonicalize on python would resolve the symlink
-                    venv_base.join("bin").join("python")
-                }
-            }
-            // TODO: For monotrail use the monotrail launcher
-            InstallLocation::Monotrail { python, .. } => python.clone(),
+impl<T: AsRef<Path>> InstallLocation<T> {
+    pub fn new(venv_base: T, python_version: (u8, u8)) -> Self {
+        Self {
+            venv_base,
+            python_version,
         }
     }
 
-    pub fn get_python_version(&self) -> (u8, u8) {
-        match self {
-            InstallLocation::Venv { python_version, .. } => *python_version,
-            InstallLocation::Monotrail { python_version, .. } => *python_version,
+    /// Returns the location of the `python` interpreter.
+    pub fn python(&self) -> PathBuf {
+        if cfg!(windows) {
+            self.venv_base.as_ref().join("Scripts").join("python.exe")
+        } else {
+            // canonicalize on python would resolve the symlink
+            self.venv_base.as_ref().join("bin").join("python")
         }
     }
 
-    /// TODO: This function is unused?
-    pub fn is_installed(&self, normalized_name: &str, version: &str) -> bool {
-        match self {
-            InstallLocation::Venv {
-                venv_base,
-                python_version,
-            } => {
-                let site_packages = if cfg!(target_os = "windows") {
-                    venv_base.join("Lib").join("site-packages")
-                } else {
-                    venv_base
-                        .join("lib")
-                        .join(format!("python{}.{}", python_version.0, python_version.1))
-                        .join("site-packages")
-                };
-                site_packages
-                    .join(format!("{normalized_name}-{version}.dist-info"))
-                    .is_dir()
-            }
-            InstallLocation::Monotrail { monotrail_root, .. } => monotrail_root
-                .join(format!("{normalized_name}-{version}"))
-                .is_dir(),
-        }
+    pub fn python_version(&self) -> (u8, u8) {
+        self.python_version
+    }
+
+    pub fn venv_base(&self) -> &T {
+        &self.venv_base
     }
 }
 
 impl InstallLocation<PathBuf> {
     pub fn acquire_lock(&self) -> io::Result<InstallLocation<LockedDir>> {
-        let root = match self {
-            Self::Venv { venv_base, .. } => venv_base,
-            Self::Monotrail { monotrail_root, .. } => monotrail_root,
-        };
-
-        // If necessary, create monotrail dir
-        fs::create_dir_all(root)?;
-
-        let locked_dir = if let Some(locked_dir) = LockedDir::try_acquire(root)? {
+        let locked_dir = if let Some(locked_dir) = LockedDir::try_acquire(&self.venv_base)? {
             locked_dir
         } else {
             warn!(
                 "Could not acquire exclusive lock for installing, is another installation process \
                 running? Sleeping until lock becomes free"
             );
-            LockedDir::acquire(root)?
+            LockedDir::acquire(&self.venv_base)?
         };
 
-        Ok(match self {
-            Self::Venv { python_version, .. } => InstallLocation::Venv {
-                venv_base: locked_dir,
-                python_version: *python_version,
-            },
-            Self::Monotrail {
-                python_version,
-                python,
-                ..
-            } => InstallLocation::Monotrail {
-                monotrail_root: locked_dir,
-                python: python.clone(),
-                python_version: *python_version,
-            },
+        Ok(InstallLocation {
+            venv_base: locked_dir,
+            python_version: self.python_version,
         })
     }
 }

@@ -11,7 +11,7 @@ use fs_err as fs;
 use fs_err::{DirEntry, File};
 use mailparse::MailHeaderMap;
 use sha2::{Digest, Sha256};
-use tempfile::{tempdir, TempDir};
+use tempfile::tempdir;
 use tracing::{debug, error, span, warn, Level};
 use walkdir::WalkDir;
 use zip::result::ZipError;
@@ -23,7 +23,7 @@ use wheel_filename::WheelFilename;
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
 use crate::script::Script;
-use crate::{normalize_name, Error};
+use crate::Error;
 
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
@@ -262,25 +262,19 @@ fn unpack_wheel_files<R: Read + Seek>(
 }
 
 pub(crate) fn get_shebang(location: &InstallLocation<LockedDir>) -> String {
-    if matches!(location, InstallLocation::Venv { .. }) {
-        let path = location.get_python().display().to_string();
-        let path = if cfg!(windows) {
-            // https://stackoverflow.com/a/50323079
-            const VERBATIM_PREFIX: &str = r"\\?\";
-            if let Some(stripped) = path.strip_prefix(VERBATIM_PREFIX) {
-                stripped.to_string()
-            } else {
-                path
-            }
+    let path = location.python().display().to_string();
+    let path = if cfg!(windows) {
+        // https://stackoverflow.com/a/50323079
+        const VERBATIM_PREFIX: &str = r"\\?\";
+        if let Some(stripped) = path.strip_prefix(VERBATIM_PREFIX) {
+            stripped.to_string()
         } else {
             path
-        };
-        format!("#!{path}")
+        }
     } else {
-        // This will use the monotrail binary moonlighting as python. `python` alone doesn't,
-        // we need env to find the python link we put in PATH
-        SHEBANG_PYTHON.to_string()
-    }
+        path
+    };
+    format!("#!{path}")
 }
 
 /// To get a launcher on windows we write a minimal .exe launcher binary and then attach the actual
@@ -336,8 +330,6 @@ pub(crate) fn write_script_entrypoints(
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
-    // for monotrail
-    fs::create_dir_all(site_packages.join(&bin_rel()))?;
     for entrypoint in entrypoints {
         let entrypoint_relative = if cfg!(windows) {
             // On windows we actually build an .exe wrapper
@@ -677,9 +669,6 @@ fn install_script(
     //
     // > The b'#!pythonw' convention is allowed. b'#!pythonw' indicates a GUI script
     // > instead of a console script.
-    //
-    // We do this in venvs as required, but in monotrail mode we use a fake shebang
-    // (#!/usr/bin/env python) for injection monotrail as python into PATH later
     let placeholder_python = b"#!python";
     // scripts might be binaries, so we read an exact number of bytes instead of the first line as string
     let mut start = Vec::new();
@@ -776,11 +765,10 @@ pub(crate) fn install_data(
                 let target_path = venv_base
                     .join("include")
                     .join("site")
-                    // TODO: Also use just python here in monotrail
                     .join(format!(
                         "python{}.{}",
-                        location.get_python_version().0,
-                        location.get_python_version().1
+                        location.python_version().0,
+                        location.python_version().1
                     ))
                     .join(dist_name);
                 move_folder_recorded(&data_entry.path(), &target_path, site_packages, record)?;
@@ -908,51 +896,23 @@ pub fn install_wheel(
     // initially used to the console scripts, currently unused. Keeping it because we likely need
     // it for validation later
     _extras: &[String],
-    unique_version: &str,
     sys_executable: impl AsRef<Path>,
 ) -> Result<String, Error> {
     let name = &filename.distribution;
     let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_str());
 
-    let (temp_dir_final_location, base_location) = match location {
-        InstallLocation::Venv { venv_base, .. } => (None, venv_base.to_path_buf()),
-        InstallLocation::Monotrail { monotrail_root, .. } => {
-            let name_version_dir = monotrail_root
-                .join(normalize_name(name))
-                .join(unique_version);
-            fs::create_dir_all(&name_version_dir)?;
-            let final_location = name_version_dir.join(filename.get_tag());
-            // temp dir and rename for atomicity
-            // well, except for windows, because there renaming fails for undeterminable reasons
-            // with an os error 5 permission denied.
-            if cfg!(not(windows)) {
-                let temp_dir = TempDir::new_in(&name_version_dir)?;
-                let base_location = temp_dir.path().to_path_buf();
-                (Some((temp_dir, final_location)), base_location)
-            } else {
-                fs::create_dir(&final_location)?;
-                (None, final_location)
-            }
-        }
-    };
+    let base_location = location.venv_base();
 
-    let site_packages_python = match location {
-        InstallLocation::Venv { .. } => {
-            format!(
-                "python{}.{}",
-                location.get_python_version().0,
-                location.get_python_version().1
-            )
-        }
-        // Monotrail installation is for multiple python versions (depending on the wheel tag)
-        // Potentially needs to be changed to creating pythonx.y symlinks for each python version
-        // we use it with (on install in that python version)
-        InstallLocation::Monotrail { .. } => "python".to_string(),
-    };
+    let site_packages_python = format!(
+        "python{}.{}",
+        location.python_version().0,
+        location.python_version().1
+    );
     let site_packages = if cfg!(target_os = "windows") {
-        base_location.join("Lib").join("site-packages")
+        base_location.as_ref().join("Lib").join("site-packages")
     } else {
         base_location
+            .as_ref()
             .join("lib")
             .join(site_packages_python)
             .join("site-packages")
@@ -1014,7 +974,7 @@ pub fn install_wheel(
     if data_dir.is_dir() {
         debug!(name = name.as_str(), "Installing data");
         install_data(
-            &base_location,
+            base_location.as_ref(),
             &site_packages,
             &data_dir,
             &name,
@@ -1022,8 +982,6 @@ pub fn install_wheel(
             &console_scripts,
             &gui_scripts,
             &mut record,
-            // For the monotrail install, we want to keep the fake shebang for our own
-            // later replacement logic
         )?;
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data
@@ -1039,7 +997,7 @@ pub fn install_wheel(
         bytecode_compile(
             &site_packages,
             unpacked_paths,
-            location.get_python_version(),
+            location.python_version(),
             sys_executable.as_ref(),
             name.as_str(),
             &mut record,
@@ -1058,12 +1016,6 @@ pub fn install_wheel(
     record.sort();
     for entry in record {
         record_writer.serialize(entry)?;
-    }
-
-    // rename for atomicity
-    // well, except for windows, see comment above
-    if let Some((_temp_dir, final_location)) = temp_dir_final_location {
-        fs::rename(base_location, final_location)?;
     }
 
     Ok(filename.get_tag())
@@ -1091,7 +1043,7 @@ fn find_dist_info(
         [] => {
             return Err(Error::InvalidWheel(
                 "Missing .dist-info directory".to_string(),
-            ))
+            ));
         }
         [dist_info] => (*dist_info).to_string(),
         _ => {
@@ -1219,7 +1171,7 @@ mod test {
         assert_eq!(
             relative_to(
                 Path::new("/home/ferris/carcinization/lib/python/site-packages/foo/__init__.py"),
-                Path::new("/home/ferris/carcinization/lib/python/site-packages")
+                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
             )
             .unwrap(),
             Path::new("foo/__init__.py")
@@ -1227,7 +1179,7 @@ mod test {
         assert_eq!(
             relative_to(
                 Path::new("/home/ferris/carcinization/lib/marker.txt"),
-                Path::new("/home/ferris/carcinization/lib/python/site-packages")
+                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
             )
             .unwrap(),
             Path::new("../../marker.txt")
@@ -1235,7 +1187,7 @@ mod test {
         assert_eq!(
             relative_to(
                 Path::new("/home/ferris/carcinization/bin/foo_launcher"),
-                Path::new("/home/ferris/carcinization/lib/python/site-packages")
+                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
             )
             .unwrap(),
             Path::new("../../../bin/foo_launcher")
@@ -1256,7 +1208,7 @@ mod test {
             Script::from_value(
                 "launcher",
                 "foo.bar:main",
-                Some(&["bar".to_string(), "baz".to_string()])
+                Some(&["bar".to_string(), "baz".to_string()]),
             )
             .unwrap(),
             Some(Script {
@@ -1273,7 +1225,7 @@ mod test {
             Script::from_value(
                 "launcher",
                 "foomod:main_bar [bar,baz]",
-                Some(&["bar".to_string(), "baz".to_string()])
+                Some(&["bar".to_string(), "baz".to_string()]),
             )
             .unwrap(),
             Some(Script {

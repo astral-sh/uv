@@ -31,10 +31,7 @@ struct Args {
 fn main() -> Result<(), Error> {
     let args = Args::parse();
     let venv_base = args.venv.canonicalize()?;
-    let location = InstallLocation::Venv {
-        venv_base,
-        python_version: (args.major, args.minor),
-    };
+    let location = InstallLocation::new(venv_base, (args.major, args.minor));
     let locked_dir = location.acquire_lock()?;
 
     let wheels: Vec<(PathBuf, WheelFilename)> = args
@@ -69,9 +66,7 @@ fn main() -> Result<(), Error> {
                 args.compile,
                 !args.skip_hashes,
                 &[],
-                // Only relevant for monotrail style installation
-                "",
-                location.get_python(),
+                location.python(),
             )?;
             Ok(())
         })

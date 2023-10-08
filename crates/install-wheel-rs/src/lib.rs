@@ -1,4 +1,4 @@
-//! Takes a wheel and installs it, either in a venv or for monotrail.
+//! Takes a wheel and installs it into a venv..
 
 use std::io;
 use std::io::{Read, Seek};
