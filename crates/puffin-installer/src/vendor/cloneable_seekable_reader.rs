@@ -6,9 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![allow(clippy::cast_sign_loss)]
+
 use std::{
     fs::File,
-    io::{BufReader, Read, Seek, SeekFrom},
+    io::{BufReader, Cursor, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
 };
 
@@ -57,14 +59,11 @@ impl<R: Read + Seek + HasLength> CloneableSeekableReader<R> {
 
     /// Determine the length of the underlying stream.
     fn ascertain_file_length(&mut self) -> u64 {
-        match self.file_length {
-            Some(file_length) => file_length,
-            None => {
-                let len = self.file.lock().unwrap().len();
-                self.file_length = Some(len);
-                len
-            }
-        }
+        self.file_length.unwrap_or_else(|| {
+            let len = self.file.lock().unwrap().len();
+            self.file_length = Some(len);
+            len
+        })
     }
 }
 
@@ -124,17 +123,17 @@ impl HasLength for File {
     }
 }
 
+impl HasLength for Cursor<Vec<u8>> {
+    fn len(&self) -> u64 {
+        self.get_ref().len() as u64
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::{CloneableSeekableReader, HasLength};
     use std::io::{Cursor, Read, Seek, SeekFrom};
-    use test_log::test;
 
-    impl HasLength for Cursor<Vec<u8>> {
-        fn len(&self) -> u64 {
-            self.get_ref().len() as u64
-        }
-    }
+    use super::CloneableSeekableReader;
 
     #[test]
     fn test_cloneable_seekable_reader() {
@@ -149,7 +148,7 @@ mod test {
         assert!(reader.read_exact(&mut out).is_ok());
         assert_eq!(out[0], 0);
         assert_eq!(out[1], 1);
-        assert!(reader.seek(SeekFrom::Current(0)).is_ok());
+        assert!(reader.stream_position().is_ok());
         assert!(reader.read_exact(&mut out).is_ok());
         assert_eq!(out[0], 2);
         assert_eq!(out[1], 3);

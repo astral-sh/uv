@@ -10,14 +10,19 @@ use zip::ZipArchive;
 
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use platform_host::{Arch, Os};
+pub use record::RecordEntry;
+pub use script::Script;
 pub use wheel::{
     get_script_launcher, install_wheel, parse_key_value_file, read_record_file, relative_to,
-    Script, SHEBANG_PYTHON,
+    SHEBANG_PYTHON,
 };
 
 mod install_location;
 #[cfg(feature = "python_bindings")]
 mod python_bindings;
+mod record;
+mod script;
+pub mod unpacked;
 mod wheel;
 
 #[derive(Error, Debug)]
@@ -67,7 +72,6 @@ impl Error {
         }
     }
 }
-
 
 pub fn do_thing(reader: impl Read + Seek) -> Result<(), Error> {
     let x = tempfile::tempdir()?;
