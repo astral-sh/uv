@@ -1720,6 +1720,7 @@ dependencies = [
  "install-wheel-rs",
  "puffin-client",
  "puffin-interpreter",
+ "puffin-package",
  "rayon",
  "tempfile",
  "tokio",

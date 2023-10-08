@@ -14,11 +14,14 @@ use zip::ZipArchive;
 use install_wheel_rs::{unpacked, InstallLocation};
 use puffin_client::{File, PypiClient};
 use puffin_interpreter::PythonExecutable;
+use puffin_package::package_name::PackageName;
 use wheel_filename::WheelFilename;
 
 use crate::vendor::CloneableSeekableReader;
 
 mod vendor;
+
+static WHEEL_CACHE: &str = "wheels-v0";
 
 /// Install a set of wheels into a Python virtual environment.
 pub async fn install(
@@ -27,23 +30,26 @@ pub async fn install(
     client: &PypiClient,
     cache: Option<&Path>,
 ) -> Result<()> {
+    // Create the cache subdirectory, if necessary.
+    if let Some(cache) = cache {
+        tokio::fs::create_dir_all(cache.join(WHEEL_CACHE)).await?;
+    }
+
     // Phase 1: Fetch the wheels in parallel.
     debug!("Phase 1: Fetching wheels");
     let mut fetches = JoinSet::new();
     let mut downloads = Vec::with_capacity(wheels.len());
     for wheel in wheels {
-        let sha256 = wheel.hashes.sha256.clone();
-        let filename = wheel.filename.clone();
-
         // If the unzipped wheel exists in the cache, skip it.
+        let key = cache_key(wheel)?;
         if let Some(cache) = cache {
-            if cache.join(&sha256).exists() {
-                debug!("Found wheel in cache: {:?}", filename);
+            if cache.join(WHEEL_CACHE).join(&key).exists() {
+                debug!("Found wheel in cache: {:?}", wheel.filename);
                 continue;
             }
         }
 
-        debug!("Fetching wheel: {:?}", filename);
+        debug!("Fetching wheel: {:?}", wheel.filename);
 
         fetches.spawn(fetch_wheel(
             wheel.clone(),
@@ -60,14 +66,14 @@ pub async fn install(
     // Phase 2: Unpack the wheels into the cache.
     debug!("Phase 2: Unpacking wheels");
     for wheel in downloads {
-        let sha256 = wheel.file.hashes.sha256.clone();
         let filename = wheel.file.filename.clone();
+        let key = cache_key(&wheel.file)?;
 
         debug!("Unpacking wheel: {:?}", filename);
 
         // Unzip the wheel.
         tokio::task::spawn_blocking({
-            let target = temp_dir.path().join(&sha256);
+            let target = temp_dir.path().join(&key);
             move || unzip_wheel(wheel, &target)
         })
         .await??;
@@ -75,7 +81,11 @@ pub async fn install(
         // Write the unzipped wheel to the cache (atomically).
         if let Some(cache) = cache {
             debug!("Caching wheel: {:?}", filename);
-            tokio::fs::rename(temp_dir.path().join(&sha256), cache.join(&sha256)).await?;
+            tokio::fs::rename(
+                temp_dir.path().join(&key),
+                cache.join(WHEEL_CACHE).join(&key),
+            )
+            .await?;
         }
     }
 
@@ -88,16 +98,31 @@ pub async fn install(
     let locked_dir = location.acquire_lock()?;
 
     for wheel in wheels {
-        let dir = cache
-            .unwrap_or_else(|| temp_dir.path())
-            .join(&wheel.hashes.sha256);
-        let filename = WheelFilename::from_str(&wheel.filename)?;
+        let key = cache_key(wheel)?;
+        let dir = cache.map_or_else(
+            || temp_dir.path().join(&key),
+            |cache| cache.join(WHEEL_CACHE).join(&key),
+        );
+
+        let wheel_filename = WheelFilename::from_str(&wheel.filename)?;
 
         // TODO(charlie): Should this be async?
-        unpacked::install_wheel(&locked_dir, &dir, &filename)?;
+        unpacked::install_wheel(&locked_dir, &dir, &wheel_filename)?;
     }
 
     Ok(())
+}
+
+/// Return the cache key for an unzipped wheel. The cache key should be equivalent to the
+/// `.dist-info` directory name, i.e., `<name>-<version>.dist-info`, where `name` is the
+/// normalized package name.
+fn cache_key(wheel: &File) -> Result<String> {
+    let filename = WheelFilename::from_str(&wheel.filename)?;
+    Ok(format!(
+        "{}-{}",
+        PackageName::normalize(filename.distribution),
+        filename.version
+    ))
 }
 
 #[derive(Debug, Clone)]
