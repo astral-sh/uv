@@ -8,7 +8,7 @@ use tracing::{debug, info};
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
-use puffin_installer::{Distribution, RemoteDistribution};
+use puffin_installer::{Distribution, LocalDistribution, LocalIndex, RemoteDistribution};
 use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
@@ -42,24 +42,52 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         python.executable().display()
     );
 
-    // Remove any already-installed packages.
-    let requirements = if flags.intersects(SyncFlags::IGNORE_INSTALLED) {
-        requirements
+    // Determine the current environment markers.
+    let markers = python.markers();
+    let tags = Tags::from_env(python.platform(), python.simple_version())?;
+
+    // Index all the already-installed packages in site-packages.
+    let site_packages = if flags.intersects(SyncFlags::IGNORE_INSTALLED) {
+        SitePackages::default()
     } else {
-        let site_packages = SitePackages::from_executable(&python).await?;
-        requirements.filter(|requirement| {
-            let package = PackageName::normalize(&requirement.name);
-            if let Some(version) = site_packages.get(&package) {
-                #[allow(clippy::print_stdout)]
-                {
-                    info!("Requirement already satisfied: {package} ({version})");
-                }
-                false
-            } else {
-                true
-            }
-        })
+        SitePackages::from_executable(&python).await?
     };
+
+    // Index all the already-downloaded wheels in the cache.
+    let local_index = if let Some(cache) = cache {
+        LocalIndex::from_directory(cache).await?
+    } else {
+        LocalIndex::default()
+    };
+
+    let requirements = requirements
+        .iter()
+        .filter_map(|requirement| {
+            let package = PackageName::normalize(&requirement.name);
+
+            // Filter out already-installed packages.
+            if let Some(version) = site_packages.get(&package) {
+                info!("Requirement already satisfied: {package} ({version})");
+                return None;
+            }
+
+            // Identify any locally-available distributions that satisfy the requirement.
+            if let Some(distribution) = local_index
+                .get(&package)
+                .filter(|dist| requirement.is_satisfied_by(dist.version()))
+            {
+                debug!(
+                    "Requirement already cached: {} ({})",
+                    distribution.name(),
+                    distribution.version()
+                );
+                return Some(Requirement::Local(distribution.clone()));
+            }
+
+            debug!("Identified uncached requirement: {}", requirement);
+            Some(Requirement::Remote(requirement.clone()))
+        })
+        .collect::<Vec<_>>();
 
     if requirements.is_empty() {
         let s = if initial_requirements == 1 { "" } else { "s" };
@@ -72,42 +100,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         return Ok(ExitStatus::Success);
     }
 
-    // Detect any cached wheels.
-    let (uncached, cached) = if let Some(cache) = cache {
-        let mut cached = Vec::with_capacity(requirements.len());
-        let mut uncached = Vec::with_capacity(requirements.len());
-
-        let index = puffin_installer::LocalIndex::from_directory(cache).await?;
-        for requirement in requirements {
-            let package = PackageName::normalize(&requirement.name);
-            if let Some(distribution) = index
-                .get(&package)
-                .filter(|dist| requirement.is_satisfied_by(dist.version()))
-            {
-                debug!(
-                    "Requirement already cached: {} ({})",
-                    distribution.name(),
-                    distribution.version()
-                );
-                cached.push(distribution.clone());
-            } else {
-                debug!("Identified uncached requirement: {}", requirement);
-                uncached.push(requirement);
-            }
-        }
-
-        (Requirements::new(uncached), cached)
-    } else {
-        (requirements, Vec::new())
-    };
-
-    // Determine the current environment markers.
-    let markers = python.markers();
-
-    // Determine the compatible platform tags.
-    let tags = Tags::from_env(python.platform(), python.simple_version())?;
-
-    // Instantiate a client.
+    // Resolve the dependencies.
     let client = {
         let mut pypi_client = PypiClientBuilder::default();
         if let Some(cache) = cache {
@@ -115,25 +108,27 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         }
         pypi_client.build()
     };
+    let resolution = puffin_resolver::resolve(
+        requirements
+            .iter()
+            .filter_map(|requirement| match requirement {
+                Requirement::Remote(requirement) => Some(requirement),
+                Requirement::Local(_) => None,
+            }),
+        markers,
+        &tags,
+        &client,
+        puffin_resolver::ResolveFlags::NO_DEPS,
+    )
+    .await?;
 
-    // Resolve the dependencies.
-    let resolution = if uncached.is_empty() {
-        puffin_resolver::Resolution::empty()
-    } else {
-        puffin_resolver::resolve(
-            &uncached,
-            markers,
-            &tags,
-            &client,
-            puffin_resolver::ResolveFlags::NO_DEPS,
-        )
-        .await?
-    };
-
-    // Install into the current environment.
-    let wheels = cached
+    // Install the resolved distributions.
+    let wheels = requirements
         .into_iter()
-        .map(|local| Ok(Distribution::Local(local)))
+        .filter_map(|requirement| match requirement {
+            Requirement::Remote(_) => None,
+            Requirement::Local(distribution) => Some(Ok(Distribution::Local(distribution))),
+        })
         .chain(
             resolution
                 .into_files()
@@ -151,4 +146,12 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
     );
 
     Ok(ExitStatus::Success)
+}
+
+#[derive(Debug)]
+enum Requirement {
+    /// A requirement that must be downloaded from PyPI.
+    Remote(pep508_rs::Requirement),
+    /// A requirement that is already available locally.
+    Local(LocalDistribution),
 }

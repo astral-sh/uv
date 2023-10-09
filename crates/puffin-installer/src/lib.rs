@@ -1,4 +1,4 @@
-pub use distribution::{Distribution, RemoteDistribution};
+pub use distribution::{Distribution, LocalDistribution, RemoteDistribution};
 pub use index::LocalIndex;
 pub use install::install;
 

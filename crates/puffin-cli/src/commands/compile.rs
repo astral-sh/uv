@@ -52,7 +52,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
 
     // Resolve the dependencies.
     let resolution = puffin_resolver::resolve(
-        &requirements,
+        requirements.iter(),
         markers,
         &tags,
         &client,

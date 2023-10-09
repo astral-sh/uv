@@ -1,21 +1,21 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
 
-use crate::cache::WheelCache;
 use puffin_package::package_name::PackageName;
 
+use crate::cache::WheelCache;
 use crate::distribution::LocalDistribution;
 
 /// A local index of cached distributions.
-#[derive(Debug)]
-pub struct LocalIndex(BTreeMap<PackageName, LocalDistribution>);
+#[derive(Debug, Default)]
+pub struct LocalIndex(HashMap<PackageName, LocalDistribution>);
 
 impl LocalIndex {
     /// Build an index of cached distributions from a directory.
     pub async fn from_directory(path: &Path) -> Result<Self> {
-        let mut index = BTreeMap::new();
+        let mut index = HashMap::new();
 
         let cache = WheelCache::new(path);
         let Ok(mut dir) = cache.read_dir().await else {

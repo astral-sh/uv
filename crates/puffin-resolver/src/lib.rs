@@ -14,17 +14,12 @@ use platform_tags::Tags;
 use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
-use puffin_package::requirements::Requirements;
 use wheel_filename::WheelFilename;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Resolution(HashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
-    pub fn empty() -> Self {
-        Self(HashMap::new())
-    }
-
     /// Iterate over the pinned packages in this resolution.
     pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
         self.0.iter()
@@ -86,7 +81,7 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
 
 /// Resolve a set of requirements into a set of pinned versions.
 pub async fn resolve(
-    requirements: &Requirements,
+    requirements: impl Iterator<Item = &Requirement>,
     markers: &MarkerEnvironment,
     tags: &Tags,
     client: &PypiClient,
@@ -116,16 +111,20 @@ pub async fn resolve(
         .ready_chunks(32);
 
     // Push all the requirements into the package sink.
-    let mut in_flight: HashSet<PackageName> = HashSet::with_capacity(requirements.len());
-    for requirement in requirements.iter() {
+    let mut in_flight: HashSet<PackageName> = HashSet::new();
+    for requirement in requirements {
         debug!("--> adding root dependency: {}", requirement);
         package_sink.unbounded_send(Request::Package(requirement.clone()))?;
         in_flight.insert(PackageName::normalize(&requirement.name));
     }
 
+    if in_flight.is_empty() {
+        return Ok(Resolution::default());
+    }
+
     // Resolve the requirements.
     let mut resolution: HashMap<PackageName, PinnedPackage> =
-        HashMap::with_capacity(requirements.len());
+        HashMap::with_capacity(in_flight.len());
 
     while let Some(chunk) = package_stream.next().await {
         for result in chunk {

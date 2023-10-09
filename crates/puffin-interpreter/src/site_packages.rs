@@ -9,7 +9,7 @@ use puffin_package::package_name::PackageName;
 
 use crate::PythonExecutable;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SitePackages(BTreeMap<PackageName, Version>);
 
 impl SitePackages {
