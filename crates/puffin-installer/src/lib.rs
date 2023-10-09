@@ -1,6 +1,6 @@
 pub use distribution::{Distribution, LocalDistribution, RemoteDistribution};
 pub use index::LocalIndex;
-pub use install::install;
+pub use install::Installer;
 pub use uninstall::uninstall;
 
 mod cache;

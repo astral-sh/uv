@@ -9,6 +9,7 @@ use crate::commands::ExitStatus;
 
 mod commands;
 mod logging;
+mod printer;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -93,6 +94,14 @@ async fn main() -> ExitCode {
         logging::Level::Default
     });
 
+    let printer = if cli.quiet {
+        printer::Printer::Quiet
+    } else if cli.verbose {
+        printer::Printer::Verbose
+    } else {
+        printer::Printer::Default
+    };
+
     let dirs = ProjectDirs::from("", "", "puffin");
 
     let result = match &cli.command {
@@ -102,6 +111,7 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                printer,
             )
             .await
         }

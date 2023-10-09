@@ -24,24 +24,7 @@ pub(crate) enum Level {
 /// includes targets and timestamps, while [`Level::Default`] excludes both.
 pub(crate) fn setup_logging(level: Level) {
     match level {
-        Level::Default => {
-            // Show `INFO` messages from the CLI crate, but allow `RUST_LOG` to override.
-            let filter = EnvFilter::try_from_default_env()
-                .or_else(|_| EnvFilter::try_new("puffin=info"))
-                .unwrap();
-
-            // Regardless of the tracing level, show messages without any adornment.
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(
-                    tracing_subscriber::fmt::layer()
-                        .without_time()
-                        .with_target(false)
-                        .with_writer(std::io::stderr),
-                )
-                .init();
-        }
-        Level::Quiet => {
+        Level::Default | Level::Quiet => {
             // Show nothing, but allow `RUST_LOG` to override.
             let filter = EnvFilter::builder()
                 .with_default_directive(LevelFilter::OFF.into())

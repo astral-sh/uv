@@ -31,3 +31,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
+indicatif = "0.17.7"
+rand = "0.8.5"
+console = "0.15.7"

@@ -1,8 +1,10 @@
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Result;
 use bitflags::bitflags;
+use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, info};
 
 use platform_host::Platform;
@@ -104,7 +106,6 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         return Ok(ExitStatus::Success);
     }
 
-    // Resolve the dependencies.
     let client = {
         let mut pypi_client = PypiClientBuilder::default();
         if let Some(cache) = cache {
@@ -112,19 +113,20 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         }
         pypi_client.build()
     };
-    let resolution = puffin_resolver::resolve(
-        requirements
-            .iter()
-            .filter_map(|requirement| match requirement {
-                Requirement::Remote(requirement) => Some(requirement),
-                Requirement::Local(_) => None,
-            }),
-        markers,
-        &tags,
-        &client,
-        puffin_resolver::ResolveFlags::NO_DEPS,
-    )
-    .await?;
+
+    // Resolve the dependencies.
+    let resolver = puffin_resolver::Resolver::new(markers, &tags, &client);
+    let resolution = resolver
+        .resolve(
+            requirements
+                .iter()
+                .filter_map(|requirement| match requirement {
+                    Requirement::Remote(requirement) => Some(requirement),
+                    Requirement::Local(_) => None,
+                }),
+            puffin_resolver::ResolveFlags::NO_DEPS,
+        )
+        .await?;
 
     // Install the resolved distributions.
     let wheels = requirements
@@ -139,7 +141,27 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
                 .map(|file| Ok(Distribution::Remote(RemoteDistribution::from_file(file)?))),
         )
         .collect::<Result<Vec<_>>>()?;
-    puffin_installer::install(&wheels, &python, &client, cache).await?;
+
+    let style = ProgressStyle::default_spinner();
+    let len = wheels.len() as u64;
+    let pb = ProgressBar::new(len);
+    pb.set_style(style);
+    let on_progress = Arc::new(move |message: String| {
+        pb.inc(1);
+        pb.set_message(message);
+        if pb.position() == len {
+            pb.finish_and_clear();
+        }
+    });
+
+    let installer = puffin_installer::Installer {
+        python: &python,
+        client: &client,
+        cache,
+        on_progress: Some(on_progress),
+    };
+
+    installer.install(&wheels).await?;
 
     let s = if wheels.len() == 1 { "" } else { "s" };
     info!(

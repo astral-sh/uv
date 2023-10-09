@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Result;
 use cacache::{Algorithm, Integrity};
@@ -17,112 +18,120 @@ use crate::cache::WheelCache;
 use crate::distribution::{Distribution, RemoteDistribution};
 use crate::vendor::CloneableSeekableReader;
 
-/// Install a set of wheels into a Python virtual environment.
-pub async fn install(
-    wheels: &[Distribution],
-    python: &PythonExecutable,
-    client: &PypiClient,
-    cache: Option<&Path>,
-) -> Result<()> {
-    if wheels.is_empty() {
-        return Ok(());
-    }
+pub struct Installer<'a> {
+    pub python: &'a PythonExecutable,
+    pub client: &'a PypiClient,
+    pub cache: Option<&'a Path>,
+    pub on_progress: Option<Arc<dyn Fn(String)>>,
+}
 
-    // Create the wheel cache subdirectory, if necessary.
-    let wheel_cache = cache.map(WheelCache::new);
-    if let Some(wheel_cache) = wheel_cache.as_ref() {
-        wheel_cache.init().await?;
-    }
+impl<'a> Installer<'a> {
+    /// Install a set of wheels into a Python virtual environment.
+    pub async fn install(&self, wheels: &[Distribution]) -> Result<()> {
+        if wheels.is_empty() {
+            return Ok(());
+        }
 
-    // Phase 1: Fetch the wheels in parallel.
-    let mut fetches = JoinSet::new();
-    let mut downloads = Vec::with_capacity(wheels.len());
-    for wheel in wheels {
-        let Distribution::Remote(remote) = wheel else {
-            continue;
-        };
-
-        debug!("Downloading: {}", remote.file().filename);
-
-        fetches.spawn(fetch_wheel(
-            remote.clone(),
-            client.clone(),
-            cache.map(Path::to_path_buf),
-        ));
-    }
-
-    if !fetches.is_empty() {
-        let s = if fetches.len() == 1 { "" } else { "s" };
-        info!("Downloading {} wheel{}", fetches.len(), s);
-    }
-
-    while let Some(result) = fetches.join_next().await.transpose()? {
-        downloads.push(result?);
-    }
-
-    if !downloads.is_empty() {
-        let s = if downloads.len() == 1 { "" } else { "s" };
-        debug!("Unpacking {} wheel{}", downloads.len(), s);
-    }
-
-    let staging = tempfile::tempdir()?;
-
-    // Phase 2: Unpack the wheels into the cache.
-    for download in downloads {
-        let filename = download.remote.file().filename.clone();
-        let id = download.remote.id();
-
-        debug!("Unpacking: {}", filename);
-
-        // Unzip the wheel.
-        tokio::task::spawn_blocking({
-            let target = staging.path().join(&id);
-            move || unzip_wheel(download, &target)
-        })
-        .await??;
-
-        // Write the unzipped wheel to the cache (atomically).
+        // Create the wheel cache subdirectory, if necessary.
+        let wheel_cache = self.cache.map(WheelCache::new);
         if let Some(wheel_cache) = wheel_cache.as_ref() {
-            debug!("Caching wheel: {}", filename);
-            tokio::fs::rename(staging.path().join(&id), wheel_cache.entry(&id)).await?;
+            wheel_cache.init().await?;
         }
-    }
 
-    let s = if wheels.len() == 1 { "" } else { "s" };
-    info!(
-        "Linking package{}: {}",
-        s,
-        wheels
-            .iter()
-            .map(Distribution::id)
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
+        // Phase 1: Fetch the wheels in parallel.
+        let mut fetches = JoinSet::new();
+        let mut downloads = Vec::with_capacity(wheels.len());
+        for wheel in wheels {
+            let Distribution::Remote(remote) = wheel else {
+                continue;
+            };
 
-    // Phase 3: Install each wheel.
-    let location = install_wheel_rs::InstallLocation::new(
-        python.venv().to_path_buf(),
-        python.simple_version(),
-    );
-    let locked_dir = location.acquire_lock()?;
+            debug!("Downloading: {}", remote.file().filename);
 
-    for wheel in wheels {
-        match wheel {
-            Distribution::Remote(remote) => {
-                let id = remote.id();
-                let dir = wheel_cache.as_ref().map_or_else(
-                    || staging.path().join(&id),
-                    |wheel_cache| wheel_cache.entry(&id),
-                );
-                install_wheel_rs::unpacked::install_wheel(&locked_dir, &dir)?;
-            }
-            Distribution::Local(local) => {
-                install_wheel_rs::unpacked::install_wheel(&locked_dir, local.path())?;
+            fetches.spawn(fetch_wheel(
+                remote.clone(),
+                self.client.clone(),
+                self.cache.map(Path::to_path_buf),
+            ));
+        }
+
+        if !fetches.is_empty() {
+            let s = if fetches.len() == 1 { "" } else { "s" };
+            info!("Downloading {} wheel{}", fetches.len(), s);
+        }
+
+        while let Some(result) = fetches.join_next().await.transpose()? {
+            downloads.push(result?);
+        }
+
+        if !downloads.is_empty() {
+            let s = if downloads.len() == 1 { "" } else { "s" };
+            info!("Unpacking {} wheel{}", downloads.len(), s);
+        }
+
+        let staging = tempfile::tempdir()?;
+
+        // Phase 2: Unpack the wheels into the cache.
+        for download in downloads {
+            let filename = download.remote.file().filename.clone();
+            let id = download.remote.id();
+
+            debug!("Unpacking: {}", filename);
+
+            // Unzip the wheel.
+            tokio::task::spawn_blocking({
+                let target = staging.path().join(&id);
+                move || unzip_wheel(download, &target)
+            })
+            .await??;
+
+            // Write the unzipped wheel to the cache (atomically).
+            if let Some(wheel_cache) = wheel_cache.as_ref() {
+                debug!("Caching wheel: {}", filename);
+                tokio::fs::rename(staging.path().join(&id), wheel_cache.entry(&id)).await?;
             }
         }
-    }
 
-    Ok(())
+        let s = if wheels.len() == 1 { "" } else { "s" };
+        info!(
+            "Linking package{}: {}",
+            s,
+            wheels
+                .iter()
+                .map(Distribution::id)
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+
+        // Phase 3: Install each wheel.
+        let location = install_wheel_rs::InstallLocation::new(
+            self.python.venv().to_path_buf(),
+            self.python.simple_version(),
+        );
+        let locked_dir = location.acquire_lock()?;
+
+        for wheel in wheels {
+            match wheel {
+                Distribution::Remote(remote) => {
+                    let id = remote.id();
+                    let dir = wheel_cache.as_ref().map_or_else(
+                        || staging.path().join(&id),
+                        |wheel_cache| wheel_cache.entry(&id),
+                    );
+                    install_wheel_rs::unpacked::install_wheel(&locked_dir, &dir)?;
+                }
+                Distribution::Local(local) => {
+                    install_wheel_rs::unpacked::install_wheel(&locked_dir, local.path())?;
+                }
+            }
+
+            if let Some(on_progress) = self.on_progress.as_ref() {
+                on_progress(wheel.id());
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
