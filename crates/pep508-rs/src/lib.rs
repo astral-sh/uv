@@ -304,16 +304,14 @@ impl Requirement {
 impl Requirement {
     /// Returns `true` if the [`Version`] satisfies the [`Requirement`].
     pub fn is_satisfied_by(&self, version: &Version) -> bool {
-        let Some(specifiers) =
-            self.version_or_url
-                .as_ref()
-                .and_then(|version_or_url| match version_or_url {
-                    VersionOrUrl::VersionSpecifier(specifiers) => Some(specifiers),
-                    // TODO(charlie): Support URL dependencies.
-                    VersionOrUrl::Url(_) => None,
-                })
-        else {
-            return false;
+        let Some(version_or_url) = self.version_or_url.as_ref() else {
+            return true;
+        };
+
+        let specifiers = match version_or_url {
+            VersionOrUrl::VersionSpecifier(specifiers) => specifiers,
+            // TODO(charlie): Support URL dependencies.
+            VersionOrUrl::Url(_) => return false,
         };
 
         specifiers

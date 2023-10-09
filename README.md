@@ -21,6 +21,12 @@ Puffin's limited scope allows us to solve many of the low-level problems that ar
 build such a package manager (like package installation) while shipping an immediately useful tool
 with a minimal barrier to adoption. Try it today in lieu of `pip` and `pip-tools`.
 
+## Features
+
+- Extremely fast dependency resolution and installation: install dependencies in sub-second time.
+- Disk-space efficient: Puffin uses a global cache to deduplicate dependencies, and uses
+  Copy-on-Write on supported filesystems to reduce disk usage.
+
 ## Limitations
 
 Puffin does not yet support:
