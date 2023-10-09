@@ -1,13 +1,13 @@
 [package]
 name = "puffin-interpreter"
-version = "0.1.0"
-edition.workspace = true
-rust-version.workspace = true
-homepage.workspace = true
-documentation.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }

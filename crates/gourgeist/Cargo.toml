@@ -1,12 +1,17 @@
 [package]
 name = "gourgeist"
 version = "0.0.4"
-edition = "2021"
+publish = false
 description = "virtualenv creation implemented in rust"
-repository = "https://github.com/konstin/gourgeist"
-license = "MIT OR Apache-2.0"
 keywords = ["virtualenv", "venv", "python"]
-readme = "Readme.md"
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 install-wheel-rs = { path = "../install-wheel-rs", optional = true }

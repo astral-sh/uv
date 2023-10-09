@@ -2,11 +2,15 @@
 name = "pep440_rs"
 version = "0.3.12"
 description = "A library for python version numbers and specifiers, implementing PEP 440"
-edition = "2021"
-include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
 license = "Apache-2.0 OR BSD-2-Clause"
-repository = "https://github.com/konstin/pep440-rs"
-readme = "Readme.md"
+include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
 
 [lib]
 name = "pep440_rs"
