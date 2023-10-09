@@ -302,6 +302,25 @@ impl Requirement {
 }
 
 impl Requirement {
+    /// Returns `true` if the [`Version`] satisfies the [`Requirement`].
+    pub fn is_satisfied_by(&self, version: &Version) -> bool {
+        let Some(specifiers) =
+            self.version_or_url
+                .as_ref()
+                .and_then(|version_or_url| match version_or_url {
+                    VersionOrUrl::VersionSpecifier(specifiers) => Some(specifiers),
+                    // TODO(charlie): Support URL dependencies.
+                    VersionOrUrl::Url(_) => None,
+                })
+        else {
+            return false;
+        };
+
+        specifiers
+            .iter()
+            .all(|specifier| specifier.contains(version))
+    }
+
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[String]) -> bool {
         if let Some(marker) = &self.marker {
@@ -572,12 +591,12 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error
             Some((pos, other)) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                    "Expected an alphanumeric character starting the extra name, found '{other}'"
-                )),
+                        "Expected an alphanumeric character starting the extra name, found '{other}'"
+                    )),
                     start: pos,
                     len: 1,
                     input: chars.copy_chars(),
-                })
+                });
             }
             None => return Err(early_eof_error),
         }
@@ -601,10 +620,9 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error
                     start: pos,
                     len: 1,
                     input: chars.copy_chars(),
-                })
-
+                });
             }
-            _=>{}
+            _ => {}
         };
         // wsp* after the identifier
         chars.eat_whitespace();
@@ -625,7 +643,7 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error
                     start: pos,
                     len: 1,
                     input: chars.copy_chars(),
-                })
+                });
             }
             None => return Err(early_eof_error),
         }
@@ -734,7 +752,7 @@ fn parse_version_specifier_parentheses(
                 let specifier = parse_specifier(chars, &buffer, start, end)?;
                 specifiers.push(specifier);
                 break Some(VersionOrUrl::VersionSpecifier(specifiers.into_iter().collect()));
-            },
+            }
             Some((_, char)) => buffer.push(char),
             None => return Err(Pep508Error {
                 message: Pep508ErrorSource::String("Missing closing parenthesis (expected ')', found end of dependency specification)".to_string()),
@@ -789,7 +807,7 @@ fn parse(chars: &mut CharIter) -> Result<Requirement, Pep508Error> {
                 start: chars.get_pos(),
                 len: 1,
                 input: chars.copy_chars(),
-            })
+            });
         }
     };
 
@@ -1036,6 +1054,7 @@ mod tests {
             },
         );
     }
+
     #[test]
     fn error_extras_illegal_character() {
         assert_err(

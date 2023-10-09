@@ -1,10 +1,12 @@
-use clap::Parser;
-use fs_err::File;
-use install_wheel_rs::{install_wheel, Error, InstallLocation};
-#[cfg(feature = "rayon")]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::path::PathBuf;
 use std::str::FromStr;
+
+use clap::Parser;
+use fs_err::File;
+#[cfg(feature = "rayon")]
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+use install_wheel_rs::{install_wheel, Error, InstallLocation};
 use wheel_filename::WheelFilename;
 
 /// Low level install CLI, mainly used for testing

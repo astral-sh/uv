@@ -1780,6 +1780,7 @@ dependencies = [
  "anyhow",
  "cacache",
  "install-wheel-rs",
+ "pep440_rs",
  "puffin-client",
  "puffin-interpreter",
  "puffin-package",

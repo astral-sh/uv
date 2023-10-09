@@ -10,8 +10,6 @@ use fs_err::File;
 use mailparse::MailHeaderMap;
 use tracing::{debug, span, Level};
 
-use wheel_filename::WheelFilename;
-
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::wheel::{
     extra_dist_info, install_data, parse_wheel_version, read_scripts_from_section,
@@ -26,14 +24,7 @@ use crate::{read_record_file, Error, Script};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
-pub fn install_wheel(
-    location: &InstallLocation<LockedDir>,
-    wheel: &Path,
-    filename: &WheelFilename,
-) -> Result<String, Error> {
-    let name = &filename.distribution;
-    let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_str());
-
+pub fn install_wheel(location: &InstallLocation<LockedDir>, wheel: &Path) -> Result<(), Error> {
     let base_location = location.venv_base();
 
     // TODO(charlie): Pass this in.
@@ -52,10 +43,10 @@ pub fn install_wheel(
             .join("site-packages")
     };
 
-    debug!(name = name.as_str(), "Getting wheel metadata");
     let dist_info_prefix = find_dist_info(wheel)?;
     let (name, _version) = read_metadata(&dist_info_prefix, wheel)?;
-    // TODO: Check that name and version match
+
+    let _my_span = span!(Level::DEBUG, "install_wheel", name);
 
     // We're going step by step though
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
@@ -68,15 +59,15 @@ pub fn install_wheel(
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
     // We always install in the same virtualenv site packages
-    debug!(name = name.as_str(), "Extracting file");
+    debug!(name, "Extracting file");
     let num_unpacked = unpack_wheel_files(&site_packages, wheel)?;
-    debug!(name = name.as_str(), "Extracted {num_unpacked} files");
+    debug!(name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
     let mut record_file = File::open(&wheel.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
     let mut record = read_record_file(&mut record_file)?;
 
-    debug!(name = name.as_str(), "Writing entrypoints");
+    debug!(name, "Writing entrypoints");
     let (console_scripts, gui_scripts) = parse_scripts(wheel, &dist_info_prefix, None)?;
     write_script_entrypoints(&site_packages, location, &console_scripts, &mut record)?;
     write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record)?;
@@ -85,7 +76,7 @@ pub fn install_wheel(
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
     if data_dir.is_dir() {
-        debug!(name = name.as_str(), "Installing data");
+        debug!(name, "Installing data");
         install_data(
             base_location.as_ref(),
             &site_packages,
@@ -101,14 +92,14 @@ pub fn install_wheel(
         // 2.e Remove empty distribution-1.0.data directory.
         fs::remove_dir_all(data_dir)?;
     } else {
-        debug!(name = name.as_str(), "No data");
+        debug!(name, "No data");
     }
 
-    debug!(name = name.as_str(), "Writing extra metadata");
+    debug!(name, "Writing extra metadata");
 
     extra_dist_info(&site_packages, &dist_info_prefix, true, &mut record)?;
 
-    debug!(name = name.as_str(), "Writing record");
+    debug!(name, "Writing record");
     let mut record_writer = csv::WriterBuilder::new()
         .has_headers(false)
         .escape(b'"')
@@ -118,7 +109,7 @@ pub fn install_wheel(
         record_writer.serialize(entry)?;
     }
 
-    Ok(filename.get_tag())
+    Ok(())
 }
 
 /// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or

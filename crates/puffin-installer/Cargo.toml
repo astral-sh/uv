@@ -11,6 +11,7 @@ license.workspace = true
 
 [dependencies]
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
+pep440_rs = { path = "../pep440-rs" }
 puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-package = { path = "../puffin-package" }
