@@ -9,7 +9,7 @@ use thiserror::Error;
 use tracing::{debug, info};
 
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
@@ -21,6 +21,10 @@ use wheel_filename::WheelFilename;
 pub struct Resolution(HashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
+    pub fn empty() -> Self {
+        Self(HashMap::new())
+    }
+
     /// Iterate over the pinned packages in this resolution.
     pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
         self.0.iter()
@@ -128,16 +132,6 @@ pub async fn resolve(
             let result: Response = result?;
             match result {
                 Response::Package(requirement, metadata) => {
-                    // TODO(charlie): Support URLs. Right now, we treat a URL as an unpinned dependency.
-                    let specifiers =
-                        requirement
-                            .version_or_url
-                            .as_ref()
-                            .and_then(|version_or_url| match version_or_url {
-                                VersionOrUrl::VersionSpecifier(specifiers) => Some(specifiers),
-                                VersionOrUrl::Url(_) => None,
-                            });
-
                     // Pick a version that satisfies the requirement.
                     let Some(file) = metadata.files.iter().rev().find(|file| {
                         // We only support wheels for now.
@@ -153,9 +147,7 @@ pub async fn resolve(
                             return false;
                         }
 
-                        specifiers
-                            .iter()
-                            .all(|specifier| specifier.contains(&version))
+                        requirement.is_satisfied_by(&version)
                     }) else {
                         return Err(ResolveError::NotFound(requirement));
                     };

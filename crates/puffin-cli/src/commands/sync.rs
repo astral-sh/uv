@@ -8,6 +8,7 @@ use tracing::{debug, info};
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
+use puffin_installer::{Distribution, RemoteDistribution};
 use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
@@ -71,6 +72,35 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         return Ok(ExitStatus::Success);
     }
 
+    // Detect any cached wheels.
+    let (uncached, cached) = if let Some(cache) = cache {
+        let mut cached = Vec::with_capacity(requirements.len());
+        let mut uncached = Vec::with_capacity(requirements.len());
+
+        let index = puffin_installer::LocalIndex::from_directory(cache).await?;
+        for requirement in requirements {
+            let package = PackageName::normalize(&requirement.name);
+            if let Some(distribution) = index
+                .get(&package)
+                .filter(|dist| requirement.is_satisfied_by(dist.version()))
+            {
+                debug!(
+                    "Requirement already cached: {} ({})",
+                    distribution.name(),
+                    distribution.version()
+                );
+                cached.push(distribution.clone());
+            } else {
+                debug!("Identified uncached requirement: {}", requirement);
+                uncached.push(requirement);
+            }
+        }
+
+        (Requirements::new(uncached), cached)
+    } else {
+        (requirements, Vec::new())
+    };
+
     // Determine the current environment markers.
     let markers = python.markers();
 
@@ -87,23 +117,35 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
     };
 
     // Resolve the dependencies.
-    let resolution = puffin_resolver::resolve(
-        &requirements,
-        markers,
-        &tags,
-        &client,
-        puffin_resolver::ResolveFlags::NO_DEPS,
-    )
-    .await?;
+    let resolution = if uncached.is_empty() {
+        puffin_resolver::Resolution::empty()
+    } else {
+        puffin_resolver::resolve(
+            &uncached,
+            markers,
+            &tags,
+            &client,
+            puffin_resolver::ResolveFlags::NO_DEPS,
+        )
+        .await?
+    };
 
     // Install into the current environment.
-    let wheels = resolution.into_files().collect::<Vec<_>>();
+    let wheels = cached
+        .into_iter()
+        .map(|local| Ok(Distribution::Local(local)))
+        .chain(
+            resolution
+                .into_files()
+                .map(|file| Ok(Distribution::Remote(RemoteDistribution::from_file(file)?))),
+        )
+        .collect::<Result<Vec<_>>>()?;
     puffin_installer::install(&wheels, &python, &client, cache).await?;
 
-    let s = if requirements.len() == 1 { "" } else { "s" };
+    let s = if wheels.len() == 1 { "" } else { "s" };
     info!(
         "Installed {} package{} in {}",
-        requirements.len(),
+        wheels.len(),
         s,
         elapsed(start.elapsed())
     );
