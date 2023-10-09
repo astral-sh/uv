@@ -10,7 +10,6 @@ use tracing::{debug, info};
 use url::Url;
 use zip::ZipArchive;
 
-use install_wheel_rs::{unpacked, InstallLocation};
 use puffin_client::PypiClient;
 use puffin_interpreter::PythonExecutable;
 
@@ -101,7 +100,10 @@ pub async fn install(
     );
 
     // Phase 3: Install each wheel.
-    let location = InstallLocation::new(python.venv().to_path_buf(), python.simple_version());
+    let location = install_wheel_rs::InstallLocation::new(
+        python.venv().to_path_buf(),
+        python.simple_version(),
+    );
     let locked_dir = location.acquire_lock()?;
 
     for wheel in wheels {
@@ -112,10 +114,10 @@ pub async fn install(
                     || staging.path().join(&id),
                     |wheel_cache| wheel_cache.entry(&id),
                 );
-                unpacked::install_wheel(&locked_dir, &dir)?;
+                install_wheel_rs::unpacked::install_wheel(&locked_dir, &dir)?;
             }
             Distribution::Local(local) => {
-                unpacked::install_wheel(&locked_dir, local.path())?;
+                install_wheel_rs::unpacked::install_wheel(&locked_dir, local.path())?;
             }
         }
     }

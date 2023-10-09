@@ -36,6 +36,8 @@ enum Commands {
     Clean,
     /// Enumerate the installed packages in the current environment.
     Freeze(FreezeArgs),
+    /// Uninstall a package.
+    Uninstall(UninstallArgs),
 }
 
 #[derive(Args)]
@@ -64,6 +66,16 @@ struct SyncArgs {
 
 #[derive(Args)]
 struct FreezeArgs {
+    /// Avoid reading from or writing to the cache.
+    #[arg(long)]
+    no_cache: bool,
+}
+
+#[derive(Args)]
+struct UninstallArgs {
+    /// The name of the package to uninstall.
+    name: String,
+
     /// Avoid reading from or writing to the cache.
     #[arg(long)]
     no_cache: bool,
@@ -110,6 +122,15 @@ async fn main() -> ExitCode {
         Commands::Clean => commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir)).await,
         Commands::Freeze(args) => {
             commands::freeze(
+                dirs.as_ref()
+                    .map(ProjectDirs::cache_dir)
+                    .filter(|_| !args.no_cache),
+            )
+            .await
+        }
+        Commands::Uninstall(args) => {
+            commands::uninstall(
+                &args.name,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
