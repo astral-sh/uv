@@ -3,6 +3,10 @@ name = "puffin-cli"
 version = "0.0.1"
 edition = "2021"
 
+[[bin]]
+name = "puffin"
+path = "src/main.rs"
+
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }

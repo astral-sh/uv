@@ -40,7 +40,6 @@ on:
   push:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
-  pull_request:
 
 jobs:
   # Run 'cargo dist plan' to determine what tasks we need to do
