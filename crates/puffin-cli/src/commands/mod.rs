@@ -5,11 +5,13 @@ pub(crate) use clean::clean;
 pub(crate) use compile::compile;
 pub(crate) use freeze::freeze;
 pub(crate) use sync::{sync, SyncFlags};
+pub(crate) use uninstall::uninstall;
 
 mod clean;
 mod compile;
 mod freeze;
 mod sync;
+mod uninstall;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

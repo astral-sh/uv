@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
@@ -10,7 +10,7 @@ use puffin_package::package_name::PackageName;
 use crate::PythonExecutable;
 
 #[derive(Debug, Default)]
-pub struct SitePackages(BTreeMap<PackageName, Version>);
+pub struct SitePackages(BTreeMap<PackageName, DistInfo>);
 
 impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
@@ -21,7 +21,7 @@ impl SitePackages {
         while let Some(entry) = dir.next_entry().await? {
             if entry.file_type().await?.is_dir() {
                 if let Some(dist_info) = DistInfo::try_from_path(&entry.path())? {
-                    index.insert(dist_info.name, dist_info.version);
+                    index.insert(dist_info.name().clone(), dist_info);
                 }
             }
         }
@@ -30,20 +30,21 @@ impl SitePackages {
     }
 
     /// Returns an iterator over the installed packages.
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &Version)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &DistInfo)> {
         self.0.iter()
     }
 
     /// Returns the version of the given package, if it is installed.
-    pub fn get(&self, name: &PackageName) -> Option<&Version> {
+    pub fn get(&self, name: &PackageName) -> Option<&DistInfo> {
         self.0.get(name)
     }
 }
 
 #[derive(Debug)]
-struct DistInfo {
+pub struct DistInfo {
     name: PackageName,
     version: Version,
+    path: PathBuf,
 }
 
 impl DistInfo {
@@ -64,10 +65,27 @@ impl DistInfo {
 
             let name = PackageName::normalize(name);
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+            let path = path.to_path_buf();
 
-            return Ok(Some(DistInfo { name, version }));
+            return Ok(Some(DistInfo {
+                name,
+                version,
+                path,
+            }));
         }
 
         Ok(None)
+    }
+
+    pub fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }

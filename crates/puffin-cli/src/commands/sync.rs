@@ -66,8 +66,12 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
             let package = PackageName::normalize(&requirement.name);
 
             // Filter out already-installed packages.
-            if let Some(version) = site_packages.get(&package) {
-                info!("Requirement already satisfied: {package} ({version})");
+            if let Some(dist_info) = site_packages.get(&package) {
+                info!(
+                    "Requirement already satisfied: {} ({})",
+                    package,
+                    dist_info.version()
+                );
                 return None;
             }
 

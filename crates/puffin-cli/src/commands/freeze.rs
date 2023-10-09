@@ -20,10 +20,10 @@ pub(crate) async fn freeze(cache: Option<&Path>) -> Result<ExitStatus> {
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&python).await?;
-    for (name, version) in site_packages.iter() {
+    for (name, dist_info) in site_packages.iter() {
         #[allow(clippy::print_stdout)]
         {
-            println!("{name}=={version}");
+            println!("{}=={}", name, dist_info.version());
         }
     }
 
