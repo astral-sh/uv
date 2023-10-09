@@ -1,11 +1,17 @@
 [package]
 name = "install-wheel-rs"
 version = "0.0.1"
-edition = "2021"
+publish = false
 description = "Takes a wheel and installs it, either in a venv or for monotrail"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/konstin/poc-monotrail"
 keywords = ["wheel", "python"]
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 name = "install_wheel_rs"

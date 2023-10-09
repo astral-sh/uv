@@ -1631,7 +1631,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platform-host"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "glibc_version",
  "goblin",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "platform-tags"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "platform-host",
 ]
@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.4.0",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-client"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "futures",
  "http-cache-reqwest",
@@ -1775,7 +1775,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-installer"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "cacache",
@@ -1796,7 +1796,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-interpreter"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "cacache",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-package"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "criterion",
@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-resolver"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.4.0",
@@ -2975,7 +2975,7 @@ dependencies = [
 
 [[package]]
 name = "wheel-filename"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "platform-tags",
  "thiserror",
