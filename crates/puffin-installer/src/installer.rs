@@ -1,4 +1,5 @@
-use anyhow::Result;
+use anyhow::{Error, Result};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use pep440_rs::Version;
 use puffin_interpreter::PythonExecutable;
@@ -31,26 +32,22 @@ impl<'a> Installer<'a> {
 
     /// Install a set of wheels into a Python virtual environment.
     pub fn install(self, wheels: &[LocalDistribution]) -> Result<()> {
-        // Install each wheel.
-        let location = install_wheel_rs::InstallLocation::new(
-            self.python.venv().to_path_buf(),
-            self.python.simple_version(),
-        );
-        let locked_dir = location.acquire_lock()?;
+        tokio::task::block_in_place(|| {
+            wheels.par_iter().try_for_each(|wheel| {
+                let location = install_wheel_rs::InstallLocation::new(
+                    self.python.venv().to_path_buf(),
+                    self.python.simple_version(),
+                );
 
-        for wheel in wheels {
-            install_wheel_rs::unpacked::install_wheel(&locked_dir, wheel.path())?;
+                install_wheel_rs::unpacked::install_wheel(&location, wheel.path())?;
 
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_install_progress(wheel.name(), wheel.version());
-            }
-        }
+                if let Some(reporter) = self.reporter.as_ref() {
+                    reporter.on_install_progress(wheel.name(), wheel.version());
+                }
 
-        if let Some(reporter) = self.reporter.as_ref() {
-            reporter.on_install_complete();
-        }
-
-        Ok(())
+                Ok::<(), Error>(())
+            })
+        })
     }
 }
 

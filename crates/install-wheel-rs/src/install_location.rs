@@ -73,7 +73,7 @@ impl AsRef<Path> for LockedDir {
 /// We use a lockfile to prevent multiple instance writing stuff on the same time
 /// As of pip 22.0, e.g. `pip install numpy; pip install numpy; pip install numpy` will
 /// non-deterministically fail.
-pub struct InstallLocation<T: AsRef<Path>> {
+pub struct InstallLocation<T> {
     /// absolute path
     venv_base: T,
     python_version: (u8, u8),
