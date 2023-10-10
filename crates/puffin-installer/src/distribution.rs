@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 
 use pep440_rs::Version;
 use puffin_client::File;
+use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 use wheel_filename::WheelFilename;
 
@@ -77,7 +78,7 @@ impl RemoteDistribution {
     }
 
     pub fn id(&self) -> String {
-        format!("{}-{}", self.name().replace('-', "_"), self.version())
+        format!("{}-{}", DistInfoName::from(self.name()), self.version())
     }
 }
 
@@ -135,6 +136,6 @@ impl LocalDistribution {
     }
 
     pub fn id(&self) -> String {
-        format!("{}-{}", self.name().replace('-', "_"), self.version())
+        format!("{}-{}", DistInfoName::from(self.name()), self.version())
     }
 }

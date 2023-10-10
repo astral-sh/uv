@@ -215,7 +215,7 @@ pub(crate) async fn sync(
             printer,
             " {} {}{}",
             "+".green(),
-            wheel.name().white().bold(),
+            wheel.name().as_ref().white().bold(),
             format!("@{}", wheel.version()).dimmed()
         )?;
     }
