@@ -7,9 +7,10 @@ use platform_host::Platform;
 use puffin_interpreter::{PythonExecutable, SitePackages};
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-pub(crate) async fn freeze(cache: Option<&Path>) -> Result<ExitStatus> {
+pub(crate) async fn freeze(cache: Option<&Path>, _printer: Printer) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;

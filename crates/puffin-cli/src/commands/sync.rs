@@ -1,11 +1,11 @@
+use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::Result;
 use bitflags::bitflags;
-use indicatif::{ProgressBar, ProgressStyle};
-use tracing::{debug, info};
+use colored::Colorize;
+use tracing::debug;
 
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -15,7 +15,9 @@ use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
 
+use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
+use crate::printer::Printer;
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Default)]
@@ -26,7 +28,12 @@ bitflags! {
 }
 
 /// Install a set of locked requirements into the current Python environment.
-pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> Result<ExitStatus> {
+pub(crate) async fn sync(
+    src: &Path,
+    cache: Option<&Path>,
+    flags: SyncFlags,
+    mut printer: Printer,
+) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     // Read the `requirements.txt` from disk.
@@ -69,7 +76,7 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
 
             // Filter out already-installed packages.
             if let Some(dist_info) = site_packages.get(&package) {
-                info!(
+                debug!(
                     "Requirement already satisfied: {} ({})",
                     package,
                     dist_info.version()
@@ -97,12 +104,17 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
 
     if requirements.is_empty() {
         let s = if initial_requirements == 1 { "" } else { "s" };
-        info!(
-            "Audited {} package{} in {}",
-            initial_requirements,
-            s,
-            elapsed(start.elapsed())
-        );
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Audited {} in {}",
+                format!("{initial_requirements} package{s}").bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+
         return Ok(ExitStatus::Success);
     }
 
@@ -114,8 +126,15 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         pypi_client.build()
     };
 
+    let num_wheels = requirements.len();
+    let num_remote = requirements
+        .iter()
+        .filter(|wheel| matches!(wheel, Requirement::Remote(_)))
+        .count();
+
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(markers, &tags, &client);
+    let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
+        .with_reporter(ResolverReporter::from(printer).with_length(num_remote as u64));
     let resolution = resolver
         .resolve(
             requirements
@@ -128,7 +147,18 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         )
         .await?;
 
-    // Install the resolved distributions.
+    let s = if resolution.len() == 1 { "" } else { "s" };
+    writeln!(
+        printer,
+        "{}",
+        format!(
+            "Resolved {} in {}",
+            format!("{} package{}", resolution.len(), s).bold(),
+            elapsed(start.elapsed())
+        )
+        .dimmed()
+    )?;
+
     let wheels = requirements
         .into_iter()
         .filter_map(|requirement| match requirement {
@@ -142,34 +172,49 @@ pub(crate) async fn sync(src: &Path, cache: Option<&Path>, flags: SyncFlags) -> 
         )
         .collect::<Result<Vec<_>>>()?;
 
-    let style = ProgressStyle::default_spinner();
-    let len = wheels.len() as u64;
-    let pb = ProgressBar::new(len);
-    pb.set_style(style);
-    let on_progress = Arc::new(move |message: String| {
-        pb.inc(1);
-        pb.set_message(message);
-        if pb.position() == len {
-            pb.finish_and_clear();
-        }
-    });
+    // Download any missing distributions.
+    let downloader = puffin_installer::Downloader::new(&python, &client, cache)
+        .with_reporter(DownloadReporter::from(printer).with_length(num_remote as u64));
+    let download_set = downloader.download(&wheels).await?;
 
-    let installer = puffin_installer::Installer {
-        python: &python,
-        client: &client,
-        cache,
-        on_progress: Some(on_progress),
-    };
+    let s = if num_remote == 1 { "" } else { "s" };
+    writeln!(
+        printer,
+        "{}",
+        format!(
+            "Downloaded {} in {}",
+            format!("{num_remote} package{s}").bold(),
+            elapsed(start.elapsed())
+        )
+        .dimmed()
+    )?;
 
-    installer.install(&wheels).await?;
+    // Install the resolved distributions.
+    puffin_installer::Installer::from(download_set)
+        .with_reporter(InstallReporter::from(printer).with_length(num_wheels as u64))
+        .install()?;
 
-    let s = if wheels.len() == 1 { "" } else { "s" };
-    info!(
-        "Installed {} package{} in {}",
-        wheels.len(),
-        s,
-        elapsed(start.elapsed())
-    );
+    let s = if num_wheels == 1 { "" } else { "s" };
+    writeln!(
+        printer,
+        "{}",
+        format!(
+            "Installed {} in {}",
+            format!("{num_wheels} package{s}").bold(),
+            elapsed(start.elapsed())
+        )
+        .dimmed()
+    )?;
+
+    for wheel in wheels {
+        writeln!(
+            printer,
+            " {} {}{}",
+            "+".green(),
+            wheel.name().white().bold(),
+            format!("@{}", wheel.version()).dimmed()
+        )?;
+    }
 
     Ok(ExitStatus::Success)
 }

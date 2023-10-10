@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use colored::Colorize;
-use indicatif::{ProgressBar, ProgressStyle};
 use tracing::debug;
 
 use platform_host::Platform;
@@ -13,6 +12,7 @@ use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_package::requirements::Requirements;
 
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -60,7 +60,7 @@ pub(crate) async fn compile(
 
     // Resolve the dependencies.
     let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
-        .with_reporter(ProgressReporter::from(printer));
+        .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver
         .resolve(
             requirements.iter(),
@@ -88,38 +88,4 @@ pub(crate) async fn compile(
     }
 
     Ok(ExitStatus::Success)
-}
-
-#[derive(Debug)]
-struct ProgressReporter {
-    progress: ProgressBar,
-}
-
-impl From<Printer> for ProgressReporter {
-    fn from(printer: Printer) -> Self {
-        let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_message("Resolving dependencies...");
-        progress.set_style(
-            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
-        );
-        Self { progress }
-    }
-}
-
-impl puffin_resolver::Reporter for ProgressReporter {
-    fn on_dependency_added(&self) {
-        self.progress.inc_length(1);
-    }
-
-    fn on_resolve_progress(&self, package: &puffin_resolver::PinnedPackage) {
-        self.progress.set_message(format!(
-            "{}=={}",
-            package.metadata.name, package.metadata.version
-        ));
-        self.progress.inc(1);
-    }
-
-    fn on_resolve_complete(&self) {
-        self.progress.finish_and_clear();
-    }
 }

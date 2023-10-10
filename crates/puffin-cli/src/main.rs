@@ -126,15 +126,19 @@ async fn main() -> ExitCode {
                 } else {
                     commands::SyncFlags::empty()
                 },
+                printer,
             )
             .await
         }
-        Commands::Clean => commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir)).await,
+        Commands::Clean => {
+            commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
+        }
         Commands::Freeze(args) => {
             commands::freeze(
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                printer,
             )
             .await
         }
@@ -144,6 +148,7 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                printer,
             )
             .await
         }

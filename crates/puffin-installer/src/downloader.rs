@@ -1,37 +1,58 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
 use cacache::{Algorithm, Integrity};
 use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
+use tempfile::TempDir;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 use zip::ZipArchive;
 
+use pep440_rs::Version;
 use puffin_client::PypiClient;
 use puffin_interpreter::PythonExecutable;
+use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
 use crate::distribution::{Distribution, RemoteDistribution};
 use crate::vendor::CloneableSeekableReader;
 
-pub struct Installer<'a> {
-    pub python: &'a PythonExecutable,
-    pub client: &'a PypiClient,
-    pub cache: Option<&'a Path>,
-    pub on_progress: Option<Arc<dyn Fn(String)>>,
+pub struct Downloader<'a> {
+    python: &'a PythonExecutable,
+    client: &'a PypiClient,
+    cache: Option<&'a Path>,
+    reporter: Option<Box<dyn Reporter>>,
 }
 
-impl<'a> Installer<'a> {
-    /// Install a set of wheels into a Python virtual environment.
-    pub async fn install(&self, wheels: &[Distribution]) -> Result<()> {
-        if wheels.is_empty() {
-            return Ok(());
+impl<'a> Downloader<'a> {
+    /// Initialize a new downloader.
+    pub fn new(
+        python: &'a PythonExecutable,
+        client: &'a PypiClient,
+        cache: Option<&'a Path>,
+    ) -> Self {
+        Self {
+            python,
+            client,
+            cache,
+            reporter: None,
         }
+    }
 
+    /// Set the [`Reporter`] to use for this downloader.
+    #[must_use]
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Box::new(reporter)),
+            ..self
+        }
+    }
+
+    /// Install a set of wheels into a Python virtual environment.
+    pub async fn download(&'a self, wheels: &'a [Distribution]) -> Result<DownloadSet<'a>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = self.cache.map(WheelCache::new);
         if let Some(wheel_cache) = wheel_cache.as_ref() {
@@ -46,7 +67,7 @@ impl<'a> Installer<'a> {
                 continue;
             };
 
-            debug!("Downloading: {}", remote.file().filename);
+            debug!("Downloading wheel: {}", remote.file().filename);
 
             fetches.spawn(fetch_wheel(
                 remote.clone(),
@@ -55,83 +76,59 @@ impl<'a> Installer<'a> {
             ));
         }
 
-        if !fetches.is_empty() {
-            let s = if fetches.len() == 1 { "" } else { "s" };
-            info!("Downloading {} wheel{}", fetches.len(), s);
-        }
-
         while let Some(result) = fetches.join_next().await.transpose()? {
             downloads.push(result?);
-        }
-
-        if !downloads.is_empty() {
-            let s = if downloads.len() == 1 { "" } else { "s" };
-            info!("Unpacking {} wheel{}", downloads.len(), s);
         }
 
         let staging = tempfile::tempdir()?;
 
         // Phase 2: Unpack the wheels into the cache.
         for download in downloads {
-            let filename = download.remote.file().filename.clone();
-            let id = download.remote.id();
+            let remote = download.remote.clone();
 
-            debug!("Unpacking: {}", filename);
+            debug!("Unpacking wheel: {}", remote.file().filename);
 
             // Unzip the wheel.
             tokio::task::spawn_blocking({
-                let target = staging.path().join(&id);
+                let target = staging.path().join(remote.id());
                 move || unzip_wheel(download, &target)
             })
             .await??;
 
             // Write the unzipped wheel to the cache (atomically).
             if let Some(wheel_cache) = wheel_cache.as_ref() {
-                debug!("Caching wheel: {}", filename);
-                tokio::fs::rename(staging.path().join(&id), wheel_cache.entry(&id)).await?;
+                debug!("Caching wheel: {}", remote.file().filename);
+                tokio::fs::rename(
+                    staging.path().join(remote.id()),
+                    wheel_cache.entry(&remote.id()),
+                )
+                .await?;
+            }
+
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_download_progress(remote.name(), remote.version());
             }
         }
 
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        info!(
-            "Linking package{}: {}",
-            s,
-            wheels
-                .iter()
-                .map(Distribution::id)
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-
-        // Phase 3: Install each wheel.
-        let location = install_wheel_rs::InstallLocation::new(
-            self.python.venv().to_path_buf(),
-            self.python.simple_version(),
-        );
-        let locked_dir = location.acquire_lock()?;
-
-        for wheel in wheels {
-            match wheel {
-                Distribution::Remote(remote) => {
-                    let id = remote.id();
-                    let dir = wheel_cache.as_ref().map_or_else(
-                        || staging.path().join(&id),
-                        |wheel_cache| wheel_cache.entry(&id),
-                    );
-                    install_wheel_rs::unpacked::install_wheel(&locked_dir, &dir)?;
-                }
-                Distribution::Local(local) => {
-                    install_wheel_rs::unpacked::install_wheel(&locked_dir, local.path())?;
-                }
-            }
-
-            if let Some(on_progress) = self.on_progress.as_ref() {
-                on_progress(wheel.id());
-            }
+        if let Some(reporter) = self.reporter.as_ref() {
+            reporter.on_download_complete();
         }
 
-        Ok(())
+        Ok(DownloadSet {
+            python: self.python,
+            wheel_cache,
+            wheels,
+            staging,
+        })
     }
+}
+
+#[derive(Debug)]
+pub struct DownloadSet<'a> {
+    pub(crate) python: &'a PythonExecutable,
+    pub(crate) wheel_cache: Option<WheelCache<'a>>,
+    pub(crate) wheels: &'a [Distribution],
+    pub(crate) staging: TempDir,
 }
 
 #[derive(Debug, Clone)]
@@ -218,4 +215,12 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
             Ok(())
         })
         .collect::<Result<_>>()
+}
+
+pub trait Reporter: Send + Sync {
+    /// Callback to invoke when a wheel is downloaded.
+    fn on_download_progress(&self, name: &PackageName, version: &Version);
+
+    /// Callback to invoke when the download is complete.
+    fn on_download_complete(&self);
 }

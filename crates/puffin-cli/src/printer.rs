@@ -28,7 +28,7 @@ impl std::fmt::Write for Printer {
             Self::Default | Self::Verbose => {
                 #[allow(clippy::print_stdout)]
                 {
-                    print!("{}", s);
+                    print!("{s}");
                 }
             }
             Self::Quiet => {}

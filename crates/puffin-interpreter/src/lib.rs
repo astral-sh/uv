@@ -7,7 +7,7 @@ use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 
 use crate::python_platform::PythonPlatform;
-pub use crate::site_packages::SitePackages;
+pub use crate::site_packages::{DistInfo, SitePackages};
 
 mod markers;
 mod python_platform;

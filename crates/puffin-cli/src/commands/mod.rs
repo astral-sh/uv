@@ -10,6 +10,7 @@ pub(crate) use uninstall::uninstall;
 mod clean;
 mod compile;
 mod freeze;
+mod reporters;
 mod sync;
 mod uninstall;
 

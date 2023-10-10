@@ -22,28 +22,7 @@ pub struct Resolver<'a> {
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
     client: &'a PypiClient,
-
-    /// Callback to invoke when a dependency is added to the resolution.
-    on_dependency_added: Option<Box<dyn Fn() + Send + Sync>>,
-
-    /// Callback to invoke when a dependency is resolved.
-    on_resolve_progress: Option<Box<dyn Fn(PinnedPackage) + Send>>,
-
     reporter: Option<Box<dyn Reporter>>,
-}
-
-pub trait Reporter: Send + Sync {
-    fn on_dependency_added(&self);
-    fn on_resolve_progress(&self, package: &PinnedPackage);
-    fn on_resolve_complete(&self);
-}
-
-bitflags! {
-    #[derive(Debug, Copy, Clone, Default)]
-    pub struct ResolveFlags: u8 {
-        /// Don't install package dependencies.
-        const NO_DEPS = 1 << 0;
-    }
 }
 
 impl<'a> Resolver<'a> {
@@ -53,37 +32,17 @@ impl<'a> Resolver<'a> {
             markers,
             tags,
             client,
-            on_dependency_added: None,
-            on_resolve_progress: None,
             reporter: None,
         }
     }
 
+    /// Set the [`Reporter`] to use for this resolver.
+    #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
-            markers: self.markers,
-            tags: self.tags,
-            client: self.client,
-            on_dependency_added: None,
-            on_resolve_progress: None,
             reporter: Some(Box::new(reporter)),
+            ..self
         }
-    }
-
-    /// Register a callback to invoke when a dependency is added to the resolution.
-    pub fn on_dependency_added<F>(&mut self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        self.on_dependency_added = Some(Box::new(callback));
-    }
-
-    /// Register a callback to invoke when a dependency is resolved.
-    pub fn on_resolve_progress<F>(&mut self, callback: F)
-    where
-        F: Fn(PinnedPackage) + Send + 'static,
-    {
-        self.on_resolve_progress = Some(Box::new(callback));
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
@@ -121,10 +80,6 @@ impl<'a> Resolver<'a> {
             debug!("Adding root dependency: {}", requirement);
             package_sink.unbounded_send(Request::Package(requirement.clone()))?;
             in_flight.insert(PackageName::normalize(&requirement.name));
-
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_dependency_added();
-            }
         }
 
         if in_flight.is_empty() {
@@ -243,4 +198,23 @@ enum Response {
     Package(Requirement, SimpleJson),
     /// The returned metadata for a specific version of a package.
     Version(Requirement, File, Metadata21),
+}
+
+pub trait Reporter: Send + Sync {
+    /// Callback to invoke when a dependency is added to the resolution.
+    fn on_dependency_added(&self);
+
+    /// Callback to invoke when a dependency is resolved.
+    fn on_resolve_progress(&self, package: &PinnedPackage);
+
+    /// Callback to invoke when the resolution is complete.
+    fn on_resolve_complete(&self);
+}
+
+bitflags! {
+    #[derive(Debug, Copy, Clone, Default)]
+    pub struct ResolveFlags: u8 {
+        /// Don't install package dependencies.
+        const NO_DEPS = 1 << 0;
+    }
 }
