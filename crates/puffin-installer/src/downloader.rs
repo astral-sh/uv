@@ -4,7 +4,6 @@ use anyhow::Result;
 use cacache::{Algorithm, Integrity};
 use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
-use tempfile::TempDir;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
@@ -13,15 +12,14 @@ use zip::ZipArchive;
 
 use pep440_rs::Version;
 use puffin_client::PypiClient;
-use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
-use crate::distribution::{Distribution, RemoteDistribution};
+use crate::distribution::RemoteDistribution;
 use crate::vendor::CloneableSeekableReader;
+use crate::LocalDistribution;
 
 pub struct Downloader<'a> {
-    python: &'a PythonExecutable,
     client: &'a PypiClient,
     cache: Option<&'a Path>,
     reporter: Option<Box<dyn Reporter>>,
@@ -29,13 +27,8 @@ pub struct Downloader<'a> {
 
 impl<'a> Downloader<'a> {
     /// Initialize a new downloader.
-    pub fn new(
-        python: &'a PythonExecutable,
-        client: &'a PypiClient,
-        cache: Option<&'a Path>,
-    ) -> Self {
+    pub fn new(client: &'a PypiClient, cache: Option<&'a Path>) -> Self {
         Self {
-            python,
             client,
             cache,
             reporter: None,
@@ -52,21 +45,19 @@ impl<'a> Downloader<'a> {
     }
 
     /// Install a set of wheels into a Python virtual environment.
-    pub async fn download(&'a self, wheels: &'a [Distribution]) -> Result<DownloadSet<'a>> {
+    pub async fn download(
+        &'a self,
+        wheels: &'a [RemoteDistribution],
+        target: &'a Path,
+    ) -> Result<Vec<LocalDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
-        let wheel_cache = self.cache.map(WheelCache::new);
-        if let Some(wheel_cache) = wheel_cache.as_ref() {
-            wheel_cache.init().await?;
-        }
+        let wheel_cache = WheelCache::new(target);
+        wheel_cache.init().await?;
 
         // Phase 1: Fetch the wheels in parallel.
         let mut fetches = JoinSet::new();
         let mut downloads = Vec::with_capacity(wheels.len());
-        for wheel in wheels {
-            let Distribution::Remote(remote) = wheel else {
-                continue;
-            };
-
+        for remote in wheels {
             debug!("Downloading wheel: {}", remote.file().filename);
 
             fetches.spawn(fetch_wheel(
@@ -80,9 +71,10 @@ impl<'a> Downloader<'a> {
             downloads.push(result?);
         }
 
-        let staging = tempfile::tempdir()?;
+        let mut wheels = Vec::with_capacity(downloads.len());
 
         // Phase 2: Unpack the wheels into the cache.
+        let staging = tempfile::tempdir()?;
         for download in downloads {
             let remote = download.remote.clone();
 
@@ -95,15 +87,18 @@ impl<'a> Downloader<'a> {
             })
             .await??;
 
-            // Write the unzipped wheel to the cache (atomically).
-            if let Some(wheel_cache) = wheel_cache.as_ref() {
-                debug!("Caching wheel: {}", remote.file().filename);
-                tokio::fs::rename(
-                    staging.path().join(remote.id()),
-                    wheel_cache.entry(&remote.id()),
-                )
-                .await?;
-            }
+            // Write the unzipped wheel to the target directory.
+            tokio::fs::rename(
+                staging.path().join(remote.id()),
+                wheel_cache.entry(&remote.id()),
+            )
+            .await?;
+
+            wheels.push(LocalDistribution::new(
+                remote.name().clone(),
+                remote.version().clone(),
+                wheel_cache.entry(&remote.id()),
+            ));
 
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_download_progress(remote.name(), remote.version());
@@ -114,21 +109,8 @@ impl<'a> Downloader<'a> {
             reporter.on_download_complete();
         }
 
-        Ok(DownloadSet {
-            python: self.python,
-            wheel_cache,
-            wheels,
-            staging,
-        })
+        Ok(wheels)
     }
-}
-
-#[derive(Debug)]
-pub struct DownloadSet<'a> {
-    pub(crate) python: &'a PythonExecutable,
-    pub(crate) wheel_cache: Option<WheelCache<'a>>,
-    pub(crate) wheels: &'a [Distribution],
-    pub(crate) staging: TempDir,
 }
 
 #[derive(Debug, Clone)]

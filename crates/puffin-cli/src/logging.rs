@@ -7,12 +7,10 @@ use tracing_tree::HierarchicalLayer;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
-    /// Show deliberately user-facing messages and errors.
+    /// Suppress all tracing output by default (overrideable by `RUST_LOG`).
     #[default]
     Default,
-    /// Suppress all user-facing output.
-    Quiet,
-    /// Show all messages, including debug messages.
+    /// Show debug messages by default (overrideable by `RUST_LOG`).
     Verbose,
 }
 
@@ -21,10 +19,10 @@ pub(crate) enum Level {
 ///
 /// The [`Level`] is used to dictate the default filters (which can be overridden by the `RUST_LOG`
 /// environment variable) along with the formatting of the output. For example, [`Level::Verbose`]
-/// includes targets and timestamps, while [`Level::Default`] excludes both.
+/// includes targets and timestamps, along with all `puffin=debug` messages by default.
 pub(crate) fn setup_logging(level: Level) {
     match level {
-        Level::Default | Level::Quiet => {
+        Level::Default => {
             // Show nothing, but allow `RUST_LOG` to override.
             let filter = EnvFilter::builder()
                 .with_default_directive(LevelFilter::OFF.into())

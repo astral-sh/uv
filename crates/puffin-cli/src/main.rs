@@ -86,9 +86,7 @@ struct UninstallArgs {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    logging::setup_logging(if cli.quiet {
-        logging::Level::Quiet
-    } else if cli.verbose {
+    logging::setup_logging(if cli.verbose {
         logging::Level::Verbose
     } else {
         logging::Level::Default

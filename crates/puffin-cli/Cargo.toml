@@ -27,6 +27,7 @@ colored = { workspace = true }
 directories = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
+itertools = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

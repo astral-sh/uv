@@ -131,7 +131,7 @@ impl<'a> Iterator for RequirementsIterator<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<RequirementLine<'a>> {
-        if self.index == self.text.len() - 1 {
+        if self.index == self.text.len() {
             return None;
         }
 
@@ -139,7 +139,7 @@ impl<'a> Iterator for RequirementsIterator<'a> {
         let Some((start, length)) = find_newline(&self.text[self.index..]) else {
             // Parse the rest of the text.
             let line = &self.text[self.index..];
-            self.index = self.text.len() - 1;
+            self.index = self.text.len();
 
             // Skip fully-commented lines.
             if line.trim_start().starts_with('#') {

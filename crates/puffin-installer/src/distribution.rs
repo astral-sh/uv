@@ -90,6 +90,15 @@ pub struct LocalDistribution {
 }
 
 impl LocalDistribution {
+    /// Initialize a new local distribution.
+    pub fn new(name: PackageName, version: Version, path: PathBuf) -> Self {
+        Self {
+            name,
+            version,
+            path,
+        }
+    }
+
     /// Try to parse a cached distribution from a directory name (like `django-5.0a1`).
     pub(crate) fn try_from_path(path: &Path) -> Result<Option<Self>> {
         let Some(file_name) = path.file_name() else {
