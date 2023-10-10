@@ -50,6 +50,8 @@ pub enum Error {
         #[source]
         err: install_wheel_rs::Error,
     },
+    #[error("{0} is not a valid UTF-8 path")]
+    NonUTF8Path(std::path::PathBuf),
 }
 
 pub(crate) fn crate_cache_dir() -> io::Result<Utf8PathBuf> {
@@ -61,11 +63,16 @@ pub(crate) fn crate_cache_dir() -> io::Result<Utf8PathBuf> {
 
 /// Create a virtualenv and if not bare, install `wheel`, `pip` and `setuptools`.
 pub fn create_venv(
-    location: &Utf8Path,
-    base_python: &Utf8Path,
+    location: impl AsRef<std::path::Path>,
+    base_python: impl AsRef<std::path::Path>,
     info: &InterpreterInfo,
     bare: bool,
 ) -> Result<(), Error> {
+    let location = Utf8Path::from_path(location.as_ref())
+        .ok_or_else(|| Error::NonUTF8Path(location.as_ref().to_path_buf()))?;
+    let base_python = Utf8Path::from_path(base_python.as_ref())
+        .ok_or_else(|| Error::NonUTF8Path(base_python.as_ref().to_path_buf()))?;
+
     let paths = create_bare_venv(location, base_python, info)?;
 
     if !bare {

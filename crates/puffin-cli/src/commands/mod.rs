@@ -6,6 +6,7 @@ pub(crate) use compile::compile;
 pub(crate) use freeze::freeze;
 pub(crate) use sync::{sync, SyncFlags};
 pub(crate) use uninstall::uninstall;
+pub(crate) use venv::venv;
 
 mod clean;
 mod compile;
@@ -13,6 +14,7 @@ mod freeze;
 mod reporters;
 mod sync;
 mod uninstall;
+mod venv;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

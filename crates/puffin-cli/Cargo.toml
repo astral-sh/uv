@@ -8,6 +8,7 @@ name = "puffin"
 path = "src/main.rs"
 
 [dependencies]
+gourgeist = { path = "../gourgeist" }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
@@ -34,3 +35,4 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
+which = { workspace = true}

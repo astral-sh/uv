@@ -1773,6 +1773,7 @@ dependencies = [
  "colored",
  "directories",
  "futures",
+ "gourgeist",
  "indicatif",
  "install-wheel-rs",
  "itertools 0.11.0",
@@ -1791,6 +1792,7 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tree",
  "url",
+ "which",
 ]
 
 [[package]]

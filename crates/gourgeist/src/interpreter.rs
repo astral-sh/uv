@@ -23,7 +23,12 @@ pub struct InterpreterInfo {
 }
 
 /// Gets the interpreter.rs info, either cached or by running it.
-pub fn get_interpreter_info(interpreter: &Utf8Path) -> Result<InterpreterInfo, Error> {
+pub fn get_interpreter_info(
+    interpreter: impl AsRef<std::path::Path>,
+) -> Result<InterpreterInfo, Error> {
+    let interpreter = Utf8Path::from_path(interpreter.as_ref())
+        .ok_or_else(|| Error::NonUTF8Path(interpreter.as_ref().to_path_buf()))?;
+
     let cache_dir = crate_cache_dir()?.join("interpreter_info");
 
     let index = seahash::hash(interpreter.as_str().as_bytes());
