@@ -25,6 +25,10 @@ struct Cli {
     /// Use verbose output.
     #[arg(global = true, long, short, conflicts_with = "quiet")]
     verbose: bool,
+
+    /// Avoid reading from or writing to the cache.
+    #[arg(long)]
+    no_cache: bool,
 }
 
 #[derive(Subcommand)]
@@ -36,19 +40,17 @@ enum Commands {
     /// Clear the cache.
     Clean,
     /// Enumerate the installed packages in the current environment.
-    Freeze(FreezeArgs),
+    Freeze,
     /// Uninstall a package.
     Uninstall(UninstallArgs),
+    /// Create a virtual environment.
+    Venv(VenvArgs),
 }
 
 #[derive(Args)]
 struct CompileArgs {
     /// Path to the `requirements.txt` file to compile.
     src: PathBuf,
-
-    /// Avoid reading from or writing to the cache.
-    #[arg(long)]
-    no_cache: bool,
 }
 
 #[derive(Args)]
@@ -56,30 +58,21 @@ struct SyncArgs {
     /// Path to the `requirements.txt` file to install.
     src: PathBuf,
 
-    /// Avoid reading from or writing to the cache.
-    #[arg(long)]
-    no_cache: bool,
-
     /// Ignore any installed packages, forcing a re-installation.
     #[arg(long)]
     ignore_installed: bool,
 }
 
 #[derive(Args)]
-struct FreezeArgs {
-    /// Avoid reading from or writing to the cache.
-    #[arg(long)]
-    no_cache: bool,
-}
-
-#[derive(Args)]
 struct UninstallArgs {
     /// The name of the package to uninstall.
     name: String,
+}
 
-    /// Avoid reading from or writing to the cache.
-    #[arg(long)]
-    no_cache: bool,
+#[derive(Args)]
+struct VenvArgs {
+    /// The path to the virtual environment to create.
+    name: PathBuf,
 }
 
 #[tokio::main]
@@ -108,7 +101,7 @@ async fn main() -> ExitCode {
                 &args.src,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
-                    .filter(|_| !args.no_cache),
+                    .filter(|_| !cli.no_cache),
                 printer,
             )
             .await
@@ -118,7 +111,7 @@ async fn main() -> ExitCode {
                 &args.src,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
-                    .filter(|_| !args.no_cache),
+                    .filter(|_| !cli.no_cache),
                 if args.ignore_installed {
                     commands::SyncFlags::IGNORE_INSTALLED
                 } else {
@@ -131,11 +124,11 @@ async fn main() -> ExitCode {
         Commands::Clean => {
             commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
         }
-        Commands::Freeze(args) => {
+        Commands::Freeze => {
             commands::freeze(
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
-                    .filter(|_| !args.no_cache),
+                    .filter(|_| !cli.no_cache),
                 printer,
             )
             .await
@@ -145,11 +138,12 @@ async fn main() -> ExitCode {
                 &args.name,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
-                    .filter(|_| !args.no_cache),
+                    .filter(|_| !cli.no_cache),
                 printer,
             )
             .await
         }
+        Commands::Venv(args) => commands::venv(&args.name, printer).await,
     };
 
     match result {
