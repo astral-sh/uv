@@ -6,123 +6,111 @@ use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 use zip::ZipArchive;
 
+use pep440_rs::Version;
 use puffin_client::PypiClient;
-use puffin_interpreter::PythonExecutable;
+use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
-use crate::distribution::{Distribution, RemoteDistribution};
+use crate::distribution::RemoteDistribution;
 use crate::vendor::CloneableSeekableReader;
+use crate::LocalDistribution;
 
-/// Install a set of wheels into a Python virtual environment.
-pub async fn install(
-    wheels: &[Distribution],
-    python: &PythonExecutable,
-    client: &PypiClient,
-    cache: Option<&Path>,
-) -> Result<()> {
-    if wheels.is_empty() {
-        return Ok(());
+pub struct Downloader<'a> {
+    client: &'a PypiClient,
+    cache: Option<&'a Path>,
+    reporter: Option<Box<dyn Reporter>>,
+}
+
+impl<'a> Downloader<'a> {
+    /// Initialize a new downloader.
+    pub fn new(client: &'a PypiClient, cache: Option<&'a Path>) -> Self {
+        Self {
+            client,
+            cache,
+            reporter: None,
+        }
     }
 
-    // Create the wheel cache subdirectory, if necessary.
-    let wheel_cache = cache.map(WheelCache::new);
-    if let Some(wheel_cache) = wheel_cache.as_ref() {
+    /// Set the [`Reporter`] to use for this downloader.
+    #[must_use]
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Box::new(reporter)),
+            ..self
+        }
+    }
+
+    /// Install a set of wheels into a Python virtual environment.
+    pub async fn download(
+        &'a self,
+        wheels: &'a [RemoteDistribution],
+        target: &'a Path,
+    ) -> Result<Vec<LocalDistribution>> {
+        // Create the wheel cache subdirectory, if necessary.
+        let wheel_cache = WheelCache::new(target);
         wheel_cache.init().await?;
-    }
 
-    // Phase 1: Fetch the wheels in parallel.
-    let mut fetches = JoinSet::new();
-    let mut downloads = Vec::with_capacity(wheels.len());
-    for wheel in wheels {
-        let Distribution::Remote(remote) = wheel else {
-            continue;
-        };
+        // Phase 1: Fetch the wheels in parallel.
+        let mut fetches = JoinSet::new();
+        let mut downloads = Vec::with_capacity(wheels.len());
+        for remote in wheels {
+            debug!("Downloading wheel: {}", remote.file().filename);
 
-        debug!("Downloading: {}", remote.file().filename);
-
-        fetches.spawn(fetch_wheel(
-            remote.clone(),
-            client.clone(),
-            cache.map(Path::to_path_buf),
-        ));
-    }
-
-    if !fetches.is_empty() {
-        let s = if fetches.len() == 1 { "" } else { "s" };
-        info!("Downloading {} wheel{}", fetches.len(), s);
-    }
-
-    while let Some(result) = fetches.join_next().await.transpose()? {
-        downloads.push(result?);
-    }
-
-    if !downloads.is_empty() {
-        let s = if downloads.len() == 1 { "" } else { "s" };
-        debug!("Unpacking {} wheel{}", downloads.len(), s);
-    }
-
-    let staging = tempfile::tempdir()?;
-
-    // Phase 2: Unpack the wheels into the cache.
-    for download in downloads {
-        let filename = download.remote.file().filename.clone();
-        let id = download.remote.id();
-
-        debug!("Unpacking: {}", filename);
-
-        // Unzip the wheel.
-        tokio::task::spawn_blocking({
-            let target = staging.path().join(&id);
-            move || unzip_wheel(download, &target)
-        })
-        .await??;
-
-        // Write the unzipped wheel to the cache (atomically).
-        if let Some(wheel_cache) = wheel_cache.as_ref() {
-            debug!("Caching wheel: {}", filename);
-            tokio::fs::rename(staging.path().join(&id), wheel_cache.entry(&id)).await?;
+            fetches.spawn(fetch_wheel(
+                remote.clone(),
+                self.client.clone(),
+                self.cache.map(Path::to_path_buf),
+            ));
         }
-    }
 
-    let s = if wheels.len() == 1 { "" } else { "s" };
-    info!(
-        "Linking package{}: {}",
-        s,
-        wheels
-            .iter()
-            .map(Distribution::id)
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
+        while let Some(result) = fetches.join_next().await.transpose()? {
+            downloads.push(result?);
+        }
 
-    // Phase 3: Install each wheel.
-    let location = install_wheel_rs::InstallLocation::new(
-        python.venv().to_path_buf(),
-        python.simple_version(),
-    );
-    let locked_dir = location.acquire_lock()?;
+        let mut wheels = Vec::with_capacity(downloads.len());
 
-    for wheel in wheels {
-        match wheel {
-            Distribution::Remote(remote) => {
-                let id = remote.id();
-                let dir = wheel_cache.as_ref().map_or_else(
-                    || staging.path().join(&id),
-                    |wheel_cache| wheel_cache.entry(&id),
-                );
-                install_wheel_rs::unpacked::install_wheel(&locked_dir, &dir)?;
-            }
-            Distribution::Local(local) => {
-                install_wheel_rs::unpacked::install_wheel(&locked_dir, local.path())?;
+        // Phase 2: Unpack the wheels into the cache.
+        let staging = tempfile::tempdir()?;
+        for download in downloads {
+            let remote = download.remote.clone();
+
+            debug!("Unpacking wheel: {}", remote.file().filename);
+
+            // Unzip the wheel.
+            tokio::task::spawn_blocking({
+                let target = staging.path().join(remote.id());
+                move || unzip_wheel(download, &target)
+            })
+            .await??;
+
+            // Write the unzipped wheel to the target directory.
+            tokio::fs::rename(
+                staging.path().join(remote.id()),
+                wheel_cache.entry(&remote.id()),
+            )
+            .await?;
+
+            wheels.push(LocalDistribution::new(
+                remote.name().clone(),
+                remote.version().clone(),
+                wheel_cache.entry(&remote.id()),
+            ));
+
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_download_progress(remote.name(), remote.version());
             }
         }
-    }
 
-    Ok(())
+        if let Some(reporter) = self.reporter.as_ref() {
+            reporter.on_download_complete();
+        }
+
+        Ok(wheels)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -209,4 +197,12 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
             Ok(())
         })
         .collect::<Result<_>>()
+}
+
+pub trait Reporter: Send + Sync {
+    /// Callback to invoke when a wheel is downloaded.
+    fn on_download_progress(&self, name: &PackageName, version: &Version);
+
+    /// Callback to invoke when the download is complete.
+    fn on_download_complete(&self);
 }

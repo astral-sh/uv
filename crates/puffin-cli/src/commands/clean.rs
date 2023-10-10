@@ -1,22 +1,24 @@
+use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use tracing::info;
+use tracing::debug;
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 
 /// Clear the cache.
-pub(crate) async fn clean(cache: Option<&Path>) -> Result<ExitStatus> {
+pub(crate) async fn clean(cache: Option<&Path>, mut printer: Printer) -> Result<ExitStatus> {
     let Some(cache) = cache else {
         return Err(anyhow::anyhow!("No cache found"));
     };
 
     if !cache.exists() {
-        info!("No cache found at: {}", cache.display());
+        writeln!(printer, "No cache found at: {}", cache.display())?;
         return Ok(ExitStatus::Success);
     }
 
-    info!("Clearing cache at: {}", cache.display());
+    debug!("Clearing cache at: {}", cache.display());
 
     for entry in cache
         .read_dir()

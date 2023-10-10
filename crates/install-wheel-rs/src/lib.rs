@@ -10,7 +10,7 @@ pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use platform_host::{Arch, Os};
 pub use record::RecordEntry;
 pub use script::Script;
-pub use uninstall::uninstall_wheel;
+pub use uninstall::{uninstall_wheel, Uninstall};
 pub use wheel::{
     get_script_launcher, install_wheel, parse_key_value_file, read_record_file, relative_to,
     SHEBANG_PYTHON,

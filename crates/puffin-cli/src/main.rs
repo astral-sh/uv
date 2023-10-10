@@ -9,6 +9,7 @@ use crate::commands::ExitStatus;
 
 mod commands;
 mod logging;
+mod printer;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -85,13 +86,19 @@ struct UninstallArgs {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    logging::setup_logging(if cli.quiet {
-        logging::Level::Quiet
-    } else if cli.verbose {
+    logging::setup_logging(if cli.verbose {
         logging::Level::Verbose
     } else {
         logging::Level::Default
     });
+
+    let printer = if cli.quiet {
+        printer::Printer::Quiet
+    } else if cli.verbose {
+        printer::Printer::Verbose
+    } else {
+        printer::Printer::Default
+    };
 
     let dirs = ProjectDirs::from("", "", "puffin");
 
@@ -102,6 +109,7 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                printer,
             )
             .await
         }
@@ -116,15 +124,19 @@ async fn main() -> ExitCode {
                 } else {
                     commands::SyncFlags::empty()
                 },
+                printer,
             )
             .await
         }
-        Commands::Clean => commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir)).await,
+        Commands::Clean => {
+            commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
+        }
         Commands::Freeze(args) => {
             commands::freeze(
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                printer,
             )
             .await
         }
@@ -134,6 +146,7 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !args.no_cache),
+                printer,
             )
             .await
         }

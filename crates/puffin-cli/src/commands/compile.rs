@@ -1,8 +1,10 @@
+use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use tracing::{debug, info};
+use colored::Colorize;
+use tracing::debug;
 
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -10,10 +12,16 @@ use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_package::requirements::Requirements;
 
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
+use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStatus> {
+pub(crate) async fn compile(
+    src: &Path,
+    cache: Option<&Path>,
+    mut printer: Printer,
+) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     // Read the `requirements.txt` from disk.
@@ -23,7 +31,7 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     let requirements = Requirements::from_str(&requirements_txt)?;
 
     if requirements.is_empty() {
-        info!("No requirements found");
+        writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
 
@@ -51,22 +59,26 @@ pub(crate) async fn compile(src: &Path, cache: Option<&Path>) -> Result<ExitStat
     };
 
     // Resolve the dependencies.
-    let resolution = puffin_resolver::resolve(
-        requirements.iter(),
-        markers,
-        &tags,
-        &client,
-        puffin_resolver::ResolveFlags::default(),
-    )
-    .await?;
+    let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
+        .with_reporter(ResolverReporter::from(printer));
+    let resolution = resolver
+        .resolve(
+            requirements.iter(),
+            puffin_resolver::ResolveFlags::default(),
+        )
+        .await?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };
-    info!(
-        "Resolved {} package{} in {}",
-        resolution.len(),
-        s,
-        elapsed(start.elapsed())
-    );
+    writeln!(
+        printer,
+        "{}",
+        format!(
+            "Resolved {} in {}",
+            format!("{} package{}", resolution.len(), s).bold(),
+            elapsed(start.elapsed())
+        )
+        .dimmed()
+    )?;
 
     for (name, package) in resolution.iter() {
         #[allow(clippy::print_stdout)]

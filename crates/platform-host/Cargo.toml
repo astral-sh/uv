@@ -10,8 +10,6 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-pep440_rs = { path = "../pep440-rs" }
-
 glibc_version = { workspace = true }
 goblin = { workspace = true }
 platform-info = { workspace = true }

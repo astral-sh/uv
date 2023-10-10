@@ -29,6 +29,8 @@ futures = { version = "0.3.28" }
 glibc_version = { version = "0.1.2" }
 goblin = { version = "0.7.1" }
 http-cache-reqwest = { version = "0.11.3" }
+indicatif = { version = "0.17.7" }
+itertools = { version = "0.11.0" }
 mailparse = { version = "0.14.0" }
 memchr = { version = "2.6.4" }
 once_cell = { version = "1.18.0" }
