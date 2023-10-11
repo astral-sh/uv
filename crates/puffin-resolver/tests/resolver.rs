@@ -16,13 +16,9 @@ use puffin_resolver::{ResolveFlags, Resolver};
 async fn black() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
-    let resolver = Resolver::new(&MARKERS_311, &TAGS_311, &client);
-    let resolution = resolver
-        .resolve(
-            [Requirement::from_str("black<=23.9.1").unwrap()].iter(),
-            ResolveFlags::default(),
-        )
-        .await?;
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve(ResolveFlags::default()).await?;
 
     assert_eq!(
         format!("{resolution}"),
@@ -44,13 +40,9 @@ async fn black() -> Result<()> {
 async fn black_colorama() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
-    let resolver = Resolver::new(&MARKERS_311, &TAGS_311, &client);
-    let resolution = resolver
-        .resolve(
-            [Requirement::from_str("black[colorama]<=23.9.1").unwrap()].iter(),
-            ResolveFlags::default(),
-        )
-        .await?;
+    let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
+    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve(ResolveFlags::default()).await?;
 
     assert_eq!(
         format!("{resolution}"),
@@ -73,13 +65,9 @@ async fn black_colorama() -> Result<()> {
 async fn black_python_310() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
-    let resolver = Resolver::new(&MARKERS_310, &TAGS_310, &client);
-    let resolution = resolver
-        .resolve(
-            [Requirement::from_str("black<=23.9.1").unwrap()].iter(),
-            ResolveFlags::default(),
-        )
-        .await?;
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let resolver = Resolver::new(requirements, &MARKERS_310, &TAGS_310, &client);
+    let resolution = resolver.resolve(ResolveFlags::default()).await?;
 
     assert_eq!(
         format!("{resolution}"),
@@ -92,6 +80,36 @@ async fn black_python_310() -> Result<()> {
             "platformdirs==3.11.0",
             "tomli==2.0.1",
             "typing-extensions==4.8.0"
+        ]
+        .join("\n")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn htmldate() -> Result<()> {
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("htmldate<=1.5.0").unwrap()];
+    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve(ResolveFlags::default()).await?;
+
+    // Resolves to `htmldate==1.4.3` (rather than `htmldate==1.5.2`) because `htmldate==1.5.2` has
+    // a dependency on `lxml` versions that don't provide universal wheels.
+    assert_eq!(
+        format!("{resolution}"),
+        [
+            "charset-normalizer==3.3.0",
+            "dateparser==1.1.8",
+            "htmldate==1.4.3",
+            "lxml==4.9.3",
+            "python-dateutil==2.8.2",
+            "pytz==2023.3.post1",
+            "regex==2023.10.3",
+            "six==1.16.0",
+            "tzlocal==5.1",
+            "urllib3==2.0.6"
         ]
         .join("\n")
     );

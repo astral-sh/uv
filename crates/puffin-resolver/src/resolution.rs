@@ -4,7 +4,6 @@ use std::io::Write;
 
 use pep440_rs::Version;
 use puffin_client::File;
-use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 
 #[derive(Debug, Default)]
@@ -48,25 +47,43 @@ impl Resolution {
 impl std::fmt::Display for Resolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut first = true;
-        for (name, package) in self.iter() {
+        for (name, pin) in self.iter() {
             if !first {
                 writeln!(f)?;
             }
             first = false;
-            write!(f, "{}=={}", name, package.version())?;
+            write!(f, "{}=={}", name, pin.version())?;
         }
         Ok(())
     }
 }
 
+/// A package pinned at a specific version.
 #[derive(Debug)]
 pub struct PinnedPackage {
-    pub metadata: Metadata21,
-    pub file: File,
+    name: PackageName,
+    version: Version,
+    file: File,
 }
 
 impl PinnedPackage {
+    pub fn new(name: PackageName, version: Version, file: File) -> Self {
+        Self {
+            name,
+            version,
+            file,
+        }
+    }
+
+    pub fn name(&self) -> &PackageName {
+        &self.name
+    }
+
     pub fn version(&self) -> &Version {
-        &self.metadata.version
+        &self.version
+    }
+
+    pub fn file(&self) -> &File {
+        &self.file
     }
 }

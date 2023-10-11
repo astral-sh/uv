@@ -35,10 +35,8 @@ impl puffin_resolver::Reporter for ResolverReporter {
     }
 
     fn on_resolve_progress(&self, package: &puffin_resolver::PinnedPackage) {
-        self.progress.set_message(format!(
-            "{}=={}",
-            package.metadata.name, package.metadata.version
-        ));
+        self.progress
+            .set_message(format!("{}=={}", package.name(), package.version()));
         self.progress.inc(1);
     }
 

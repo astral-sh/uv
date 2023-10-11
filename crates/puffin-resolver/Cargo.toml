@@ -10,10 +10,11 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+pubgrub = { path = "../pubgrub" }
 puffin-client = { path = "../puffin-client" }
 puffin-package = { path = "../puffin-package" }
-platform-host = { path = "../platform-host" }
 wheel-filename = { path = "../wheel-filename" }
 
 anyhow = { workspace = true }
@@ -23,6 +24,7 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+once_cell = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1.33.0" }

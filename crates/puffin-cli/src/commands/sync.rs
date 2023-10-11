@@ -143,19 +143,20 @@ pub(crate) async fn sync(
     let resolution = if uncached.is_empty() {
         puffin_resolver::Resolution::default()
     } else {
-        let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
-            .with_reporter(ResolverReporter::from(printer).with_length(uncached.len() as u64));
+        let num_uncached = uncached.len();
+        let resolver = puffin_resolver::Resolver::new(uncached, markers, &tags, &client)
+            .with_reporter(ResolverReporter::from(printer).with_length(num_uncached as u64));
         let resolution = resolver
-            .resolve(uncached.iter(), puffin_resolver::ResolveFlags::NO_DEPS)
+            .resolve(puffin_resolver::ResolveFlags::NO_DEPS)
             .await?;
 
-        let s = if uncached.len() == 1 { "" } else { "s" };
+        let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Resolved {} in {}",
-                format!("{} package{}", uncached.len(), s).bold(),
+                format!("{} package{}", resolution.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()

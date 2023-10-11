@@ -62,13 +62,10 @@ pub(crate) async fn compile(
     };
 
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
+    let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client)
         .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver
-        .resolve(
-            requirements.iter(),
-            puffin_resolver::ResolveFlags::default(),
-        )
+        .resolve(puffin_resolver::ResolveFlags::default())
         .await?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };

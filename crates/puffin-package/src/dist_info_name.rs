@@ -25,6 +25,10 @@ impl DistInfoName {
         normalized.make_ascii_lowercase();
         Self(normalized)
     }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 impl AsRef<str> for DistInfoName {

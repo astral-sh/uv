@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::facade::{PubGrubPackage, PubGrubVersion};
 use pep508_rs::Requirement;
 
 #[derive(Error, Debug)]
@@ -12,6 +13,9 @@ pub enum ResolveError {
 
     #[error(transparent)]
     TrySend(#[from] futures::channel::mpsc::SendError),
+
+    #[error(transparent)]
+    PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, PubGrubVersion>),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
