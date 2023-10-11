@@ -261,8 +261,8 @@ fn unpack_wheel_files<R: Read + Seek>(
     Ok(extracted_paths)
 }
 
-pub(crate) fn get_shebang(location: &InstallLocation<LockedDir>) -> String {
-    let path = location.python().display().to_string();
+pub(crate) fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
+    let path = location.python().to_string_lossy().to_string();
     let path = if cfg!(windows) {
         // https://stackoverflow.com/a/50323079
         const VERBATIM_PREFIX: &str = r"\\?\";
@@ -326,7 +326,7 @@ pub(crate) fn windows_script_launcher(launcher_python_script: &str) -> Result<Ve
 /// TODO: Test for this launcher directly in install-wheel-rs
 pub(crate) fn write_script_entrypoints(
     site_packages: &Path,
-    location: &InstallLocation<LockedDir>,
+    location: &InstallLocation<impl AsRef<Path>>,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -649,7 +649,7 @@ fn install_script(
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
-    location: &InstallLocation<LockedDir>,
+    location: &InstallLocation<impl AsRef<Path>>,
 ) -> Result<(), Error> {
     let path = file.path();
     if !path.is_file() {
@@ -726,7 +726,7 @@ pub(crate) fn install_data(
     site_packages: &Path,
     data_dir: &Path,
     dist_name: &str,
-    location: &InstallLocation<LockedDir>,
+    location: &InstallLocation<impl AsRef<Path>>,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],

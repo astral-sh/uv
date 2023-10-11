@@ -10,7 +10,7 @@ use fs_err::File;
 use mailparse::MailHeaderMap;
 use tracing::{debug, span, Level};
 
-use crate::install_location::{InstallLocation, LockedDir};
+use crate::install_location::InstallLocation;
 use crate::wheel::{
     extra_dist_info, install_data, parse_wheel_version, read_scripts_from_section,
     write_script_entrypoints,
@@ -24,7 +24,10 @@ use crate::{read_record_file, Error, Script};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
-pub fn install_wheel(location: &InstallLocation<LockedDir>, wheel: &Path) -> Result<(), Error> {
+pub fn install_wheel(
+    location: &InstallLocation<impl AsRef<Path>>,
+    wheel: impl AsRef<Path>,
+) -> Result<(), Error> {
     let base_location = location.venv_base();
 
     // TODO(charlie): Pass this in.
@@ -43,8 +46,8 @@ pub fn install_wheel(location: &InstallLocation<LockedDir>, wheel: &Path) -> Res
             .join("site-packages")
     };
 
-    let dist_info_prefix = find_dist_info(wheel)?;
-    let (name, _version) = read_metadata(&dist_info_prefix, wheel)?;
+    let dist_info_prefix = find_dist_info(&wheel)?;
+    let (name, _version) = read_metadata(&dist_info_prefix, &wheel)?;
 
     let _my_span = span!(Level::DEBUG, "install_wheel", name);
 
@@ -52,7 +55,9 @@ pub fn install_wheel(location: &InstallLocation<LockedDir>, wheel: &Path) -> Res
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
     // > 1.a Parse distribution-1.0.dist-info/WHEEL.
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
-    let wheel_file_path = wheel.join(format!("{dist_info_prefix}.dist-info/WHEEL"));
+    let wheel_file_path = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
     let wheel_text = std::fs::read_to_string(&wheel_file_path)?;
     parse_wheel_version(&wheel_text)?;
 
@@ -60,15 +65,19 @@ pub fn install_wheel(location: &InstallLocation<LockedDir>, wheel: &Path) -> Res
     // > 1.d Else unpack archive into platlib (site-packages).
     // We always install in the same virtualenv site packages
     debug!(name, "Extracting file");
-    let num_unpacked = unpack_wheel_files(&site_packages, wheel)?;
+    let num_unpacked = unpack_wheel_files(&site_packages, &wheel)?;
     debug!(name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
-    let mut record_file = File::open(&wheel.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
+    let mut record_file = File::open(
+        wheel
+            .as_ref()
+            .join(format!("{dist_info_prefix}.dist-info/RECORD")),
+    )?;
     let mut record = read_record_file(&mut record_file)?;
 
     debug!(name, "Writing entrypoints");
-    let (console_scripts, gui_scripts) = parse_scripts(wheel, &dist_info_prefix, None)?;
+    let (console_scripts, gui_scripts) = parse_scripts(&wheel, &dist_info_prefix, None)?;
     write_script_entrypoints(&site_packages, location, &console_scripts, &mut record)?;
     write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record)?;
 
@@ -117,7 +126,7 @@ pub fn install_wheel(location: &InstallLocation<LockedDir>, wheel: &Path) -> Res
 /// Either way, we just search the wheel for the name
 ///
 /// <https://github.com/PyO3/python-pkginfo-rs>
-fn find_dist_info(path: &Path) -> Result<String, Error> {
+fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info) = std::fs::read_dir(path)?.find_map(|entry| {
         let entry = entry.ok()?;
@@ -147,8 +156,13 @@ fn find_dist_info(path: &Path) -> Result<String, Error> {
 }
 
 /// <https://github.com/PyO3/python-pkginfo-rs>
-fn read_metadata(dist_info_prefix: &str, wheel: &Path) -> Result<(String, String), Error> {
-    let metadata_file = wheel.join(format!("{dist_info_prefix}.dist-info/METADATA"));
+fn read_metadata(
+    dist_info_prefix: &str,
+    wheel: impl AsRef<Path>,
+) -> Result<(String, String), Error> {
+    let metadata_file = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/METADATA"));
 
     // Read into a buffer.
     let mut content = Vec::new();
@@ -197,11 +211,13 @@ fn read_metadata(dist_info_prefix: &str, wheel: &Path) -> Result<(String, String
 ///
 /// Extras are supposed to be ignored, which happens if you pass None for extras
 fn parse_scripts(
-    wheel: &Path,
+    wheel: impl AsRef<Path>,
     dist_info_prefix: &str,
     extras: Option<&[String]>,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_path = wheel.join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
+    let entry_points_path = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
     // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
     let Ok(ini) = std::fs::read_to_string(entry_points_path) else {
@@ -229,7 +245,10 @@ fn parse_scripts(
 
 /// Extract all files from the wheel into the site packages.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn unpack_wheel_files(site_packages: &Path, wheel: &Path) -> Result<usize, Error> {
+fn unpack_wheel_files(
+    site_packages: impl AsRef<Path>,
+    wheel: impl AsRef<Path>,
+) -> Result<usize, Error> {
     use crate::reflink::reflink;
 
     let mut count = 0usize;
@@ -237,10 +256,12 @@ fn unpack_wheel_files(site_packages: &Path, wheel: &Path) -> Result<usize, Error
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory.
-    for entry in std::fs::read_dir(wheel)? {
+    for entry in std::fs::read_dir(&wheel)? {
         let entry = entry?;
         let from = entry.path();
-        let to = site_packages.join(from.strip_prefix(wheel).unwrap());
+        let to = site_packages
+            .as_ref()
+            .join(from.strip_prefix(&wheel).unwrap());
 
         // Delete the destination if it already exists.
         if let Ok(metadata) = to.metadata() {
@@ -262,14 +283,17 @@ fn unpack_wheel_files(site_packages: &Path, wheel: &Path) -> Result<usize, Error
 
 /// Extract all files from the wheel into the site packages
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn unpack_wheel_files(site_packages: &Path, wheel: &Path) -> Result<usize, Error> {
+fn unpack_wheel_files(
+    site_packages: impl AsRef<Path>,
+    wheel: impl AsRef<Path>,
+) -> Result<usize, Error> {
     let mut count = 0usize;
 
     // Walk over the directory.
-    for entry in walkdir::WalkDir::new(wheel) {
+    for entry in walkdir::WalkDir::new(&wheel) {
         let entry = entry?;
-        let relative = entry.path().strip_prefix(wheel).unwrap();
-        let out_path = site_packages.join(relative);
+        let relative = entry.path().strip_prefix(&wheel).unwrap();
+        let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
