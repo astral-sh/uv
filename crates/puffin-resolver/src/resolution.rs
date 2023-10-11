@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use pep440_rs::Version;
 use puffin_client::File;
@@ -6,11 +6,11 @@ use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 
 #[derive(Debug, Default)]
-pub struct Resolution(HashMap<PackageName, PinnedPackage>);
+pub struct Resolution(BTreeMap<PackageName, PinnedPackage>);
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub(crate) fn new(packages: HashMap<PackageName, PinnedPackage>) -> Self {
+    pub(crate) fn new(packages: BTreeMap<PackageName, PinnedPackage>) -> Self {
         Self(packages)
     }
 

@@ -2,13 +2,10 @@ use std::path::Path;
 
 use anyhow::Result;
 use cacache::{Algorithm, Integrity};
-use rayon::iter::ParallelBridge;
-use rayon::iter::ParallelIterator;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 use url::Url;
-use zip::ZipArchive;
 
 use pep440_rs::Version;
 use puffin_client::PypiClient;
@@ -16,8 +13,6 @@ use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
 use crate::distribution::RemoteDistribution;
-use crate::vendor::CloneableSeekableReader;
-use crate::LocalDistribution;
 
 pub struct Downloader<'a> {
     client: &'a PypiClient,
@@ -49,7 +44,7 @@ impl<'a> Downloader<'a> {
         &'a self,
         wheels: &'a [RemoteDistribution],
         target: &'a Path,
-    ) -> Result<Vec<LocalDistribution>> {
+    ) -> Result<Vec<InMemoryDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init().await?;
@@ -68,57 +63,29 @@ impl<'a> Downloader<'a> {
         }
 
         while let Some(result) = fetches.join_next().await.transpose()? {
-            downloads.push(result?);
-        }
-
-        let mut wheels = Vec::with_capacity(downloads.len());
-
-        // Phase 2: Unpack the wheels into the cache.
-        let staging = tempfile::tempdir()?;
-        for download in downloads {
-            let remote = download.remote.clone();
-
-            debug!("Unpacking wheel: {}", remote.file().filename);
-
-            // Unzip the wheel.
-            tokio::task::spawn_blocking({
-                let target = staging.path().join(remote.id());
-                move || unzip_wheel(download, &target)
-            })
-            .await??;
-
-            // Write the unzipped wheel to the target directory.
-            tokio::fs::rename(
-                staging.path().join(remote.id()),
-                wheel_cache.entry(&remote.id()),
-            )
-            .await?;
-
-            wheels.push(LocalDistribution::new(
-                remote.name().clone(),
-                remote.version().clone(),
-                wheel_cache.entry(&remote.id()),
-            ));
+            let result = result?;
 
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_download_progress(remote.name(), remote.version());
+                reporter.on_download_progress(result.remote.name(), result.remote.version());
             }
+
+            downloads.push(result);
         }
 
         if let Some(reporter) = self.reporter.as_ref() {
             reporter.on_download_complete();
         }
 
-        Ok(wheels)
+        Ok(downloads)
     }
 }
 
 #[derive(Debug, Clone)]
-struct InMemoryDistribution {
+pub struct InMemoryDistribution {
     /// The remote file from which this wheel was downloaded.
-    remote: RemoteDistribution,
+    pub(crate) remote: RemoteDistribution,
     /// The contents of the wheel.
-    buffer: Vec<u8>,
+    pub(crate) buffer: Vec<u8>,
 }
 
 /// Download a wheel to a given path.
@@ -154,55 +121,10 @@ async fn fetch_wheel(
     Ok(InMemoryDistribution { remote, buffer })
 }
 
-/// Write a wheel into the target directory.
-fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
-    // Read the wheel into a buffer.
-    let reader = std::io::Cursor::new(wheel.buffer);
-    let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
-
-    // Unzip in parallel.
-    (0..archive.len())
-        .par_bridge()
-        .map(|file_number| {
-            let mut archive = archive.clone();
-            let mut file = archive.by_index(file_number)?;
-
-            // Determine the path of the file within the wheel.
-            let file_path = match file.enclosed_name() {
-                Some(path) => path.to_owned(),
-                None => return Ok(()),
-            };
-
-            // Create necessary parent directories.
-            let path = target.join(file_path);
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            // Write the file.
-            let mut outfile = std::fs::File::create(&path)?;
-            std::io::copy(&mut file, &mut outfile)?;
-
-            // Set permissions.
-            #[cfg(unix)]
-            {
-                use std::fs::Permissions;
-                use std::os::unix::fs::PermissionsExt;
-
-                if let Some(mode) = file.unix_mode() {
-                    std::fs::set_permissions(&path, Permissions::from_mode(mode))?;
-                }
-            }
-
-            Ok(())
-        })
-        .collect::<Result<_>>()
-}
-
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is downloaded.
     fn on_download_progress(&self, name: &PackageName, version: &Version);
 
-    /// Callback to invoke when the download is complete.
+    /// Callback to invoke when the operation is complete.
     fn on_download_complete(&self);
 }

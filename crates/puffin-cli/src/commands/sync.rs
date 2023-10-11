@@ -16,7 +16,9 @@ use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements::Requirements;
 
-use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::reporters::{
+    DownloadReporter, InstallReporter, ResolverReporter, UnzipReporter,
+};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -161,6 +163,8 @@ pub(crate) async fn sync(
         resolution
     };
 
+    let start = std::time::Instant::now();
+
     let uncached = resolution
         .into_files()
         .map(RemoteDistribution::from_file)
@@ -168,8 +172,8 @@ pub(crate) async fn sync(
     let staging = tempfile::tempdir()?;
 
     // Download any missing distributions.
-    let wheels = if uncached.is_empty() {
-        cached
+    let downloads = if uncached.is_empty() {
+        vec![]
     } else {
         let downloader = puffin_installer::Downloader::new(&client, cache)
             .with_reporter(DownloadReporter::from(printer).with_length(uncached.len() as u64));
@@ -190,10 +194,41 @@ pub(crate) async fn sync(
             .dimmed()
         )?;
 
-        downloads.into_iter().chain(cached).collect::<Vec<_>>()
+        downloads
     };
 
+    let start = std::time::Instant::now();
+
+    // Unzip any downloaded distributions.
+    let unzips = if downloads.is_empty() {
+        vec![]
+    } else {
+        let unzipper = puffin_installer::Unzipper::default()
+            .with_reporter(UnzipReporter::from(printer).with_length(downloads.len() as u64));
+
+        let unzips = unzipper
+            .download(downloads, cache.unwrap_or(staging.path()))
+            .await?;
+
+        let s = if unzips.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Unzipped {} in {}",
+                format!("{} package{}", unzips.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+
+        unzips
+    };
+
+    let start = std::time::Instant::now();
+
     // Install the resolved distributions.
+    let wheels = unzips.into_iter().chain(cached).collect::<Vec<_>>();
     puffin_installer::Installer::new(&python)
         .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
         .install(&wheels)?;
