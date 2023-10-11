@@ -99,7 +99,7 @@ async fn scipy() -> Result<()> {
         )
         .await?;
 
-    assert_eq!(format!("{resolution}"), "scipy==1.11.2\nnumpy==1.25.2");
+    assert_eq!(format!("{resolution}"), "numpy==1.25.2\nscipy==1.11.2");
 
     Ok(())
 }

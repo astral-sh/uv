@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -87,8 +87,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Resolve the requirements.
-        let mut resolution: HashMap<PackageName, PinnedPackage> =
-            HashMap::with_capacity(in_flight.len());
+        let mut resolution: BTreeMap<PackageName, PinnedPackage> = BTreeMap::new();
 
         while let Some(chunk) = package_stream.next().await {
             for result in chunk {

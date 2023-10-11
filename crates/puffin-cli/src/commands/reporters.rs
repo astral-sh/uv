@@ -48,6 +48,41 @@ impl puffin_resolver::Reporter for ResolverReporter {
 }
 
 #[derive(Debug)]
+pub(crate) struct UnzipReporter {
+    progress: ProgressBar,
+}
+
+impl From<Printer> for UnzipReporter {
+    fn from(printer: Printer) -> Self {
+        let progress = ProgressBar::with_draw_target(None, printer.target());
+        progress.set_message("Unzipping wheels...");
+        progress.set_style(
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+        );
+        Self { progress }
+    }
+}
+
+impl UnzipReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.progress.set_length(length);
+        self
+    }
+}
+
+impl puffin_installer::UnzipReporter for UnzipReporter {
+    fn on_unzip_progress(&self, name: &PackageName, version: &Version) {
+        self.progress.set_message(format!("{name}=={version}"));
+        self.progress.inc(1);
+    }
+
+    fn on_unzip_complete(&self) {
+        self.progress.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct DownloadReporter {
     progress: ProgressBar,
 }
