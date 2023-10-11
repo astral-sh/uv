@@ -1,0 +1,855 @@
+{
+    "files": [
+        {
+            "core-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "filename": "scipy-1.11.2-cp310-cp310-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "2b997a5369e2d30c97995dcb29d638701f8000d04df01b8e947f206e5d0ac788"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37162915,
+            "upload-time": "2023-08-17T22:08:09.157786Z",
+            "url": "https://files.pythonhosted.org/packages/65/da/4d0dfd29379c8ee3ba54b19249f673cc98448e0fd86170339fb02031f0e9/scipy-1.11.2-cp310-cp310-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "4385f01042be84decb8d249734bccec49decf3154ffa208c65480ed943ec5781"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "4385f01042be84decb8d249734bccec49decf3154ffa208c65480ed943ec5781"
+            },
+            "filename": "scipy-1.11.2-cp310-cp310-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "95763fbda1206bec41157582bea482f50eb3702c85fffcf6d24394b071c0e87a"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29647231,
+            "upload-time": "2023-08-17T22:08:14.960859Z",
+            "url": "https://files.pythonhosted.org/packages/63/b9/0344b60e7c577eb637785841222fde8ef7928ec4797be1a34ca39bfe31dc/scipy-1.11.2-cp310-cp310-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "ca73b7b78df825dafd46c4cccd9bbf8559289cf67aaa0dcf2465a5f1d26fc350"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "ca73b7b78df825dafd46c4cccd9bbf8559289cf67aaa0dcf2465a5f1d26fc350"
+            },
+            "filename": "scipy-1.11.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "e367904a0fec76433bf3fbf3e85bf60dae8e9e585ffd21898ab1085a29a04d16"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32787468,
+            "upload-time": "2023-08-17T22:08:21.076858Z",
+            "url": "https://files.pythonhosted.org/packages/a7/99/370831a3fdb4c0c4187c75709bf298d3784b0a9a8574f50653ede3ab873d/scipy-1.11.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "d690e1ca993c8f7ede6d22e5637541217fc6a4d3f78b3672a6fe454dbb7eb9a7"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36293944,
+            "upload-time": "2023-08-17T22:08:27.144318Z",
+            "url": "https://files.pythonhosted.org/packages/a8/cc/c36f3439f5d47c3b13833ce6687b43a040cc7638c502ac46b41e2d4f3d6f/scipy-1.11.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "d2b813bfbe8dec6a75164523de650bad41f4405d35b0fa24c2c28ae07fcefb20"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36496415,
+            "upload-time": "2023-08-17T22:08:34.202951Z",
+            "url": "https://files.pythonhosted.org/packages/1f/26/72a67b2c738be9d42b86bc79abb3d38026b2dece9d8a5321a7bde6cccefd/scipy-1.11.2-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "filename": "scipy-1.11.2-cp310-cp310-win_amd64.whl",
+            "hashes": {
+                "sha256": "afdb0d983f6135d50770dd979df50bf1c7f58b5b33e0eb8cf5c73c70600eae1d"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 44012899,
+            "upload-time": "2023-08-17T22:08:41.133380Z",
+            "url": "https://files.pythonhosted.org/packages/70/03/485f73046134400ea25d3cb178c5e6728f9b165f79d09638ecb44ee0e9b1/scipy-1.11.2-cp310-cp310-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "filename": "scipy-1.11.2-cp311-cp311-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "8d9886f44ef8c9e776cb7527fb01455bf4f4a46c455c4682edc2c2cc8cd78562"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37025726,
+            "upload-time": "2023-08-17T22:08:47.350411Z",
+            "url": "https://files.pythonhosted.org/packages/1d/77/5e660d211906becd9f8e13e00d828f5e68b5e66d9b956f4646bb4882c68e/scipy-1.11.2-cp311-cp311-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "1960810cf111929dea452f20b9994304030d7e8624f1012ee882a2f18ca27bac"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "1960810cf111929dea452f20b9994304030d7e8624f1012ee882a2f18ca27bac"
+            },
+            "filename": "scipy-1.11.2-cp311-cp311-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "1342ca385c673208f32472830c10110a9dcd053cf0c4b7d4cd7026d0335a6c1d"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29556532,
+            "upload-time": "2023-08-17T22:08:52.888206Z",
+            "url": "https://files.pythonhosted.org/packages/2a/12/62804d63514ecd9d2ecb73497c3e38094f9139bc60b0353b653253d106bb/scipy-1.11.2-cp311-cp311-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "b133f237bd8ba73bad51bc12eb4f2d84cbec999753bf25ba58235e9fc2096d80"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32748811,
+            "upload-time": "2023-08-17T22:08:58.739136Z",
+            "url": "https://files.pythonhosted.org/packages/e6/5c/4cf8cc5436017ccefc6cb22afdeec80d602f8c9d956edaecc0baac263905/scipy-1.11.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "3aeb87661de987f8ec56fa6950863994cd427209158255a389fc5aea51fa7055"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36252967,
+            "upload-time": "2023-08-17T22:09:05.064438Z",
+            "url": "https://files.pythonhosted.org/packages/0e/a0/8606a7eef659f3d5f79d9efb92eed3ed1243178f4ae962614e1b202935a6/scipy-1.11.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "90d3b1364e751d8214e325c371f0ee0dd38419268bf4888b2ae1040a6b266b2a"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36468508,
+            "upload-time": "2023-08-17T22:09:10.748621Z",
+            "url": "https://files.pythonhosted.org/packages/e5/97/e908314f5ab13aa263980d3f6bc897f8a0df25f5b47c67a8d1aebf0eeeb4/scipy-1.11.2-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "filename": "scipy-1.11.2-cp311-cp311-win_amd64.whl",
+            "hashes": {
+                "sha256": "f73102f769ee06041a3aa26b5841359b1a93cc364ce45609657751795e8f4a4a"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 43956451,
+            "upload-time": "2023-08-17T22:09:17.790233Z",
+            "url": "https://files.pythonhosted.org/packages/06/15/e73734f9170b66c6a84a0bd7e03586e87e77404e2eb8e34749fc49fa43f7/scipy-1.11.2-cp311-cp311-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "filename": "scipy-1.11.2-cp312-cp312-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "fa4909c6c20c3d91480533cddbc0e7c6d849e7d9ded692918c76ce5964997898"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36926870,
+            "upload-time": "2023-08-17T22:09:23.859795Z",
+            "url": "https://files.pythonhosted.org/packages/e5/8a/a1856c7dc72d744ea04a18ea83a73bd0ce46c89d425ef75145be8a3bed7f/scipy-1.11.2-cp312-cp312-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "0cbc93f95cf19c8ca1922ee923cc4a19e6f4045429420b0fc0d2139040f87c64"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "0cbc93f95cf19c8ca1922ee923cc4a19e6f4045429420b0fc0d2139040f87c64"
+            },
+            "filename": "scipy-1.11.2-cp312-cp312-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "ac74b1512d38718fb6a491c439aa7b3605b96b1ed3be6599c17d49d6c60fca18"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29529510,
+            "upload-time": "2023-08-17T22:09:29.061081Z",
+            "url": "https://files.pythonhosted.org/packages/2f/05/3c047ca15a565291291e1459dd0ebedacf46474607528a7120085c5b67eb/scipy-1.11.2-cp312-cp312-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "ca73b7b78df825dafd46c4cccd9bbf8559289cf67aaa0dcf2465a5f1d26fc350"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "ca73b7b78df825dafd46c4cccd9bbf8559289cf67aaa0dcf2465a5f1d26fc350"
+            },
+            "filename": "scipy-1.11.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "b8425fa963a32936c9773ee3ce44a765d8ff67eed5f4ac81dc1e4a819a238ee9"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32118096,
+            "upload-time": "2023-08-17T22:09:35.025915Z",
+            "url": "https://files.pythonhosted.org/packages/25/e6/9bd9ca158e7dc8f9d3689cb90a20de5e33ca1546e999d92f50513345378a/scipy-1.11.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "542a757e2a6ec409e71df3d8fd20127afbbacb1c07990cb23c5870c13953d899"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 35607441,
+            "upload-time": "2023-08-17T22:09:41.103140Z",
+            "url": "https://files.pythonhosted.org/packages/c2/de/efd780a29d6e600f83164837811cbae7cd21a0c3a296080486728313dbbe/scipy-1.11.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp312-cp312-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "ea932570b1c2a30edafca922345854ff2cd20d43cd9123b6dacfdecebfc1a80b"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 35794240,
+            "upload-time": "2023-08-17T22:09:46.832599Z",
+            "url": "https://files.pythonhosted.org/packages/0f/df/f2d6440feca0f76c7ee42f15d70e9688130fc688b783e84953386adf8abc/scipy-1.11.2-cp312-cp312-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "filename": "scipy-1.11.2-cp312-cp312-win_amd64.whl",
+            "hashes": {
+                "sha256": "4447ad057d7597476f9862ecbd9285bbf13ba9d73ce25acfa4e4b11c6801b4c9"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 43598350,
+            "upload-time": "2023-08-17T22:09:53.954355Z",
+            "url": "https://files.pythonhosted.org/packages/53/2c/fbccc145c70da7ea073763e97f2e20c9897fc351958c2d035cba9dce6df6/scipy-1.11.2-cp312-cp312-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "filename": "scipy-1.11.2-cp39-cp39-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "b0620240ef445b5ddde52460e6bc3483b7c9c750275369379e5f609a1050911c"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37184268,
+            "upload-time": "2023-08-17T22:10:00.313941Z",
+            "url": "https://files.pythonhosted.org/packages/03/c3/5162f7d23a12c62cf0630f6cce20932f166fca7cb5513ed9af56b5618ba6/scipy-1.11.2-cp39-cp39-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e99fc27826330f696399077d524b3bed0b4586ca2083cdcfd16047cbef1adc8a"
+            },
+            "filename": "scipy-1.11.2-cp39-cp39-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "f28f1f6cfeb48339c192efc6275749b2a25a7e49c4d8369a28b6591da02fbc9a"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29627567,
+            "upload-time": "2023-08-17T22:10:06.683537Z",
+            "url": "https://files.pythonhosted.org/packages/77/31/b063f21370c6050a663aae5a9868d2fe112b21caeface3c248016dfea092/scipy-1.11.2-cp39-cp39-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "214cdf04bbae7a54784f8431f976704ed607c4bc69ba0d5d5d6a9df84374df76"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32901671,
+            "upload-time": "2023-08-17T22:10:12.531869Z",
+            "url": "https://files.pythonhosted.org/packages/ab/82/3dfc4e1e7f3ee5c28ad289bba5fe542ed5f98acc7d56a52c8eda18a438e0/scipy-1.11.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "10eb6af2f751aa3424762948e5352f707b0dece77288206f227864ddf675aca0"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36471743,
+            "upload-time": "2023-08-17T22:10:18.334814Z",
+            "url": "https://files.pythonhosted.org/packages/a3/d3/f88285098505c8e5d141678a24bb9620d902c683f11edc1eb9532b02624e/scipy-1.11.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "cf1376eabdbf7b477707b4f71a7772191a98e6e4d5cfe37156c2f40c2ac48551"
+            },
+            "filename": "scipy-1.11.2-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "0f3261f14b767b316d7137c66cc4f33a80ea05841b9c87ad83a726205b901423"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36636238,
+            "upload-time": "2023-08-17T22:10:24.743188Z",
+            "url": "https://files.pythonhosted.org/packages/3c/a8/de47d1e9830ce0bb3adb11a99f5286535b8c070ea95ccf422047d3e8289c/scipy-1.11.2-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "e1f0f9b7e39e4dda6317a015a81f7f1c1890490dc07a51c92034847c47d18492"
+            },
+            "filename": "scipy-1.11.2-cp39-cp39-win_amd64.whl",
+            "hashes": {
+                "sha256": "2c91cf049ffb5575917f2a01da1da082fd24ed48120d08a6e7297dfcac771dcd"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 44117053,
+            "upload-time": "2023-08-17T22:10:31.867544Z",
+            "url": "https://files.pythonhosted.org/packages/e9/20/2d0561ab54d857365926c5b53538369a7b8d6ccbffaca509305b074028cd/scipy-1.11.2-cp39-cp39-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": false,
+            "data-dist-info-metadata": false,
+            "filename": "scipy-1.11.2.tar.gz",
+            "hashes": {
+                "sha256": "b29318a5e39bd200ca4381d80b065cdf3076c7d7281c5e36569e99273867f61d"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 56045065,
+            "upload-time": "2023-08-17T22:12:36.469322Z",
+            "url": "https://files.pythonhosted.org/packages/9c/ef/87a5565907645998d7c62e76b84b0ca9f0b7c25cd433f5617a968051cec3/scipy-1.11.2.tar.gz",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "filename": "scipy-1.11.3-cp310-cp310-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "370f569c57e1d888304052c18e58f4a927338eafdaef78613c685ca2ea0d1fa0"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37290488,
+            "upload-time": "2023-09-27T21:55:42.824923Z",
+            "url": "https://files.pythonhosted.org/packages/6d/bc/6f79da3a8edf5f432ccdc49fd35e8b4fe2ce1d4ad3b5360c742101a57838/scipy-1.11.3-cp310-cp310-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "7e632f89891c8e05fa35971b0ce06694310dd72773bf7d10dc472a169e1190a8"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "7e632f89891c8e05fa35971b0ce06694310dd72773bf7d10dc472a169e1190a8"
+            },
+            "filename": "scipy-1.11.3-cp310-cp310-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "9885e3e4f13b2bd44aaf2a1a6390a11add9f48d5295f7a592393ceb8991577a3"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29759823,
+            "upload-time": "2023-09-27T21:55:49.349332Z",
+            "url": "https://files.pythonhosted.org/packages/62/35/4297fb91ee65883caa6c228eb8ae27db0a41353819902694c61d3bd22de1/scipy-1.11.3-cp310-cp310-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "13844629e8b70bceffc656e36a34b96d9127efab365f94ff7dc9fc87184bdd2c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "13844629e8b70bceffc656e36a34b96d9127efab365f94ff7dc9fc87184bdd2c"
+            },
+            "filename": "scipy-1.11.3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "e04aa19acc324a1a076abb4035dabe9b64badb19f76ad9c798bde39d41025cdc"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32921725,
+            "upload-time": "2023-09-27T21:55:55.407847Z",
+            "url": "https://files.pythonhosted.org/packages/9a/1d/b625246bb88b78244d7fa2f3ae1afc60a45590134fa292ed7cb8c028596e/scipy-1.11.3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "3e1a8a4657673bfae1e05e1e1d6e94b0cabe5ed0c7c144c8aa7b7dbb774ce5c1"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36441096,
+            "upload-time": "2023-09-27T21:56:02.063113Z",
+            "url": "https://files.pythonhosted.org/packages/18/44/7e8d208eb59a8224fcc474415104f13be9b378be8da63f76dfde12ec2b44/scipy-1.11.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "7abda0e62ef00cde826d441485e2e32fe737bdddee3324e35c0e01dee65e2a88"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36642696,
+            "upload-time": "2023-09-27T21:56:08.895348Z",
+            "url": "https://files.pythonhosted.org/packages/af/90/ca8803505c2df3aa641e715bdb829e7fec239e967ed808436a80295d3ec0/scipy-1.11.3-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "filename": "scipy-1.11.3-cp310-cp310-win_amd64.whl",
+            "hashes": {
+                "sha256": "033c3fd95d55012dd1148b201b72ae854d5086d25e7c316ec9850de4fe776929"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 44148677,
+            "upload-time": "2023-09-27T21:56:16.491534Z",
+            "url": "https://files.pythonhosted.org/packages/3a/98/3041681b3a0fef0f59033861a05d846aa1d284b07b531ce35b1b97cc2e93/scipy-1.11.3-cp310-cp310-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "filename": "scipy-1.11.3-cp311-cp311-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "925c6f09d0053b1c0f90b2d92d03b261e889b20d1c9b08a3a51f61afc5f58165"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37156418,
+            "upload-time": "2023-09-27T21:56:23.708745Z",
+            "url": "https://files.pythonhosted.org/packages/b1/a6/b6d66d4f4045ba59200d25f254ccd63340162c903f95231e3ae6863fc4ae/scipy-1.11.3-cp311-cp311-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "10744443c1d5db1ddca31e623e662271ab969a71f8cee67b87c214465c4d68e5"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "10744443c1d5db1ddca31e623e662271ab969a71f8cee67b87c214465c4d68e5"
+            },
+            "filename": "scipy-1.11.3-cp311-cp311-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "5664e364f90be8219283eeb844323ff8cd79d7acbd64e15eb9c46b9bc7f6a42a"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29674269,
+            "upload-time": "2023-09-27T21:56:29.895021Z",
+            "url": "https://files.pythonhosted.org/packages/50/8b/2057417a07a6fee8ed8be40e37bac4a502cae4cf44468a02962bbe81b8af/scipy-1.11.3-cp311-cp311-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "00f325434b6424952fbb636506f0567898dca7b0f7654d48f1c382ea338ce9a3"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32881937,
+            "upload-time": "2023-09-27T21:56:35.648327Z",
+            "url": "https://files.pythonhosted.org/packages/fd/bd/2905516155dbca3f5ae793caa1954a77369dec42d49ac3a60ea749acd3db/scipy-1.11.3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "5f290cf561a4b4edfe8d1001ee4be6da60c1c4ea712985b58bf6bc62badee221"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36401766,
+            "upload-time": "2023-09-27T21:56:42.467816Z",
+            "url": "https://files.pythonhosted.org/packages/ef/1b/7538792254aec6850657d5b940fd05fe60582af829ffe40d6c054f065f34/scipy-1.11.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "91770cb3b1e81ae19463b3c235bf1e0e330767dca9eb4cd73ba3ded6c4151e4d"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36621150,
+            "upload-time": "2023-09-27T21:56:48.816441Z",
+            "url": "https://files.pythonhosted.org/packages/36/95/69e32b4691daa6a6fe625d2e3724a39dc9b910c7860e739b583798d3d127/scipy-1.11.3-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "filename": "scipy-1.11.3-cp311-cp311-win_amd64.whl",
+            "hashes": {
+                "sha256": "e1f97cd89c0fe1a0685f8f89d85fa305deb3067d0668151571ba50913e445820"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 44095029,
+            "upload-time": "2023-09-27T21:56:57.096415Z",
+            "url": "https://files.pythonhosted.org/packages/81/d7/d2537d51efb692d0c411e64267ba349e7668d40f5bc73cefe78ccd650dcd/scipy-1.11.3-cp311-cp311-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "filename": "scipy-1.11.3-cp312-cp312-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "dfcc1552add7cb7c13fb70efcb2389d0624d571aaf2c80b04117e2755a0c5d15"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37051885,
+            "upload-time": "2023-09-27T21:57:05.532489Z",
+            "url": "https://files.pythonhosted.org/packages/e5/ee/c5bc0d4b66a9c38165adf86e8b57be6f76868edf5ea23b3bbee3680e7edf/scipy-1.11.3-cp312-cp312-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "1bb9ebb5a678563804bfac2ef73ba0cbd7756c04d02e6645c98aa23f47ea8b92"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "1bb9ebb5a678563804bfac2ef73ba0cbd7756c04d02e6645c98aa23f47ea8b92"
+            },
+            "filename": "scipy-1.11.3-cp312-cp312-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "0d3a136ae1ff0883fffbb1b05b0b2fea251cb1046a5077d0b435a1839b3e52b7"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29643878,
+            "upload-time": "2023-09-27T21:57:13.558961Z",
+            "url": "https://files.pythonhosted.org/packages/cb/0e/7e2c614d4c892e7fc9f44f4bf16a4661c7f9112f856c3a14f444e43a6ad4/scipy-1.11.3-cp312-cp312-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "13844629e8b70bceffc656e36a34b96d9127efab365f94ff7dc9fc87184bdd2c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "13844629e8b70bceffc656e36a34b96d9127efab365f94ff7dc9fc87184bdd2c"
+            },
+            "filename": "scipy-1.11.3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "bae66a2d7d5768eaa33008fa5a974389f167183c87bf39160d3fefe6664f8ddc"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 32244516,
+            "upload-time": "2023-09-27T21:57:19.346071Z",
+            "url": "https://files.pythonhosted.org/packages/85/61/0b1298353028ae5080674a02a44ea2514decb7c87664007cd1e0c4822522/scipy-1.11.3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "d2f6dee6cbb0e263b8142ed587bc93e3ed5e777f1f75448d24fb923d9fd4dce6"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 35743498,
+            "upload-time": "2023-09-27T21:57:25.020441Z",
+            "url": "https://files.pythonhosted.org/packages/c8/ae/c1e5e9f7ace48e299d7eb05a4b7f1ca0c98961659945a0270a735e5a045a/scipy-1.11.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp312-cp312-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "74e89dc5e00201e71dd94f5f382ab1c6a9f3ff806c7d24e4e90928bb1aafb280"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 35936106,
+            "upload-time": "2023-09-27T21:57:31.970727Z",
+            "url": "https://files.pythonhosted.org/packages/dc/b2/c58eb0e021696c46719f90ab970d0c034445e36180445c431feed3290871/scipy-1.11.3-cp312-cp312-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "filename": "scipy-1.11.3-cp312-cp312-win_amd64.whl",
+            "hashes": {
+                "sha256": "90271dbde4be191522b3903fc97334e3956d7cfb9cce3f0718d0ab4fd7d8bfd6"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 43734377,
+            "upload-time": "2023-09-27T21:57:39.922193Z",
+            "url": "https://files.pythonhosted.org/packages/f4/ce/be0b376ba6069f3f8ba240aa532a374733447453c93582d4c474effdde21/scipy-1.11.3-cp312-cp312-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "filename": "scipy-1.11.3-cp39-cp39-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "a63d1ec9cadecce838467ce0631c17c15c7197ae61e49429434ba01d618caa83"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 37315067,
+            "upload-time": "2023-09-27T21:57:47.321384Z",
+            "url": "https://files.pythonhosted.org/packages/3a/85/67af0d598ed6e60a105e7acbf6bb1be1eab8c2f22facd2ffec84ba9a431a/scipy-1.11.3-cp39-cp39-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "098149fc10c8abbc240976bf15420b8ca0a5ce837773591634e1ab095cef80cc"
+            },
+            "filename": "scipy-1.11.3-cp39-cp39-macosx_12_0_arm64.whl",
+            "hashes": {
+                "sha256": "5305792c7110e32ff155aed0df46aa60a60fc6e52cd4ee02cdeb67eaccd5356e"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 29740317,
+            "upload-time": "2023-09-27T21:57:53.527173Z",
+            "url": "https://files.pythonhosted.org/packages/6f/d9/d10111b008fabab4aea0f98274d3f5db4bd33baadf30c782b6e659ec7708/scipy-1.11.3-cp39-cp39-macosx_12_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "9ea7f579182d83d00fed0e5c11a4aa5ffe01460444219dedc448a36adf0c3917"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 33035042,
+            "upload-time": "2023-09-27T21:57:59.266880Z",
+            "url": "https://files.pythonhosted.org/packages/c4/52/25baeb7d1f10fb402dc8313a0b38b1469dc0e4b73c9e1fa570a64a8bc59a/scipy-1.11.3-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "c77da50c9a91e23beb63c2a711ef9e9ca9a2060442757dffee34ea41847d8156"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36620663,
+            "upload-time": "2023-09-27T21:58:05.886117Z",
+            "url": "https://files.pythonhosted.org/packages/88/8c/9d1f74196c296046af1f20e6d3fc7fbb27387282315e1643f450bba14329/scipy-1.11.3-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "283424f25638d7175400f2c268d9c5c2b72adf5a1cf8da1bde2c96194d3e43ff"
+            },
+            "filename": "scipy-1.11.3-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "15f237e890c24aef6891c7d008f9ff7e758c6ef39a2b5df264650eb7900403c0"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 36776283,
+            "upload-time": "2023-09-27T21:58:13.710596Z",
+            "url": "https://files.pythonhosted.org/packages/34/60/31ab759c4305d0cd4aac316c7c580d955800980eb97c2c1e67502b2daed9/scipy-1.11.3-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "ede2b55e44e34b899856916f89459da4450e92ec46632ea777a59908e31d36da"
+            },
+            "filename": "scipy-1.11.3-cp39-cp39-win_amd64.whl",
+            "hashes": {
+                "sha256": "4b4bb134c7aa457e26cc6ea482b016fef45db71417d55cc6d8f43d799cdf9ef2"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 44259362,
+            "upload-time": "2023-09-27T21:58:20.463135Z",
+            "url": "https://files.pythonhosted.org/packages/23/86/57a03f715b1398c6c5efa5e62e34d683b6c4b609b0e51df58d48aedde84a/scipy-1.11.3-cp39-cp39-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": false,
+            "data-dist-info-metadata": false,
+            "filename": "scipy-1.11.3.tar.gz",
+            "hashes": {
+                "sha256": "bba4d955f54edd61899776bad459bf7326e14b9fa1c552181f0479cc60a568cd"
+            },
+            "requires-python": "<3.13,>=3.9",
+            "size": 56335652,
+            "upload-time": "2023-09-27T22:00:04.892279Z",
+            "url": "https://files.pythonhosted.org/packages/39/7b/9f265b7f074195392e893a5cdc66116c2f7a31fd5f3d9cceff661ec6df82/scipy-1.11.3.tar.gz",
+            "yanked": false
+        }
+    ],
+    "meta": {
+        "_last-serial": 19929204,
+        "api-version": "1.1"
+    },
+    "name": "scipy",
+    "versions": [
+        "1.11.2",
+        "1.11.3"
+    ]
+}

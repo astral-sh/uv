@@ -35,6 +35,20 @@ impl Resolution {
     }
 }
 
+impl std::fmt::Display for Resolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+        for (name, package) in self.iter() {
+            if !first {
+                writeln!(f)?;
+            }
+            first = false;
+            write!(f, "{}=={}", name, package.version())?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct PinnedPackage {
     pub metadata: Metadata21,

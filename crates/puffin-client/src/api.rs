@@ -71,11 +71,7 @@ impl PypiClient {
         let url = if file.data_dist_info_metadata.is_available() {
             Url::parse(&format!("{}.metadata", file.url))?
         } else {
-            self.proxy.join(
-                file.url
-                    .strip_prefix("https://files.pythonhosted.org/")
-                    .unwrap(),
-            )?
+            self.proxy.join(file.url.parse::<Url>()?.path())?
         };
 
         trace!("fetching file {} from {}", file.filename, url);
