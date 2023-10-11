@@ -6,6 +6,11 @@ use platform_host::{Arch, Os, Platform, PlatformError};
 pub struct Tags(Vec<(String, String, String)>);
 
 impl Tags {
+    /// Create a new set of tags.
+    pub fn new(tags: Vec<(String, String, String)>) -> Self {
+        Self(tags)
+    }
+
     /// Returns the compatible tags for the given Python version and platform.
     pub fn from_env(platform: &Platform, python_version: (u8, u8)) -> Result<Self, PlatformError> {
         let platform_tags = compatible_tags(platform)?;

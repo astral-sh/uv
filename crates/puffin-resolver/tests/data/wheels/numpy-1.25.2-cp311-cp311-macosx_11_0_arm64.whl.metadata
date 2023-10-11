@@ -1,0 +1,41 @@
+Metadata-Version: 2.1
+Name: numpy
+Version: 1.25.2
+Summary: Fundamental package for array computing in Python
+Home-page: https://www.numpy.org
+Author: Travis E. Oliphant et al.
+Maintainer: NumPy Developers
+Maintainer-email: numpy-discussion@python.org
+License: BSD-3-Clause
+Download-URL: https://pypi.python.org/pypi/numpy
+Project-URL: Bug Tracker, https://github.com/numpy/numpy/issues
+Project-URL: Documentation, https://numpy.org/doc/1.25
+Project-URL: Source Code, https://github.com/numpy/numpy
+Platform: Windows
+Platform: Linux
+Platform: Solaris
+Platform: Mac OS-X
+Platform: Unix
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: C
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Topic :: Software Development
+Classifier: Topic :: Scientific/Engineering
+Classifier: Typing :: Typed
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Unix
+Classifier: Operating System :: MacOS
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+License-File: LICENSES_bundled.txt

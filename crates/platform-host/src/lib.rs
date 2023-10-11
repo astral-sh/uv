@@ -26,16 +26,24 @@ pub struct Platform {
 }
 
 impl Platform {
+    /// Create a new platform from the given operating system and architecture.
+    pub fn new(os: Os, arch: Arch) -> Self {
+        Self { os, arch }
+    }
+
+    /// Create a new platform from the current operating system and architecture.
     pub fn current() -> Result<Self, PlatformError> {
         let os = Os::current()?;
         let arch = Arch::current()?;
         Ok(Self { os, arch })
     }
 
+    /// Return the platform's operating system.
     pub fn os(&self) -> &Os {
         &self.os
     }
 
+    /// Return the platform's architecture.
     pub fn arch(&self) -> Arch {
         self.arch
     }

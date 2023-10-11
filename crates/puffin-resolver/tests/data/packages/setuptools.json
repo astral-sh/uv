@@ -1,0 +1,73 @@
+{
+    "files": [
+        {
+            "core-metadata": {
+                "sha256": "9a3931da5db44a9dc4c4b1d2c5d880f2f3e3fc90403e12b1f363422ac8fab821"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "9a3931da5db44a9dc4c4b1d2c5d880f2f3e3fc90403e12b1f363422ac8fab821"
+            },
+            "filename": "setuptools-68.2.1-py3-none-any.whl",
+            "hashes": {
+                "sha256": "eff96148eb336377ab11beee0c73ed84f1709a40c0b870298b0d058828761bae"
+            },
+            "requires-python": ">=3.8",
+            "size": 807862,
+            "upload-time": "2023-09-11T16:46:16.429269Z",
+            "url": "https://files.pythonhosted.org/packages/95/79/6b47c6a872b40743a480687dc0c79ffb4202710789f3e4d54a84fff8b550/setuptools-68.2.1-py3-none-any.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": false,
+            "data-dist-info-metadata": false,
+            "filename": "setuptools-68.2.1.tar.gz",
+            "hashes": {
+                "sha256": "56ee14884fd8d0cd015411f4a13f40b4356775a0aefd9ebc1d3bfb9a1acb32f1"
+            },
+            "requires-python": ">=3.8",
+            "size": 2203059,
+            "upload-time": "2023-09-11T16:46:19.010431Z",
+            "url": "https://files.pythonhosted.org/packages/e9/37/c6a6eb1ebeea919e4f394d811f234322d8a99eb58d5ee0f6089dbf06c488/setuptools-68.2.1.tar.gz",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "59bf63aaf3bd42ac410fa094100e8d3d8eca6c4b7a8c26c8c3e86236cbf7b6a2"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "59bf63aaf3bd42ac410fa094100e8d3d8eca6c4b7a8c26c8c3e86236cbf7b6a2"
+            },
+            "filename": "setuptools-68.2.2-py3-none-any.whl",
+            "hashes": {
+                "sha256": "b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a"
+            },
+            "requires-python": ">=3.8",
+            "size": 807864,
+            "upload-time": "2023-09-12T17:22:04.917576Z",
+            "url": "https://files.pythonhosted.org/packages/bb/26/7945080113158354380a12ce26873dd6c1ebd88d47f5bc24e2c5bb38c16a/setuptools-68.2.2-py3-none-any.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": false,
+            "data-dist-info-metadata": false,
+            "filename": "setuptools-68.2.2.tar.gz",
+            "hashes": {
+                "sha256": "4ac1475276d2f1c48684874089fefcd83bd7162ddaafb81fac866ba0db282a87"
+            },
+            "requires-python": ">=3.8",
+            "size": 2203338,
+            "upload-time": "2023-09-12T17:22:07.903746Z",
+            "url": "https://files.pythonhosted.org/packages/ef/cc/93f7213b2ab5ed383f98ce8020e632ef256b406b8569606c3f160ed8e1c9/setuptools-68.2.2.tar.gz",
+            "yanked": false
+        }
+    ],
+    "meta": {
+        "_last-serial": 19717649,
+        "api-version": "1.1"
+    },
+    "name": "setuptools",
+    "versions": [
+        "68.2.1",
+        "68.2.2"
+    ]
+}

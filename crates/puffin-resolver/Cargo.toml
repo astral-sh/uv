@@ -23,3 +23,8 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+serde_json = { version = "1.0.107" }
+tokio = { version = "1.33.0" }
+wiremock = { version = "0.5.19" }

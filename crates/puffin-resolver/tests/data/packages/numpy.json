@@ -1,0 +1,855 @@
+{
+    "files": [
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "77d339465dff3eb33c701430bcb9c325b60354698340229e1dff97745e6b3efa"
+            },
+            "requires-python": ">=3.9",
+            "size": 20056393,
+            "upload-time": "2023-07-08T21:38:33.449846Z",
+            "url": "https://files.pythonhosted.org/packages/fa/07/c6980120967a9fc76138eddd583d6ac47dd072922d6f66d7d502f6f9a964/numpy-1.25.1-cp310-cp310-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-macosx_11_0_arm64.whl",
+            "hashes": {
+                "sha256": "d736b75c3f2cb96843a5c7f8d8ccc414768d34b0a75f466c05f3a739b406f10b"
+            },
+            "requires-python": ">=3.9",
+            "size": 13964284,
+            "upload-time": "2023-07-08T21:39:00.943271Z",
+            "url": "https://files.pythonhosted.org/packages/1b/cd/9e8313ffd849626c836fffd7881296a74f53a7739bd9ce7a6e22b1fc843b/numpy-1.25.1-cp310-cp310-macosx_11_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "4a90725800caeaa160732d6b31f3f843ebd45d6b5f3eec9e8cc287e30f2805bf"
+            },
+            "requires-python": ">=3.9",
+            "size": 14133399,
+            "upload-time": "2023-07-08T21:39:24.042808Z",
+            "url": "https://files.pythonhosted.org/packages/3c/81/90d13a812268943226a9ca8d4967343f9e273a5d9a1063f8a99736816eba/numpy-1.25.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "6c6c9261d21e617c6dc5eacba35cb68ec36bb72adcff0dee63f8fbc899362588"
+            },
+            "requires-python": ">=3.9",
+            "size": 17613846,
+            "upload-time": "2023-07-08T21:39:52.936721Z",
+            "url": "https://files.pythonhosted.org/packages/d0/55/559e6f455a066e12058330377259a106b7fefa41c15dbdb1b71070cec429/numpy-1.25.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "0def91f8af6ec4bb94c370e38c575855bf1d0be8a8fbfba42ef9c073faf2cf19"
+            },
+            "requires-python": ">=3.9",
+            "size": 17450777,
+            "upload-time": "2023-07-08T21:40:21.551578Z",
+            "url": "https://files.pythonhosted.org/packages/e9/ce/27f1961d50170ab38fd739263465437fb193404dc8fac7dd0b3bb146c95a/numpy-1.25.1-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-win32.whl",
+            "hashes": {
+                "sha256": "fd67b306320dcadea700a8f79b9e671e607f8696e98ec255915c0c6d6b818503"
+            },
+            "requires-python": ">=3.9",
+            "size": 12608693,
+            "upload-time": "2023-07-08T21:40:43.909455Z",
+            "url": "https://files.pythonhosted.org/packages/28/68/a4594268ecddf860de11fa541ee789e9c2d23b3854f9f04d308960768c60/numpy-1.25.1-cp310-cp310-win32.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-cp310-cp310-win_amd64.whl",
+            "hashes": {
+                "sha256": "c1516db588987450b85595586605742879e50dcce923e8973f79529651545b57"
+            },
+            "requires-python": ">=3.9",
+            "size": 15035649,
+            "upload-time": "2023-07-08T21:41:08.927093Z",
+            "url": "https://files.pythonhosted.org/packages/8d/07/cab4129005dba3f170dd1a2cfa312fc71100f0e26b91f7fc659b6b5abbdc/numpy-1.25.1-cp310-cp310-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "6b82655dd8efeea69dbf85d00fca40013d7f503212bc5259056244961268b66e"
+            },
+            "requires-python": ">=3.9",
+            "size": 20043317,
+            "upload-time": "2023-07-08T21:41:41.203491Z",
+            "url": "https://files.pythonhosted.org/packages/e3/7e/0b072c21f4feefb2d89600956af307db29fb7df695cbe6e145de91643155/numpy-1.25.1-cp311-cp311-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-macosx_11_0_arm64.whl",
+            "hashes": {
+                "sha256": "e8f6049c4878cb16960fbbfb22105e49d13d752d4d8371b55110941fb3b17800"
+            },
+            "requires-python": ">=3.9",
+            "size": 13974169,
+            "upload-time": "2023-07-08T21:42:07.119902Z",
+            "url": "https://files.pythonhosted.org/packages/48/73/df07644e8fa1127a7985db70cf1d07123004e2dd7a3cf33e8b83297a775b/numpy-1.25.1-cp311-cp311-macosx_11_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "41a56b70e8139884eccb2f733c2f7378af06c82304959e174f8e7370af112e09"
+            },
+            "requires-python": ">=3.9",
+            "size": 14124276,
+            "upload-time": "2023-07-08T21:42:31.738414Z",
+            "url": "https://files.pythonhosted.org/packages/7c/be/76ae69de42c60e9d14252df2191db298e955223853dff6a77c9d1e01cd71/numpy-1.25.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "d5154b1a25ec796b1aee12ac1b22f414f94752c5f94832f14d8d6c9ac40bcca6"
+            },
+            "requires-python": ">=3.9",
+            "size": 17603702,
+            "upload-time": "2023-07-08T21:43:00.845499Z",
+            "url": "https://files.pythonhosted.org/packages/f0/5a/9b7b7bae29f9f5f8a976607cd30139c1fec9076c0e65ea918d3400924acf/numpy-1.25.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "38eb6548bb91c421261b4805dc44def9ca1a6eef6444ce35ad1669c0f1a3fc5d"
+            },
+            "requires-python": ">=3.9",
+            "size": 17455076,
+            "upload-time": "2023-07-08T21:43:34.198541Z",
+            "url": "https://files.pythonhosted.org/packages/55/ee/a9cb689bab52cb617094148a2db7f87f89fb390682392545e8751a9cf06b/numpy-1.25.1-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-win32.whl",
+            "hashes": {
+                "sha256": "791f409064d0a69dd20579345d852c59822c6aa087f23b07b1b4e28ff5880fcb"
+            },
+            "requires-python": ">=3.9",
+            "size": 12601595,
+            "upload-time": "2023-07-08T21:43:59.114246Z",
+            "url": "https://files.pythonhosted.org/packages/28/65/46e9c57b034c63f67d4a76fe335c0204e80d4722e94939de684af0456ef0/numpy-1.25.1-cp311-cp311-win32.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-cp311-cp311-win_amd64.whl",
+            "hashes": {
+                "sha256": "c40571fe966393b212689aa17e32ed905924120737194b5d5c1b20b9ed0fb171"
+            },
+            "requires-python": ">=3.9",
+            "size": 15027551,
+            "upload-time": "2023-07-08T21:44:24.863647Z",
+            "url": "https://files.pythonhosted.org/packages/2f/2a/34fe0b64e78347f4ea128868df0034a97e0f92b476f62947b0976caba820/numpy-1.25.1-cp311-cp311-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "3d7abcdd85aea3e6cdddb59af2350c7ab1ed764397f8eec97a038ad244d2d105"
+            },
+            "requires-python": ">=3.9",
+            "size": 20088702,
+            "upload-time": "2023-07-08T21:44:58.703773Z",
+            "url": "https://files.pythonhosted.org/packages/06/23/883340d4a8ff93ab24beb5a25c53f5999e0016c20ed2171853bbd2cdf9f4/numpy-1.25.1-cp39-cp39-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-macosx_11_0_arm64.whl",
+            "hashes": {
+                "sha256": "1a180429394f81c7933634ae49b37b472d343cccb5bb0c4a575ac8bbc433722f"
+            },
+            "requires-python": ">=3.9",
+            "size": 13991938,
+            "upload-time": "2023-07-08T21:45:27.145617Z",
+            "url": "https://files.pythonhosted.org/packages/dd/68/ee92adfe1cadfc36f5bb7301eae5c8ad8138ec4dae83d68014f2a7f3709f/numpy-1.25.1-cp39-cp39-macosx_11_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "d412c1697c3853c6fc3cb9751b4915859c7afe6a277c2bf00acf287d56c4e625"
+            },
+            "requires-python": ">=3.9",
+            "size": 14172241,
+            "upload-time": "2023-07-08T21:45:53.806737Z",
+            "url": "https://files.pythonhosted.org/packages/0a/54/370ec143539de0dc09c3024b4fea99e76e3051bd6ad199ccf1e5b6bc05b7/numpy-1.25.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "20e1266411120a4f16fad8efa8e0454d21d00b8c7cee5b5ccad7565d95eb42dd"
+            },
+            "requires-python": ">=3.9",
+            "size": 17658067,
+            "upload-time": "2023-07-08T21:46:22.140034Z",
+            "url": "https://files.pythonhosted.org/packages/21/9c/1a7d658112aed97be36dfd93cc7362ca6c33598615988e6d836fa0a80f89/numpy-1.25.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "f76aebc3358ade9eacf9bc2bb8ae589863a4f911611694103af05346637df1b7"
+            },
+            "requires-python": ">=3.9",
+            "size": 17483521,
+            "upload-time": "2023-07-08T21:46:53.546338Z",
+            "url": "https://files.pythonhosted.org/packages/99/08/7a793f0ad404a0d9f03debeb82cf9039b8ce60d5a6631b35f4991f6fc93a/numpy-1.25.1-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-win32.whl",
+            "hashes": {
+                "sha256": "247d3ffdd7775bdf191f848be8d49100495114c82c2bd134e8d5d075fb386a1c"
+            },
+            "requires-python": ">=3.9",
+            "size": 12637213,
+            "upload-time": "2023-07-08T21:47:17.261379Z",
+            "url": "https://files.pythonhosted.org/packages/94/83/2473c27e3f52339d1278d7b02245211d1ecf9c5eb2d97cc17370bf59ef10/numpy-1.25.1-cp39-cp39-win32.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-cp39-cp39-win_amd64.whl",
+            "hashes": {
+                "sha256": "1d5d3c68e443c90b38fdf8ef40e60e2538a27548b39b12b73132456847f4b631"
+            },
+            "requires-python": ">=3.9",
+            "size": 15062259,
+            "upload-time": "2023-07-08T21:47:43.930891Z",
+            "url": "https://files.pythonhosted.org/packages/86/c7/f92afdefa2bccdf0bc357321a931adafb1a999bc84f8877a6ed786a69ccc/numpy-1.25.1-cp39-cp39-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-pp39-pypy39_pp73-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "35a9527c977b924042170a0887de727cd84ff179e478481404c5dc66b4170009"
+            },
+            "requires-python": ">=3.9",
+            "size": 19410762,
+            "upload-time": "2023-07-08T21:48:15.968666Z",
+            "url": "https://files.pythonhosted.org/packages/83/b8/76d402c0c09aa08befa84f7a55c714ba4e2d9974134e8881aa42ac46abd5/numpy-1.25.1-pp39-pypy39_pp73-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "17a7adce418cb77c5eac235de0d4337bd48d76fcf69a2f59f987a124757c4fa3"
+            },
+            "filename": "numpy-1.25.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "0d3fe3dd0506a28493d82dc3cf254be8cd0d26f4008a417385cbf1ae95b54004"
+            },
+            "requires-python": ">=3.9",
+            "size": 17012385,
+            "upload-time": "2023-07-08T21:48:48.346783Z",
+            "url": "https://files.pythonhosted.org/packages/bd/8a/7eccc0d8b54c85a0b210a72c3f8be71eecc7db1bf62dcd9275a911282a5a/numpy-1.25.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "752f6a0f32795af243649d79eb221486f5b1d015515e15315a9060269ea45181"
+            },
+            "filename": "numpy-1.25.1-pp39-pypy39_pp73-win_amd64.whl",
+            "hashes": {
+                "sha256": "012097b5b0d00a11070e8f2e261128c44157a8689f7dedcf35576e525893f4fe"
+            },
+            "requires-python": ">=3.9",
+            "size": 14922989,
+            "upload-time": "2023-07-08T21:49:14.166186Z",
+            "url": "https://files.pythonhosted.org/packages/b8/66/d74ebeff4fbd678d19002f7be03c3f9ab57604e4606d67d9b18431250cc2/numpy-1.25.1-pp39-pypy39_pp73-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": false,
+            "data-dist-info-metadata": false,
+            "filename": "numpy-1.25.1.tar.gz",
+            "hashes": {
+                "sha256": "9a3a9f3a61480cc086117b426a8bd86869c213fc4072e606f01c4e4b66eb92bf"
+            },
+            "requires-python": ">=3.9",
+            "size": 10428993,
+            "upload-time": "2023-07-08T22:07:25.372637Z",
+            "url": "https://files.pythonhosted.org/packages/cf/7a/f68d1d658a0e68084097beb212fa9356fee7eabff8b57231cc4acb555b12/numpy-1.25.1.tar.gz",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "db3ccc4e37a6873045580d413fe79b68e47a681af8db2e046f1dacfa11f86eb3"
+            },
+            "requires-python": ">=3.9",
+            "size": 20814934,
+            "upload-time": "2023-07-31T14:50:49.761194Z",
+            "url": "https://files.pythonhosted.org/packages/d5/50/8aedb5ff1460e7c8527af15c6326115009e7c270ec705487155b779ebabb/numpy-1.25.2-cp310-cp310-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-macosx_11_0_arm64.whl",
+            "hashes": {
+                "sha256": "90319e4f002795ccfc9050110bbbaa16c944b1c37c0baeea43c5fb881693ae1f"
+            },
+            "requires-python": ">=3.9",
+            "size": 13994425,
+            "upload-time": "2023-07-31T14:51:12.312536Z",
+            "url": "https://files.pythonhosted.org/packages/c3/ea/1d95b399078ecaa7b5d791e1fdbb3aee272077d9fd5fb499593c87dec5ea/numpy-1.25.2-cp310-cp310-macosx_11_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "dfe4a913e29b418d096e696ddd422d8a5d13ffba4ea91f9f60440a3b759b0187"
+            },
+            "requires-python": ">=3.9",
+            "size": 14167163,
+            "upload-time": "2023-07-31T14:51:34.507034Z",
+            "url": "https://files.pythonhosted.org/packages/b1/39/3f88e2bfac1fb510c112dc0c78a1e7cad8f3a2d75e714d1484a044c56682/numpy-1.25.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "f08f2e037bba04e707eebf4bc934f1972a315c883a9e0ebfa8a7756eabf9e357"
+            },
+            "requires-python": ">=3.9",
+            "size": 18219190,
+            "upload-time": "2023-07-31T14:52:07.478096Z",
+            "url": "https://files.pythonhosted.org/packages/71/3c/3b1981c6a1986adc9ee7db760c0c34ea5b14ac3da9ecfcf1ea2a4ec6c398/numpy-1.25.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "bec1e7213c7cb00d67093247f8c4db156fd03075f49876957dca4711306d39c9"
+            },
+            "requires-python": ">=3.9",
+            "size": 18068385,
+            "upload-time": "2023-07-31T14:52:35.891697Z",
+            "url": "https://files.pythonhosted.org/packages/73/6f/2a0d0ad31a588d303178d494787f921c246c6234eccced236866bc1beaa5/numpy-1.25.2-cp310-cp310-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-win32.whl",
+            "hashes": {
+                "sha256": "7dc869c0c75988e1c693d0e2d5b26034644399dd929bc049db55395b1379e044"
+            },
+            "requires-python": ">=3.9",
+            "size": 12661360,
+            "upload-time": "2023-07-31T14:52:56.694318Z",
+            "url": "https://files.pythonhosted.org/packages/63/bd/a1c256cdea5d99e2f7e1acc44fc287455420caeb2e97d43ff0dda908fae8/numpy-1.25.2-cp310-cp310-win32.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-cp310-cp310-win_amd64.whl",
+            "hashes": {
+                "sha256": "834b386f2b8210dca38c71a6e0f4fd6922f7d3fcff935dbe3a570945acb1b545"
+            },
+            "requires-python": ">=3.9",
+            "size": 15554633,
+            "upload-time": "2023-07-31T14:53:21.013912Z",
+            "url": "https://files.pythonhosted.org/packages/b7/db/4d37359e2c9cf8bf071c08b8a6f7374648a5ab2e76e2e22e3b808f81d507/numpy-1.25.2-cp310-cp310-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "c5462d19336db4560041517dbb7759c21d181a67cb01b36ca109b2ae37d32418"
+            },
+            "requires-python": ">=3.9",
+            "size": 20801693,
+            "upload-time": "2023-07-31T14:53:53.290555Z",
+            "url": "https://files.pythonhosted.org/packages/c9/57/3cb8131a0e6d559501e088d3e685f4122e9ff9104c4b63e4dfd3a577b491/numpy-1.25.2-cp311-cp311-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-macosx_11_0_arm64.whl",
+            "hashes": {
+                "sha256": "c5652ea24d33585ea39eb6a6a15dac87a1206a692719ff45d53c5282e66d4a8f"
+            },
+            "requires-python": ">=3.9",
+            "size": 14004130,
+            "upload-time": "2023-07-31T14:54:16.413224Z",
+            "url": "https://files.pythonhosted.org/packages/86/a1/b8ef999c32f26a97b5f714887e21f96c12ae99a38583a0a96e65283ac0a1/numpy-1.25.2-cp311-cp311-macosx_11_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "0d60fbae8e0019865fc4784745814cff1c421df5afee233db6d88ab4f14655a2"
+            },
+            "requires-python": ">=3.9",
+            "size": 14158219,
+            "upload-time": "2023-07-31T14:54:39.032155Z",
+            "url": "https://files.pythonhosted.org/packages/50/67/3e966d99a07d60a21a21d7ec016e9e4c2642a86fea251ec68677daf71d4d/numpy-1.25.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "60e7f0f7f6d0eee8364b9a6304c2845b9c491ac706048c7e8cf47b83123b8dbf"
+            },
+            "requires-python": ">=3.9",
+            "size": 18209344,
+            "upload-time": "2023-07-31T14:55:08.584521Z",
+            "url": "https://files.pythonhosted.org/packages/32/6a/65dbc57a89078af9ff8bfcd4c0761a50172d90192eaeb1b6f56e5fbf1c3d/numpy-1.25.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "bb33d5a1cf360304754913a350edda36d5b8c5331a8237268c48f91253c3a364"
+            },
+            "requires-python": ">=3.9",
+            "size": 18072378,
+            "upload-time": "2023-07-31T14:55:39.551777Z",
+            "url": "https://files.pythonhosted.org/packages/cd/fe/e900cb2ebafae04b7570081cefc65b6fdd9e202b9b353572506cea5cafdf/numpy-1.25.2-cp311-cp311-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-win32.whl",
+            "hashes": {
+                "sha256": "5883c06bb92f2e6c8181df7b39971a5fb436288db58b5a1c3967702d4278691d"
+            },
+            "requires-python": ">=3.9",
+            "size": 12654351,
+            "upload-time": "2023-07-31T14:56:10.623372Z",
+            "url": "https://files.pythonhosted.org/packages/5c/e4/990c6cb09f2cd1a3f53bcc4e489dad903faa01b058b625d84bb62d2e9391/numpy-1.25.2-cp311-cp311-win32.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-cp311-cp311-win_amd64.whl",
+            "hashes": {
+                "sha256": "5c97325a0ba6f9d041feb9390924614b60b99209a71a69c876f71052521d42a4"
+            },
+            "requires-python": ">=3.9",
+            "size": 15546748,
+            "upload-time": "2023-07-31T14:57:13.015786Z",
+            "url": "https://files.pythonhosted.org/packages/72/b2/02770e60c4e2f7e158d923ab0dea4e9f146a2dbf267fec6d8dc61d475689/numpy-1.25.2-cp311-cp311-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "b79e513d7aac42ae918db3ad1341a015488530d0bb2a6abcbdd10a3a829ccfd3"
+            },
+            "requires-python": ">=3.9",
+            "size": 20847260,
+            "upload-time": "2023-07-31T14:57:44.838089Z",
+            "url": "https://files.pythonhosted.org/packages/8b/d9/22c304cd123e0a1b7d89213e50ed6ec4b22f07f1117d64d28f81c08be428/numpy-1.25.2-cp39-cp39-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-macosx_11_0_arm64.whl",
+            "hashes": {
+                "sha256": "eb942bfb6f84df5ce05dbf4b46673ffed0d3da59f13635ea9b926af3deb76926"
+            },
+            "requires-python": ">=3.9",
+            "size": 14022126,
+            "upload-time": "2023-07-31T14:58:08.418792Z",
+            "url": "https://files.pythonhosted.org/packages/0f/a8/5057b97c395a710999b5697ffedd648caee82c24a29595952d26bd750155/numpy-1.25.2-cp39-cp39-macosx_11_0_arm64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "hashes": {
+                "sha256": "3e0746410e73384e70d286f93abf2520035250aad8c5714240b0492a7302fdca"
+            },
+            "requires-python": ">=3.9",
+            "size": 14206441,
+            "upload-time": "2023-07-31T14:58:31.007067Z",
+            "url": "https://files.pythonhosted.org/packages/6d/b6/94a587cd64ef090f844ab1d8c8f1af44d07be7387f5f1a40eb729a0ff9c9/numpy-1.25.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "d7806500e4f5bdd04095e849265e55de20d8cc4b661b038957354327f6d9b295"
+            },
+            "requires-python": ">=3.9",
+            "size": 18263142,
+            "upload-time": "2023-07-31T14:58:59.337506Z",
+            "url": "https://files.pythonhosted.org/packages/69/1f/c95b1108a9972a52d7b1b63ed8ca70466b59b8c1811bd121f1e667cc45d8/numpy-1.25.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "hashes": {
+                "sha256": "8b77775f4b7df768967a7c8b3567e309f617dd5e99aeb886fa14dc1a0791141f"
+            },
+            "requires-python": ">=3.9",
+            "size": 18102143,
+            "upload-time": "2023-07-31T14:59:27.625453Z",
+            "url": "https://files.pythonhosted.org/packages/d3/76/fe6b9e75883d1f2bd3cd27cbc7307ec99a0cc76fa941937c177f464fd60a/numpy-1.25.2-cp39-cp39-musllinux_1_1_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-win32.whl",
+            "hashes": {
+                "sha256": "2792d23d62ec51e50ce4d4b7d73de8f67a2fd3ea710dcbc8563a51a03fb07b01"
+            },
+            "requires-python": ">=3.9",
+            "size": 12689997,
+            "upload-time": "2023-07-31T14:59:48.404082Z",
+            "url": "https://files.pythonhosted.org/packages/81/e3/f562c2d76af16c1d79e73de04f9d08e5a7fd0e50ae12692acd4dbd2501f7/numpy-1.25.2-cp39-cp39-win32.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-cp39-cp39-win_amd64.whl",
+            "hashes": {
+                "sha256": "76b4115d42a7dfc5d485d358728cdd8719be33cc5ec6ec08632a5d6fca2ed380"
+            },
+            "requires-python": ">=3.9",
+            "size": 15581137,
+            "upload-time": "2023-07-31T15:00:14.604039Z",
+            "url": "https://files.pythonhosted.org/packages/df/18/181fb40f03090c6fbd061bb8b1f4c32453f7c602b0dc7c08b307baca7cd7/numpy-1.25.2-cp39-cp39-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-pp39-pypy39_pp73-macosx_10_9_x86_64.whl",
+            "hashes": {
+                "sha256": "1a1329e26f46230bf77b02cc19e900db9b52f398d6722ca853349a782d4cff55"
+            },
+            "requires-python": ">=3.9",
+            "size": 20168999,
+            "upload-time": "2023-07-31T15:00:48.021958Z",
+            "url": "https://files.pythonhosted.org/packages/11/58/e921b73d1a181d49fc5a797f5151b7be78cbc5b4483f8f6042e295b85c01/numpy-1.25.2-pp39-pypy39_pp73-macosx_10_9_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "34fa235b6b2b762c70614a94540c70367e237dc23e71e582b44770be7f33d797"
+            },
+            "filename": "numpy-1.25.2-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "hashes": {
+                "sha256": "4c3abc71e8b6edba80a01a52e66d83c5d14433cbcd26a40c329ec7ed09f37901"
+            },
+            "requires-python": ">=3.9",
+            "size": 17618771,
+            "upload-time": "2023-07-31T15:01:15.808937Z",
+            "url": "https://files.pythonhosted.org/packages/2c/53/9a023f6960ea6c8f66eafae774ba7ab1700fd987158df5aa9dbb28f98f8b/numpy-1.25.2-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "data-dist-info-metadata": {
+                "sha256": "49ae165db191260c8c8d56618694c6c275b94363b93ad50d93dc794e983fa61c"
+            },
+            "filename": "numpy-1.25.2-pp39-pypy39_pp73-win_amd64.whl",
+            "hashes": {
+                "sha256": "1b9735c27cea5d995496f46a8b1cd7b408b3f34b6d50459d9ac8fe3a20cc17bf"
+            },
+            "requires-python": ">=3.9",
+            "size": 15442128,
+            "upload-time": "2023-07-31T15:01:40.620520Z",
+            "url": "https://files.pythonhosted.org/packages/2d/2a/5d85ca5d889363ffdec3e3258c7bacdc655801787d004a55e04cf19eeb4a/numpy-1.25.2-pp39-pypy39_pp73-win_amd64.whl",
+            "yanked": false
+        },
+        {
+            "core-metadata": false,
+            "data-dist-info-metadata": false,
+            "filename": "numpy-1.25.2.tar.gz",
+            "hashes": {
+                "sha256": "fd608e19c8d7c55021dffd43bfe5492fab8cc105cc8986f813f8c3c048b38760"
+            },
+            "requires-python": ">=3.9",
+            "size": 10805282,
+            "upload-time": "2023-07-31T15:17:43.198078Z",
+            "url": "https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz",
+            "yanked": false
+        }
+    ],
+    "meta": {
+        "_last-serial": 19777155,
+        "api-version": "1.1"
+    },
+    "name": "numpy",
+    "versions": [
+        "1.25.1",
+        "1.25.2"
+    ]
+}
