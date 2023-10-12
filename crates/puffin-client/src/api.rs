@@ -27,7 +27,7 @@ impl PypiClient {
         url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 
         trace!(
-            "fetching metadata for {} from {}",
+            "Fetching metadata for {} from {}",
             package_name.as_ref(),
             url
         );
@@ -74,7 +74,7 @@ impl PypiClient {
             self.proxy.join(file.url.parse::<Url>()?.path())?
         };
 
-        trace!("fetching file {} from {}", file.filename, url);
+        trace!("Fetching file {} from {}", file.filename, url);
 
         // Fetch from the registry.
         let text = self.file_impl(&file.filename, &url).await?;
@@ -135,7 +135,6 @@ pub struct SimpleJson {
     pub versions: Vec<String>,
 }
 
-// TODO(charlie): Can we rename this? What does this look like for source distributions?
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {

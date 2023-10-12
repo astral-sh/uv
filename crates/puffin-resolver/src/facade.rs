@@ -1,15 +1,16 @@
 use std::str::FromStr;
 
+use anyhow::Result;
 use once_cell::sync::Lazy;
-use pep508_rs::{MarkerEnvironment, Requirement};
 use pubgrub::range::Range;
 
-use crate::specifier::to_ranges;
-use anyhow::Result;
+use pep508_rs::{MarkerEnvironment, Requirement};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
-use tracing::debug;
 
+use crate::specifier::to_ranges;
+
+/// A PubGrub-compatible wrapper around a PEP 440 version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PubGrubVersion(pep440_rs::Version);
 
@@ -53,7 +54,7 @@ impl PubGrubVersion {
 
     /// Returns the smallest PEP 440 version that is larger than `self`.
     pub fn next(&self) -> PubGrubVersion {
-        let mut new = self.clone();
+        let mut next = self.clone();
         // The rules are here:
         //
         //   https://www.python.org/dev/peps/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
@@ -68,15 +69,15 @@ impl PubGrubVersion {
         //
         // - You *can* attach a .postN after anything else. And a .devN after that. So
         // to get the next possible value, attach a .post0.dev0.
-        if let Some(dev) = &mut new.0.dev {
+        if let Some(dev) = &mut next.0.dev {
             *dev += 1;
-        } else if let Some(post) = &mut new.0.post {
+        } else if let Some(post) = &mut next.0.post {
             *post += 1;
         } else {
-            new.0.post = Some(0);
-            new.0.dev = Some(0);
+            next.0.post = Some(0);
+            next.0.dev = Some(0);
         }
-        new
+        next
     }
 }
 
@@ -122,6 +123,7 @@ impl pubgrub::version::Version for PubGrubVersion {
 // extras[1] ever become a thing, because we're basically reifying them already.
 //
 // [1] https://mail.python.org/pipermail/distutils-sig/2015-October/027364.html
+/// A PubGrub-compatible wrapper around a "Python package".
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PubGrubPackage {
     Root,
@@ -173,6 +175,7 @@ pub(crate) fn pubgrub_requirements<'a>(
 ) -> impl Iterator<Item = (PubGrubPackage, Range<PubGrubVersion>)> + 'a {
     requirements
         .filter(move |requirement| {
+            // TODO(charlie): We shouldn't need a vector here.
             let extra = if let Some(extra) = extra {
                 vec![extra.as_ref()]
             } else {
