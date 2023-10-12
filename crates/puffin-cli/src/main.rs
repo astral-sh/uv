@@ -71,6 +71,11 @@ struct UninstallArgs {
 
 #[derive(Args)]
 struct VenvArgs {
+    /// The python interpreter to use for the virtual environment
+    // Short `-p` to match `virtualenv`
+    // TODO(konstin): Support e.g. `-p 3.10`
+    #[clap(short, long)]
+    python: Option<PathBuf>,
     /// The path to the virtual environment to create.
     name: PathBuf,
 }
@@ -143,7 +148,7 @@ async fn main() -> ExitCode {
             )
             .await
         }
-        Commands::Venv(args) => commands::venv(&args.name, printer).await,
+        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
     };
 
     match result {
