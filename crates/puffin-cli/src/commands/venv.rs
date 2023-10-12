@@ -8,15 +8,23 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Create a virtual environment.
-pub(crate) async fn venv(path: &Path, mut printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn venv(
+    path: &Path,
+    base_python: Option<&Path>,
+    mut printer: Printer,
+) -> Result<ExitStatus> {
     // Locate the Python interpreter.
     // TODO(charlie): Look at how Maturin discovers and ranks all the available Python interpreters.
-    let executable = which::which("python3").or_else(|_| which::which("python"))?;
-    let interpreter_info = gourgeist::get_interpreter_info(&executable)?;
+    let base_python = if let Some(base_python) = base_python {
+        base_python.to_path_buf()
+    } else {
+        which::which("python3").or_else(|_| which::which("python"))?
+    };
+    let interpreter_info = gourgeist::get_interpreter_info(&base_python)?;
     writeln!(
         printer,
         "Using Python interpreter: {}",
-        format!("{}", executable.display()).cyan()
+        format!("{}", base_python.display()).cyan()
     )?;
 
     // If the path already exists, remove it.
@@ -30,7 +38,7 @@ pub(crate) async fn venv(path: &Path, mut printer: Printer) -> Result<ExitStatus
     )?;
 
     // Create the virtual environment.
-    gourgeist::create_venv(path, &executable, &interpreter_info, true)?;
+    gourgeist::create_venv(path, &base_python, &interpreter_info, true)?;
 
     Ok(ExitStatus::Success)
 }
