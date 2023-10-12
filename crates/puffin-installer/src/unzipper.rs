@@ -101,6 +101,10 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
 
             // Create necessary parent directories.
             let path = target.join(file_path);
+            if file.is_dir() {
+                std::fs::create_dir_all(path)?;
+                return Ok(());
+            }
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
