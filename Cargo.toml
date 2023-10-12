@@ -56,6 +56,7 @@ tracing = { version = "0.1.37" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 tracing-tree = { version = "0.2.5" }
 unicode-width = { version = "0.1.8" }
+unscanny = { version = "0.1.0" }
 url = { version = "2.4.1" }
 walkdir = { version = "2.4.0" }
 which = { version = "4.4.2" }

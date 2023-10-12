@@ -1,0 +1,199 @@
+---
+source: crates/puffin-package/src/requirements_txt.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Requirement {
+                name: "numpy",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            1,
+                                            24,
+                                            2,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "pandas",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2,
+                                            0,
+                                            0,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "python-dateutil",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2,
+                                            8,
+                                            2,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "pytz",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2023,
+                                            3,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "six",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            1,
+                                            16,
+                                            0,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "tzdata",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2023,
+                                            3,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+    ],
+    constraints: [],
+}

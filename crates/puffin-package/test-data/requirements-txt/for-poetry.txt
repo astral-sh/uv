@@ -1,0 +1,6 @@
+
+# Used in requirements_txt_to_poetry
+inflection==0.5.1
+upsidedown==0.4
+numpy
+pandas[tabulate]>=1,<2

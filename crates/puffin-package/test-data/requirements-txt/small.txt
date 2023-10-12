@@ -1,0 +1,4 @@
+# These are small and fast to install
+
+tqdm==4.65.0
+tomli-w==1.0.0
