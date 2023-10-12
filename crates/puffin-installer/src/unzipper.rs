@@ -38,7 +38,7 @@ impl Unzipper {
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init().await?;
 
-        let staging = tempfile::tempdir()?;
+        let staging = tempfile::tempdir_in(wheel_cache.root())?;
 
         // Unpack the wheels into the cache.
         let mut wheels = Vec::with_capacity(downloads.len());
