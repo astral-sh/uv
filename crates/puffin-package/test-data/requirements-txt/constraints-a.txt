@@ -1,0 +1,2 @@
+-c constraints-b.txt # We can't actually semantically deal with those yet
+django-debug-toolbar<2.2

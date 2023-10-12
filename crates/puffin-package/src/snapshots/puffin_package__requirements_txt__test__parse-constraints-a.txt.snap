@@ -1,0 +1,96 @@
+---
+source: crates/puffin-package/src/requirements_txt.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Requirement {
+                name: "django-debug-toolbar",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: LessThan,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2,
+                                            2,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+    ],
+    constraints: [
+        Requirement {
+            name: "django",
+            extras: None,
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: Version {
+                                    epoch: 0,
+                                    release: [
+                                        2,
+                                        1,
+                                        15,
+                                    ],
+                                    pre: None,
+                                    post: None,
+                                    dev: None,
+                                    local: None,
+                                },
+                            },
+                        ],
+                    ),
+                ),
+            ),
+            marker: None,
+        },
+        Requirement {
+            name: "pytz",
+            extras: None,
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: Version {
+                                    epoch: 0,
+                                    release: [
+                                        2023,
+                                        3,
+                                    ],
+                                    pre: None,
+                                    post: None,
+                                    dev: None,
+                                    local: None,
+                                },
+                            },
+                        ],
+                    ),
+                ),
+            ),
+            marker: None,
+        },
+    ],
+}

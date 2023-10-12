@@ -1,4 +1,4 @@
 pub mod dist_info_name;
 pub mod metadata;
 pub mod package_name;
-pub mod requirements;
+pub mod requirements_txt;

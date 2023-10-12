@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::Result;
 use colored::Colorize;
@@ -10,7 +9,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
-use puffin_package::requirements::Requirements;
+use puffin_package::requirements_txt::RequirementsTxt;
 
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
@@ -25,11 +24,12 @@ pub(crate) async fn compile(
     let start = std::time::Instant::now();
 
     // Read the `requirements.txt` from disk.
-    let requirements_txt = std::fs::read_to_string(src)?;
-
-    // Parse the `requirements.txt` into a list of requirements.
-    let requirements = Requirements::from_str(&requirements_txt)?;
-
+    let requirements_txt = RequirementsTxt::parse(src, std::env::current_dir()?)?;
+    let requirements = requirements_txt
+        .requirements
+        .into_iter()
+        .map(|entry| entry.requirement)
+        .collect::<Vec<_>>();
     if requirements.is_empty() {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
