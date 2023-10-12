@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::io;
+use std::io::Write;
 
 use pep440_rs::Version;
 use puffin_client::File;
@@ -32,6 +34,14 @@ impl Resolution {
     /// Return `true` if there are no pinned packages in this resolution.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Write the resolution in the `{name}=={version}` format of requirements.txt that pip uses.
+    pub fn write_requirement_format(&self, writer: &mut impl Write) -> io::Result<()> {
+        for (name, package) in self.iter() {
+            writeln!(writer, "{}=={}", name, package.version())?;
+        }
+        Ok(())
     }
 }
 

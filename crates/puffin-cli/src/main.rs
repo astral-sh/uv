@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use crate::commands::ExitStatus;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
-
-use crate::commands::ExitStatus;
 
 mod commands;
 mod logging;
@@ -49,6 +48,9 @@ enum Commands {
 
 #[derive(Args)]
 struct CompileArgs {
+    /// Output `requirements.txt` file
+    #[clap(short, long)]
+    output_file: Option<PathBuf>,
     /// Path to the `requirements.txt` file to compile.
     src: PathBuf,
 }
@@ -104,6 +106,7 @@ async fn main() -> ExitCode {
         Commands::Compile(args) => {
             commands::compile(
                 &args.src,
+                args.output_file.as_deref(),
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
