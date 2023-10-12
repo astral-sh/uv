@@ -131,7 +131,7 @@ impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for SmallVec<T> {
 // TESTS #######################################################################
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
     use proptest::prelude::*;
 

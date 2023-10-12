@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! A term is the fundamental unit of operation of the `PubGrub` algorithm.
+//! A term is the fundamental unit of operation of the PubGrub algorithm.
 //! It is a positive or negative expression regarding a set of versions.
 
 use crate::range::Range;
@@ -56,7 +56,7 @@ impl<V: Version> Term<V> {
     }
 
     /// Evaluate a term regarding a given choice of version.
-    pub fn contains(&self, v: &V) -> bool {
+    pub(crate) fn contains(&self, v: &V) -> bool {
         match self {
             Self::Positive(range) => range.contains(v),
             Self::Negative(range) => !(range.contains(v)),
@@ -162,7 +162,7 @@ impl<'a, V: 'a + Version> Term<V> {
 
 impl<V: Version> AsRef<Term<V>> for Term<V> {
     fn as_ref(&self) -> &Term<V> {
-        self
+        &self
     }
 }
 
@@ -171,8 +171,8 @@ impl<V: Version> AsRef<Term<V>> for Term<V> {
 impl<V: Version + fmt::Display> fmt::Display for Term<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Positive(range) => write!(f, "{range}"),
-            Self::Negative(range) => write!(f, "Not ( {range} )"),
+            Self::Positive(range) => write!(f, "{}", range),
+            Self::Negative(range) => write!(f, "Not ( {} )", range),
         }
     }
 }

@@ -10,8 +10,8 @@
 //!  - [none()](Range::none): the empty set
 //!  - [any()](Range::any): the set of all possible versions
 //!  - [exact(v)](Range::exact): the set containing only the version v
-//!  - [`higher_than(v`)](Range::higher_than): the set defined by `v <= versions`
-//!  - [`strictly_lower_than(v`)](Range::strictly_lower_than): the set defined by `versions < v`
+//!  - [higher_than(v)](Range::higher_than): the set defined by `v <= versions`
+//!  - [strictly_lower_than(v)](Range::strictly_lower_than): the set defined by `versions < v`
 //!  - [between(v1, v2)](Range::between): the set defined by `v1 <= versions < v2`
 
 use std::cmp::Ordering;
@@ -129,7 +129,7 @@ impl<V: Version> Range<V> {
             // start.unwrap() is fine because `segments` is not exposed,
             // and our usage guaranties that only the last segment may contain a None.
             complement_segments.push((start.unwrap(), Some(v1.to_owned())));
-            start = maybe_v2.clone();
+            start = maybe_v2.to_owned();
         }
         if let Some(last) = start {
             complement_segments.push((last, None));
@@ -269,10 +269,10 @@ impl<V: Version> fmt::Display for Range<V> {
         match self.segments.as_slice() {
             [] => write!(f, "∅"),
             [(start, None)] if start == &V::lowest() => write!(f, "∗"),
-            [(start, None)] => write!(f, "{start} <= v"),
-            [(start, Some(end))] if end == &start.bump() => write!(f, "{start}"),
-            [(start, Some(end))] if start == &V::lowest() => write!(f, "v < {end}"),
-            [(start, Some(end))] => write!(f, "{start} <= v < {end}"),
+            [(start, None)] => write!(f, "{} <= v", start),
+            [(start, Some(end))] if end == &start.bump() => write!(f, "{}", start),
+            [(start, Some(end))] if start == &V::lowest() => write!(f, "v < {}", end),
+            [(start, Some(end))] => write!(f, "{} <= v < {}", start, end),
             more_than_one_interval => {
                 let string_intervals: Vec<_> = more_than_one_interval
                     .iter()
@@ -286,8 +286,8 @@ impl<V: Version> fmt::Display for Range<V> {
 
 fn interval_to_string<V: Version>((start, maybe_end): &Interval<V>) -> String {
     match maybe_end {
-        Some(end) => format!("[ {start}, {end} ["),
-        None => format!("[ {start}, ∞ ["),
+        Some(end) => format!("[ {}, {} [", start, end),
+        None => format!("[ {}, ∞ [", start),
     }
 }
 

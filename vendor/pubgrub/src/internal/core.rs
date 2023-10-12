@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Core model and functions
-//! to write a functional `PubGrub` algorithm.
+//! to write a functional PubGrub algorithm.
 
 use std::collections::HashSet as Set;
 
@@ -19,7 +19,7 @@ use crate::solver::DependencyConstraints;
 use crate::type_aliases::Map;
 use crate::version::Version;
 
-/// Current state of the `PubGrub` algorithm.
+/// Current state of the PubGrub algorithm.
 #[derive(Clone)]
 pub struct State<P: Package, V: Version> {
     root_package: P,
@@ -45,7 +45,7 @@ pub struct State<P: Package, V: Version> {
 }
 
 impl<P: Package, V: Version> State<P, V> {
-    /// Initialization of `PubGrub` state.
+    /// Initialization of PubGrub state.
     pub fn init(root_package: P, root_version: V) -> Self {
         let mut incompatibility_store = Arena::new();
         let not_root_id = incompatibility_store.alloc(Incompatibility::not_root(

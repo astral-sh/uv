@@ -4,6 +4,7 @@
 //! dependency solving failed.
 
 use std::fmt;
+use std::ops::{Deref, DerefMut};
 
 use crate::package::Package;
 use crate::range::Range;
@@ -63,32 +64,32 @@ pub struct Derived<P: Package, V: Version> {
 }
 
 impl<P: Package, V: Version> DerivationTree<P, V> {
-    /// Merge the [`NoVersions`](External::NoVersions) external incompatibilities
+    /// Merge the [NoVersions](External::NoVersions) external incompatibilities
     /// with the other one they are matched with
     /// in a derived incompatibility.
     /// This cleans up quite nicely the generated report.
     /// You might want to do this if you know that the
-    /// [`DependencyProvider`](crate::solver::DependencyProvider)
+    /// [DependencyProvider](crate::solver::DependencyProvider)
     /// was not run in some kind of offline mode that may not
     /// have access to all versions existing.
     pub fn collapse_no_versions(&mut self) {
         match self {
             DerivationTree::External(_) => {}
             DerivationTree::Derived(derived) => {
-                match (&mut *derived.cause1, &mut *derived.cause2) {
+                match (derived.cause1.deref_mut(), derived.cause2.deref_mut()) {
                     (DerivationTree::External(External::NoVersions(p, r)), ref mut cause2) => {
                         cause2.collapse_no_versions();
                         *self = cause2
                             .clone()
-                            .merge_no_versions(p.to_owned(), r.clone())
-                            .unwrap_or_else(|| self.clone());
+                            .merge_no_versions(p.to_owned(), r.to_owned())
+                            .unwrap_or_else(|| self.to_owned());
                     }
                     (ref mut cause1, DerivationTree::External(External::NoVersions(p, r))) => {
                         cause1.collapse_no_versions();
                         *self = cause1
                             .clone()
-                            .merge_no_versions(p.to_owned(), r.clone())
-                            .unwrap_or_else(|| self.clone());
+                            .merge_no_versions(p.to_owned(), r.to_owned())
+                            .unwrap_or_else(|| self.to_owned());
                     }
                     _ => {
                         derived.cause1.collapse_no_versions();
@@ -141,34 +142,35 @@ impl<P: Package, V: Version> fmt::Display for External<P, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotRoot(package, version) => {
-                write!(f, "we are solving dependencies of {package} {version}")
+                write!(f, "we are solving dependencies of {} {}", package, version)
             }
             Self::NoVersions(package, range) => {
                 if range == &Range::any() {
-                    write!(f, "there is no available version for {package}")
+                    write!(f, "there is no available version for {}", package)
                 } else {
-                    write!(f, "there is no version of {package} in {range}")
+                    write!(f, "there is no version of {} in {}", package, range)
                 }
             }
             Self::UnavailableDependencies(package, range) => {
                 if range == &Range::any() {
-                    write!(f, "dependencies of {package} are unavailable")
+                    write!(f, "dependencies of {} are unavailable", package)
                 } else {
                     write!(
                         f,
-                        "dependencies of {package} at version {range} are unavailable"
+                        "dependencies of {} at version {} are unavailable",
+                        package, range
                     )
                 }
             }
             Self::FromDependencyOf(p, range_p, dep, range_dep) => {
                 if range_p == &Range::any() && range_dep == &Range::any() {
-                    write!(f, "{p} depends on {dep}")
+                    write!(f, "{} depends on {}", p, dep)
                 } else if range_p == &Range::any() {
-                    write!(f, "{p} depends on {dep} {range_dep}")
+                    write!(f, "{} depends on {} {}", p, dep, range_dep)
                 } else if range_dep == &Range::any() {
-                    write!(f, "{p} {range_p} depends on {dep}")
+                    write!(f, "{} {} depends on {}", p, range_p, dep)
                 } else {
-                    write!(f, "{p} {range_p} depends on {dep} {range_dep}")
+                    write!(f, "{} {} depends on {} {}", p, range_p, dep, range_dep)
                 }
             }
         }
@@ -199,7 +201,7 @@ impl DefaultStringReporter {
     fn build_recursive<P: Package, V: Version>(&mut self, derived: &Derived<P, V>) {
         self.build_recursive_helper(derived);
         if let Some(id) = derived.shared_id {
-            if self.shared_with_ref.get(&id).is_none() {
+            if self.shared_with_ref.get(&id) == None {
                 self.add_line_ref();
                 self.shared_with_ref.insert(id, self.ref_count);
             }
@@ -207,7 +209,7 @@ impl DefaultStringReporter {
     }
 
     fn build_recursive_helper<P: Package, V: Version>(&mut self, current: &Derived<P, V>) {
-        match (&*current.cause1, &*current.cause2) {
+        match (current.cause1.deref(), current.cause2.deref()) {
             (DerivationTree::External(external1), DerivationTree::External(external2)) => {
                 // Simplest case, we just combine two external incompatibilities.
                 self.lines.push(Self::explain_both_external(
@@ -262,13 +264,13 @@ impl DefaultStringReporter {
                     //     and finally conclude.
                     (None, None) => {
                         self.build_recursive(derived1);
-                        if derived1.shared_id.is_some() {
-                            self.lines.push(String::new());
+                        if derived1.shared_id != None {
+                            self.lines.push("".into());
                             self.build_recursive(current);
                         } else {
                             self.add_line_ref();
                             let ref1 = self.ref_count;
-                            self.lines.push(String::new());
+                            self.lines.push("".into());
                             self.build_recursive(derived2);
                             self.lines
                                 .push(Self::and_explain_ref(ref1, derived1, &current.terms));
@@ -307,7 +309,7 @@ impl DefaultStringReporter {
         external: &External<P, V>,
         current_terms: &Map<P, Term<V>>,
     ) {
-        match (&*derived.cause1, &*derived.cause2) {
+        match (derived.cause1.deref(), derived.cause2.deref()) {
             // If the derived cause has itself one external prior cause,
             // we can chain the external explanations.
             (DerivationTree::Derived(prior_derived), DerivationTree::External(prior_external)) => {
@@ -437,8 +439,8 @@ impl DefaultStringReporter {
         match terms_vec.as_slice() {
             [] => "version solving failed".into(),
             // TODO: special case when that unique package is root.
-            [(package, Term::Positive(range))] => format!("{package} {range} is forbidden"),
-            [(package, Term::Negative(range))] => format!("{package} {range} is mandatory"),
+            [(package, Term::Positive(range))] => format!("{} {} is forbidden", package, range),
+            [(package, Term::Negative(range))] => format!("{} {} is mandatory", package, range),
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => {
                 External::FromDependencyOf(p1, r1.clone(), p2, r2.clone()).to_string()
             }
@@ -446,7 +448,7 @@ impl DefaultStringReporter {
                 External::FromDependencyOf(p2, r2.clone(), p1, r1.clone()).to_string()
             }
             slice => {
-                let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{p} {t}")).collect();
+                let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{} {}", p, t)).collect();
                 str_terms.join(", ") + " are incompatible"
             }
         }
@@ -458,12 +460,12 @@ impl DefaultStringReporter {
         let new_count = self.ref_count + 1;
         self.ref_count = new_count;
         if let Some(line) = self.lines.last_mut() {
-            *line = format!("{line} ({new_count})");
+            *line = format!("{} ({})", line, new_count);
         }
     }
 
     fn line_ref_of(&self, shared_id: Option<usize>) -> Option<usize> {
-        shared_id.and_then(|id| self.shared_with_ref.get(&id).copied())
+        shared_id.and_then(|id| self.shared_with_ref.get(&id).cloned())
     }
 }
 

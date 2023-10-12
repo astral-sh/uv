@@ -29,7 +29,7 @@ impl serde::Serialize for SemanticVersion {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&format!("{self}"))
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 
@@ -105,7 +105,7 @@ impl SemanticVersion {
     }
 }
 
-/// Error creating [`SemanticVersion`] from [String].
+/// Error creating [SemanticVersion] from [String].
 #[derive(Error, Debug, PartialEq)]
 pub enum VersionParseError {
     /// [SemanticVersion] must contain major, minor, patch versions.

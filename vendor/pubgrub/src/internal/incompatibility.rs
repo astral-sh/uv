@@ -36,7 +36,7 @@ pub struct Incompatibility<P: Package, V: Version> {
 }
 
 /// Type alias of unique identifiers for incompatibilities.
-pub(crate) type IncompId<P, V> = Id<Incompatibility<P, V>>;
+pub type IncompId<P, V> = Id<Incompatibility<P, V>>;
 
 #[derive(Debug, Clone)]
 enum Kind<P: Package, V: Version> {
@@ -152,7 +152,7 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
             false
         } else {
             let (package, term) = self.package_terms.iter().next().unwrap();
-            (package == root_package) && term.contains(root_version)
+            (package == root_package) && term.contains(&root_version)
         }
     }
 
@@ -168,7 +168,7 @@ impl<P: Package, V: Version> Incompatibility<P, V> {
 
     // Reporting ###############################################################
 
-    /// Retrieve parent causes if of type `DerivedFrom`.
+    /// Retrieve parent causes if of type DerivedFrom.
     pub fn causes(&self) -> Option<(Id<Self>, Id<Self>)> {
         match self.kind {
             Kind::DerivedFrom(id1, id2) => Some((id1, id2)),
@@ -220,7 +220,7 @@ impl<'a, P: Package, V: Version + 'a> Incompatibility<P, V> {
     pub fn relation(&self, terms: impl Fn(&P) -> Option<&'a Term<V>>) -> Relation<P> {
         let mut relation = Relation::Satisfied;
         for (package, incompat_term) in self.package_terms.iter() {
-            match terms(package).map(|term| incompat_term.relation_with(term)) {
+            match terms(package).map(|term| incompat_term.relation_with(&term)) {
                 Some(term::Relation::Satisfied) => {}
                 Some(term::Relation::Contradicted) => {
                     return Relation::Contradicted(package.clone());
@@ -256,7 +256,7 @@ impl<P: Package, V: Version> fmt::Display for Incompatibility<P, V> {
 // TESTS #######################################################################
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
     use crate::term::tests::strategy as term_strat;
     use crate::type_aliases::Map;

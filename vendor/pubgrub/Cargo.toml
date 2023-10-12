@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MPL-2.0
+
+[package]
+name = "pubgrub"
+version = "0.2.1"
+authors = [
+    "Matthieu Pizenberg <matthieu.pizenberg@gmail.com>",
+    "Alex Tokarev <aleksator@gmail.com>",
+    "Jacob Finkelman <Eh2406@wayne.edu>",
+]
+edition = "2018"
+description = "PubGrub version solving algorithm"
+readme = "README.md"
+repository = "https://github.com/pubgrub-rs/pubgrub"
+license = "MPL-2.0"
+keywords = ["dependency", "pubgrub", "semver", "solver", "version"]
+categories = ["algorithms"]
+include = ["Cargo.toml", "LICENSE", "README.md", "src/**", "tests/**", "examples/**", "benches/**"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+thiserror = "1.0"
+rustc-hash = "1.1.0"
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[dev-dependencies]
+proptest = "0.10.1"
+ron = "0.6"
+varisat = "0.2.2"
+criterion = "0.3"
+
+[[bench]]
+name = "large_case"
+harness = false
+required-features = ["serde"]

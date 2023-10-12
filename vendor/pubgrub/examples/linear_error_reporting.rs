@@ -36,7 +36,7 @@ fn main() {
 
     // Run the algorithm.
     match resolve(&dependency_provider, "root", (1, 0, 0)) {
-        Ok(sol) => println!("{sol:?}"),
+        Ok(sol) => println!("{:?}", sol),
         Err(PubGrubError::NoSolution(mut derivation_tree)) => {
             derivation_tree.collapse_no_versions();
             eprintln!("{}", DefaultStringReporter::report(&derivation_tree));

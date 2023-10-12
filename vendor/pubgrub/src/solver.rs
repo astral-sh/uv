@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! `PubGrub` version solving algorithm.
+//! PubGrub version solving algorithm.
 //!
 //! It consists in efficiently finding a set of packages and versions
 //! that satisfy all the constraints of a given project dependencies.
 //! In addition, when that is not possible,
-//! `PubGrub` tries to provide a very human-readable and clear
+//! PubGrub tries to provide a very human-readable and clear
 //! explanation as to why that failed.
 //! Below is an example of explanation present in
-//! the introductory blog post about `PubGrub`
+//! the introductory blog post about PubGrub
 //!
 //! ```txt
 //! Because dropdown >=2.0.0 depends on icons >=2.0.0 and
@@ -59,7 +59,7 @@
 //!
 //! Where `dependency_provider` supplies the list of available packages and versions,
 //! as well as the dependencies of every available package
-//! by implementing the [`DependencyProvider`] trait.
+//! by implementing the [DependencyProvider] trait.
 //! The call to [resolve] for a given package at a given version
 //! will compute the set of packages and versions needed
 //! to satisfy the dependencies of that package and version pair.
@@ -70,8 +70,8 @@ use std::collections::{BTreeMap, BTreeSet as Set};
 use std::error::Error;
 
 use crate::error::PubGrubError;
-pub use crate::internal::core::State;
-pub use crate::internal::incompatibility::Incompatibility;
+use crate::internal::core::State;
+use crate::internal::incompatibility::Incompatibility;
 use crate::package::Package;
 use crate::range::Range;
 use crate::type_aliases::{Map, SelectedDependencies};
@@ -125,7 +125,9 @@ pub fn resolve<P: Package, V: Version>(
             Some(x) => x,
         };
         if !term_intersection.contains(&v) {
-            return Err(PubGrubError::IncompatibleVersion);
+            return Err(PubGrubError::ErrorChoosingPackageVersion(
+                "choose_package_version picked an incompatible version".into(),
+            ));
         }
 
         if added_dependencies
@@ -135,37 +137,38 @@ pub fn resolve<P: Package, V: Version>(
         {
             // Retrieve that package dependencies.
             let p = &next;
-            let dependencies = match dependency_provider.get_dependencies(p, &v).map_err(|err| {
-                PubGrubError::ErrorRetrievingDependencies {
-                    package: p.clone(),
-                    version: v.clone(),
-                    source: err,
-                }
-            })? {
-                Dependencies::Unknown => {
-                    state.add_incompatibility(Incompatibility::unavailable_dependencies(
-                        p.clone(),
-                        v.clone(),
-                    ));
-                    continue;
-                }
-                Dependencies::Known(x) => {
-                    if x.contains_key(p) {
-                        return Err(PubGrubError::SelfDependency {
-                            package: p.clone(),
-                            version: v.clone(),
-                        });
+            let dependencies =
+                match dependency_provider
+                    .get_dependencies(&p, &v)
+                    .map_err(|err| PubGrubError::ErrorRetrievingDependencies {
+                        package: p.clone(),
+                        version: v.clone(),
+                        source: err,
+                    })? {
+                    Dependencies::Unknown => {
+                        state.add_incompatibility(Incompatibility::unavailable_dependencies(
+                            p.clone(),
+                            v.clone(),
+                        ));
+                        continue;
                     }
-                    if let Some((dependent, _)) = x.iter().find(|(_, r)| r == &&Range::none()) {
-                        return Err(PubGrubError::DependencyOnTheEmptySet {
-                            package: p.clone(),
-                            version: v.clone(),
-                            dependent: dependent.clone(),
-                        });
+                    Dependencies::Known(x) => {
+                        if x.contains_key(&p) {
+                            return Err(PubGrubError::SelfDependency {
+                                package: p.clone(),
+                                version: v.clone(),
+                            });
+                        }
+                        if let Some((dependent, _)) = x.iter().find(|(_, r)| r == &&Range::none()) {
+                            return Err(PubGrubError::DependencyOnTheEmptySet {
+                                package: p.clone(),
+                                version: v.clone(),
+                                dependent: dependent.clone(),
+                            });
+                        }
+                        x
                     }
-                    x
-                }
-            };
+                };
 
             // Add that package and version if the dependencies are not problematic.
             let dep_incompats =
@@ -197,7 +200,7 @@ pub fn resolve<P: Package, V: Version>(
     }
 }
 
-/// An enum used by [`DependencyProvider`] that holds information about package dependencies.
+/// An enum used by [DependencyProvider] that holds information about package dependencies.
 /// For each [Package] there is a [Range] of concrete versions it allows as a dependency.
 #[derive(Clone)]
 pub enum Dependencies<P: Package, V: Version> {
@@ -210,9 +213,9 @@ pub enum Dependencies<P: Package, V: Version> {
 /// Subtype of [Dependencies] which holds information about
 /// all possible versions a given package can accept.
 /// There is a difference in semantics between an empty [Map<P, Range<V>>](crate::type_aliases::Map)
-/// inside [`DependencyConstraints`] and [`Dependencies::Unknown`]:
+/// inside [DependencyConstraints] and [Dependencies::Unknown]:
 /// the former means the package has no dependencies and it is a known fact,
-/// while the latter means they could not be fetched by [`DependencyProvider`].
+/// while the latter means they could not be fetched by [DependencyProvider].
 pub type DependencyConstraints<P, V> = Map<P, Range<V>>;
 
 /// Trait that allows the algorithm to retrieve available packages and their dependencies.
@@ -229,7 +232,7 @@ pub trait DependencyProvider<P: Package, V: Version> {
     /// cannot change the existence of a solution or not,
     /// but can drastically change the performances of the solver,
     /// or the properties of the solution.
-    /// The documentation of Pub (`PubGrub` implementation for the dart programming language)
+    /// The documentation of Pub (PubGrub implementation for the dart programming language)
     /// states the following:
     ///
     /// > Pub chooses the latest matching version of the package
@@ -238,7 +241,7 @@ pub trait DependencyProvider<P: Package, V: Version> {
     /// > since these packages will run out of versions to try more quickly.
     /// > But there's likely room for improvement in these heuristics.
     ///
-    /// A helper function [`choose_package_with_fewest_versions`] is provided to ease
+    /// A helper function [choose_package_with_fewest_versions] is provided to ease
     /// implementations of this method if you can produce an iterator
     /// of the available versions in preference order for any package.
     ///
@@ -246,28 +249,28 @@ pub trait DependencyProvider<P: Package, V: Version> {
     fn choose_package_version<T: Borrow<P>, U: Borrow<Range<V>>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<V>), Box<dyn Error + Send + Sync>>;
+    ) -> Result<(T, Option<V>), Box<dyn Error>>;
 
     /// Retrieves the package dependencies.
-    /// Return [`Dependencies::Unknown`] if its dependencies are unknown.
+    /// Return [Dependencies::Unknown] if its dependencies are unknown.
     fn get_dependencies(
         &self,
         package: &P,
         version: &V,
-    ) -> Result<Dependencies<P, V>, Box<dyn Error + Send + Sync>>;
+    ) -> Result<Dependencies<P, V>, Box<dyn Error>>;
 
     /// This is called fairly regularly during the resolution,
     /// if it returns an Err then resolution will be terminated.
     /// This is helpful if you want to add some form of early termination like a timeout,
     /// or you want to add some form of user feedback if things are taking a while.
     /// If not provided the resolver will run as long as needed.
-    fn should_cancel(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn should_cancel(&self) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 }
 
 /// This is a helper function to make it easy to implement
-/// [`DependencyProvider::choose_package_version`].
+/// [DependencyProvider::choose_package_version].
 /// It takes a function `list_available_versions` that takes a package and returns an iterator
 /// of the available versions in preference order.
 /// The helper finds the package from the `packages` argument with the fewest versions from
@@ -296,7 +299,7 @@ where
     (pkg, version)
 }
 
-/// A basic implementation of [`DependencyProvider`].
+/// A basic implementation of [DependencyProvider].
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
@@ -305,7 +308,7 @@ pub struct OfflineDependencyProvider<P: Package, V: Version> {
 }
 
 impl<P: Package, V: Version> OfflineDependencyProvider<P, V> {
-    /// Creates an empty `OfflineDependencyProvider` with no dependencies.
+    /// Creates an empty OfflineDependencyProvider with no dependencies.
     pub fn new() -> Self {
         Self {
             dependencies: Map::default(),
@@ -314,13 +317,13 @@ impl<P: Package, V: Version> OfflineDependencyProvider<P, V> {
 
     /// Registers the dependencies of a package and version pair.
     /// Dependencies must be added with a single call to
-    /// [`add_dependencies`](OfflineDependencyProvider::add_dependencies).
+    /// [add_dependencies](OfflineDependencyProvider::add_dependencies).
     /// All subsequent calls to
-    /// [`add_dependencies`](OfflineDependencyProvider::add_dependencies) for a given
+    /// [add_dependencies](OfflineDependencyProvider::add_dependencies) for a given
     /// package version pair will replace the dependencies by the new ones.
     ///
     /// The API does not allow to add dependencies one at a time to uphold an assumption that
-    /// [`OfflineDependencyProvider.get_dependencies(p`, v)](OfflineDependencyProvider::get_dependencies)
+    /// [OfflineDependencyProvider.get_dependencies(p, v)](OfflineDependencyProvider::get_dependencies)
     /// provides all dependencies of a given package (p) and version (v) pair.
     pub fn add_dependencies<I: IntoIterator<Item = (P, Range<V>)>>(
         &mut self,
@@ -346,9 +349,7 @@ impl<P: Package, V: Version> OfflineDependencyProvider<P, V> {
     /// Lists versions of saved packages in sorted order.
     /// Returns [None] if no information is available regarding that package.
     pub fn versions(&self, package: &P) -> Option<impl Iterator<Item = &V>> {
-        self.dependencies
-            .get(package)
-            .map(std::collections::BTreeMap::keys)
+        self.dependencies.get(package).map(|k| k.keys())
     }
 
     /// Lists dependencies of a given package and version.
@@ -358,7 +359,7 @@ impl<P: Package, V: Version> OfflineDependencyProvider<P, V> {
     }
 }
 
-/// An implementation of [`DependencyProvider`] that
+/// An implementation of [DependencyProvider] that
 /// contains all dependency information available in memory.
 /// Packages are picked with the fewest versions contained in the constraints first.
 /// Versions are picked with the newest versions first.
@@ -366,13 +367,13 @@ impl<P: Package, V: Version> DependencyProvider<P, V> for OfflineDependencyProvi
     fn choose_package_version<T: Borrow<P>, U: Borrow<Range<V>>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<V>), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(T, Option<V>), Box<dyn Error>> {
         Ok(choose_package_with_fewest_versions(
             |p| {
                 self.dependencies
                     .get(p)
                     .into_iter()
-                    .flat_map(std::collections::BTreeMap::keys)
+                    .flat_map(|k| k.keys())
                     .rev()
                     .cloned()
             },
@@ -384,7 +385,7 @@ impl<P: Package, V: Version> DependencyProvider<P, V> for OfflineDependencyProvi
         &self,
         package: &P,
         version: &V,
-    ) -> Result<Dependencies<P, V>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Dependencies<P, V>, Box<dyn Error>> {
         Ok(match self.dependencies(package, version) {
             None => Dependencies::Unknown,
             Some(dependencies) => Dependencies::Known(dependencies),

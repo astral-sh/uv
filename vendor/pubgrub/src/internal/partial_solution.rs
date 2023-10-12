@@ -44,7 +44,7 @@ struct PackageAssignments<P: Package, V: Version> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DatedDerivation<P: Package, V: Version> {
+pub struct DatedDerivation<P: Package, V: Version> {
     global_index: u32,
     decision_level: DecisionLevel,
     cause: IncompId<P, V>,
@@ -67,7 +67,7 @@ pub enum SatisfierSearch<P: Package, V: Version> {
 }
 
 impl<P: Package, V: Version> PartialSolution<P, V> {
-    /// Initialize an empty `PartialSolution`.
+    /// Initialize an empty PartialSolution.
     pub fn empty() -> Self {
         Self {
             next_global_index: 0,
@@ -93,7 +93,7 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
             }
         }
         self.current_decision_level = self.current_decision_level.increment();
-        let pa = self
+        let mut pa = self
             .package_assignments
             .get_mut(&package)
             .expect("Derivations must already exist");
@@ -123,7 +123,7 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
         self.next_global_index += 1;
         match self.package_assignments.entry(package) {
             Entry::Occupied(mut occupied) => {
-                let pa = occupied.get_mut();
+                let mut pa = occupied.get_mut();
                 pa.highest_decision_level = self.current_decision_level;
                 match &mut pa.assignments_intersection {
                     // Check that add_derivation is never called in the wrong context.
@@ -223,7 +223,7 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
                     pa.dated_derivations
                         .iter()
                         .fold(Term::any(), |acc, dated_derivation| {
-                            let term = store[dated_derivation.cause].get(p).unwrap().negate();
+                            let term = store[dated_derivation.cause].get(&p).unwrap().negate();
                             acc.intersection(&term)
                         }),
                 );
@@ -299,7 +299,7 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
             };
             (satisfier_package, search_result)
         } else {
-            let satisfier_pa = &self.package_assignments[&satisfier_package];
+            let satisfier_pa = self.package_assignments.get(&satisfier_package).unwrap();
             let dd = &satisfier_pa.dated_derivations[satisfier_index];
             let search_result = SatisfierSearch::SameDecisionLevels {
                 satisfier_cause: dd.cause,
@@ -314,9 +314,9 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
     /// Returns a map indicating for each package term, when that was first satisfied in history.
     /// If we effectively found a satisfier, the returned map must be the same size that incompat.
     ///
-    /// Question: This is possible since we added a "`global_index`" to every `dated_derivation`.
+    /// Question: This is possible since we added a "global_index" to every dated_derivation.
     /// It would be nice if we could get rid of it, but I don't know if then it will be possible
-    /// to return a coherent `previous_satisfier_level`.
+    /// to return a coherent previous_satisfier_level.
     fn find_satisfier(
         incompat: &Incompatibility<P, V>,
         package_assignments: &Map<P, PackageAssignments<P, V>>,

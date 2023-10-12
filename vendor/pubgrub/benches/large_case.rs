@@ -2,7 +2,7 @@
 use std::time::Duration;
 
 extern crate criterion;
-use self::criterion::{criterion_group, criterion_main, Bencher, Criterion};
+use self::criterion::*;
 
 use pubgrub::package::Package;
 use pubgrub::solver::{resolve, OfflineDependencyProvider};
@@ -14,7 +14,7 @@ fn bench<'a, P: Package + Deserialize<'a>, V: Version + Hash + Deserialize<'a>>(
     b: &mut Bencher,
     case: &'a str,
 ) {
-    let dependency_provider: OfflineDependencyProvider<P, V> = ron::de::from_str(case).unwrap();
+    let dependency_provider: OfflineDependencyProvider<P, V> = ron::de::from_str(&case).unwrap();
 
     b.iter(|| {
         for p in dependency_provider.packages() {

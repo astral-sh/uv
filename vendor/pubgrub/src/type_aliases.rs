@@ -6,5 +6,5 @@
 pub type Map<K, V> = rustc_hash::FxHashMap<K, V>;
 
 /// Concrete dependencies picked by the library during [resolve](crate::solver::resolve)
-/// from [`DependencyConstraints`](crate::solver::DependencyConstraints)
+/// from [DependencyConstraints](crate::solver::DependencyConstraints)
 pub type SelectedDependencies<P, V> = Map<P, V>;

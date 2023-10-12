@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! `PubGrub` version solving algorithm.
+//! PubGrub version solving algorithm.
 //!
 //! Version solving consists in efficiently finding a set of packages and versions
 //! that satisfy all the constraints of a given project dependencies.
@@ -27,8 +27,8 @@
 //! strictly higher than the current one.
 //! For convenience, this library already provides
 //! two implementations of [Version](version::Version).
-//! The first one is [`NumberVersion`](version::NumberVersion), basically a newtype for [u32].
-//! The second one is [`SemanticVersion`](version::NumberVersion)
+//! The first one is [NumberVersion](version::NumberVersion), basically a newtype for [u32].
+//! The second one is [SemanticVersion](version::NumberVersion)
 //! that implements semantic versioning rules.
 //!
 //! # Basic example
@@ -63,16 +63,16 @@
 //! let solution = resolve(&dependency_provider, "root", 1).unwrap();
 //! ```
 //!
-//! # `DependencyProvider` trait
+//! # DependencyProvider trait
 //!
 //! In our previous example we used the
-//! [`OfflineDependencyProvider`](solver::OfflineDependencyProvider),
-//! which is a basic implementation of the [`DependencyProvider`](solver::DependencyProvider) trait.
+//! [OfflineDependencyProvider](solver::OfflineDependencyProvider),
+//! which is a basic implementation of the [DependencyProvider](solver::DependencyProvider) trait.
 //!
-//! But we might want to implement the [`DependencyProvider`](solver::DependencyProvider)
+//! But we might want to implement the [DependencyProvider](solver::DependencyProvider)
 //! trait for our own type.
 //! Let's say that we will use [String] for packages,
-//! and [`SemanticVersion`](version::SemanticVersion) for versions.
+//! and [SemanticVersion](version::SemanticVersion) for versions.
 //! This may be done quite easily by implementing the two following functions.
 //! ```
 //! # use pubgrub::solver::{DependencyProvider, Dependencies};
@@ -100,10 +100,10 @@
 //! ```
 //!
 //! The first method
-//! [`choose_package_version`](crate::solver::DependencyProvider::choose_package_version)
+//! [choose_package_version](crate::solver::DependencyProvider::choose_package_version)
 //! chooses a package and available version compatible with the provided options.
 //! A helper function
-//! [`choose_package_with_fewest_versions`](crate::solver::choose_package_with_fewest_versions)
+//! [choose_package_with_fewest_versions](crate::solver::choose_package_with_fewest_versions)
 //! is provided for convenience
 //! in cases when lists of available versions for packages are easily obtained.
 //! The strategy of that helper function consists in choosing the package
@@ -111,16 +111,16 @@
 //! But in general you are free to employ whatever strategy suits you best
 //! to pick a package and a version.
 //!
-//! The second method [`get_dependencies`](crate::solver::DependencyProvider::get_dependencies)
+//! The second method [get_dependencies](crate::solver::DependencyProvider::get_dependencies)
 //! aims at retrieving the dependencies of a given package at a given version.
 //! Returns [None] if dependencies are unknown.
 //!
 //! In a real scenario, these two methods may involve reading the file system
 //! or doing network request, so you may want to hold a cache in your
-//! [`DependencyProvider`](solver::DependencyProvider) implementation.
+//! [DependencyProvider](solver::DependencyProvider) implementation.
 //! How exactly this could be achieved is shown in `CachingDependencyProvider`
 //! (see `examples/caching_dependency_provider.rs`).
-//! You could also use the [`OfflineDependencyProvider`](solver::OfflineDependencyProvider)
+//! You could also use the [OfflineDependencyProvider](solver::OfflineDependencyProvider)
 //! type defined by the crate as guidance,
 //! but you are free to use whatever approach makes sense in your situation.
 //!
@@ -132,7 +132,7 @@
 //! [SelectedDepedencies<P, V>](type_aliases::SelectedDependencies).
 //! But sometimes there is no solution because dependencies are incompatible.
 //! In such cases, [resolve(...)](solver::resolve) returns a
-//! [`PubGrubError::NoSolution(derivation_tree`)](error::PubGrubError::NoSolution),
+//! [PubGrubError::NoSolution(derivation_tree)](error::PubGrubError::NoSolution),
 //! where the provided derivation tree is a custom binary tree
 //! containing the full chain of reasons why there is no solution.
 //!
@@ -142,9 +142,9 @@
 //! and nodes are derived.
 //! External incompatibilities have reasons that are independent
 //! of the way this algorithm is implemented such as
-//!  - dependencies: "`package_a`" at version 1 depends on "`package_b`" at version 4
-//!  - missing dependencies: dependencies of "`package_a`" are unknown
-//!  - absence of version: there is no version of "`package_a`" in the range [3.1.0  4.0.0[
+//!  - dependencies: "package_a" at version 1 depends on "package_b" at version 4
+//!  - missing dependencies: dependencies of "package_a" are unknown
+//!  - absence of version: there is no version of "package_a" in the range [3.1.0  4.0.0[
 //!
 //! Derived incompatibilities are obtained during the algorithm execution by deduction,
 //! such as if "a" depends on "b" and "b" depends on "c", "a" depends on "c".
@@ -165,7 +165,7 @@
 //! Implementing a [Reporter](crate::report::Reporter) may involve a lot of heuristics
 //! to make the output human-readable and natural.
 //! For convenience, we provide a default implementation
-//! [`DefaultStringReporter`](crate::report::DefaultStringReporter)
+//! [DefaultStringReporter](crate::report::DefaultStringReporter)
 //! that outputs the report as a [String].
 //! You may use it as follows:
 //! ```
@@ -188,9 +188,9 @@
 //! };
 //! ```
 //! Notice that we also used
-//! [`collapse_no_versions`()](crate::report::DerivationTree::collapse_no_versions) above.
+//! [collapse_no_versions()](crate::report::DerivationTree::collapse_no_versions) above.
 //! This method simplifies the derivation tree to get rid of the
-//! [`NoVersions`](crate::report::External::NoVersions)
+//! [NoVersions](crate::report::External::NoVersions)
 //! external incompatibilities in the derivation tree.
 //! So instead of seeing things like this in the report:
 //! ```txt
