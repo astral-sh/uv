@@ -1,4 +1,6 @@
 use std::fmt::Write;
+use std::fs::File;
+use std::io::{stdout, BufWriter};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -19,6 +21,7 @@ use crate::printer::Printer;
 /// Resolve a set of requirements into a set of pinned versions.
 pub(crate) async fn compile(
     src: &Path,
+    output_file: Option<&Path>,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -80,12 +83,11 @@ pub(crate) async fn compile(
         .dimmed()
     )?;
 
-    for (name, package) in resolution.iter() {
-        #[allow(clippy::print_stdout)]
-        {
-            println!("{}=={}", name, package.version());
-        }
-    }
+    if let Some(output_file) = output_file {
+        resolution.write_requirement_format(&mut BufWriter::new(File::create(output_file)?))?;
+    } else {
+        resolution.write_requirement_format(&mut stdout().lock())?;
+    };
 
     Ok(ExitStatus::Success)
 }
