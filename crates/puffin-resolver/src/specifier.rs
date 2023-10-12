@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use crate::facade::{PubGrubVersion, VERSION_INFINITY, VERSION_ZERO};
 
-pub fn to_ranges(specifier: &VersionSpecifier) -> Result<Vec<Range<PubGrubVersion>>> {
+pub(crate) fn to_ranges(specifier: &VersionSpecifier) -> Result<Vec<Range<PubGrubVersion>>> {
     match specifier.operator() {
         Operator::Equal => {
             let version = PubGrubVersion::from(specifier.version().clone());

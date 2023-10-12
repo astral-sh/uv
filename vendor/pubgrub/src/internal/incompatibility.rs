@@ -36,7 +36,7 @@ pub struct Incompatibility<P: Package, V: Version> {
 }
 
 /// Type alias of unique identifiers for incompatibilities.
-pub type IncompId<P, V> = Id<Incompatibility<P, V>>;
+pub(crate) type IncompId<P, V> = Id<Incompatibility<P, V>>;
 
 #[derive(Debug, Clone)]
 enum Kind<P: Package, V: Version> {

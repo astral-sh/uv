@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+exclude = ["vendor/pubgrub"]
 resolver = "2"
 
 [workspace.package]

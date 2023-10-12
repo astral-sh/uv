@@ -44,7 +44,7 @@ struct PackageAssignments<P: Package, V: Version> {
 }
 
 #[derive(Clone, Debug)]
-pub struct DatedDerivation<P: Package, V: Version> {
+pub(crate) struct DatedDerivation<P: Package, V: Version> {
     global_index: u32,
     decision_level: DecisionLevel,
     cause: IncompId<P, V>,
@@ -93,7 +93,7 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
             }
         }
         self.current_decision_level = self.current_decision_level.increment();
-        let mut pa = self
+        let pa = self
             .package_assignments
             .get_mut(&package)
             .expect("Derivations must already exist");
@@ -123,7 +123,7 @@ impl<P: Package, V: Version> PartialSolution<P, V> {
         self.next_global_index += 1;
         match self.package_assignments.entry(package) {
             Entry::Occupied(mut occupied) => {
-                let mut pa = occupied.get_mut();
+                let pa = occupied.get_mut();
                 pa.highest_decision_level = self.current_decision_level;
                 match &mut pa.assignments_intersection {
                     // Check that add_derivation is never called in the wrong context.

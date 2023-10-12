@@ -70,8 +70,8 @@ use std::collections::{BTreeMap, BTreeSet as Set};
 use std::error::Error;
 
 use crate::error::PubGrubError;
-use crate::internal::core::State;
-use crate::internal::incompatibility::Incompatibility;
+pub use crate::internal::core::State;
+pub use crate::internal::incompatibility::Incompatibility;
 use crate::package::Package;
 use crate::range::Range;
 use crate::type_aliases::{Map, SelectedDependencies};
@@ -249,7 +249,7 @@ pub trait DependencyProvider<P: Package, V: Version> {
     fn choose_package_version<T: Borrow<P>, U: Borrow<Range<V>>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<V>), Box<dyn Error>>;
+    ) -> Result<(T, Option<V>), Box<dyn Error + Send + Sync>>;
 
     /// Retrieves the package dependencies.
     /// Return [Dependencies::Unknown] if its dependencies are unknown.
@@ -257,14 +257,14 @@ pub trait DependencyProvider<P: Package, V: Version> {
         &self,
         package: &P,
         version: &V,
-    ) -> Result<Dependencies<P, V>, Box<dyn Error>>;
+    ) -> Result<Dependencies<P, V>, Box<dyn Error + Send + Sync>>;
 
     /// This is called fairly regularly during the resolution,
     /// if it returns an Err then resolution will be terminated.
     /// This is helpful if you want to add some form of early termination like a timeout,
     /// or you want to add some form of user feedback if things are taking a while.
     /// If not provided the resolver will run as long as needed.
-    fn should_cancel(&self) -> Result<(), Box<dyn Error>> {
+    fn should_cancel(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         Ok(())
     }
 }
@@ -367,7 +367,7 @@ impl<P: Package, V: Version> DependencyProvider<P, V> for OfflineDependencyProvi
     fn choose_package_version<T: Borrow<P>, U: Borrow<Range<V>>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<V>), Box<dyn Error>> {
+    ) -> Result<(T, Option<V>), Box<dyn Error + Send + Sync>> {
         Ok(choose_package_with_fewest_versions(
             |p| {
                 self.dependencies
@@ -385,7 +385,7 @@ impl<P: Package, V: Version> DependencyProvider<P, V> for OfflineDependencyProvi
         &self,
         package: &P,
         version: &V,
-    ) -> Result<Dependencies<P, V>, Box<dyn Error>> {
+    ) -> Result<Dependencies<P, V>, Box<dyn Error + Send + Sync>> {
         Ok(match self.dependencies(package, version) {
             None => Dependencies::Unknown,
             Some(dependencies) => Dependencies::Known(dependencies),

@@ -27,7 +27,7 @@ pub enum PubGrubError<P: Package, V: Version> {
         version: V,
         /// Error raised by the implementer of
         /// [DependencyProvider](crate::solver::DependencyProvider).
-        source: Box<dyn std::error::Error>,
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     /// Error arising when the implementer of
@@ -63,12 +63,12 @@ pub enum PubGrubError<P: Package, V: Version> {
     /// returned an error in the method
     /// [choose_package_version](crate::solver::DependencyProvider::choose_package_version).
     #[error("Decision making failed")]
-    ErrorChoosingPackageVersion(Box<dyn std::error::Error>),
+    ErrorChoosingPackageVersion(Box<dyn std::error::Error + Send + Sync>),
 
     /// Error arising when the implementer of [DependencyProvider](crate::solver::DependencyProvider)
     /// returned an error in the method [should_cancel](crate::solver::DependencyProvider::should_cancel).
     #[error("We should cancel")]
-    ErrorInShouldCancel(Box<dyn std::error::Error>),
+    ErrorInShouldCancel(Box<dyn std::error::Error + Send + Sync>),
 
     /// Something unexpected happened.
     #[error("{0}")]

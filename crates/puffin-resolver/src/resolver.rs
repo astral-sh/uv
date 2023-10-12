@@ -59,7 +59,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
-    pub async fn resolve(self, flags: ResolveFlags) -> Result<Resolution, ResolveError> {
+    pub async fn resolve(self, _flags: ResolveFlags) -> Result<Resolution, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         let (package_sink, package_stream) = futures::channel::mpsc::unbounded();
@@ -84,7 +84,7 @@ impl<'a> Resolver<'a> {
             .ready_chunks(32);
 
         // Push all the requirements into the package sink.
-        for requirement in self.requirements.iter() {
+        for requirement in &self.requirements {
             debug!("Adding root dependency: {}", requirement);
             let package_name = PackageName::normalize(&requirement.name);
             package_sink.unbounded_send(Request::Package(package_name))?;
@@ -94,7 +94,6 @@ impl<'a> Resolver<'a> {
         let selected_dependencies = self
             .solve(&package_sink, &mut package_stream, &mut cache)
             .await?;
-        println!("{:#?}", selected_dependencies);
 
         // Map to our own internal resolution type.
         let mut resolution = BTreeMap::new();
@@ -155,23 +154,19 @@ impl<'a> Resolver<'a> {
             debug!("Chose package version: {:?}", next);
 
             // Pick the next compatible version.
-            let term_intersection = state
-                .partial_solution
-                .term_intersection_for_package(&next)
-                .expect("a package was chosen but we don't have a term.");
             let v = match decision.1 {
                 None => {
-                    let inc = Incompatibility::no_versions(next.clone(), term_intersection.clone());
-                    println!("Adding incompatibility: {:#?}", inc);
+                    let term_intersection = state
+                        .partial_solution
+                        .term_intersection_for_package(&next)
+                        .expect("a package was chosen but we don't have a term.");
 
+                    let inc = Incompatibility::no_versions(next.clone(), term_intersection.clone());
                     state.add_incompatibility(inc);
                     continue;
                 }
                 Some(x) => x,
             };
-            if !term_intersection.contains(&v) {
-                return Err(PubGrubError::IncompatibleVersion.into());
-            }
 
             if added_dependencies
                 .entry(next.clone())
@@ -181,7 +176,7 @@ impl<'a> Resolver<'a> {
                 // Retrieve that package dependencies.
                 let p = &next;
                 let dependencies = match self
-                    .get_dependencies(&p, &v, package_sink, package_stream, cache)
+                    .get_dependencies(p, &v, package_sink, package_stream, cache)
                     .await?
                 {
                     Dependencies::Unknown => {
@@ -192,7 +187,7 @@ impl<'a> Resolver<'a> {
                         continue;
                     }
                     Dependencies::Known(x) => {
-                        if x.contains_key(&p) {
+                        if x.contains_key(p) {
                             return Err(PubGrubError::SelfDependency {
                                 package: p.clone(),
                                 version: v.clone(),
@@ -252,7 +247,6 @@ impl<'a> Resolver<'a> {
         package_stream: &mut (impl Stream<Item = Vec<Result<Response, PypiClientError>>> + Unpin),
         cache: &mut SolverCache,
     ) -> Result<(T, Option<PubGrubVersion>), ResolveError> {
-        debug!("Choosing package version");
         loop {
             // Check if any of the potential packages are available in the cache.
             if let Some(index) =
@@ -270,27 +264,26 @@ impl<'a> Resolver<'a> {
                 // we also need to iterate over `potential_packages` multiple times, so we can't
                 // use `into_iter()`.)
                 let (package, range) = potential_packages.remove(index);
-                println!("Choosing: {:?}", package.borrow());
 
                 return match package.borrow() {
                     PubGrubPackage::Root => Ok((package, Some(VERSION_ZERO.clone()))),
                     PubGrubPackage::Package(package_name, _) => {
-                        let simple_json = cache.packages.get(package_name).unwrap();
+                        let simple_json = &cache.packages[package_name];
 
                         // Find a compatible version.
                         let name_version_file = simple_json.files.iter().rev().find_map(|file| {
                             let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
-                                debug!("Ignoring invalid wheel filename: {}", file.filename);
+                                // debug!("Ignoring non-wheel: {}", file.filename);
                                 return None;
                             };
 
                             let Ok(version) = pep440_rs::Version::from_str(&name.version) else {
-                                debug!("Ignoring invalid version: {}", name.version);
+                                // debug!("Ignoring invalid version: {}", name.version);
                                 return None;
                             };
 
                             if !name.is_compatible(self.tags) {
-                                debug!("Ignoring incompatible wheel: {}", file.filename);
+                                // debug!("Ignoring incompatible wheel: {}", file.filename);
                                 return None;
                             }
 
@@ -298,7 +291,7 @@ impl<'a> Resolver<'a> {
                                 .borrow()
                                 .contains(&PubGrubVersion::from(version.clone()))
                             {
-                                debug!("Ignoring incompatible version: {}", version);
+                                // debug!("Ignoring incompatible version: {}", version);
                                 return None;
                             };
 
@@ -312,7 +305,9 @@ impl<'a> Resolver<'a> {
                             );
 
                             // Emit a request to fetch the metadata for this version.
-                            package_sink.unbounded_send(Request::Version(file.clone()))?;
+                            if !cache.versions.contains_key(&file.hashes.sha256) {
+                                package_sink.unbounded_send(Request::Version(file.clone()))?;
+                            }
 
                             // We want to return a package pinned to a specific version; but we _also_ want to
                             // store the exact file that we selected to satisfy that version.
@@ -330,6 +325,8 @@ impl<'a> Resolver<'a> {
                     }
                 };
             }
+
+            debug!("Waiting around...");
 
             // Fetch the next chunk of metadata.
             for response in package_stream.next().await.unwrap() {
@@ -357,7 +354,6 @@ impl<'a> Resolver<'a> {
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root => {
-                debug!("Fetching dependencies for <root>");
                 let mut constraints = DependencyConstraints::default();
                 for (package, version) in
                     pubgrub_requirements(self.requirements.iter(), None, self.markers)
@@ -368,9 +364,9 @@ impl<'a> Resolver<'a> {
             }
             PubGrubPackage::Package(package_name, extra) => {
                 debug!("Fetching dependencies for {}[{:?}]", package_name, extra);
+
                 loop {
                     // Check if the dependencies are available in the cache.
-                    debug!("Checking cache for dependencies");
                     if let Some(metadata) = cache
                         .files
                         .get(package_name)
@@ -384,10 +380,15 @@ impl<'a> Resolver<'a> {
                             extra.as_ref(),
                             self.markers,
                         ) {
+                            debug!("Adding transitive dependency: {package} {version}");
+
                             // Emit a request to fetch the metadata for this package.
                             if let PubGrubPackage::Package(package_name, None) = &package {
-                                let package_name = package_name.clone();
-                                package_sink.unbounded_send(Request::Package(package_name))?;
+                                if !cache.packages.contains_key(package_name) {
+                                    let package_name = package_name.clone();
+                                    package_sink
+                                        .unbounded_send(Request::Package(package_name))?;
+                                }
                             }
 
                             // Add it to the constraints.
@@ -408,6 +409,8 @@ impl<'a> Resolver<'a> {
 
                         return Ok(Dependencies::Known(constraints));
                     }
+
+                    debug!("Waiting around...");
 
                     // Fetch the next chunk of metadata.
                     for response in package_stream.next().await.unwrap() {
@@ -474,7 +477,7 @@ struct SolverCache {
     versions: HashMap<String, Metadata21>,
 }
 
-/// An enum used by [DependencyProvider] that holds information about package dependencies.
+/// An enum used by [`DependencyProvider`] that holds information about package dependencies.
 /// For each [Package] there is a [Range] of concrete versions it allows as a dependency.
 #[derive(Clone)]
 enum Dependencies {

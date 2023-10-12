@@ -31,10 +31,10 @@ impl From<PubGrubVersion> for pep440_rs::Version {
     }
 }
 
-pub static VERSION_ZERO: Lazy<PubGrubVersion> =
+pub(crate) static VERSION_ZERO: Lazy<PubGrubVersion> =
     Lazy::new(|| PubGrubVersion::from(pep440_rs::Version::from_str("0a0.dev0").unwrap()));
 
-pub static VERSION_INFINITY: Lazy<PubGrubVersion> = Lazy::new(|| {
+pub(crate) static VERSION_INFINITY: Lazy<PubGrubVersion> = Lazy::new(|| {
     PubGrubVersion(pep440_rs::Version {
         epoch: usize::MAX,
         release: vec![usize::MAX, usize::MAX, usize::MAX],
@@ -132,15 +132,15 @@ impl std::fmt::Display for PubGrubPackage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PubGrubPackage::Root => write!(f, "<root>"),
-            PubGrubPackage::Package(name, None) => write!(f, "{}", name),
+            PubGrubPackage::Package(name, None) => write!(f, "{name}"),
             PubGrubPackage::Package(name, Some(extra)) => {
-                write!(f, "{}[{}]", name, extra)
+                write!(f, "{name}[{extra}]")
             }
         }
     }
 }
 
-/// Convert a PEP 508 specifier to a PubGrub range.
+/// Convert a PEP 508 specifier to a `PubGrub` range.
 fn pubgrub_range(specifiers: Option<&pep508_rs::VersionOrUrl>) -> Result<Range<PubGrubVersion>> {
     let Some(specifiers) = specifiers else {
         return Ok(Range::any());
@@ -178,16 +178,9 @@ pub(crate) fn pubgrub_requirements<'a>(
             } else {
                 vec![]
             };
-            if requirement.evaluate_markers(env, &extra) {
-                true
-            } else {
-                debug!("Ignoring {requirement} due to environment mismatch");
-                false
-            }
+            requirement.evaluate_markers(env, &extra)
         })
         .flat_map(|requirement| {
-            debug!("Adding transitive dependency: {requirement}");
-
             let normalized_name = PackageName::normalize(&requirement.name);
 
             let package = PubGrubPackage::Package(normalized_name.clone(), None);

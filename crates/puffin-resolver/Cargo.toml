@@ -12,7 +12,7 @@ license = { workspace = true }
 [dependencies]
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-pubgrub = { path = "../pubgrub" }
+pubgrub = { path = "../../vendor/pubgrub" }
 puffin-client = { path = "../puffin-client" }
 puffin-package = { path = "../puffin-package" }
 wheel-filename = { path = "../wheel-filename" }
