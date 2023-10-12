@@ -38,7 +38,7 @@ impl Unzipper {
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init().await?;
 
-        let staging = tempfile::tempdir()?;
+        let staging = tempfile::tempdir_in(wheel_cache.root())?;
 
         // Unpack the wheels into the cache.
         let mut wheels = Vec::with_capacity(downloads.len());
@@ -101,6 +101,10 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
 
             // Create necessary parent directories.
             let path = target.join(file_path);
+            if file.is_dir() {
+                std::fs::create_dir_all(path)?;
+                return Ok(());
+            }
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
