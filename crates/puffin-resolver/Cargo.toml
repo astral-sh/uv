@@ -10,6 +10,8 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pubgrub = { path = "../../vendor/pubgrub" }
@@ -20,12 +22,11 @@ wheel-filename = { path = "../wheel-filename" }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 futures = { workspace = true }
-pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path = "../pep508-rs" }
-thiserror = { workspace = true }
-tracing = { workspace = true }
 once_cell = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+waitmap = "1.1.0"
 
 [dev-dependencies]
-tokio = { version = "1.33.0" }
 once_cell = { version = "1.18.0" }

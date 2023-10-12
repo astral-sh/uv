@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use bitflags::bitflags;
@@ -30,6 +31,7 @@ pub struct Resolver<'a> {
     tags: &'a Tags,
     client: &'a PypiClient,
     reporter: Option<Box<dyn Reporter>>,
+    // cache: Mutex<SolverCache>,
 }
 
 impl<'a> Resolver<'a> {
@@ -46,6 +48,7 @@ impl<'a> Resolver<'a> {
             tags,
             client,
             reporter: None,
+            // cache: Mutex::new( SolverCache::default()),
         }
     }
 
@@ -62,37 +65,81 @@ impl<'a> Resolver<'a> {
     pub async fn resolve(self, _flags: ResolveFlags) -> Result<Resolution, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
-        let (package_sink, package_stream) = futures::channel::mpsc::unbounded();
+        let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
+
+        let (package_sink, mut package_stream) = futures::channel::mpsc::unbounded();
+        let (file_sink, mut file_stream) = futures::channel::mpsc::unbounded();
 
         // Initialize the package stream.
-        let mut package_stream = package_stream
-            .map(|request: Request| match request {
-                Request::Package(package_name) => Either::Left(
-                    self.client
-                        // TODO(charlie): Remove this clone.
-                        .simple(package_name.clone())
-                        .map_ok(move |metadata| Response::Package(package_name, metadata)),
-                ),
-                Request::Version(file) => Either::Right(
-                    self.client
-                        // TODO(charlie): Remove this clone.
-                        .file(file.clone())
-                        .map_ok(move |metadata| Response::Version(file, metadata)),
-                ),
-            })
-            .buffer_unordered(32)
-            .ready_chunks(32);
+        let client = Arc::new(self.client.clone());
+
+        // Kick off a thread to handle the responses.
+        tokio::spawn({
+            let client = client.clone();
+            async move {
+                let mut response_stream = request_stream
+                    .map({
+                        |request: Request| match request {
+                            Request::Package(package_name) => Either::Left(
+                                client
+                                    // TODO(charlie): Remove this clone.
+                                    .simple(package_name.clone())
+                                    .map_ok(move |metadata| {
+                                        Response::Package(package_name, metadata)
+                                    }),
+                            ),
+                            Request::Version(file) => Either::Right(
+                                client
+                                    // TODO(charlie): Remove this clone.
+                                    .file(file.clone())
+                                    .map_ok(move |metadata| Response::Version(file, metadata)),
+                            ),
+                        }
+                    })
+                    .buffer_unordered(32)
+                    .ready_chunks(32);
+
+                while let Some(chunk) = response_stream.next().await {
+                    for response in chunk {
+                        match response? {
+                            Response::Package(package_name, metadata) => {
+                                // debug!("Received metadata for {}", package_name);
+                                // {
+                                //     let mut cache = cache.lock().unwrap();
+                                //     cache.packages.insert(package_name.clone(), metadata);
+                                // }
+                                // debug!("Sending on sink {}", package_name);
+                                package_sink.unbounded_send((package_name, metadata))?;
+                            }
+                            Response::Version(file, metadata) => {
+                                // debug!("Received metadata for {}", file.filename);
+                                // {
+                                //     debug!("Inserting into cache: {}", file.hashes.sha256);
+                                //     let mut cache = cache.lock().unwrap();
+                                //     debug!("Inserting into cache: {}", file.hashes.sha256);
+                                //     cache.versions.insert(file.hashes.sha256.clone(), metadata);
+                                // }
+                                // debug!("Sending on sink {}", file.hashes.sha256);
+                                file_sink.unbounded_send((file, metadata))?;
+                            }
+                        }
+                    }
+                }
+
+                Ok::<(), anyhow::Error>(())
+            }
+        });
 
         // Push all the requirements into the package sink.
         for requirement in &self.requirements {
             debug!("Adding root dependency: {}", requirement);
             let package_name = PackageName::normalize(&requirement.name);
-            package_sink.unbounded_send(Request::Package(package_name))?;
+            request_sink.unbounded_send(Request::Package(package_name))?;
         }
 
         let mut cache = SolverCache::default();
         let selected_dependencies = self
-            .solve(&package_sink, &mut package_stream, &mut cache)
+            .solve(&mut cache, &request_sink, &mut package_stream, &mut file_stream)
             .await?;
 
         // Map to our own internal resolution type.
@@ -118,9 +165,10 @@ impl<'a> Resolver<'a> {
 
     async fn solve(
         &self,
-        package_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-        package_stream: &mut (impl Stream<Item = Vec<Result<Response, PypiClientError>>> + Unpin),
         cache: &mut SolverCache,
+        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        package_stream: &mut (impl Stream<Item=(PackageName, SimpleJson)> + Unpin),
+        file_stream: &mut (impl Stream<Item=(File, Metadata21)> + Unpin),
     ) -> Result<SelectedDependencies<PubGrubPackage, PubGrubVersion>, ResolveError> {
         let root = PubGrubPackage::Root;
 
@@ -140,18 +188,22 @@ impl<'a> Resolver<'a> {
                     PubGrubError::Failure(
                         "How did we end up with no package to choose but no solution?".into(),
                     )
-                    .into()
+                        .into()
                 });
             };
 
             // Choose a package version.
             let potential_packages = potential_packages.collect::<Vec<_>>();
             let decision = self
-                .choose_package_version(potential_packages, package_sink, package_stream, cache)
+                .choose_package_version(
+                    potential_packages,
+                    cache,
+                    request_sink,
+                    package_stream,
+                    file_stream,
+                )
                 .await?;
             next = decision.0.clone();
-
-            debug!("Chose package version: {:?}", next);
 
             // Pick the next compatible version.
             let v = match decision.1 {
@@ -176,7 +228,7 @@ impl<'a> Resolver<'a> {
                 // Retrieve that package dependencies.
                 let p = &next;
                 let dependencies = match self
-                    .get_dependencies(p, &v, package_sink, package_stream, cache)
+                    .get_dependencies(p, &v, cache, request_sink, package_stream, file_stream)
                     .await?
                 {
                     Dependencies::Unknown => {
@@ -192,7 +244,7 @@ impl<'a> Resolver<'a> {
                                 package: p.clone(),
                                 version: v.clone(),
                             }
-                            .into());
+                                .into());
                         }
                         if let Some((dependent, _)) = x.iter().find(|(_, r)| r == &&Range::none()) {
                             return Err(PubGrubError::DependencyOnTheEmptySet {
@@ -200,7 +252,7 @@ impl<'a> Resolver<'a> {
                                 version: v.clone(),
                                 dependent: dependent.clone(),
                             }
-                            .into());
+                                .into());
                         }
                         x
                     }
@@ -224,7 +276,7 @@ impl<'a> Resolver<'a> {
                     return Err(PubGrubError::Failure(
                         "Root package depends on itself at a different version?".into(),
                     )
-                    .into());
+                        .into());
                 }
                 state.partial_solution.add_version(
                     p.clone(),
@@ -243,11 +295,13 @@ impl<'a> Resolver<'a> {
     async fn choose_package_version<T: Borrow<PubGrubPackage>, U: Borrow<Range<PubGrubVersion>>>(
         &self,
         mut potential_packages: Vec<(T, U)>,
-        package_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-        package_stream: &mut (impl Stream<Item = Vec<Result<Response, PypiClientError>>> + Unpin),
         cache: &mut SolverCache,
+        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        package_stream: &mut (impl Stream<Item=(PackageName, SimpleJson)> + Unpin),
+        file_stream: &mut (impl Stream<Item=(File, Metadata21)> + Unpin),
     ) -> Result<(T, Option<PubGrubVersion>), ResolveError> {
         loop {
+
             // Check if any of the potential packages are available in the cache.
             if let Some(index) =
                 potential_packages
@@ -299,14 +353,11 @@ impl<'a> Resolver<'a> {
                         });
 
                         if let Some((name, version, file)) = name_version_file {
-                            debug!(
-                                "Found compatible version: {}=={} ({})",
-                                name, version, file.filename
-                            );
+                            debug!("Selecting: {}=={} ({})", name, version, file.filename);
 
                             // Emit a request to fetch the metadata for this version.
                             if !cache.versions.contains_key(&file.hashes.sha256) {
-                                package_sink.unbounded_send(Request::Version(file.clone()))?;
+                                request_sink.unbounded_send(Request::Version(file.clone()))?;
                             }
 
                             // We want to return a package pinned to a specific version; but we _also_ want to
@@ -326,21 +377,11 @@ impl<'a> Resolver<'a> {
                 };
             }
 
-            debug!("Waiting around...");
+            // Otherwise, wait for the next available package.
+            let (package, metadata) = package_stream.next().await.unwrap();
+            println!("Received package: {:?}", package);
+            cache.packages.insert(package, metadata);
 
-            // Fetch the next chunk of metadata.
-            for response in package_stream.next().await.unwrap() {
-                match response? {
-                    Response::Package(package_name, metadata) => {
-                        debug!("Received metadata for {}", package_name);
-                        cache.packages.insert(package_name, metadata);
-                    }
-                    Response::Version(file, metadata) => {
-                        debug!("Received metadata for {}", file.filename);
-                        cache.versions.insert(file.hashes.sha256, metadata);
-                    }
-                }
-            }
         }
     }
 
@@ -348,15 +389,16 @@ impl<'a> Resolver<'a> {
         &self,
         package: &PubGrubPackage,
         version: &PubGrubVersion,
-        package_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-        package_stream: &mut (impl Stream<Item = Vec<Result<Response, PypiClientError>>> + Unpin),
         cache: &mut SolverCache,
+        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        package_stream: &mut (impl Stream<Item=(PackageName, SimpleJson)> + Unpin),
+        file_stream: &mut (impl Stream<Item=(File, Metadata21)> + Unpin),
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root => {
                 let mut constraints = DependencyConstraints::default();
                 for (package, version) in
-                    pubgrub_requirements(self.requirements.iter(), None, self.markers)
+                pubgrub_requirements(self.requirements.iter(), None, self.markers)
                 {
                     constraints.insert(package, version);
                 }
@@ -385,9 +427,9 @@ impl<'a> Resolver<'a> {
                             // Emit a request to fetch the metadata for this package.
                             if let PubGrubPackage::Package(package_name, None) = &package {
                                 if !cache.packages.contains_key(package_name) {
+                                    debug!("Requesting metadata for {}", package_name);
                                     let package_name = package_name.clone();
-                                    package_sink
-                                        .unbounded_send(Request::Package(package_name))?;
+                                    request_sink.unbounded_send(Request::Package(package_name))?;
                                 }
                             }
 
@@ -410,21 +452,11 @@ impl<'a> Resolver<'a> {
                         return Ok(Dependencies::Known(constraints));
                     }
 
-                    debug!("Waiting around...");
+                    debug!("Waiting for metadata for {}[{:?}]", package_name, extra);
 
-                    // Fetch the next chunk of metadata.
-                    for response in package_stream.next().await.unwrap() {
-                        match response? {
-                            Response::Package(package_name, metadata) => {
-                                debug!("Received metadata for {}", package_name);
-                                cache.packages.insert(package_name, metadata);
-                            }
-                            Response::Version(file, metadata) => {
-                                debug!("Received metadata for {}", file.filename);
-                                cache.versions.insert(file.hashes.sha256, metadata);
-                            }
-                        }
-                    }
+                    // Otherwise, wait for the next available file.
+                    let (file, metadata) = file_stream.next().await.unwrap();
+                    cache.versions.insert(file.hashes.sha256, metadata);
                 }
             }
         }
