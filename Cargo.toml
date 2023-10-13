@@ -62,6 +62,10 @@ walkdir = { version = "2.4.0" }
 which = { version = "4.4.2" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
+[profile.profiling]
+inherits = "release"
+debug = true
+
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
