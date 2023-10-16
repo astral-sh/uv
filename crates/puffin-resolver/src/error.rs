@@ -10,11 +10,17 @@ pub enum ResolveError {
     #[error("Failed to find a version of {0} that satisfies the requirement")]
     NotFound(Requirement),
 
+    #[error("The request stream terminated unexpectedly")]
+    StreamTermination,
+
     #[error(transparent)]
     Client(#[from] puffin_client::PypiClientError),
 
     #[error(transparent)]
     TrySend(#[from] futures::channel::mpsc::SendError),
+
+    #[error(transparent)]
+    Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
     PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, PubGrubVersion>),

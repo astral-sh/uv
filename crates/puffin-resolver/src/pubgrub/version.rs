@@ -7,11 +7,6 @@ use once_cell::sync::Lazy;
 pub struct PubGrubVersion(pep440_rs::Version);
 
 impl PubGrubVersion {
-    /// Returns `true` if this is a pre-release version.
-    pub fn is_prerelease(&self) -> bool {
-        self.0.pre.is_some() || self.0.dev.is_some()
-    }
-
     /// Returns the smallest PEP 440 version that is larger than `self`.
     pub fn next(&self) -> PubGrubVersion {
         let mut next = self.clone();
