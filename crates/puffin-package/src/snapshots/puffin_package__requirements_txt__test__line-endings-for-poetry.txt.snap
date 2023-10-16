@@ -1,0 +1,129 @@
+---
+source: crates/puffin-package/src/requirements_txt.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Requirement {
+                name: "inflection",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            0,
+                                            5,
+                                            1,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "upsidedown",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            0,
+                                            4,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "numpy",
+                extras: None,
+                version_or_url: None,
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "pandas",
+                extras: Some(
+                    [
+                        "tabulate",
+                    ],
+                ),
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            1,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                                VersionSpecifier {
+                                    operator: LessThan,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+    ],
+    constraints: [],
+}

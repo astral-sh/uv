@@ -159,7 +159,6 @@ impl Os {
         } else {
             return Err(PlatformError::OsVersionDetectionError("Couldn't detect neither glibc version nor musl libc version, at least one of which is required".to_string()));
         };
-        trace!("libc: {}", linux);
         Ok(linux)
     }
 }

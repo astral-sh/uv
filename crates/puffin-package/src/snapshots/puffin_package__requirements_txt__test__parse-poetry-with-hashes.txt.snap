@@ -1,0 +1,329 @@
+---
+source: crates/puffin-package/src/requirements_txt.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Requirement {
+                name: "werkzeug",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2,
+                                            2,
+                                            3,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: Some(
+                    And(
+                        [
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: GreaterEqual,
+                                    r_value: QuotedString(
+                                        "3.8",
+                                    ),
+                                },
+                            ),
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: LessThan,
+                                    r_value: QuotedString(
+                                        "4.0",
+                                    ),
+                                },
+                            ),
+                        ],
+                    ),
+                ),
+            },
+            hashes: [
+                "sha256:2e1ccc9417d4da358b9de6f174e3ac094391ea1d4fbef2d667865d819dfd0afe",
+            ],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "urllib3",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            1,
+                                            26,
+                                            15,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: Some(
+                    And(
+                        [
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: GreaterEqual,
+                                    r_value: QuotedString(
+                                        "3.8",
+                                    ),
+                                },
+                            ),
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: LessThan,
+                                    r_value: QuotedString(
+                                        "4",
+                                    ),
+                                },
+                            ),
+                        ],
+                    ),
+                ),
+            },
+            hashes: [
+                "sha256:8a388717b9476f934a21484e8c8e61875ab60644d29b9b39e11e4b9dc1c6b305",
+            ],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "ansicon",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            1,
+                                            89,
+                                            0,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: Some(
+                    And(
+                        [
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: GreaterEqual,
+                                    r_value: QuotedString(
+                                        "3.8",
+                                    ),
+                                },
+                            ),
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: LessThan,
+                                    r_value: QuotedString(
+                                        "4",
+                                    ),
+                                },
+                            ),
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvString(
+                                        PlatformSystem,
+                                    ),
+                                    operator: Equal,
+                                    r_value: QuotedString(
+                                        "Windows",
+                                    ),
+                                },
+                            ),
+                        ],
+                    ),
+                ),
+            },
+            hashes: [
+                "sha256:e4d039def5768a47e4afec8e89e83ec3ae5a26bf00ad851f914d1240b444d2b1",
+            ],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "requests-oauthlib",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            1,
+                                            3,
+                                            1,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: Some(
+                    And(
+                        [
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: GreaterEqual,
+                                    r_value: QuotedString(
+                                        "3.8",
+                                    ),
+                                },
+                            ),
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: LessThan,
+                                    r_value: QuotedString(
+                                        "4.0",
+                                    ),
+                                },
+                            ),
+                        ],
+                    ),
+                ),
+            },
+            hashes: [
+                "sha256:2577c501a2fb8d05a304c09d090d6e47c306fef15809d102b327cf8364bddab5",
+                "sha256:75beac4a47881eeb94d5ea5d6ad31ef88856affe2332b9aafb52c6452ccf0d7a",
+            ],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: "psycopg2",
+                extras: None,
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: Version {
+                                        epoch: 0,
+                                        release: [
+                                            2,
+                                            9,
+                                            5,
+                                        ],
+                                        pre: None,
+                                        post: None,
+                                        dev: None,
+                                        local: None,
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: Some(
+                    And(
+                        [
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: GreaterEqual,
+                                    r_value: QuotedString(
+                                        "3.8",
+                                    ),
+                                },
+                            ),
+                            Expression(
+                                MarkerExpression {
+                                    l_value: MarkerEnvVersion(
+                                        PythonVersion,
+                                    ),
+                                    operator: LessThan,
+                                    r_value: QuotedString(
+                                        "4.0",
+                                    ),
+                                },
+                            ),
+                        ],
+                    ),
+                ),
+            },
+            hashes: [
+                "sha256:093e3894d2d3c592ab0945d9eba9d139c139664dcf83a1c440b8a7aa9bb21955",
+                "sha256:190d51e8c1b25a47484e52a79638a8182451d6f6dff99f26ad9bd81e5359a0fa",
+                "sha256:1a5c7d7d577e0eabfcf15eb87d1e19314c8c4f0e722a301f98e0e3a65e238b4e",
+                "sha256:1e5a38aa85bd660c53947bd28aeaafb6a97d70423606f1ccb044a03a1203fe4a",
+            ],
+            editable: false,
+        },
+    ],
+    constraints: [],
+}

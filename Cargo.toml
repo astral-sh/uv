@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+exclude = ["vendor/pubgrub"]
 resolver = "2"
 
 [workspace.package]
@@ -56,10 +57,16 @@ tracing = { version = "0.1.37" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 tracing-tree = { version = "0.2.5" }
 unicode-width = { version = "0.1.8" }
+unscanny = { version = "0.1.0" }
 url = { version = "2.4.1" }
+waitmap = { version = "1.1.0" }
 walkdir = { version = "2.4.0" }
 which = { version = "4.4.2" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+
+[profile.profiling]
+inherits = "release"
+debug = true
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]

@@ -8,6 +8,7 @@ pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 
 anyhow = { workspace = true }
+fs-err = { workspace = true }
 mailparse = { workspace = true }
 memchr = { workspace = true }
 once_cell = { workspace = true }
@@ -15,11 +16,12 @@ regex = { workspace = true }
 rfc2047-decoder = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tracing.workspace = true
+unscanny = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5.1" }
+indoc = { version = "2.0.4" }
 insta = { version = "1.33.0" }
-
-[[bench]]
-name = "parser"
-harness = false
+serde_json = { version = "1.0.107" }
+tempfile = { version = "3.8.0" }
+test-case = { version = "3.2.1" }

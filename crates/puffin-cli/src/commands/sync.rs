@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use bitflags::bitflags;
@@ -14,10 +13,10 @@ use puffin_client::PypiClientBuilder;
 use puffin_installer::{LocalIndex, RemoteDistribution};
 use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
-use puffin_package::requirements::Requirements;
+use puffin_package::requirements_txt::RequirementsTxt;
 
 use crate::commands::reporters::{
-    DownloadReporter, InstallReporter, ResolverReporter, UnzipReporter,
+    DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
 };
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -40,10 +39,12 @@ pub(crate) async fn sync(
     let start = std::time::Instant::now();
 
     // Read the `requirements.txt` from disk.
-    let requirements_txt = std::fs::read_to_string(src)?;
-
-    // Parse the `requirements.txt` into a list of requirements.
-    let requirements = Requirements::from_str(&requirements_txt)?;
+    let requirements_txt = RequirementsTxt::parse(src, std::env::current_dir()?)?;
+    let requirements = requirements_txt
+        .requirements
+        .into_iter()
+        .map(|entry| entry.requirement)
+        .collect::<Vec<_>>();
     if requirements.is_empty() {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -58,7 +59,6 @@ pub(crate) async fn sync(
     );
 
     // Determine the current environment markers.
-    let markers = python.markers();
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
 
     // Index all the already-installed packages in site-packages.
@@ -142,19 +142,17 @@ pub(crate) async fn sync(
     let resolution = if uncached.is_empty() {
         puffin_resolver::Resolution::default()
     } else {
-        let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
-            .with_reporter(ResolverReporter::from(printer).with_length(uncached.len() as u64));
-        let resolution = resolver
-            .resolve(uncached.iter(), puffin_resolver::ResolveFlags::NO_DEPS)
-            .await?;
+        let wheel_finder = puffin_resolver::WheelFinder::new(&tags, &client)
+            .with_reporter(WheelFinderReporter::from(printer).with_length(uncached.len() as u64));
+        let resolution = wheel_finder.resolve(&uncached).await?;
 
-        let s = if uncached.len() == 1 { "" } else { "s" };
+        let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Resolved {} in {}",
-                format!("{} package{}", uncached.len(), s).bold(),
+                format!("{} package{}", resolution.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()

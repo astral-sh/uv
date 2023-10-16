@@ -2,7 +2,6 @@ use std::fmt::Write;
 use std::fs::File;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::Result;
 use colored::Colorize;
@@ -12,9 +11,8 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
-use puffin_package::requirements::Requirements;
+use puffin_package::requirements_txt::RequirementsTxt;
 
-use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -28,11 +26,12 @@ pub(crate) async fn compile(
     let start = std::time::Instant::now();
 
     // Read the `requirements.txt` from disk.
-    let requirements_txt = std::fs::read_to_string(src)?;
-
-    // Parse the `requirements.txt` into a list of requirements.
-    let requirements = Requirements::from_str(&requirements_txt)?;
-
+    let requirements_txt = RequirementsTxt::parse(src, std::env::current_dir()?)?;
+    let requirements = requirements_txt
+        .requirements
+        .into_iter()
+        .map(|entry| entry.requirement)
+        .collect::<Vec<_>>();
     if requirements.is_empty() {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -62,14 +61,8 @@ pub(crate) async fn compile(
     };
 
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(markers, &tags, &client)
-        .with_reporter(ResolverReporter::from(printer));
-    let resolution = resolver
-        .resolve(
-            requirements.iter(),
-            puffin_resolver::ResolveFlags::default(),
-        )
-        .await?;
+    let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client);
+    let resolution = resolver.resolve().await?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
