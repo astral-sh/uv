@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::Parser;
 use colored::Colorize;
 use fs_err as fs;
-use puffin_build::{build_sdist, Error};
+use puffin_build::{Error, SourceDistributionBuilder};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -45,7 +45,8 @@ fn run() -> anyhow::Result<()> {
     })?;
     let interpreter_info = gourgeist::get_interpreter_info(&base_python)?;
 
-    let wheel = build_sdist(&args.sdist, &wheel_dir, &base_python, &interpreter_info)?;
+    let builder = SourceDistributionBuilder::setup(&args.sdist, &base_python, &interpreter_info)?;
+    let wheel = builder.build(&wheel_dir)?;
     println!("Wheel built to {}", wheel.display());
     Ok(())
 }
