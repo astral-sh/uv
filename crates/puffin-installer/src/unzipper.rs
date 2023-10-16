@@ -1,6 +1,8 @@
 use std::path::Path;
 
 use anyhow::Result;
+use fs_err::tokio as fs;
+use fs_err::File;
 use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
 use tracing::debug;
@@ -55,7 +57,7 @@ impl Unzipper {
             .await??;
 
             // Write the unzipped wheel to the target directory.
-            tokio::fs::rename(
+            fs::rename(
                 staging.path().join(remote.id()),
                 wheel_cache.entry(&remote.id()),
             )
@@ -110,7 +112,7 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
             }
 
             // Write the file.
-            let mut outfile = std::fs::File::create(&path)?;
+            let mut outfile = File::create(&path)?;
             std::io::copy(&mut file, &mut outfile)?;
 
             // Set permissions.

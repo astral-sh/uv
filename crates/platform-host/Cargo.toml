@@ -10,6 +10,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+fs-err = { workspace = true }
 glibc_version = { workspace = true }
 goblin = { workspace = true }
 platform-info = { workspace = true }

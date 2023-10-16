@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
+use fs_err::tokio as fs;
 
 use pep440_rs::Version;
 use puffin_package::package_name::PackageName;
@@ -17,7 +18,7 @@ impl SitePackages {
     pub async fn from_executable(python: &PythonExecutable) -> Result<Self> {
         let mut index = BTreeMap::new();
 
-        let mut dir = tokio::fs::read_dir(python.site_packages()).await?;
+        let mut dir = fs::read_dir(python.site_packages()).await?;
         while let Some(entry) = dir.next_entry().await? {
             if entry.file_type().await?.is_dir() {
                 if let Some(dist_info) = DistInfo::try_from_path(&entry.path())? {

@@ -2,8 +2,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{fmt, fs, io};
+use std::{fmt, io};
 
+use fs_err as fs;
 use goblin::elf::Elf;
 use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
 use regex::Regex;

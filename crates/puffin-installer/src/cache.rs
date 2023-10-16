@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use fs_err::tokio as fs;
+
 static WHEEL_CACHE: &str = "wheels-v0";
 
 #[derive(Debug)]
@@ -22,12 +24,12 @@ impl WheelCache {
 
     /// Initialize the wheel cache.
     pub(crate) async fn init(&self) -> std::io::Result<()> {
-        tokio::fs::create_dir_all(&self.root).await
+        fs::create_dir_all(&self.root).await
     }
 
     /// Returns a handle to the wheel cache directory.
-    pub(crate) async fn read_dir(&self) -> std::io::Result<tokio::fs::ReadDir> {
-        tokio::fs::read_dir(&self.root).await
+    pub(crate) async fn read_dir(&self) -> std::io::Result<fs::ReadDir> {
+        fs::read_dir(&self.root).await
     }
 
     /// Returns the cache root.

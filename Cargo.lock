@@ -717,6 +717,9 @@ name = "fs-err"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0845fa252299212f0389d64ba26f34fa32cfe41588355f21ed507c59a0f64541"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "fs2"
@@ -1667,6 +1670,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "platform-host"
 version = "0.0.1"
 dependencies = [
+ "fs-err",
  "glibc_version",
  "goblin",
  "platform-info",
@@ -1812,6 +1816,7 @@ dependencies = [
  "clap",
  "colored",
  "directories",
+ "fs-err",
  "futures",
  "gourgeist",
  "indicatif",
@@ -1858,6 +1863,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cacache",
+ "fs-err",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
  "puffin-client",
@@ -1879,6 +1885,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cacache",
+ "fs-err",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",

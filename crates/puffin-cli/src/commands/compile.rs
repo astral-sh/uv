@@ -1,5 +1,5 @@
+use fs_err::File;
 use std::fmt::Write;
-use std::fs::File;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
 
