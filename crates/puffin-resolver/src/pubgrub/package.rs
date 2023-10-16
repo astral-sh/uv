@@ -17,7 +17,7 @@ pub enum PubGrubPackage {
 impl std::fmt::Display for PubGrubPackage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PubGrubPackage::Root => write!(f, "<root>"),
+            PubGrubPackage::Root => write!(f, "root"),
             PubGrubPackage::Package(name, None) => write!(f, "{name}"),
             PubGrubPackage::Package(name, Some(extra)) => {
                 write!(f, "{name}[{extra}]")

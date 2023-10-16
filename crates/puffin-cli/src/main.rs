@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use crate::commands::ExitStatus;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
+
+use crate::commands::ExitStatus;
 
 mod commands;
 mod logging;
