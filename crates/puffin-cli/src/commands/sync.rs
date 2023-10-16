@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bitflags::bitflags;
 use colored::Colorize;
 use itertools::{Either, Itertools};
@@ -206,7 +206,8 @@ pub(crate) async fn sync(
 
         let unzips = unzipper
             .download(downloads, cache.unwrap_or(staging.path()))
-            .await?;
+            .await
+            .context("Failed to download and unpack wheels")?;
 
         let s = if unzips.len() == 1 { "" } else { "s" };
         writeln!(
