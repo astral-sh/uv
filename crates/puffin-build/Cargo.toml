@@ -1,0 +1,34 @@
+[package]
+name = "puffin-build"
+version = "0.0.1"
+description = "Build wheels from source distributions"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+colored = { workspace = true }
+flate2 = { workspace = true }
+fs-err = { workspace = true }
+gourgeist = { version = "0.0.4", path = "../gourgeist" }
+indoc = { workspace = true }
+pep508_rs = { version = "0.2.3", path = "../pep508-rs" }
+pyproject-toml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tar = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = "0.3.17"
+which.workspace = true
+zip = { workspace = true }
