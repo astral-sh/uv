@@ -2,6 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use fs_err::tokio as fs;
 use tracing::debug;
 
 use crate::commands::ExitStatus;
@@ -31,11 +32,11 @@ pub(crate) async fn clean(cache: Option<&Path>, mut printer: Printer) -> Result<
         .flatten()
     {
         if entry.file_type()?.is_dir() {
-            tokio::fs::remove_dir_all(entry.path())
+            fs::remove_dir_all(entry.path())
                 .await
                 .with_context(|| format!("Failed to clear cache at {}", cache.display()))?;
         } else {
-            tokio::fs::remove_file(entry.path())
+            fs::remove_file(entry.path())
                 .await
                 .with_context(|| format!("Failed to clear cache at {}", cache.display()))?;
         }

@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
+use fs_err::tokio as fs;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -28,8 +29,8 @@ pub(crate) async fn venv(
     )?;
 
     // If the path already exists, remove it.
-    tokio::fs::remove_file(path).await.ok();
-    tokio::fs::remove_dir_all(path).await.ok();
+    fs::remove_file(path).await.ok();
+    fs::remove_dir_all(path).await.ok();
 
     writeln!(
         printer,
