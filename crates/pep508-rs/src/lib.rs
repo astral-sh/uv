@@ -264,7 +264,10 @@ impl Requirement {
     #[allow(clippy::needless_pass_by_value)]
     #[pyo3(name = "evaluate_markers")]
     pub fn py_evaluate_markers(&self, env: &MarkerEnvironment, extras: Vec<String>) -> bool {
-        self.evaluate_markers(env, &extras)
+        self.evaluate_markers(
+            env,
+            &extras.iter().map(String::as_str).collect::<Vec<&str>>(),
+        )
     }
 
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.

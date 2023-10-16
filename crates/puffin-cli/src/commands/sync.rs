@@ -16,7 +16,7 @@ use puffin_package::package_name::PackageName;
 use puffin_package::requirements_txt::RequirementsTxt;
 
 use crate::commands::reporters::{
-    DownloadReporter, InstallReporter, ResolverReporter, UnzipReporter,
+    DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
 };
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -59,7 +59,6 @@ pub(crate) async fn sync(
     );
 
     // Determine the current environment markers.
-    let markers = python.markers();
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
 
     // Index all the already-installed packages in site-packages.
@@ -143,12 +142,9 @@ pub(crate) async fn sync(
     let resolution = if uncached.is_empty() {
         puffin_resolver::Resolution::default()
     } else {
-        let num_uncached = uncached.len();
-        let resolver = puffin_resolver::Resolver::new(uncached, markers, &tags, &client)
-            .with_reporter(ResolverReporter::from(printer).with_length(num_uncached as u64));
-        let resolution = resolver
-            .resolve(puffin_resolver::ResolveFlags::NO_DEPS)
-            .await?;
+        let wheel_finder = puffin_resolver::WheelFinder::new(&tags, &client)
+            .with_reporter(WheelFinderReporter::from(printer).with_length(uncached.len() as u64));
+        let resolution = wheel_finder.resolve(&uncached).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(

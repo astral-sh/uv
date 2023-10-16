@@ -67,6 +67,7 @@ pub struct PinnedPackage {
 }
 
 impl PinnedPackage {
+    /// Initialize a new pinned package.
     pub fn new(name: PackageName, version: Version, file: File) -> Self {
         Self {
             name,
@@ -75,14 +76,17 @@ impl PinnedPackage {
         }
     }
 
+    /// Return the name of the pinned package.
     pub fn name(&self) -> &PackageName {
         &self.name
     }
 
+    /// Return the version of the pinned package.
     pub fn version(&self) -> &Version {
         &self.version
     }
 
+    /// Return the file of the pinned package.
     pub fn file(&self) -> &File {
         &self.file
     }

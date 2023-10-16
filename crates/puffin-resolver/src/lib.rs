@@ -1,8 +1,9 @@
 pub use resolution::{PinnedPackage, Resolution};
-pub use resolver::{Reporter, ResolveFlags, Resolver};
+pub use resolver::Resolver;
+pub use wheel_finder::{Reporter, WheelFinder};
 
 mod error;
-mod facade;
+mod pubgrub;
 mod resolution;
 mod resolver;
-mod specifier;
+mod wheel_finder;

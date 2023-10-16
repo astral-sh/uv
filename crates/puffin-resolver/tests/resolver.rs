@@ -10,7 +10,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
-use puffin_resolver::{ResolveFlags, Resolver};
+use puffin_resolver::Resolver;
 
 #[tokio::test]
 async fn black() -> Result<()> {
@@ -18,7 +18,7 @@ async fn black() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
-    let resolution = resolver.resolve(ResolveFlags::default()).await?;
+    let resolution = resolver.resolve().await?;
 
     assert_eq!(
         format!("{resolution}"),
@@ -42,7 +42,7 @@ async fn black_colorama() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
     let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
-    let resolution = resolver.resolve(ResolveFlags::default()).await?;
+    let resolution = resolver.resolve().await?;
 
     assert_eq!(
         format!("{resolution}"),
@@ -67,7 +67,7 @@ async fn black_python_310() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let resolver = Resolver::new(requirements, &MARKERS_310, &TAGS_310, &client);
-    let resolution = resolver.resolve(ResolveFlags::default()).await?;
+    let resolution = resolver.resolve().await?;
 
     assert_eq!(
         format!("{resolution}"),
@@ -93,7 +93,7 @@ async fn htmldate() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("htmldate<=1.5.0").unwrap()];
     let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
-    let resolution = resolver.resolve(ResolveFlags::default()).await?;
+    let resolution = resolver.resolve().await?;
 
     // Resolves to `htmldate==1.4.3` (rather than `htmldate==1.5.2`) because `htmldate==1.5.2` has
     // a dependency on `lxml` versions that don't provide universal wheels.

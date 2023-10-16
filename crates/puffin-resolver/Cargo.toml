@@ -26,7 +26,7 @@ once_cell = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-waitmap = "1.1.0"
+waitmap = { workspace = true }
 
 [dev-dependencies]
 once_cell = { version = "1.18.0" }

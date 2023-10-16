@@ -13,7 +13,6 @@ use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_package::requirements_txt::RequirementsTxt;
 
-use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -62,11 +61,8 @@ pub(crate) async fn compile(
     };
 
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client)
-        .with_reporter(ResolverReporter::from(printer));
-    let resolution = resolver
-        .resolve(puffin_resolver::ResolveFlags::default())
-        .await?;
+    let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client);
+    let resolution = resolver.resolve().await?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(

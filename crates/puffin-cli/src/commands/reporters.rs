@@ -6,11 +6,11 @@ use puffin_package::package_name::PackageName;
 use crate::printer::Printer;
 
 #[derive(Debug)]
-pub(crate) struct ResolverReporter {
+pub(crate) struct WheelFinderReporter {
     progress: ProgressBar,
 }
 
-impl From<Printer> for ResolverReporter {
+impl From<Printer> for WheelFinderReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
         progress.set_message("Resolving dependencies...");
@@ -21,7 +21,7 @@ impl From<Printer> for ResolverReporter {
     }
 }
 
-impl ResolverReporter {
+impl WheelFinderReporter {
     #[must_use]
     pub(crate) fn with_length(self, length: u64) -> Self {
         self.progress.set_length(length);
@@ -29,18 +29,14 @@ impl ResolverReporter {
     }
 }
 
-impl puffin_resolver::Reporter for ResolverReporter {
-    fn on_dependency_added(&self) {
-        self.progress.inc_length(1);
-    }
-
-    fn on_resolve_progress(&self, package: &puffin_resolver::PinnedPackage) {
+impl puffin_resolver::Reporter for WheelFinderReporter {
+    fn on_progress(&self, package: &puffin_resolver::PinnedPackage) {
         self.progress
             .set_message(format!("{}=={}", package.name(), package.version()));
         self.progress.inc(1);
     }
 
-    fn on_resolve_complete(&self) {
+    fn on_complete(&self) {
         self.progress.finish_and_clear();
     }
 }
