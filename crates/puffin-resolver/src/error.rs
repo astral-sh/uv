@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use pep508_rs::Requirement;
+use puffin_package::package_name::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::PubGrubVersion;
@@ -12,6 +13,9 @@ pub enum ResolveError {
 
     #[error("The request stream terminated unexpectedly")]
     StreamTermination,
+
+    #[error("No platform-compatible distributions found for: {0}")]
+    NoCompatibleDistributions(PackageName),
 
     #[error(transparent)]
     Client(#[from] puffin_client::PypiClientError),
