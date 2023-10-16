@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Borrow;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -158,16 +159,13 @@ impl<'a> Resolver<'a> {
 
             // Fetch the list of candidates.
             let Some(potential_packages) = state.partial_solution.potential_packages() else {
-                let Some(selected_dependencies) = state.partial_solution.extract_solution() else {
+                let Some(selection) = state.partial_solution.extract_solution() else {
                     return Err(PubGrubError::Failure(
                         "How did we end up with no package to choose but no solution?".into(),
                     )
                     .into());
                 };
-                return Ok(PubGrubResolution {
-                    selected_dependencies,
-                    pins,
-                });
+                return Ok(PubGrubResolution { selection, pins });
             };
 
             // Choose a package version.
@@ -415,12 +413,23 @@ impl<'a> Resolver<'a> {
                 for (package, version) in
                     iter_requirements(self.requirements.iter(), None, self.markers)
                 {
-                    constraints.insert(package, version);
+                    match constraints.entry(package) {
+                        Entry::Occupied(mut entry) => {
+                            entry.insert(entry.get().intersection(&version));
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(version);
+                        }
+                    }
                 }
                 Ok(Dependencies::Known(constraints))
             }
             PubGrubPackage::Package(package_name, extra) => {
-                debug!("Fetching dependencies for {}[{:?}]", package_name, extra);
+                if let Some(extra) = extra.as_ref() {
+                    debug!("Fetching dependencies for {}[{:?}]", package_name, extra);
+                } else {
+                    debug!("Fetching dependencies for {}", package_name);
+                }
 
                 // Wait for the metadata to be available.
                 let versions = pins.get(package_name).unwrap();
@@ -429,7 +438,6 @@ impl<'a> Resolver<'a> {
                 let metadata = entry.value();
 
                 let mut constraints = DependencyConstraints::default();
-
                 for (package, version) in
                     iter_requirements(metadata.requires_dist.iter(), extra.as_ref(), self.markers)
                 {
@@ -443,7 +451,14 @@ impl<'a> Resolver<'a> {
                     }
 
                     // Add it to the constraints.
-                    constraints.insert(package, version);
+                    match constraints.entry(package) {
+                        Entry::Occupied(mut entry) => {
+                            entry.insert(entry.get().intersection(&version));
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(version);
+                        }
+                    }
                 }
 
                 if let Some(extra) = extra {
@@ -512,7 +527,7 @@ enum Dependencies {
 #[derive(Debug)]
 struct PubGrubResolution {
     /// The selected dependencies.
-    selected_dependencies: SelectedDependencies<PubGrubPackage, PubGrubVersion>,
+    selection: SelectedDependencies<PubGrubPackage, PubGrubVersion>,
     /// The selected file (source or built distribution) for each package.
     pins: HashMap<PackageName, HashMap<pep440_rs::Version, File>>,
 }
@@ -520,7 +535,7 @@ struct PubGrubResolution {
 impl From<PubGrubResolution> for Resolution {
     fn from(value: PubGrubResolution) -> Self {
         let mut packages = BTreeMap::new();
-        for (package, version) in value.selected_dependencies {
+        for (package, version) in value.selection {
             let PubGrubPackage::Package(package_name, None) = package else {
                 continue;
             };

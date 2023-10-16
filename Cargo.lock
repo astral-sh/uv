@@ -1826,6 +1826,7 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
+ "pubgrub",
  "puffin-client",
  "puffin-installer",
  "puffin-interpreter",

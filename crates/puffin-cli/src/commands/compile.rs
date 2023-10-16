@@ -5,6 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
+use pubgrub::report::Reporter;
 use tracing::debug;
 
 use platform_host::Platform;
@@ -62,7 +63,23 @@ pub(crate) async fn compile(
 
     // Resolve the dependencies.
     let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client);
-    let resolution = resolver.resolve().await?;
+    let resolution = match resolver.resolve().await {
+        Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
+            mut derivation_tree,
+        ))) => {
+            derivation_tree.collapse_no_versions();
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{}: {}", "error".red().bold(), "no solution found".bold());
+                eprintln!(
+                    "{}",
+                    pubgrub::report::DefaultStringReporter::report(&derivation_tree)
+                );
+            }
+            return Ok(ExitStatus::Failure);
+        }
+        result => result,
+    }?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
