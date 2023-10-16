@@ -8,7 +8,7 @@ use fs_err::File;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tempfile::NamedTempFile;
-use tracing::info;
+use tracing::debug;
 
 use install_wheel_rs::{install_wheel, InstallLocation};
 use wheel_filename::WheelFilename;
@@ -21,11 +21,11 @@ pub(crate) fn download_wheel_cached(filename: &str, url: &str) -> Result<Utf8Pat
     let wheels_cache = crate_cache_dir()?.join("wheels");
     let cached_wheel = wheels_cache.join(filename);
     if cached_wheel.is_file() {
-        info!("Using cached wheel at {cached_wheel}");
+        debug!("Using cached wheel at {cached_wheel}");
         return Ok(cached_wheel);
     }
 
-    info!("Downloading wheel from {url} to {cached_wheel}");
+    debug!("Downloading wheel from {url} to {cached_wheel}");
     fs::create_dir_all(&wheels_cache)?;
     let mut tempfile = NamedTempFile::new_in(wheels_cache)?;
     let tempfile_path: Utf8PathBuf = tempfile

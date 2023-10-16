@@ -1,12 +1,13 @@
 use std::io;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use dirs::cache_dir;
 use tempfile::PersistError;
 use thiserror::Error;
 
-use interpreter::InterpreterInfo;
-pub use interpreter::{get_interpreter_info, parse_python_cli};
+pub use interpreter::{get_interpreter_info, parse_python_cli, InterpreterInfo};
 
 use crate::bare::create_bare_venv;
 
@@ -51,7 +52,44 @@ pub enum Error {
         err: install_wheel_rs::Error,
     },
     #[error("{0} is not a valid UTF-8 path")]
-    NonUTF8Path(std::path::PathBuf),
+    NonUTF8Path(PathBuf),
+}
+
+/// Provides the paths inside a venv
+pub struct Venv(Utf8PathBuf);
+
+impl Deref for Venv {
+    type Target = Utf8Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Venv {
+    pub fn new(location: impl Into<PathBuf>) -> Result<Self, Error> {
+        let location = Utf8PathBuf::from_path_buf(location.into()).map_err(Error::NonUTF8Path)?;
+        Ok(Self(location))
+    }
+
+    /// Returns the location of the python interpreter
+    pub fn python_interpreter(&self) -> PathBuf {
+        #[cfg(unix)]
+        {
+            self.0.join("bin").join("python").into_std_path_buf()
+        }
+        #[cfg(windows)]
+        {
+            self.0
+                .join("Scripts")
+                .join("python.exe")
+                .into_std_path_buf()
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            compile_error!("Only windows and unix (linux, mac os, etc.) are supported")
+        }
+    }
 }
 
 pub(crate) fn crate_cache_dir() -> io::Result<Utf8PathBuf> {
@@ -63,22 +101,21 @@ pub(crate) fn crate_cache_dir() -> io::Result<Utf8PathBuf> {
 
 /// Create a virtualenv and if not bare, install `wheel`, `pip` and `setuptools`.
 pub fn create_venv(
-    location: impl AsRef<std::path::Path>,
-    base_python: impl AsRef<std::path::Path>,
+    location: impl Into<PathBuf>,
+    base_python: impl AsRef<Path>,
     info: &InterpreterInfo,
     bare: bool,
-) -> Result<(), Error> {
-    let location = Utf8Path::from_path(location.as_ref())
-        .ok_or_else(|| Error::NonUTF8Path(location.as_ref().to_path_buf()))?;
+) -> Result<Venv, Error> {
+    let location = Utf8PathBuf::from_path_buf(location.into()).map_err(Error::NonUTF8Path)?;
     let base_python = Utf8Path::from_path(base_python.as_ref())
         .ok_or_else(|| Error::NonUTF8Path(base_python.as_ref().to_path_buf()))?;
 
-    let paths = create_bare_venv(location, base_python, info)?;
+    let paths = create_bare_venv(&location, base_python, info)?;
 
     if !bare {
         #[cfg(feature = "install")]
         {
-            packages::install_base_packages(location, info, &paths)?;
+            packages::install_base_packages(&location, info, &paths)?;
         }
         #[cfg(not(feature = "install"))]
         {
@@ -90,5 +127,5 @@ pub fn create_venv(
         }
     }
 
-    Ok(())
+    Ok(Venv(location))
 }

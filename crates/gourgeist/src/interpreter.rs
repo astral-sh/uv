@@ -1,5 +1,6 @@
 use std::io;
 use std::io::{BufReader, Write};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
@@ -7,7 +8,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 use fs_err::File;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::{crate_cache_dir, Error};
 
@@ -23,9 +24,7 @@ pub struct InterpreterInfo {
 }
 
 /// Gets the interpreter.rs info, either cached or by running it.
-pub fn get_interpreter_info(
-    interpreter: impl AsRef<std::path::Path>,
-) -> Result<InterpreterInfo, Error> {
+pub fn get_interpreter_info(interpreter: impl AsRef<Path>) -> Result<InterpreterInfo, Error> {
     let interpreter = Utf8Path::from_path(interpreter.as_ref())
         .ok_or_else(|| Error::NonUTF8Path(interpreter.as_ref().to_path_buf()))?;
 
@@ -171,7 +170,7 @@ pub fn parse_python_cli(cli_python: Option<Utf8PathBuf>) -> Result<Utf8PathBuf, 
                     "Only python 3 is supported".into(),
                 ));
             }
-            info!("Looking for python {major}.{minor}");
+            debug!("Looking for python {major}.{minor}");
             Utf8PathBuf::from(format!("python{major}.{minor}"))
         } else {
             python
@@ -184,7 +183,7 @@ pub fn parse_python_cli(cli_python: Option<Utf8PathBuf>) -> Result<Utf8PathBuf, 
     let python = if python.components().count() > 1 {
         // Does this path contain a slash (unix) or backslash (windows)? In that case, assume it's
         // relative or absolute path that we don't need to resolve
-        info!("Assuming {python} is a path");
+        debug!("Assuming {python} is a path");
         python
     } else {
         let python_in_path = which::which(python.as_std_path())
@@ -195,7 +194,7 @@ pub fn parse_python_cli(cli_python: Option<Utf8PathBuf>) -> Result<Utf8PathBuf, 
             })?
             .try_into()
             .map_err(camino::FromPathBufError::into_io_error)?;
-        info!("Resolved {python} to {python_in_path}");
+        debug!("Resolved {python} to {python_in_path}");
         python_in_path
     };
     Ok(python)
