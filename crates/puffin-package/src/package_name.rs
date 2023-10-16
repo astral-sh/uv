@@ -9,6 +9,12 @@ use crate::dist_info_name::DistInfoName;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageName(String);
 
+impl From<&PackageName> for PackageName {
+    fn from(package_name: &PackageName) -> Self {
+        package_name.clone()
+    }
+}
+
 impl Display for PackageName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
