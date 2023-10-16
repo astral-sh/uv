@@ -159,8 +159,9 @@ async fn main() -> ExitCode {
         Err(err) => {
             #[allow(clippy::print_stderr)]
             {
-                eprintln!("{}", "Puffin failed".red().bold());
-                for err in err.chain() {
+                let mut causes = err.chain();
+                eprintln!("{}: {}", "error".red().bold(), causes.next().unwrap());
+                for err in causes {
                     eprintln!("  {}: {}", "Caused by".red().bold(), err);
                 }
             }
