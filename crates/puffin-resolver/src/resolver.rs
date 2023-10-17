@@ -256,19 +256,35 @@ impl<'a> Resolver<'a> {
                 continue;
             };
 
-            // Find a compatible version.
-            let wheels = entry.value();
-            let Some(wheel) = wheels.iter().rev().find(|wheel| {
-                range
+            let simple_json = entry.value();
+            let Some(file) = simple_json.files.iter().rev().find(|file| {
+                let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
+                    return false;
+                };
+
+                let Ok(version) = pep440_rs::Version::from_str(&name.version) else {
+                    return false;
+                };
+
+                if !name.is_compatible(self.tags) {
+                    return false;
+                }
+
+                if !range
                     .borrow()
-                    .contains(&PubGrubVersion::from(wheel.version.clone()))
+                    .contains(&PubGrubVersion::from(version.clone()))
+                {
+                    return false;
+                };
+
+                true
             }) else {
                 continue;
             };
 
             // Emit a request to fetch the metadata for this version.
-            if in_flight.insert(wheel.file.hashes.sha256.clone()) {
-                request_sink.unbounded_send(Request::Version(wheel.file.clone()))?;
+            if in_flight.insert(file.hashes.sha256.clone()) {
+                request_sink.unbounded_send(Request::Version(file.clone()))?;
             }
 
             selection = index;
@@ -286,7 +302,7 @@ impl<'a> Resolver<'a> {
                 // TODO(charlie): Ideally, we'd choose the first package for which metadata is
                 // available.
                 let entry = self.cache.packages.wait(package_name).await.unwrap();
-                let wheels = entry.value();
+                let simple_json = entry.value();
 
                 debug!(
                     "Searching for a compatible version of {} ({})",
@@ -295,16 +311,31 @@ impl<'a> Resolver<'a> {
                 );
 
                 // Find a compatible version.
-                let wheel = wheels.iter().rev().find(|wheel| {
-                    if range
-                        .borrow()
-                        .contains(&PubGrubVersion::from(wheel.version.clone()))
-                    {
-                        true
-                    } else {
-                        debug!("Ignoring non-satisfying version: {}", wheel.version);
-                        false
+                let wheel = simple_json.files.iter().rev().find_map(|file| {
+                    let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
+                        return None;
+                    };
+
+                    let Ok(version) = pep440_rs::Version::from_str(&name.version) else {
+                        return None;
+                    };
+
+                    if !name.is_compatible(self.tags) {
+                        return None;
                     }
+
+                    if !range
+                        .borrow()
+                        .contains(&PubGrubVersion::from(version.clone()))
+                    {
+                        return None;
+                    };
+
+                    Some(Wheel {
+                        file: file.clone(),
+                        name: package_name.clone(),
+                        version: version.clone(),
+                    })
                 });
 
                 if let Some(wheel) = wheel {
@@ -315,7 +346,7 @@ impl<'a> Resolver<'a> {
 
                     // We want to return a package pinned to a specific version; but we _also_ want to
                     // store the exact file that we selected to satisfy that version.
-                    pins.entry(wheel.name.clone())
+                    pins.entry(wheel.name)
                         .or_default()
                         .insert(wheel.version.clone(), wheel.file.clone());
 
@@ -324,7 +355,7 @@ impl<'a> Resolver<'a> {
                         request_sink.unbounded_send(Request::Version(wheel.file.clone()))?;
                     }
 
-                    Ok((package, Some(PubGrubVersion::from(wheel.version.clone()))))
+                    Ok((package, Some(PubGrubVersion::from(wheel.version))))
                 } else {
                     // We have metadata for the package, but no compatible version.
                     Ok((package, None))
@@ -361,9 +392,9 @@ impl<'a> Resolver<'a> {
             }
             PubGrubPackage::Package(package_name, extra) => {
                 if let Some(extra) = extra.as_ref() {
-                    debug!("Fetching dependencies for: {}[{:?}]", package_name, extra);
+                    debug!("Fetching dependencies for {}[{:?}]", package_name, extra);
                 } else {
-                    debug!("Fetching dependencies for: {}", package_name);
+                    debug!("Fetching dependencies for {}", package_name);
                 }
 
                 // Wait for the metadata to be available.
@@ -440,45 +471,7 @@ impl<'a> Resolver<'a> {
                 match response? {
                     Response::Package(package_name, metadata) => {
                         trace!("Received package metadata for {}", package_name);
-
-                        // Only bother storing platform-compatible wheels.
-                        let wheels: Vec<Wheel> = metadata
-                            .files
-                            .into_iter()
-                            .filter_map(|file| {
-                                let Ok(filename) = WheelFilename::from_str(file.filename.as_str())
-                                else {
-                                    debug!("Ignoring non-wheel: {}", file.filename);
-                                    return None;
-                                };
-
-                                let Ok(version) = pep440_rs::Version::from_str(&filename.version)
-                                else {
-                                    debug!("Ignoring invalid version: {}", file.filename);
-                                    return None;
-                                };
-
-                                if !filename.is_compatible(self.tags) {
-                                    debug!(
-                                        "Ignoring wheel with incompatible tags: {}",
-                                        file.filename
-                                    );
-                                    return None;
-                                }
-
-                                Some(Wheel {
-                                    name: PackageName::normalize(&filename.distribution),
-                                    version,
-                                    file,
-                                })
-                            })
-                            .collect();
-
-                        if wheels.is_empty() {
-                            return Err(ResolveError::NoCompatibleDistributions(package_name));
-                        }
-
-                        self.cache.packages.insert(package_name.clone(), wheels);
+                        self.cache.packages.insert(package_name.clone(), metadata);
                     }
                     Response::Version(file, metadata) => {
                         trace!("Received file metadata for {}", file.filename);
@@ -492,6 +485,16 @@ impl<'a> Resolver<'a> {
 
         Ok::<(), ResolveError>(())
     }
+}
+
+#[derive(Debug, Clone)]
+struct Wheel {
+    /// The underlying [`File`] for this wheel.
+    file: File,
+    /// The normalized name of the package.
+    name: PackageName,
+    /// The version of the package.
+    version: pep440_rs::Version,
 }
 
 #[derive(Debug)]
@@ -510,19 +513,9 @@ enum Response {
     Version(File, Metadata21),
 }
 
-#[derive(Debug, Clone)]
-struct Wheel {
-    /// The underlying [`File`] for this wheel.
-    file: File,
-    /// The normalized name of the package.
-    name: PackageName,
-    /// The version of the package.
-    version: pep440_rs::Version,
-}
-
 struct SolverCache {
-    /// A map from package name to the wheels available for that package.
-    packages: WaitMap<PackageName, Vec<Wheel>>,
+    /// A map from package name to the metadata for that package.
+    packages: WaitMap<PackageName, SimpleJson>,
 
     /// A map from wheel SHA to the metadata for that wheel.
     versions: WaitMap<String, Metadata21>,
