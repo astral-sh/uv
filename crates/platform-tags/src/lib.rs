@@ -2,7 +2,7 @@ use platform_host::{Arch, Os, Platform, PlatformError};
 
 /// A set of compatible tags for a given Python version and platform, in
 /// (`python_tag`, `abi_tag`, `platform_tag`) format.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Tags(Vec<(String, String, String)>);
 
 impl Tags {
