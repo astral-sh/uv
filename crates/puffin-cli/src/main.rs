@@ -45,6 +45,8 @@ enum Commands {
     Uninstall(UninstallArgs),
     /// Create a virtual environment.
     Venv(VenvArgs),
+    /// Add a dependency to the workspace.
+    Add(AddArgs),
 }
 
 #[derive(Args)]
@@ -81,6 +83,12 @@ struct VenvArgs {
     python: Option<PathBuf>,
     /// The path to the virtual environment to create.
     name: PathBuf,
+}
+
+#[derive(Args)]
+struct AddArgs {
+    /// The name of the package to add.
+    name: String,
 }
 
 #[tokio::main]
@@ -153,6 +161,7 @@ async fn main() -> ExitCode {
             .await
         }
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
+        Commands::Add(args) => commands::add(&args.name, printer),
     };
 
     match result {
