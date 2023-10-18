@@ -32,10 +32,12 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
+miette = { workspace = true, features = ["fancy"] }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
-which = { workspace = true}
+which = { workspace = true }
