@@ -16,12 +16,12 @@ TARGET=${1}
 # Resolution with a cold cache.
 ###
 hyperfine --runs 20 --warmup 3 --prepare "rm -f /tmp/requirements.txt" \
-    "./target/release/puffin --no-cache compile ${TARGET} > /tmp/requirements.txt" \
-    "./target/release/main --no-cache compile ${TARGET} > /tmp/requirements.txt"
+    "./target/release/puffin --no-cache pip-compile ${TARGET} > /tmp/requirements.txt" \
+    "./target/release/main --no-cache pip-compile ${TARGET} > /tmp/requirements.txt"
 
 ###
 # Resolution with a warm cache.
 ###
 hyperfine --runs 20 --warmup 3 --prepare "rm -f /tmp/requirements.txt" \
-    "./target/release/puffin compile ${TARGET} > /tmp/requirements.txt" \
-    "./target/release/main compile ${TARGET} > /tmp/requirements.txt"
+    "./target/release/puffin pip-compile ${TARGET} > /tmp/requirements.txt" \
+    "./target/release/main pip-compile ${TARGET} > /tmp/requirements.txt"

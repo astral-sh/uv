@@ -18,7 +18,7 @@ use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-pub(crate) async fn compile(
+pub(crate) async fn pip_compile(
     src: &Path,
     output_file: Option<&Path>,
     cache: Option<&Path>,
