@@ -47,6 +47,8 @@ enum Commands {
     Venv(VenvArgs),
     /// Add a dependency to the workspace.
     Add(AddArgs),
+    /// Remove a dependency from the workspace.
+    Remove(RemoveArgs),
 }
 
 #[derive(Args)]
@@ -87,7 +89,13 @@ struct VenvArgs {
 
 #[derive(Args)]
 struct AddArgs {
-    /// The name of the package to add.
+    /// The name of the package to add (e.g., `Django==4.2.6`).
+    name: String,
+}
+
+#[derive(Args)]
+struct RemoveArgs {
+    /// The name of the package to remove (e.g., `Django`).
     name: String,
 }
 
@@ -162,6 +170,7 @@ async fn main() -> ExitCode {
         }
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
         Commands::Add(args) => commands::add(&args.name, printer),
+        Commands::Remove(args) => commands::remove(&args.name, printer),
     };
 
     match result {

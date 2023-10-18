@@ -1,5 +1,10 @@
 /// Reformat a TOML array to use multiline format.
 pub(crate) fn format_multiline_array(dependencies: &mut toml_edit::Array) {
+    if dependencies.is_empty() {
+        dependencies.set_trailing("");
+        return;
+    }
+
     for item in dependencies.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
