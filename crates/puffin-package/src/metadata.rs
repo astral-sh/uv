@@ -5,8 +5,11 @@ use std::io;
 use std::str::FromStr;
 
 use mailparse::{MailHeaderMap, MailParseError};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::warn;
 
 use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
@@ -146,14 +149,16 @@ impl Metadata21 {
         let classifiers = get_all_values("Classifier");
         let requires_dist = get_all_values("Requires-Dist")
             .iter()
-            .map(|requires_dist| Requirement::from_str(requires_dist))
+            .map(|requires_dist| LenientRequirement::from_str(requires_dist).map(Requirement::from))
             .collect::<Result<Vec<_>, _>>()?;
         let provides_dist = get_all_values("Provides-Dist");
         let obsoletes_dist = get_all_values("Obsoletes-Dist");
         let maintainer = get_first_value("Maintainer");
         let maintainer_email = get_first_value("Maintainer-email");
         let requires_python = get_first_value("Requires-Python")
-            .map(|requires_python| VersionSpecifiers::from_str(&requires_python))
+            .map(|requires_python| {
+                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
+            })
             .transpose()?;
         let requires_external = get_all_values("Requires-External");
         let project_urls = get_all_values("Project-URL")
@@ -191,5 +196,88 @@ impl Metadata21 {
             project_urls,
             provides_extras,
         })
+    }
+}
+
+static REQUIREMENT_FIXUP_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
+
+/// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+struct LenientRequirement(Requirement);
+
+impl FromStr for LenientRequirement {
+    type Err = Pep508Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match Requirement::from_str(s) {
+            Ok(requirement) => Ok(Self(requirement)),
+            Err(err) => {
+                // Given `elasticsearch-dsl (>=7.2.0<8.0.0)`, rewrite to `elasticsearch-dsl (>=7.2.0,<8.0.0)`.
+                let patched = REQUIREMENT_FIXUP_REGEX.replace(s, r"$1,$2");
+                if patched != s {
+                    if let Ok(requirement) = Requirement::from_str(&patched) {
+                        warn!(
+                        "Inserting missing comma into invalid requirement (before: `{s}`; after: `{patched}`)",
+                    );
+                        return Ok(Self(requirement));
+                    }
+                }
+                Err(err)
+            }
+        }
+    }
+}
+
+impl From<LenientRequirement> for Requirement {
+    fn from(requirement: LenientRequirement) -> Self {
+        requirement.0
+    }
+}
+
+/// Like [`VersionSpecifiers`], but attempts to correct some common errors in user-provided requirements.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+struct LenientVersionSpecifiers(VersionSpecifiers);
+
+impl FromStr for LenientVersionSpecifiers {
+    type Err = Pep440Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match VersionSpecifiers::from_str(s) {
+            Ok(specifiers) => Ok(Self(specifiers)),
+            Err(err) => {
+                // Given `>=3.5.*`, rewrite to `>=3.5`.
+                let patched = match s {
+                    ">=3.12.*" => Some(">=3.12"),
+                    ">=3.11.*" => Some(">=3.11"),
+                    ">=3.10.*" => Some(">=3.10"),
+                    ">=3.9.*" => Some(">=3.9"),
+                    ">=3.8.*" => Some(">=3.8"),
+                    ">=3.7.*" => Some(">=3.7"),
+                    ">=3.6.*" => Some(">=3.6"),
+                    ">=3.5.*" => Some(">=3.5"),
+                    ">=3.4.*" => Some(">=3.4"),
+                    ">=3.3.*" => Some(">=3.3"),
+                    ">=3.2.*" => Some(">=3.2"),
+                    ">=3.1.*" => Some(">=3.1"),
+                    ">=3.0.*" => Some(">=3.0"),
+                    _ => None,
+                };
+                if let Some(patched) = patched {
+                    if let Ok(specifier) = VersionSpecifiers::from_str(patched) {
+                        warn!(
+                        "Correcting invalid wildcard bound on version specifier (before: `{s}`; after: `{patched}`)",
+                    );
+                        return Ok(Self(specifier));
+                    }
+                }
+                Err(err)
+            }
+        }
+    }
+}
+
+impl From<LenientVersionSpecifiers> for VersionSpecifiers {
+    fn from(specifiers: LenientVersionSpecifiers) -> Self {
+        specifiers.0
     }
 }

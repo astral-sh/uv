@@ -13,6 +13,28 @@ use puffin_client::PypiClientBuilder;
 use puffin_resolver::Resolver;
 
 #[tokio::test]
+async fn pylint() -> Result<()> {
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("pylint==2.3.0").unwrap()];
+    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve().await?;
+
+    assert_eq!(
+        format!("{resolution}"),
+        [
+            "astroid==3.0.1",
+            "isort==6.0.0b2",
+            "mccabe==0.7.0",
+            "pylint==2.3.0"
+        ]
+        .join("\n")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn black() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
@@ -109,7 +131,7 @@ async fn htmldate() -> Result<()> {
             "regex==2023.10.3",
             "six==1.16.0",
             "tzlocal==5.1",
-            "urllib3==2.0.6"
+            "urllib3==2.0.7"
         ]
         .join("\n")
     );
