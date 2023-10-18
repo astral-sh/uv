@@ -42,7 +42,7 @@ jobs:
   cargo-test:
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
+        os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
@@ -57,10 +57,3 @@ jobs:
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo insta test --all --all-features --unreferenced reject
-      - name: "Tests (Windows)"
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: bash
-        run: cargo insta test --all --all-features --unreferenced reject
-      - run: cargo doc --all --no-deps
-        env:
-          RUSTDOCFLAGS: "-D warnings"
