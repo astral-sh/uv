@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 
 pub use error::WorkspaceError;
+pub use verbatim::VerbatimRequirement;
 pub use workspace::Workspace;
 
 mod error;
 mod toml;
+mod verbatim;
 mod workspace;
 
 /// Find the closest `pyproject.toml` file to the given path.

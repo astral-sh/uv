@@ -11,6 +11,7 @@ use pep508_rs::Requirement;
 use puffin_package::package_name::PackageName;
 
 use crate::toml::format_multiline_array;
+use crate::verbatim::VerbatimRequirement;
 use crate::WorkspaceError;
 
 /// Unlike [`pyproject_toml::PyProjectToml`], in our case `build_system` is also optional
@@ -36,9 +37,7 @@ pub struct Workspace {
 
 impl Workspace {
     /// Add a dependency to the workspace.
-    pub fn add_dependency(&mut self, dependency: &str) -> Result<(), WorkspaceError> {
-        let requirement = Requirement::from_str(dependency)?;
-
+    pub fn add_dependency(&mut self, requirement: &VerbatimRequirement<'_>) {
         let Some(project) = self
             .document
             .get_mut("project")
@@ -46,7 +45,7 @@ impl Workspace {
         else {
             // No `project` table.
             let mut dependencies = toml_edit::Array::new();
-            dependencies.push(dependency);
+            dependencies.push(requirement.given_name);
             format_multiline_array(&mut dependencies);
 
             let mut project = toml_edit::Table::new();
@@ -58,7 +57,7 @@ impl Workspace {
             self.document
                 .insert("project", toml_edit::Item::Table(project));
 
-            return Ok(());
+            return;
         };
 
         let Some(dependencies) = project
@@ -67,14 +66,14 @@ impl Workspace {
         else {
             // No `dependencies` array.
             let mut dependencies = toml_edit::Array::new();
-            dependencies.push(dependency);
+            dependencies.push(requirement.given_name);
             format_multiline_array(&mut dependencies);
 
             project.insert(
                 "dependencies",
                 toml_edit::Item::Value(toml_edit::Value::Array(dependencies)),
             );
-            return Ok(());
+            return;
         };
 
         // TODO(charlie): Awkward `drop` pattern required to work around destructors, apparently.
@@ -88,19 +87,18 @@ impl Workspace {
                 return false;
             };
 
-            PackageName::normalize(&requirement.name) == PackageName::normalize(existing.name)
+            PackageName::normalize(&requirement.requirement.name)
+                == PackageName::normalize(existing.name)
         });
         drop(iter);
 
         if let Some(index) = index {
-            dependencies.replace(index, dependency);
+            dependencies.replace(index, requirement.given_name);
         } else {
-            dependencies.push(dependency);
+            dependencies.push(requirement.given_name);
         }
 
         format_multiline_array(dependencies);
-
-        Ok(())
     }
 
     /// Save the workspace to disk.
