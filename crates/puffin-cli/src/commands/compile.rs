@@ -53,13 +53,7 @@ pub(crate) async fn compile(
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
 
     // Instantiate a client.
-    let client = {
-        let mut pypi_client = PypiClientBuilder::default();
-        if let Some(cache) = cache {
-            pypi_client = pypi_client.cache(cache);
-        }
-        pypi_client.build()
-    };
+    let client = PypiClientBuilder::default().cache(cache).build();
 
     // Resolve the dependencies.
     let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client);

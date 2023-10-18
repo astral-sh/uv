@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
@@ -47,8 +47,11 @@ impl PypiClientBuilder {
     }
 
     #[must_use]
-    pub fn cache(mut self, cache: impl AsRef<Path>) -> Self {
-        self.cache = Some(PathBuf::from(cache.as_ref()));
+    pub fn cache<T>(mut self, cache: Option<T>) -> Self
+    where
+        T: Into<PathBuf>,
+    {
+        self.cache = cache.map(Into::into);
         self
     }
 
