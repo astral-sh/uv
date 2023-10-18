@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 ###
 # Benchmark the installer against `pip`.
@@ -16,8 +16,8 @@ TARGET=${1}
 # Installation with a cold cache.
 ###
 hyperfine --runs 20 --warmup 3 \
-    --prepare "rm -rf .venv && virtualenv .venv" \
-    "./target/release/puffin-cli sync ${TARGET} --ignore-installed --no-cache" \
+    --prepare "virtualenv --clear .venv" \
+    "./target/release/puffin sync ${TARGET} --ignore-installed --no-cache" \
     --prepare "rm -rf /tmp/site-packages" \
     "pip install -r ${TARGET} --target /tmp/site-packages --ignore-installed --no-cache-dir --no-deps"
 
@@ -25,8 +25,8 @@ hyperfine --runs 20 --warmup 3 \
 # Installation with a warm cache, similar to blowing away and re-creating a virtual environment.
 ###
 hyperfine --runs 20 --warmup 3 \
-    --prepare "rm -rf .venv && virtualenv .venv" \
-    "./target/release/puffin-cli sync ${TARGET} --ignore-installed" \
+    --prepare "virtualenv --clear .venv" \
+    "./target/release/puffin sync ${TARGET} --ignore-installed" \
     --prepare "rm -rf /tmp/site-packages" \
     "pip install -r ${TARGET} --target /tmp/site-packages --ignore-installed --no-deps"
 
@@ -34,6 +34,6 @@ hyperfine --runs 20 --warmup 3 \
 # Installation with all dependencies already installed (no-op).
 ###
 hyperfine --runs 20 --warmup 3 \
-    --setup "rm -rf .venv && virtualenv .venv && source .venv/bin/activate" \
-    "./target/release/puffin-cli sync ${TARGET}" \
+    --setup "virtualenv --clear .venv && source .venv/bin/activate" \
+    "./target/release/puffin sync ${TARGET}" \
     "pip install -r ${TARGET} --no-deps"

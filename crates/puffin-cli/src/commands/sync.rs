@@ -1,16 +1,17 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bitflags::bitflags;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
+use pep508_rs::Requirement;
 use tracing::debug;
 
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
-use puffin_installer::{LocalIndex, RemoteDistribution};
+use puffin_installer::{LocalDistribution, LocalIndex, RemoteDistribution};
 use puffin_interpreter::{PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements_txt::RequirementsTxt;
@@ -36,10 +37,11 @@ pub(crate) async fn sync(
     flags: SyncFlags,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
-    let start = std::time::Instant::now();
-
     // Read the `requirements.txt` from disk.
     let requirements_txt = RequirementsTxt::parse(src, std::env::current_dir()?)?;
+    if !requirements_txt.constraints.is_empty() {
+        bail!("Constraints in requirements.txt are not supported");
+    }
     let requirements = requirements_txt
         .requirements
         .into_iter()
@@ -49,6 +51,18 @@ pub(crate) async fn sync(
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
+
+    sync_requirements(&requirements, cache, flags, printer).await
+}
+
+/// Install a set of locked requirements into the current Python environment.
+pub(crate) async fn sync_requirements(
+    requirements: &[Requirement],
+    cache: Option<&Path>,
+    flags: SyncFlags,
+    mut printer: Printer,
+) -> Result<ExitStatus> {
+    let start = std::time::Instant::now();
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -61,57 +75,9 @@ pub(crate) async fn sync(
     // Determine the current environment markers.
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
 
-    // Index all the already-installed packages in site-packages.
-    let site_packages = if flags.intersects(SyncFlags::IGNORE_INSTALLED) {
-        SitePackages::default()
-    } else {
-        SitePackages::from_executable(&python).await?
-    };
-
-    // Index all the already-downloaded wheels in the cache.
-    let local_index = if let Some(cache) = cache {
-        LocalIndex::from_directory(cache).await?
-    } else {
-        LocalIndex::default()
-    };
-
     // Filter out any already-installed or already-cached packages.
-    let (cached, uncached): (Vec<_>, Vec<_>) = requirements
-        .iter()
-        .filter(|requirement| {
-            let package = PackageName::normalize(&requirement.name);
-
-            // Filter out already-installed packages.
-            if let Some(dist_info) = site_packages.get(&package) {
-                debug!(
-                    "Requirement already satisfied: {} ({})",
-                    package,
-                    dist_info.version()
-                );
-                false
-            } else {
-                true
-            }
-        })
-        .partition_map(|requirement| {
-            let package = PackageName::normalize(&requirement.name);
-
-            // Identify any locally-available distributions that satisfy the requirement.
-            if let Some(distribution) = local_index
-                .get(&package)
-                .filter(|dist| requirement.is_satisfied_by(dist.version()))
-            {
-                debug!(
-                    "Requirement already cached: {} ({})",
-                    distribution.name(),
-                    distribution.version()
-                );
-                Either::Left(distribution.clone())
-            } else {
-                debug!("Identified uncached requirement: {}", requirement);
-                Either::Right(requirement.clone())
-            }
-        });
+    let (cached, uncached) =
+        find_uncached_requirements(requirements, cache, flags, &python).await?;
 
     // Nothing to do.
     if uncached.is_empty() && cached.is_empty() {
@@ -130,22 +96,14 @@ pub(crate) async fn sync(
         return Ok(ExitStatus::Success);
     }
 
-    let client = {
-        let mut pypi_client = PypiClientBuilder::default();
-        if let Some(cache) = cache {
-            pypi_client = pypi_client.cache(cache);
-        }
-        pypi_client.build()
-    };
+    let client = PypiClientBuilder::default().cache(cache).build();
 
     // Resolve the dependencies.
-    let resolution = if uncached.is_empty() {
-        puffin_resolver::Resolution::default()
-    } else {
-        let wheel_finder = puffin_resolver::WheelFinder::new(&tags, &client)
-            .with_reporter(WheelFinderReporter::from(printer).with_length(uncached.len() as u64));
-        let resolution = wheel_finder.resolve(&uncached).await?;
+    let wheel_finder = puffin_resolver::WheelFinder::new(&tags, &client)
+        .with_reporter(WheelFinderReporter::from(printer).with_length(uncached.len() as u64));
+    let resolution = wheel_finder.resolve(&uncached).await?;
 
+    if !resolution.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -157,9 +115,7 @@ pub(crate) async fn sync(
             )
             .dimmed()
         )?;
-
-        resolution
-    };
+    }
 
     let start = std::time::Instant::now();
 
@@ -255,4 +211,74 @@ pub(crate) async fn sync(
     }
 
     Ok(ExitStatus::Success)
+}
+
+async fn find_uncached_requirements(
+    requirements: &[Requirement],
+    cache: Option<&Path>,
+    flags: SyncFlags,
+    python: &PythonExecutable,
+) -> Result<(Vec<LocalDistribution>, Vec<Requirement>)> {
+    // Index all the already-installed packages in site-packages.
+    let site_packages = if flags.intersects(SyncFlags::IGNORE_INSTALLED) {
+        SitePackages::default()
+    } else {
+        SitePackages::from_executable(python).await?
+    };
+
+    // Index all the already-downloaded wheels in the cache.
+    let local_index = if let Some(cache) = cache {
+        LocalIndex::from_directory(cache).await?
+    } else {
+        LocalIndex::default()
+    };
+
+    Ok(split_uncached_requirements(
+        requirements,
+        &site_packages,
+        &local_index,
+    ))
+}
+
+fn split_uncached_requirements(
+    requirements: &[Requirement],
+    site_packages: &SitePackages,
+    local_index: &LocalIndex,
+) -> (Vec<LocalDistribution>, Vec<Requirement>) {
+    requirements
+        .iter()
+        .filter(|requirement| {
+            let package = PackageName::normalize(&requirement.name);
+
+            // Filter out already-installed packages.
+            if let Some(dist_info) = site_packages.get(&package) {
+                debug!(
+                    "Requirement already satisfied: {} ({})",
+                    package,
+                    dist_info.version()
+                );
+                false
+            } else {
+                true
+            }
+        })
+        .partition_map(|requirement| {
+            let package = PackageName::normalize(&requirement.name);
+
+            // Identify any locally-available distributions that satisfy the requirement.
+            if let Some(distribution) = local_index
+                .get(&package)
+                .filter(|dist| requirement.is_satisfied_by(dist.version()))
+            {
+                debug!(
+                    "Requirement already cached: {} ({})",
+                    distribution.name(),
+                    distribution.version()
+                );
+                Either::Left(distribution.clone())
+            } else {
+                debug!("Identified uncached requirement: {}", requirement);
+                Either::Right(requirement.clone())
+            }
+        })
 }
