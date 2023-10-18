@@ -17,7 +17,7 @@ puffin-package = { path = "../puffin-package" }
 
 anyhow = { workspace = true }
 cacache = { workspace = true }
-fs-err = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

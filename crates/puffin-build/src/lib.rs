@@ -8,15 +8,24 @@ use fs_err as fs;
 use fs_err::{DirEntry, File};
 use gourgeist::{InterpreterInfo, Venv};
 use indoc::formatdoc;
+use itertools::{Either, Itertools};
 use pep508_rs::Requirement;
+use platform_host::Platform;
+use platform_tags::Tags;
+use puffin_client::PypiClientBuilder;
+use puffin_installer::{Downloader, LocalDistribution, LocalIndex, RemoteDistribution, Unzipper};
+use puffin_interpreter::PythonExecutable;
+use puffin_package::package_name::PackageName;
+use puffin_resolver::WheelFinder;
 use pyproject_toml::PyProjectToml;
 use std::io;
 use std::io::BufRead;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::str::FromStr;
 use tar::Archive;
-use tempfile::TempDir;
+use tempfile::{tempdir, TempDir};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use zip::ZipArchive;
@@ -101,12 +110,13 @@ pub struct SourceDistributionBuilder {
 
 impl SourceDistributionBuilder {
     /// Extract the source distribution and create a venv with the required packages
-    pub fn setup(
+    pub async fn setup(
         sdist: &Path,
         base_python: &Path,
         interpreter_info: &InterpreterInfo,
+        cache: Option<&Path>,
     ) -> Result<SourceDistributionBuilder, Error> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
 
         // TODO(konstin): Parse and verify filenames
         debug!("Unpacking for build {}", sdist.display());
@@ -141,7 +151,9 @@ impl SourceDistributionBuilder {
                 base_python,
                 interpreter_info,
                 pep517_backend,
-            )?
+                cache,
+            )
+            .await?
         } else {
             if !source_tree.join("setup.py").is_file() {
                 return Err(Error::InvalidSourceDistribution(
@@ -149,12 +161,22 @@ impl SourceDistributionBuilder {
                         .to_string(),
                 ));
             }
-            gourgeist::create_venv(
+            let venv = gourgeist::create_venv(
                 temp_dir.path().join("venv"),
                 base_python,
                 interpreter_info,
-                false,
-            )?
+                true,
+            )?;
+            // TODO: Resolve those once globally and cache per puffin invocation
+            let requirements = [
+                Requirement::from_str("wheel").unwrap(),
+                Requirement::from_str("setuptools").unwrap(),
+                Requirement::from_str("pip").unwrap(),
+            ];
+            resolve_and_install(venv.as_std_path(), &requirements, cache)
+                .await
+                .map_err(Error::RequirementsInstall)?;
+            venv
         };
 
         Ok(Self {
@@ -323,17 +345,22 @@ fn escape_path_for_python(path: &Path) -> String {
 }
 
 /// Not a method because we call it before the builder is completely initialized
-fn create_pep517_build_environment(
+async fn create_pep517_build_environment(
     root: &Path,
     source_tree: &Path,
     base_python: &Path,
     data: &InterpreterInfo,
     pep517_backend: &Pep517Backend,
+    cache: Option<&Path>,
 ) -> Result<Venv, Error> {
-    // TODO(konstin): Create bare venvs when we don't need pip anymore
-    let venv = gourgeist::create_venv(root.join(".venv"), base_python, data, false)?;
-    resolve_and_install(venv.deref().as_std_path(), &pep517_backend.requirements)
-        .map_err(Error::RequirementsInstall)?;
+    let venv = gourgeist::create_venv(root.join(".venv"), base_python, data, true)?;
+    resolve_and_install(
+        venv.deref().as_std_path(),
+        &pep517_backend.requirements,
+        cache,
+    )
+    .await
+    .map_err(Error::RequirementsInstall)?;
 
     debug!(
         "Calling `{}.get_requires_for_build_wheel()`",
@@ -393,30 +420,60 @@ fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
-        resolve_and_install(&*venv, &requirements).map_err(Error::RequirementsInstall)?;
+        resolve_and_install(&*venv, &requirements, cache)
+            .await
+            .map_err(Error::RequirementsInstall)?;
     }
     Ok(venv)
 }
 
 #[instrument(skip_all)]
-fn resolve_and_install(venv: impl AsRef<Path>, requirements: &[Requirement]) -> anyhow::Result<()> {
-    debug!("Calling pip to install build dependencies");
-    let python = Venv::new(venv.as_ref())?.python_interpreter();
-    // No error handling because we want have to replace this with the real resolver and installer
-    // anyway.
-    let installation = Command::new(python)
-        .args(["-m", "pip", "install"])
-        .args(
-            requirements
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<String>>(),
-        )
-        .output()
-        .context("pip install failed")?;
-    if !installation.status.success() {
-        anyhow::bail!("Installation failed :(")
-    }
+async fn resolve_and_install(
+    venv: impl AsRef<Path>,
+    requirements: &[Requirement],
+    cache: Option<&Path>,
+) -> anyhow::Result<()> {
+    debug!("Installing {} build requirements", requirements.len());
+
+    let local_index = if let Some(cache) = cache {
+        LocalIndex::from_directory(cache).await?
+    } else {
+        LocalIndex::default()
+    };
+    let (cached, uncached): (Vec<LocalDistribution>, Vec<Requirement>) =
+        requirements.iter().partition_map(|requirement| {
+            let package = PackageName::normalize(&requirement.name);
+            if let Some(distribution) = local_index
+                .get(&package)
+                .filter(|dist| requirement.is_satisfied_by(dist.version()))
+            {
+                Either::Left(distribution.clone())
+            } else {
+                Either::Right(requirement.clone())
+            }
+        });
+
+    let client = PypiClientBuilder::default().cache(cache).build();
+
+    let platform = Platform::current()?;
+    let python = PythonExecutable::from_venv(platform, venv.as_ref(), cache)?;
+    let tags = Tags::from_env(python.platform(), python.simple_version())?;
+    let resolution = WheelFinder::new(&tags, &client).resolve(&uncached).await?;
+    let uncached = resolution
+        .into_files()
+        .map(RemoteDistribution::from_file)
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let staging = tempdir()?;
+    let downloads = Downloader::new(&client, cache)
+        .download(&uncached, cache.unwrap_or(staging.path()))
+        .await?;
+    let unzips = Unzipper::default()
+        .download(downloads, cache.unwrap_or(staging.path()))
+        .await
+        .context("Failed to download and unpack wheels")?;
+    let wheels = unzips.into_iter().chain(cached).collect::<Vec<_>>();
+    puffin_installer::Installer::new(&python).install(&wheels)?;
+
     Ok(())
 }
 

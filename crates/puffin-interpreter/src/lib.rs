@@ -39,6 +39,19 @@ impl PythonExecutable {
         })
     }
 
+    pub fn from_venv(platform: Platform, venv: &Path, cache: Option<&Path>) -> Result<Self> {
+        let platform = PythonPlatform::from(platform);
+        let executable = platform.venv_python(venv);
+        let markers = markers::detect_cached_markers(&executable, cache)?;
+
+        Ok(Self {
+            platform,
+            venv: venv.to_path_buf(),
+            executable,
+            markers,
+        })
+    }
+
     /// Returns the path to the Python virtual environment.
     pub fn platform(&self) -> &Platform {
         &self.platform
