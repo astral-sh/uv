@@ -17,7 +17,7 @@ TARGET=${1}
 ###
 hyperfine --runs 20 --warmup 3 \
     --prepare "virtualenv --clear .venv" \
-    "./target/release/puffin sync ${TARGET} --ignore-installed --no-cache" \
+    "./target/release/puffin pip-sync ${TARGET} --ignore-installed --no-cache" \
     --prepare "rm -rf /tmp/site-packages" \
     "pip install -r ${TARGET} --target /tmp/site-packages --ignore-installed --no-cache-dir --no-deps"
 
@@ -26,7 +26,7 @@ hyperfine --runs 20 --warmup 3 \
 ###
 hyperfine --runs 20 --warmup 3 \
     --prepare "virtualenv --clear .venv" \
-    "./target/release/puffin sync ${TARGET} --ignore-installed" \
+    "./target/release/puffin pip-sync ${TARGET} --ignore-installed" \
     --prepare "rm -rf /tmp/site-packages" \
     "pip install -r ${TARGET} --target /tmp/site-packages --ignore-installed --no-deps"
 
@@ -35,5 +35,5 @@ hyperfine --runs 20 --warmup 3 \
 ###
 hyperfine --runs 20 --warmup 3 \
     --setup "virtualenv --clear .venv && source .venv/bin/activate" \
-    "./target/release/puffin sync ${TARGET}" \
+    "./target/release/puffin pip-sync ${TARGET}" \
     "pip install -r ${TARGET} --no-deps"

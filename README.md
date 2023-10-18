@@ -34,7 +34,6 @@ Puffin does not yet support:
 - Source distributions
 - VCS dependencies
 - URL dependencies
-- Uninstalling packages
 - Windows
 - ...
 
@@ -47,13 +46,13 @@ Like `pip-compile`, Puffin generates a platform-specific `requirements.txt` file
 To resolve a `requirements.in` file:
 
 ```shell
-cargo run -p puffin-cli -- compile requirements.in
+cargo run -p puffin-cli -- pip-compile requirements.in
 ```
 
 To install from a resolved `requirements.txt` file:
 
 ```shell
-cargo run -p puffin-cli -- sync requirements.txt
+cargo run -p puffin-cli -- pip-sync requirements.txt
 ```
 
 For more, see `cargo run -p puffin-cli -- --help`:

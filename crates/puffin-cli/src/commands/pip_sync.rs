@@ -24,17 +24,17 @@ use crate::printer::Printer;
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Default)]
-    pub struct SyncFlags: u8 {
+    pub struct PipSyncFlags: u8 {
         /// Ignore any installed packages, forcing a re-installation.
         const IGNORE_INSTALLED = 1 << 0;
     }
 }
 
 /// Install a set of locked requirements into the current Python environment.
-pub(crate) async fn sync(
+pub(crate) async fn pip_sync(
     src: &Path,
     cache: Option<&Path>,
-    flags: SyncFlags,
+    flags: PipSyncFlags,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Read the `requirements.txt` from disk.
@@ -59,7 +59,7 @@ pub(crate) async fn sync(
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     cache: Option<&Path>,
-    flags: SyncFlags,
+    flags: PipSyncFlags,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -216,11 +216,11 @@ pub(crate) async fn sync_requirements(
 async fn find_uncached_requirements(
     requirements: &[Requirement],
     cache: Option<&Path>,
-    flags: SyncFlags,
+    flags: PipSyncFlags,
     python: &PythonExecutable,
 ) -> Result<(Vec<LocalDistribution>, Vec<Requirement>)> {
     // Index all the already-installed packages in site-packages.
-    let site_packages = if flags.intersects(SyncFlags::IGNORE_INSTALLED) {
+    let site_packages = if flags.intersects(PipSyncFlags::IGNORE_INSTALLED) {
         SitePackages::default()
     } else {
         SitePackages::from_executable(python).await?

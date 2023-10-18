@@ -34,9 +34,9 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Compile a `requirements.in` file to a `requirements.txt` file.
-    Compile(CompileArgs),
+    PipCompile(PipCompileArgs),
     /// Sync dependencies from a `requirements.txt` file.
-    Sync(SyncArgs),
+    PipSync(PipSyncArgs),
     /// Clear the cache.
     Clean,
     /// Enumerate the installed packages in the current environment.
@@ -52,7 +52,7 @@ enum Commands {
 }
 
 #[derive(Args)]
-struct CompileArgs {
+struct PipCompileArgs {
     /// Output `requirements.txt` file
     #[clap(short, long)]
     output_file: Option<PathBuf>,
@@ -61,7 +61,7 @@ struct CompileArgs {
 }
 
 #[derive(Args)]
-struct SyncArgs {
+struct PipSyncArgs {
     /// Path to the `requirements.txt` file to install.
     src: PathBuf,
 
@@ -120,8 +120,8 @@ async fn main() -> ExitCode {
     let dirs = ProjectDirs::from("", "", "puffin");
 
     let result = match &cli.command {
-        Commands::Compile(args) => {
-            commands::compile(
+        Commands::PipCompile(args) => {
+            commands::pip_compile(
                 &args.src,
                 args.output_file.as_deref(),
                 dirs.as_ref()
@@ -131,16 +131,16 @@ async fn main() -> ExitCode {
             )
             .await
         }
-        Commands::Sync(args) => {
-            commands::sync(
+        Commands::PipSync(args) => {
+            commands::pip_sync(
                 &args.src,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
                 if args.ignore_installed {
-                    commands::SyncFlags::IGNORE_INSTALLED
+                    commands::PipSyncFlags::IGNORE_INSTALLED
                 } else {
-                    commands::SyncFlags::empty()
+                    commands::PipSyncFlags::empty()
                 },
                 printer,
             )

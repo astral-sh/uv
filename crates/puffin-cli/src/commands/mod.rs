@@ -3,20 +3,20 @@ use std::time::Duration;
 
 pub(crate) use add::add;
 pub(crate) use clean::clean;
-pub(crate) use compile::compile;
 pub(crate) use freeze::freeze;
+pub(crate) use pip_compile::pip_compile;
+pub(crate) use pip_sync::{pip_sync, PipSyncFlags};
 pub(crate) use remove::remove;
-pub(crate) use sync::{sync, SyncFlags};
 pub(crate) use uninstall::uninstall;
 pub(crate) use venv::venv;
 
 mod add;
 mod clean;
-mod compile;
 mod freeze;
+mod pip_compile;
+mod pip_sync;
 mod remove;
 mod reporters;
-mod sync;
 mod uninstall;
 mod venv;
 
