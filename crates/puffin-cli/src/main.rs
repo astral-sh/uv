@@ -27,7 +27,7 @@ struct Cli {
     verbose: bool,
 
     /// Avoid reading from or writing to the cache.
-    #[arg(long)]
+    #[arg(global = true, long, short)]
     no_cache: bool,
 }
 
