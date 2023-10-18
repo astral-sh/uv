@@ -57,6 +57,25 @@ impl Error {
     }
 }
 
+/// `[build-backend]` from pyproject.toml
+struct Pep517Backend {
+    /// The build backend string such as `setuptools.build_meta:__legacy__` or `maturin` from
+    /// `build-backend.backend` in pyproject.toml
+    backend: String,
+    /// `build-backend.requirements` in pyproject.toml
+    requirements: Vec<Requirement>,
+}
+
+impl Pep517Backend {
+    fn backend_import(&self) -> String {
+        if let Some((path, object)) = self.backend.split_once(':') {
+            format!("from {path} import {object}")
+        } else {
+            format!("import {}", self.backend)
+        }
+    }
+}
+
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
 /// invocation.
 ///
@@ -65,8 +84,8 @@ impl Error {
 pub struct SourceDistributionBuilder {
     temp_dir: TempDir,
     source_tree: PathBuf,
-    /// If this is a PEP 517, these fields are filled with build backend and requirements
-    pep517: Option<(String, Vec<Requirement>)>,
+    /// `Some` if this is a PEP 517 build
+    pep517_backend: Option<Pep517Backend>,
     venv: Venv,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
@@ -105,18 +124,23 @@ impl SourceDistributionBuilder {
             // > behaviour of running setup.py (either directly, or by implicitly invoking the
             // > setuptools.build_meta:__legacy__ backend).
             if let Some(backend) = pyproject_toml.build_system.build_backend {
-                pep517 = Some((backend, pyproject_toml.build_system.requires));
+                pep517 = Some(Pep517Backend {
+                    backend,
+                    requirements: pyproject_toml.build_system.requires,
+                });
             };
+            if pyproject_toml.build_system.backend_path.is_some() {
+                todo!("backend-path is not supported yet")
+            }
         }
 
-        let venv = if let Some((backend, requirements)) = &pep517 {
+        let venv = if let Some(pep517_backend) = &pep517 {
             create_pep517_build_environment(
                 temp_dir.path(),
                 &source_tree,
                 base_python,
                 interpreter_info,
-                requirements,
-                backend,
+                pep517_backend,
             )?
         } else {
             if !source_tree.join("setup.py").is_file() {
@@ -136,7 +160,7 @@ impl SourceDistributionBuilder {
         Ok(Self {
             temp_dir,
             source_tree,
-            pep517,
+            pep517_backend: pep517,
             venv,
             metadata_directory: None,
         })
@@ -148,20 +172,17 @@ impl SourceDistributionBuilder {
     /// TODO(konstin): Return the actual metadata instead of the dist-info dir
     pub fn get_metadata_without_build(&mut self) -> Result<Option<&Path>, Error> {
         // setup.py builds don't support this
-        let Some((backend, _)) = &self.pep517 else {
+        let Some(pep517_backend) = &self.pep517_backend else {
             return Ok(None);
-        };
-
-        let backend_import = if let Some((path, object)) = backend.split_once(':') {
-            format!("from {path} import {object}")
-        } else {
-            format!("import {backend}")
         };
 
         let metadata_directory = self.temp_dir.path().join("metadata_directory");
         fs::create_dir(&metadata_directory)?;
 
-        debug!("Calling `{}.prepare_metadata_for_build_wheel()`", backend);
+        debug!(
+            "Calling `{}.prepare_metadata_for_build_wheel()`",
+            pep517_backend.backend
+        );
         let script = formatdoc! {
             r#"{} as backend
             import json
@@ -170,7 +191,7 @@ impl SourceDistributionBuilder {
                 print(get_requires_for_build_wheel("{}"))
             else:
                 print()
-            "#, backend_import, escape_path_for_python(&metadata_directory)
+            "#, pep517_backend.backend_import(), escape_path_for_python(&metadata_directory)
         };
         let output =
             run_python_script(&self.venv.python_interpreter(), &script, &self.source_tree)?;
@@ -216,8 +237,8 @@ impl SourceDistributionBuilder {
         // The build scripts run with the extracted root as cwd, so they need the absolute path
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
-        if let Some((backend, _)) = &self.pep517 {
-            self.pep517_build_wheel(&wheel_dir, backend)
+        if let Some(pep517_backend) = &self.pep517_backend {
+            self.pep517_build_wheel(&wheel_dir, pep517_backend)
         } else {
             // We checked earlier that setup.py exists
             let python_interpreter = self.venv.python_interpreter();
@@ -250,13 +271,11 @@ impl SourceDistributionBuilder {
         }
     }
 
-    fn pep517_build_wheel(&self, wheel_dir: &Path, backend: &str) -> Result<PathBuf, Error> {
-        let backend_import = if let Some((path, object)) = backend.split_once(':') {
-            format!("from {path} import {object}")
-        } else {
-            format!("import {backend}")
-        };
-
+    fn pep517_build_wheel(
+        &self,
+        wheel_dir: &Path,
+        pep517_backend: &Pep517Backend,
+    ) -> Result<PathBuf, Error> {
         let metadata_directory = self
             .metadata_directory
             .as_deref()
@@ -265,13 +284,13 @@ impl SourceDistributionBuilder {
             });
         debug!(
             "Calling `{}.build_wheel(metadata_directory={})`",
-            backend, metadata_directory
+            pep517_backend.backend, metadata_directory
         );
         let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
             r#"{} as backend
             print(backend.build_wheel("{}", metadata_directory={}))
-            "#, backend_import, escaped_wheel_dir, metadata_directory 
+            "#, pep517_backend.backend_import(), escaped_wheel_dir, metadata_directory 
         };
         let output =
             run_python_script(&self.venv.python_interpreter(), &script, &self.source_tree)?;
@@ -309,21 +328,17 @@ fn create_pep517_build_environment(
     source_tree: &Path,
     base_python: &Path,
     data: &InterpreterInfo,
-    requirements: &[Requirement],
-    backend: &str,
+    pep517_backend: &Pep517Backend,
 ) -> Result<Venv, Error> {
     // TODO(konstin): Create bare venvs when we don't need pip anymore
     let venv = gourgeist::create_venv(root.join(".venv"), base_python, data, false)?;
-    resolve_and_install(venv.deref().as_std_path(), requirements)
+    resolve_and_install(venv.deref().as_std_path(), &pep517_backend.requirements)
         .map_err(Error::RequirementsInstall)?;
 
-    let backend_import = if let Some((path, object)) = backend.split_once(':') {
-        format!("from {path} import {object}")
-    } else {
-        format!("import {backend}")
-    };
-
-    debug!("Calling `{}.get_requires_for_build_wheel()`", backend);
+    debug!(
+        "Calling `{}.get_requires_for_build_wheel()`",
+        pep517_backend.backend
+    );
     let script = formatdoc! {
         r#"{} as backend
             import json
@@ -333,7 +348,7 @@ fn create_pep517_build_environment(
             else:
                 requires = []
             print(json.dumps(requires))
-            "#, backend_import
+            "#, pep517_backend.backend_import()
     };
     let output = run_python_script(&venv.python_interpreter(), &script, source_tree)?;
     if !output.status.success() {
@@ -365,11 +380,19 @@ fn create_pep517_build_environment(
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
     // and installation again.
     // TODO(konstin): Do we still need this when we have a fast resolver?
-    if !extra_requires.is_empty() && !extra_requires.iter().all(|req| requirements.contains(req)) {
+    if !extra_requires.is_empty()
+        && !extra_requires
+            .iter()
+            .all(|req| pep517_backend.requirements.contains(req))
+    {
         debug!("Installing extra requirements for build backend");
         // TODO(konstin): Do we need to resolve them together?
-        let requirements: Vec<Requirement> =
-            requirements.iter().cloned().chain(extra_requires).collect();
+        let requirements: Vec<Requirement> = pep517_backend
+            .requirements
+            .iter()
+            .cloned()
+            .chain(extra_requires)
+            .collect();
         resolve_and_install(&*venv, &requirements).map_err(Error::RequirementsInstall)?;
     }
     Ok(venv)
