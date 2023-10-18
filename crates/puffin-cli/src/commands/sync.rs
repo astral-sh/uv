@@ -3,8 +3,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use bitflags::bitflags;
-use colored::Colorize;
 use itertools::{Either, Itertools};
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use platform_host::Platform;

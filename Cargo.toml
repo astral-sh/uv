@@ -18,7 +18,6 @@ bitflags = { version = "2.4.0" }
 cacache = { version = "11.7.1", default-features = false, features = ["tokio-runtime"] }
 camino = { version = "1.1.6", features = ["serde1"] }
 clap = { version = "4.4.6" }
-colored = { version = "2.0.4" }
 configparser = { version = "3.0.2" }
 csv = { version = "1.3.0" }
 data-encoding = { version = "2.4.0" }
@@ -38,6 +37,7 @@ mailparse = { version = "0.14.0" }
 memchr = { version = "2.6.4" }
 miette = { version = "5.10.0" }
 once_cell = { version = "1.18.0" }
+owo-colors = { version = "3.5.0" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.5.0" }
 pyproject-toml = { version = "0.7.0" }
