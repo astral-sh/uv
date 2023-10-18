@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
-use colored::Colorize;
 use directories::ProjectDirs;
+use owo_colors::OwoColorize;
 
 use crate::commands::ExitStatus;
 

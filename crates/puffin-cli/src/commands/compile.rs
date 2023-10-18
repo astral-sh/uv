@@ -4,7 +4,7 @@ use std::io::{stdout, BufWriter};
 use std::path::Path;
 
 use anyhow::Result;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use pubgrub::report::Reporter;
 use tracing::debug;
 

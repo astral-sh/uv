@@ -10,17 +10,16 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+gourgeist = { version = "0.0.4", path = "../gourgeist" }
+pep508_rs = { version = "0.2.3", path = "../pep508-rs" }
+
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-colored = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
-gourgeist = { version = "0.0.4", path = "../gourgeist" }
 indoc = { workspace = true }
-pep508_rs = { version = "0.2.3", path = "../pep508-rs" }
+owo-colors = { workspace = true }
 pyproject-toml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -29,6 +28,6 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = "0.3.17"
-which.workspace = true
+tracing-subscriber = { workspace = true }
+which = { workspace = true}
 zip = { workspace = true }
