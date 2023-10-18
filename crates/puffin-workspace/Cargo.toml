@@ -1,0 +1,21 @@
+[package]
+name = "puffin-workspace"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
+puffin-package = { path = "../puffin-package" }
+
+fs-err = { workspace = true }
+pyproject-toml = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml_edit = { workspace = true, features = ["serde"] }

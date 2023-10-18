@@ -20,6 +20,7 @@ puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-package = { path = "../puffin-package" }
 puffin-resolver = { path = "../puffin-resolver" }
+puffin-workspace = { path = "../puffin-workspace" }
 
 anyhow = { workspace = true }
 bitflags = { workspace = true }

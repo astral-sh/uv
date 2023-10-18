@@ -1832,6 +1832,7 @@ dependencies = [
  "puffin-interpreter",
  "puffin-package",
  "puffin-resolver",
+ "puffin-workspace",
  "tempfile",
  "tokio",
  "tracing",
@@ -1940,6 +1941,20 @@ dependencies = [
  "tracing",
  "waitmap",
  "wheel-filename",
+]
+
+[[package]]
+name = "puffin-workspace"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "pep440_rs 0.3.12",
+ "pep508_rs",
+ "puffin-package",
+ "pyproject-toml",
+ "serde",
+ "thiserror",
+ "toml_edit 0.20.2",
 ]
 
 [[package]]
