@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::Colorize;
 use fs_err::tokio as fs;
 
@@ -29,8 +29,8 @@ pub(crate) async fn venv(
     )?;
 
     // If the path already exists, remove it.
-    fs::remove_file(path).await.context("Foo")?;
-    fs::remove_dir_all(path).await?;
+    fs::remove_file(path).await.ok();
+    fs::remove_dir_all(path).await.ok();
 
     writeln!(
         printer,

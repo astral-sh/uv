@@ -76,9 +76,7 @@ impl Workspace {
             return;
         };
 
-        // TODO(charlie): Awkward `drop` pattern required to work around destructors, apparently.
-        let mut iter = dependencies.iter();
-        let index = iter.position(|item| {
+        let index = dependencies.iter().position(|item| {
             let Some(item) = item.as_str() else {
                 return false;
             };
@@ -90,7 +88,6 @@ impl Workspace {
             PackageName::normalize(&requirement.requirement.name)
                 == PackageName::normalize(existing.name)
         });
-        drop(iter);
 
         if let Some(index) = index {
             dependencies.replace(index, requirement.given_name);
@@ -99,6 +96,45 @@ impl Workspace {
         }
 
         format_multiline_array(dependencies);
+    }
+
+    /// Remove a dependency from the workspace.
+    pub fn remove_dependency(&mut self, name: &str) -> Result<(), WorkspaceError> {
+        let Some(project) = self
+            .document
+            .get_mut("project")
+            .map(|project| project.as_table_mut().unwrap())
+        else {
+            return Err(WorkspaceError::MissingProjectTable);
+        };
+
+        let Some(dependencies) = project
+            .get_mut("dependencies")
+            .map(|dependencies| dependencies.as_array_mut().unwrap())
+        else {
+            return Err(WorkspaceError::MissingProjectDependenciesArray);
+        };
+
+        let index = dependencies.iter().position(|item| {
+            let Some(item) = item.as_str() else {
+                return false;
+            };
+
+            let Ok(existing) = Requirement::from_str(item) else {
+                return false;
+            };
+
+            PackageName::normalize(name) == PackageName::normalize(existing.name)
+        });
+
+        let Some(index) = index else {
+            return Err(WorkspaceError::MissingPackage(name.to_string()));
+        };
+
+        dependencies.remove(index);
+        format_multiline_array(dependencies);
+
+        Ok(())
     }
 
     /// Save the workspace to disk.
