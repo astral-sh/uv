@@ -2,9 +2,9 @@
 
 use anyhow::Context;
 use clap::Parser;
+use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
-use owo_colors::OwoColorize;
 use puffin_build::{Error, SourceDistributionBuilder};
 use std::path::PathBuf;
 use std::process::ExitCode;

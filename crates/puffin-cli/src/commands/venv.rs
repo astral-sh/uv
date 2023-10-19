@@ -2,8 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
+use colored::Colorize;
 use fs_err::tokio as fs;
-use owo_colors::OwoColorize;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -25,7 +25,7 @@ pub(crate) async fn venv(
     writeln!(
         printer,
         "Using Python interpreter: {}",
-        base_python.display().cyan()
+        format!("{}", base_python.display()).cyan()
     )?;
 
     // If the path already exists, remove it.
@@ -35,7 +35,7 @@ pub(crate) async fn venv(
     writeln!(
         printer,
         "Creating virtual environment at: {}",
-        path.display().cyan()
+        format!("{}", path.display()).cyan()
     )?;
 
     // Create the virtual environment.

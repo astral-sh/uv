@@ -26,13 +26,13 @@ anyhow = { workspace = true }
 bitflags = { workspace = true }
 cacache = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+colored = { workspace = true }
 directories = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
-owo-colors = { workspace = true }
 pyproject-toml = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

@@ -2,8 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
+use colored::Colorize;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -23,6 +23,13 @@ pub(crate) async fn pip_uninstall(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // Read all requirements from the provided sources.
+    let requirements = sources
+        .iter()
+        .map(RequirementsSource::requirements)
+        .flatten_ok()
+        .collect::<Result<Vec<Requirement>>>()?;
+
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
@@ -30,13 +37,6 @@ pub(crate) async fn pip_uninstall(
         "Using Python interpreter: {}",
         python.executable().display()
     );
-
-    // Read all requirements from the provided sources.
-    let requirements = sources
-        .iter()
-        .map(RequirementsSource::requirements)
-        .flatten_ok()
-        .collect::<Result<Vec<Requirement>>>()?;
 
     // Index the current `site-packages` directory.
     let site_packages = puffin_installer::SitePackages::from_executable(&python).await?;
@@ -64,7 +64,7 @@ pub(crate) async fn pip_uninstall(
                     "{}{} Skipping {} as it is not installed.",
                     "warning".yellow().bold(),
                     ":".bold(),
-                    package.bold()
+                    package.as_ref().bold()
                 );
                 None
             }

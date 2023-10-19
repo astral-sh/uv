@@ -1,7 +1,9 @@
+//! A standard interface for working with heterogeneous sources of requirements.
+
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use fs_err as fs;
 
 use pep508_rs::Requirement;
@@ -37,7 +39,8 @@ impl RequirementsSource {
     /// Return an iterator over the requirements in this source.
     pub(crate) fn requirements(&self) -> Result<impl Iterator<Item = Requirement>> {
         let iter_name = if let Self::Name(name) = self {
-            let requirement = Requirement::from_str(name)?;
+            let requirement =
+                Requirement::from_str(name).with_context(|| format!("Failed to parse `{name}`"))?;
             Some(std::iter::once(requirement))
         } else {
             None
@@ -59,8 +62,9 @@ impl RequirementsSource {
         };
 
         let iter_pyproject_toml = if let Self::PyprojectToml(path) = self {
-            let pyproject_toml =
-                toml::from_str::<pyproject_toml::PyProjectToml>(&fs::read_to_string(path)?)?;
+            let contents = fs::read_to_string(path)?;
+            let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
+                .with_context(|| format!("Failed to read `{}`", path.display()))?;
             Some(
                 pyproject_toml
                     .project

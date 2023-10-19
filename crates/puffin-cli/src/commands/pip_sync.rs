@@ -2,8 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use colored::Colorize;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -247,7 +247,7 @@ pub(crate) async fn sync_requirements(
                     printer,
                     " {} {}{}",
                     "+".green(),
-                    event.distribution.name().white().bold(),
+                    event.distribution.name().as_ref().white().bold(),
                     format!("@{}", event.distribution.version()).dimmed()
                 )?;
             }
@@ -256,7 +256,7 @@ pub(crate) async fn sync_requirements(
                     printer,
                     " {} {}{}",
                     "-".red(),
-                    event.distribution.name().white().bold(),
+                    event.distribution.name().as_ref().white().bold(),
                     format!("@{}", event.distribution.version()).dimmed()
                 )?;
             }
