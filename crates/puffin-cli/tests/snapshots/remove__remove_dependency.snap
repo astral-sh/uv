@@ -1,0 +1,14 @@
+---
+source: crates/puffin-cli/tests/remove.rs
+info:
+  program: puffin
+  args:
+    - remove
+    - flask
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+

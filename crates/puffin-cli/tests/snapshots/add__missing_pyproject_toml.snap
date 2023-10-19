@@ -1,0 +1,18 @@
+---
+source: crates/puffin-cli/tests/add.rs
+info:
+  program: puffin
+  args:
+    - add
+    - flask
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+puffin::add::workspace_not_found
+
+  × Could not find a `pyproject.toml` file in the current directory or any of
+  │ its parents
+

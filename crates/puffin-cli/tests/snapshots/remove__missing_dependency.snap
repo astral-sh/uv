@@ -1,0 +1,18 @@
+---
+source: crates/puffin-cli/tests/remove.rs
+info:
+  program: puffin
+  args:
+    - remove
+    - requests
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+puffin::remove::parse_error
+
+  × Failed to remove `requests` from `pyproject.toml`
+  ╰─▶ unable to find package: `requests`
+
