@@ -100,7 +100,7 @@ async fn fetch_wheel(
     // Read from the cache, if possible.
     if let Some(cache) = cache.as_ref() {
         if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
-            debug!("Extracted wheel from cache: {:?}", remote.file().filename);
+            debug!("Extracted wheel from cache: {}", remote.file().filename);
             return Ok(InMemoryDistribution { remote, buffer });
         }
     }

@@ -5,7 +5,7 @@ use pep440_rs::Version;
 use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 
-use crate::LocalDistribution;
+use crate::CachedDistribution;
 
 pub struct Installer<'a> {
     python: &'a PythonExecutable,
@@ -31,7 +31,7 @@ impl<'a> Installer<'a> {
     }
 
     /// Install a set of wheels into a Python virtual environment.
-    pub fn install(self, wheels: &[LocalDistribution]) -> Result<()> {
+    pub fn install(self, wheels: &[CachedDistribution]) -> Result<()> {
         tokio::task::block_in_place(|| {
             wheels.par_iter().try_for_each(|wheel| {
                 let location = install_wheel_rs::InstallLocation::new(

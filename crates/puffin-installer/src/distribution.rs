@@ -13,7 +13,8 @@ use wheel_filename::WheelFilename;
 #[derive(Debug, Clone)]
 pub enum Distribution {
     Remote(RemoteDistribution),
-    Local(LocalDistribution),
+    Cached(CachedDistribution),
+    Installed(InstalledDistribution),
 }
 
 impl Distribution {
@@ -21,7 +22,8 @@ impl Distribution {
     pub fn name(&self) -> &PackageName {
         match self {
             Self::Remote(dist) => dist.name(),
-            Self::Local(dist) => dist.name(),
+            Self::Cached(dist) => dist.name(),
+            Self::Installed(dist) => dist.name(),
         }
     }
 
@@ -29,7 +31,8 @@ impl Distribution {
     pub fn version(&self) -> &Version {
         match self {
             Self::Remote(dist) => dist.version(),
-            Self::Local(dist) => dist.version(),
+            Self::Cached(dist) => dist.version(),
+            Self::Installed(dist) => dist.version(),
         }
     }
 
@@ -39,8 +42,27 @@ impl Distribution {
     pub fn id(&self) -> String {
         match self {
             Self::Remote(dist) => dist.id(),
-            Self::Local(dist) => dist.id(),
+            Self::Cached(dist) => dist.id(),
+            Self::Installed(dist) => dist.id(),
         }
+    }
+}
+
+impl From<RemoteDistribution> for Distribution {
+    fn from(dist: RemoteDistribution) -> Self {
+        Self::Remote(dist)
+    }
+}
+
+impl From<CachedDistribution> for Distribution {
+    fn from(dist: CachedDistribution) -> Self {
+        Self::Cached(dist)
+    }
+}
+
+impl From<InstalledDistribution> for Distribution {
+    fn from(dist: InstalledDistribution) -> Self {
+        Self::Installed(dist)
     }
 }
 
@@ -82,16 +104,16 @@ impl RemoteDistribution {
     }
 }
 
-/// A built distribution (wheel) that exists as a local file (e.g., in the wheel cache).
+/// A built distribution (wheel) that exists in a local cache.
 #[derive(Debug, Clone)]
-pub struct LocalDistribution {
+pub struct CachedDistribution {
     name: PackageName,
     version: Version,
     path: PathBuf,
 }
 
-impl LocalDistribution {
-    /// Initialize a new local distribution.
+impl CachedDistribution {
+    /// Initialize a new cached distribution.
     pub fn new(name: PackageName, version: Version, path: PathBuf) -> Self {
         Self {
             name,
@@ -100,7 +122,7 @@ impl LocalDistribution {
         }
     }
 
-    /// Try to parse a cached distribution from a directory name (like `django-5.0a1`).
+    /// Try to parse a distribution from a cached directory name (like `django-5.0a1`).
     pub(crate) fn try_from_path(path: &Path) -> Result<Option<Self>> {
         let Some(file_name) = path.file_name() else {
             return Ok(None);
@@ -116,11 +138,75 @@ impl LocalDistribution {
         let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
         let path = path.to_path_buf();
 
-        Ok(Some(LocalDistribution {
+        Ok(Some(CachedDistribution {
             name,
             version,
             path,
         }))
+    }
+
+    pub fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn id(&self) -> String {
+        format!("{}-{}", DistInfoName::from(self.name()), self.version())
+    }
+}
+
+/// A built distribution (wheel) that exists in a virtual environment.
+#[derive(Debug, Clone)]
+pub struct InstalledDistribution {
+    name: PackageName,
+    version: Version,
+    path: PathBuf,
+}
+
+impl InstalledDistribution {
+    /// Initialize a new installed distribution.
+    pub fn new(name: PackageName, version: Version, path: PathBuf) -> Self {
+        Self {
+            name,
+            version,
+            path,
+        }
+    }
+
+    /// Try to parse a distribution from a `.dist-info` directory name (like `django-5.0a1.dist-info`).
+    ///
+    /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
+    pub(crate) fn try_from_path(path: &Path) -> Result<Option<Self>> {
+        if path.extension().is_some_and(|ext| ext == "dist-info") {
+            let Some(file_stem) = path.file_stem() else {
+                return Ok(None);
+            };
+            let Some(file_stem) = file_stem.to_str() else {
+                return Ok(None);
+            };
+            let Some((name, version)) = file_stem.split_once('-') else {
+                return Ok(None);
+            };
+
+            let name = PackageName::normalize(name);
+            let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+            let path = path.to_path_buf();
+
+            return Ok(Some(Self {
+                name,
+                version,
+                path,
+            }));
+        }
+
+        Ok(None)
     }
 
     pub fn name(&self) -> &PackageName {

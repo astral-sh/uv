@@ -4,7 +4,8 @@ use anyhow::Result;
 use tracing::debug;
 
 use platform_host::Platform;
-use puffin_interpreter::{PythonExecutable, SitePackages};
+use puffin_installer::SitePackages;
+use puffin_interpreter::PythonExecutable;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

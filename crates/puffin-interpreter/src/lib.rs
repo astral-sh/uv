@@ -7,11 +7,9 @@ use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 
 use crate::python_platform::PythonPlatform;
-pub use crate::site_packages::{Distribution, SitePackages};
 
 mod markers;
 mod python_platform;
-mod site_packages;
 mod virtual_env;
 
 /// A Python executable and its associated platform markers.
