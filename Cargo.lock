@@ -1310,7 +1310,6 @@ dependencies = [
  "rayon",
  "reflink-copy",
  "regex",
- "rfc2047-decoder",
  "serde",
  "serde_json",
  "sha2",

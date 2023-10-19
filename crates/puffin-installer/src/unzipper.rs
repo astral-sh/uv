@@ -14,7 +14,7 @@ use puffin_package::package_name::PackageName;
 use crate::cache::WheelCache;
 use crate::downloader::InMemoryDistribution;
 use crate::vendor::CloneableSeekableReader;
-use crate::LocalDistribution;
+use crate::CachedDistribution;
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -35,7 +35,7 @@ impl Unzipper {
         &self,
         downloads: Vec<InMemoryDistribution>,
         target: &Path,
-    ) -> Result<Vec<LocalDistribution>> {
+    ) -> Result<Vec<CachedDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init().await?;
@@ -63,7 +63,7 @@ impl Unzipper {
             )
             .await?;
 
-            wheels.push(LocalDistribution::new(
+            wheels.push(CachedDistribution::new(
                 remote.name().clone(),
                 remote.version().clone(),
                 wheel_cache.entry(&remote.id()),

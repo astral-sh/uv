@@ -6,11 +6,11 @@ use anyhow::Result;
 use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
-use crate::distribution::LocalDistribution;
+use crate::distribution::CachedDistribution;
 
 /// A local index of cached distributions.
 #[derive(Debug, Default)]
-pub struct LocalIndex(HashMap<PackageName, LocalDistribution>);
+pub struct LocalIndex(HashMap<PackageName, CachedDistribution>);
 
 impl LocalIndex {
     /// Build an index of cached distributions from a directory.
@@ -24,7 +24,7 @@ impl LocalIndex {
 
         while let Some(entry) = dir.next_entry().await? {
             if entry.file_type().await?.is_dir() {
-                if let Some(dist_info) = LocalDistribution::try_from_path(&entry.path())? {
+                if let Some(dist_info) = CachedDistribution::try_from_path(&entry.path())? {
                     index.insert(dist_info.name().clone(), dist_info);
                 }
             }
@@ -34,7 +34,7 @@ impl LocalIndex {
     }
 
     /// Returns a distribution from the index, if it exists.
-    pub fn get(&self, name: &PackageName) -> Option<&LocalDistribution> {
+    pub fn get(&self, name: &PackageName) -> Option<&CachedDistribution> {
         self.0.get(name)
     }
 }

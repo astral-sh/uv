@@ -2,17 +2,19 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep508_rs::Requirement;
 use tracing::debug;
 
+use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
-use puffin_installer::{LocalDistribution, LocalIndex, RemoteDistribution};
-use puffin_interpreter::{Distribution, PythonExecutable, SitePackages};
+use puffin_installer::{
+    CachedDistribution, Distribution, InstalledDistribution, LocalIndex, RemoteDistribution,
+    SitePackages,
+};
+use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements_txt::RequirementsTxt;
 use puffin_resolver::Resolution;
@@ -230,37 +232,35 @@ pub(crate) async fn sync_requirements(
         )?;
     }
 
-    for dist in extraneous
-        .iter()
-        .map(|dist_info| PackageModification {
-            name: dist_info.name(),
-            version: dist_info.version(),
-            modification: Modification::Remove,
+    for event in extraneous
+        .into_iter()
+        .map(|distribution| ChangeEvent {
+            distribution: Distribution::from(distribution),
+            kind: ChangeEventKind::Remove,
         })
-        .chain(wheels.iter().map(|dist_info| PackageModification {
-            name: dist_info.name(),
-            version: dist_info.version(),
-            modification: Modification::Add,
+        .chain(wheels.into_iter().map(|distribution| ChangeEvent {
+            distribution: Distribution::from(distribution),
+            kind: ChangeEventKind::Add,
         }))
-        .sorted_unstable_by_key(|modification| modification.name)
+        .sorted_unstable_by_key(|event| event.distribution.name().clone())
     {
-        match dist.modification {
-            Modification::Add => {
+        match event.kind {
+            ChangeEventKind::Add => {
                 writeln!(
                     printer,
                     " {} {}{}",
                     "+".green(),
-                    dist.name.as_ref().white().bold(),
-                    format!("@{}", dist.version).dimmed()
+                    event.distribution.name().white().bold(),
+                    format!("@{}", event.distribution.version()).dimmed()
                 )?;
             }
-            Modification::Remove => {
+            ChangeEventKind::Remove => {
                 writeln!(
                     printer,
                     " {} {}{}",
                     "-".red(),
-                    dist.name.as_ref().white().bold(),
-                    format!("@{}", dist.version).dimmed()
+                    event.distribution.name().white().bold(),
+                    format!("@{}", event.distribution.version()).dimmed()
                 )?;
             }
         }
@@ -273,7 +273,7 @@ pub(crate) async fn sync_requirements(
 struct PartitionedRequirements {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
-    local: Vec<LocalDistribution>,
+    local: Vec<CachedDistribution>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
@@ -281,7 +281,7 @@ struct PartitionedRequirements {
 
     /// The distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
-    extraneous: Vec<Distribution>,
+    extraneous: Vec<InstalledDistribution>,
 }
 
 impl PartitionedRequirements {
@@ -354,7 +354,7 @@ impl PartitionedRequirements {
 }
 
 #[derive(Debug)]
-enum Modification {
+enum ChangeEventKind {
     /// The package was added to the environment.
     Add,
     /// The package was removed from the environment.
@@ -362,8 +362,7 @@ enum Modification {
 }
 
 #[derive(Debug)]
-struct PackageModification<'a> {
-    name: &'a PackageName,
-    version: &'a pep440_rs::Version,
-    modification: Modification,
+struct ChangeEvent {
+    distribution: Distribution,
+    kind: ChangeEventKind,
 }

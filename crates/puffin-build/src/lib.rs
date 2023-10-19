@@ -13,7 +13,7 @@ use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
-use puffin_installer::{Downloader, LocalDistribution, LocalIndex, RemoteDistribution, Unzipper};
+use puffin_installer::{CachedDistribution, Downloader, LocalIndex, RemoteDistribution, Unzipper};
 use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 use puffin_resolver::WheelFinder;
@@ -440,7 +440,7 @@ async fn resolve_and_install(
     } else {
         LocalIndex::default()
     };
-    let (cached, uncached): (Vec<LocalDistribution>, Vec<Requirement>) =
+    let (cached, uncached): (Vec<CachedDistribution>, Vec<Requirement>) =
         requirements.iter().partition_map(|requirement| {
             let package = PackageName::normalize(&requirement.name);
             if let Some(distribution) = local_index
