@@ -41,3 +41,9 @@ tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { version = "2.0.8" }
+assert_fs = { version = "1.0.13" }
+insta-cmd = { version = "0.4.0" }
+predicates = { version = "3.0.4" }
