@@ -55,17 +55,20 @@ enum Commands {
 
 #[derive(Args)]
 struct PipCompileArgs {
-    /// Output `requirements.txt` file
+    /// Include all packages listed in the given `requirements.in` files.
+    #[clap(required(true))]
+    src_file: Vec<PathBuf>,
+
+    /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
     output_file: Option<PathBuf>,
-    /// Path to the `requirements.txt` file to compile.
-    src: PathBuf,
 }
 
 #[derive(Args)]
 struct PipSyncArgs {
-    /// Path to the `requirements.txt` file to install.
-    src: PathBuf,
+    /// Include all packages listed in the given `requirements.txt` files.
+    #[clap(required(true))]
+    src_file: Vec<PathBuf>,
 }
 
 #[derive(Args)]
@@ -121,12 +124,16 @@ async fn main() -> ExitCode {
         printer::Printer::Default
     };
 
-    let dirs = ProjectDirs::from("", "", "puffin");
-
     let result = match cli.command {
         Commands::PipCompile(args) => {
+            let dirs = ProjectDirs::from("", "", "puffin");
+            let sources = args
+                .src_file
+                .into_iter()
+                .map(RequirementsSource::from)
+                .collect::<Vec<_>>();
             commands::pip_compile(
-                &args.src,
+                &sources,
                 args.output_file.as_deref(),
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
@@ -136,8 +143,14 @@ async fn main() -> ExitCode {
             .await
         }
         Commands::PipSync(args) => {
+            let dirs = ProjectDirs::from("", "", "puffin");
+            let sources = args
+                .src_file
+                .into_iter()
+                .map(RequirementsSource::from)
+                .collect::<Vec<_>>();
             commands::pip_sync(
-                &args.src,
+                &sources,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
@@ -146,6 +159,7 @@ async fn main() -> ExitCode {
             .await
         }
         Commands::PipUninstall(args) => {
+            let dirs = ProjectDirs::from("", "", "puffin");
             let sources = args
                 .package
                 .into_iter()
@@ -162,9 +176,11 @@ async fn main() -> ExitCode {
             .await
         }
         Commands::Clean => {
+            let dirs = ProjectDirs::from("", "", "puffin");
             commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
         }
         Commands::Freeze => {
+            let dirs = ProjectDirs::from("", "", "puffin");
             commands::freeze(
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
