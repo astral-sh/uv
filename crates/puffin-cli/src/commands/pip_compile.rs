@@ -3,9 +3,9 @@ use std::io::{stdout, BufWriter};
 use std::path::Path;
 
 use anyhow::Result;
+use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use pubgrub::report::Reporter;
 use tracing::debug;
 
@@ -28,6 +28,13 @@ pub(crate) async fn pip_compile(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // Read all requirements from the provided sources.
+    let requirements = sources
+        .iter()
+        .map(RequirementsSource::requirements)
+        .flatten_ok()
+        .collect::<Result<Vec<Requirement>>>()?;
+
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
@@ -35,13 +42,6 @@ pub(crate) async fn pip_compile(
         "Using Python interpreter: {}",
         python.executable().display()
     );
-
-    // Read all requirements from the provided sources.
-    let requirements = sources
-        .iter()
-        .map(RequirementsSource::requirements)
-        .flatten_ok()
-        .collect::<Result<Vec<Requirement>>>()?;
 
     // Determine the current environment markers.
     let markers = python.markers();

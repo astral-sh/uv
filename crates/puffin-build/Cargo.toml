@@ -24,12 +24,12 @@ puffin-workspace = { path = "../puffin-workspace" }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+colored = { workspace = true }
 directories = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
-owo-colors = { workspace = true }
 pyproject-toml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

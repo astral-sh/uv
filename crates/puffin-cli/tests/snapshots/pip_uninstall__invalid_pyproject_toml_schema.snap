@@ -1,0 +1,22 @@
+---
+source: crates/puffin-cli/tests/pip_uninstall.rs
+info:
+  program: puffin
+  args:
+    - pip-uninstall
+    - "-r"
+    - pyproject.toml
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: Failed to read `pyproject.toml`
+  Caused by: TOML parse error at line 1, column 1
+  |
+1 | [project]
+  | ^^^^^^^^^
+missing field `name`
+
+
