@@ -26,9 +26,9 @@ impl std::fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Default | Self::Verbose => {
-                #[allow(clippy::print_stdout)]
+                #[allow(clippy::print_stderr)]
                 {
-                    print!("{s}");
+                    eprint!("{s}");
                 }
             }
             Self::Quiet => {}
