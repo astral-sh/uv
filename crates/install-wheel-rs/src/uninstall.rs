@@ -90,7 +90,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Uninstall {
     /// The number of files that were removed during the uninstallation.
     pub file_count: usize,

@@ -6,8 +6,8 @@ pub(crate) use clean::clean;
 pub(crate) use freeze::freeze;
 pub(crate) use pip_compile::pip_compile;
 pub(crate) use pip_sync::{pip_sync, PipSyncFlags};
+pub(crate) use pip_uninstall::pip_uninstall;
 pub(crate) use remove::remove;
-pub(crate) use uninstall::uninstall;
 pub(crate) use venv::venv;
 
 mod add;
@@ -15,9 +15,9 @@ mod clean;
 mod freeze;
 mod pip_compile;
 mod pip_sync;
+mod pip_uninstall;
 mod remove;
 mod reporters;
-mod uninstall;
 mod venv;
 
 #[derive(Copy, Clone)]

@@ -6,10 +6,12 @@ use directories::ProjectDirs;
 use owo_colors::OwoColorize;
 
 use crate::commands::ExitStatus;
+use crate::requirements::RequirementsSource;
 
 mod commands;
 mod logging;
 mod printer;
+mod requirements;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -41,8 +43,8 @@ enum Commands {
     Clean,
     /// Enumerate the installed packages in the current environment.
     Freeze,
-    /// Uninstall a package.
-    Uninstall(UninstallArgs),
+    /// Uninstall packages from the current environment.
+    PipUninstall(PipUninstallArgs),
     /// Create a virtual environment.
     Venv(VenvArgs),
     /// Add a dependency to the workspace.
@@ -71,9 +73,15 @@ struct PipSyncArgs {
 }
 
 #[derive(Args)]
-struct UninstallArgs {
-    /// The name of the package to uninstall.
-    name: String,
+#[command(group = clap::ArgGroup::new("sources").required(true))]
+struct PipUninstallArgs {
+    /// Uninstall all listed packages.
+    #[clap(group = "sources")]
+    package: Vec<String>,
+
+    /// Uninstall all packages listed in the given requirements files.
+    #[clap(short, long, group = "sources")]
+    requirement: Vec<PathBuf>,
 }
 
 #[derive(Args)]
@@ -119,7 +127,7 @@ async fn main() -> ExitCode {
 
     let dirs = ProjectDirs::from("", "", "puffin");
 
-    let result = match &cli.command {
+    let result = match cli.command {
         Commands::PipCompile(args) => {
             commands::pip_compile(
                 &args.src,
@@ -146,11 +154,15 @@ async fn main() -> ExitCode {
             )
             .await
         }
-        Commands::Clean => {
-            commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
-        }
-        Commands::Freeze => {
-            commands::freeze(
+        Commands::PipUninstall(args) => {
+            let sources = args
+                .package
+                .into_iter()
+                .map(RequirementsSource::from)
+                .chain(args.requirement.into_iter().map(RequirementsSource::from))
+                .collect::<Vec<_>>();
+            commands::pip_uninstall(
+                &sources,
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
@@ -158,9 +170,11 @@ async fn main() -> ExitCode {
             )
             .await
         }
-        Commands::Uninstall(args) => {
-            commands::uninstall(
-                &args.name,
+        Commands::Clean => {
+            commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
+        }
+        Commands::Freeze => {
+            commands::freeze(
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
