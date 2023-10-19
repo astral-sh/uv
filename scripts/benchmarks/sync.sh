@@ -17,18 +17,18 @@ TARGET=${1}
 ###
 hyperfine --runs 20 --warmup 3 \
     --prepare "virtualenv --clear .venv" \
-    "./target/release/puffin pip-sync ${TARGET} --ignore-installed --no-cache" \
+    "./target/release/puffin pip-sync ${TARGET} --no-cache" \
     --prepare "rm -rf /tmp/site-packages" \
-    "pip install -r ${TARGET} --target /tmp/site-packages --ignore-installed --no-cache-dir --no-deps"
+    "pip install -r ${TARGET} --target /tmp/site-packages --no-cache-dir --no-deps"
 
 ###
 # Installation with a warm cache, similar to blowing away and re-creating a virtual environment.
 ###
 hyperfine --runs 20 --warmup 3 \
     --prepare "virtualenv --clear .venv" \
-    "./target/release/puffin pip-sync ${TARGET} --ignore-installed" \
+    "./target/release/puffin pip-sync ${TARGET}" \
     --prepare "rm -rf /tmp/site-packages" \
-    "pip install -r ${TARGET} --target /tmp/site-packages --ignore-installed --no-deps"
+    "pip install -r ${TARGET} --target /tmp/site-packages --no-deps"
 
 ###
 # Installation with all dependencies already installed (no-op).

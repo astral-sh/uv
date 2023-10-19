@@ -2,8 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use bitflags::bitflags;
-use itertools::{Either, Itertools};
+
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pep508_rs::Requirement;
 use tracing::debug;
@@ -12,7 +12,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_installer::{LocalDistribution, LocalIndex, RemoteDistribution};
-use puffin_interpreter::{PythonExecutable, SitePackages};
+use puffin_interpreter::{Distribution, PythonExecutable, SitePackages};
 use puffin_package::package_name::PackageName;
 use puffin_package::requirements_txt::RequirementsTxt;
 use puffin_resolver::Resolution;
@@ -23,19 +23,10 @@ use crate::commands::reporters::{
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
-bitflags! {
-    #[derive(Debug, Copy, Clone, Default)]
-    pub struct PipSyncFlags: u8 {
-        /// Ignore any installed packages, forcing a re-installation.
-        const IGNORE_INSTALLED = 1 << 0;
-    }
-}
-
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn pip_sync(
     src: &Path,
     cache: Option<&Path>,
-    flags: PipSyncFlags,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Read the `requirements.txt` from disk.
@@ -53,14 +44,13 @@ pub(crate) async fn pip_sync(
         return Ok(ExitStatus::Success);
     }
 
-    sync_requirements(&requirements, cache, flags, printer).await
+    sync_requirements(&requirements, cache, printer).await
 }
 
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     cache: Option<&Path>,
-    flags: PipSyncFlags,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Audit the requirements.
@@ -74,15 +64,16 @@ pub(crate) async fn sync_requirements(
         python.executable().display()
     );
 
-    // Determine the current environment markers.
-    let tags = Tags::from_env(python.platform(), python.simple_version())?;
-
-    // Filter out any already-installed or already-cached packages.
-    let (cached, uncached) =
-        find_uncached_requirements(requirements, cache, flags, &python).await?;
+    // Partition into those that should be linked from the cache (`local`), those that need to be
+    // downloaded (`remote`), and those that should be removed (`extraneous`).
+    let PartitionedRequirements {
+        local,
+        remote,
+        extraneous,
+    } = PartitionedRequirements::try_from_requirements(requirements, cache, &python).await?;
 
     // Nothing to do.
-    if uncached.is_empty() && cached.is_empty() {
+    if remote.is_empty() && local.is_empty() && extraneous.is_empty() {
         let s = if requirements.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -98,17 +89,19 @@ pub(crate) async fn sync_requirements(
         return Ok(ExitStatus::Success);
     }
 
+    // Determine the current environment markers.
+    let tags = Tags::from_env(python.platform(), python.simple_version())?;
     let client = PypiClientBuilder::default().cache(cache).build();
 
     // Resolve the dependencies.
-    let resolution = if uncached.is_empty() {
+    let resolution = if remote.is_empty() {
         Resolution::default()
     } else {
         let start = std::time::Instant::now();
 
         let wheel_finder = puffin_resolver::WheelFinder::new(&tags, &client)
-            .with_reporter(WheelFinderReporter::from(printer).with_length(uncached.len() as u64));
-        let resolution = wheel_finder.resolve(&uncached).await?;
+            .with_reporter(WheelFinderReporter::from(printer).with_length(remote.len() as u64));
+        let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
@@ -125,13 +118,12 @@ pub(crate) async fn sync_requirements(
         resolution
     };
 
+    // Download any missing distributions.
+    let staging = tempfile::tempdir()?;
     let uncached = resolution
         .into_files()
         .map(RemoteDistribution::from_file)
         .collect::<Result<Vec<_>>>()?;
-    let staging = tempfile::tempdir()?;
-
-    // Download any missing distributions.
     let downloads = if uncached.is_empty() {
         vec![]
     } else {
@@ -188,89 +180,147 @@ pub(crate) async fn sync_requirements(
         unzips
     };
 
-    // Install the resolved distributions.
-    let start = std::time::Instant::now();
-    let wheels = unzips.into_iter().chain(cached).collect::<Vec<_>>();
-    puffin_installer::Installer::new(&python)
-        .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
-        .install(&wheels)?;
+    // Remove any unnecessary packages.
+    if !extraneous.is_empty() {
+        let start = std::time::Instant::now();
 
-    let s = if wheels.len() == 1 { "" } else { "s" };
-    writeln!(
-        printer,
-        "{}",
-        format!(
-            "Installed {} in {}",
-            format!("{} package{}", wheels.len(), s).bold(),
-            elapsed(start.elapsed())
-        )
-        .dimmed()
-    )?;
+        for dist_info in &extraneous {
+            let summary = puffin_installer::uninstall(dist_info).await?;
+            debug!(
+                "Uninstalled {} ({} file{}, {} director{})",
+                dist_info.name(),
+                summary.file_count,
+                if summary.file_count == 1 { "" } else { "s" },
+                summary.dir_count,
+                if summary.dir_count == 1 { "y" } else { "ies" },
+            );
+        }
 
-    for wheel in wheels {
+        let s = if extraneous.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
-            " {} {}{}",
-            "+".green(),
-            wheel.name().as_ref().white().bold(),
-            format!("@{}", wheel.version()).dimmed()
+            "{}",
+            format!(
+                "Uninstalled {} in {}",
+                format!("{} package{}", extraneous.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
         )?;
+    }
+
+    // Install the resolved distributions.
+    let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
+    if !wheels.is_empty() {
+        let start = std::time::Instant::now();
+        puffin_installer::Installer::new(&python)
+            .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
+            .install(&wheels)?;
+
+        let s = if wheels.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Installed {} in {}",
+                format!("{} package{}", wheels.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+    }
+
+    for dist in extraneous
+        .iter()
+        .map(|dist_info| PackageModification {
+            name: dist_info.name(),
+            version: dist_info.version(),
+            modification: Modification::Remove,
+        })
+        .chain(wheels.iter().map(|dist_info| PackageModification {
+            name: dist_info.name(),
+            version: dist_info.version(),
+            modification: Modification::Add,
+        }))
+        .sorted_unstable_by_key(|modification| modification.name)
+    {
+        match dist.modification {
+            Modification::Add => {
+                writeln!(
+                    printer,
+                    " {} {}{}",
+                    "+".green(),
+                    dist.name.as_ref().white().bold(),
+                    format!("@{}", dist.version).dimmed()
+                )?;
+            }
+            Modification::Remove => {
+                writeln!(
+                    printer,
+                    " {} {}{}",
+                    "-".red(),
+                    dist.name.as_ref().white().bold(),
+                    format!("@{}", dist.version).dimmed()
+                )?;
+            }
+        }
     }
 
     Ok(ExitStatus::Success)
 }
 
-async fn find_uncached_requirements(
-    requirements: &[Requirement],
-    cache: Option<&Path>,
-    flags: PipSyncFlags,
-    python: &PythonExecutable,
-) -> Result<(Vec<LocalDistribution>, Vec<Requirement>)> {
-    // Index all the already-installed packages in site-packages.
-    let site_packages = if flags.intersects(PipSyncFlags::IGNORE_INSTALLED) {
-        SitePackages::default()
-    } else {
-        SitePackages::from_executable(python).await?
-    };
+#[derive(Debug, Default)]
+struct PartitionedRequirements {
+    /// The distributions that are not already installed in the current environment, but are
+    /// available in the local cache.
+    local: Vec<LocalDistribution>,
 
-    // Index all the already-downloaded wheels in the cache.
-    let local_index = if let Some(cache) = cache {
-        LocalIndex::from_directory(cache).await?
-    } else {
-        LocalIndex::default()
-    };
+    /// The distributions that are not already installed in the current environment, and are
+    /// not available in the local cache.
+    remote: Vec<Requirement>,
 
-    Ok(split_uncached_requirements(
-        requirements,
-        &site_packages,
-        &local_index,
-    ))
+    /// The distributions that are already installed in the current environment, and are
+    /// _not_ necessary to satisfy the requirements.
+    extraneous: Vec<Distribution>,
 }
 
-fn split_uncached_requirements(
-    requirements: &[Requirement],
-    site_packages: &SitePackages,
-    local_index: &LocalIndex,
-) -> (Vec<LocalDistribution>, Vec<Requirement>) {
-    requirements
-        .iter()
-        .filter(|requirement| {
+impl PartitionedRequirements {
+    /// Partition a set of requirements into those that should be linked from the cache, those that
+    /// need to be downloaded, and those that should be removed.
+    pub(crate) async fn try_from_requirements(
+        requirements: &[Requirement],
+        cache: Option<&Path>,
+        python: &PythonExecutable,
+    ) -> Result<Self> {
+        // Index all the already-installed packages in site-packages.
+        let mut site_packages = SitePackages::from_executable(python).await?;
+
+        // Index all the already-downloaded wheels in the cache.
+        let local_index = if let Some(cache) = cache {
+            LocalIndex::from_directory(cache).await?
+        } else {
+            LocalIndex::default()
+        };
+
+        let mut local = vec![];
+        let mut remote = vec![];
+        let mut extraneous = vec![];
+
+        for requirement in requirements {
             let package = PackageName::normalize(&requirement.name);
 
             // Filter out already-installed packages.
-            if let Some(dist_info) = site_packages.get(&package) {
-                debug!(
-                    "Requirement already satisfied: {} ({})",
-                    package,
-                    dist_info.version()
-                );
-                false
-            } else {
-                true
+            if let Some(dist) = site_packages.remove(&package) {
+                if requirement.is_satisfied_by(dist.version()) {
+                    debug!(
+                        "Requirement already satisfied: {} ({})",
+                        package,
+                        dist.version()
+                    );
+                    continue;
+                }
+                extraneous.push(dist);
             }
-        })
-        .partition_map(|requirement| {
-            let package = PackageName::normalize(&requirement.name);
 
             // Identify any locally-available distributions that satisfy the requirement.
             if let Some(distribution) = local_index
@@ -282,10 +332,38 @@ fn split_uncached_requirements(
                     distribution.name(),
                     distribution.version()
                 );
-                Either::Left(distribution.clone())
+                local.push(distribution.clone());
             } else {
                 debug!("Identified uncached requirement: {}", requirement);
-                Either::Right(requirement.clone())
+                remote.push(requirement.clone());
             }
+        }
+
+        // Remove any unnecessary packages.
+        for (package, dist_info) in site_packages {
+            debug!("Unnecessary package: {} ({})", package, dist_info.version());
+            extraneous.push(dist_info);
+        }
+
+        Ok(PartitionedRequirements {
+            local,
+            remote,
+            extraneous,
         })
+    }
+}
+
+#[derive(Debug)]
+enum Modification {
+    /// The package was added to the environment.
+    Add,
+    /// The package was removed from the environment.
+    Remove,
+}
+
+#[derive(Debug)]
+struct PackageModification<'a> {
+    name: &'a PackageName,
+    version: &'a pep440_rs::Version,
+    modification: Modification,
 }
