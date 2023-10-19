@@ -39,12 +39,12 @@ enum Commands {
     PipCompile(PipCompileArgs),
     /// Sync dependencies from a `requirements.txt` file.
     PipSync(PipSyncArgs),
+    /// Uninstall packages from the current environment.
+    PipUninstall(PipUninstallArgs),
     /// Clear the cache.
     Clean,
     /// Enumerate the installed packages in the current environment.
     Freeze,
-    /// Uninstall packages from the current environment.
-    PipUninstall(PipUninstallArgs),
     /// Create a virtual environment.
     Venv(VenvArgs),
     /// Add a dependency to the workspace.
@@ -58,6 +58,10 @@ struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
+
+    /// Constrain versions using the given constraints files.
+    #[clap(short, long)]
+    constraint: Vec<PathBuf>,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
@@ -85,11 +89,12 @@ struct PipUninstallArgs {
 
 #[derive(Args)]
 struct VenvArgs {
-    /// The python interpreter to use for the virtual environment
+    /// The Python interpreter to use for the virtual environment.
     // Short `-p` to match `virtualenv`
     // TODO(konstin): Support e.g. `-p 3.10`
     #[clap(short, long)]
     python: Option<PathBuf>,
+
     /// The path to the virtual environment to create.
     name: PathBuf,
 }
@@ -127,13 +132,19 @@ async fn main() -> ExitCode {
     let result = match cli.command {
         Commands::PipCompile(args) => {
             let dirs = ProjectDirs::from("", "", "puffin");
-            let sources = args
+            let requirements = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraint
+                .into_iter()
+                .map(RequirementsSource::from)
+                .collect::<Vec<_>>();
             commands::pip_compile(
-                &sources,
+                &requirements,
+                &constraints,
                 args.output_file.as_deref(),
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)

@@ -17,7 +17,8 @@ async fn pylint() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("pylint==2.3.0").unwrap()];
-    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let constraints = vec![];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
     let resolution = resolver.resolve().await?;
 
     assert_eq!(
@@ -39,7 +40,8 @@ async fn black() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let constraints = vec![];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
     let resolution = resolver.resolve().await?;
 
     assert_eq!(
@@ -63,7 +65,8 @@ async fn black_colorama() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
-    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let constraints = vec![];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
     let resolution = resolver.resolve().await?;
 
     assert_eq!(
@@ -88,7 +91,8 @@ async fn black_python_310() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let resolver = Resolver::new(requirements, &MARKERS_310, &TAGS_310, &client);
+    let constraints = vec![];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_310, &TAGS_310, &client);
     let resolution = resolver.resolve().await?;
 
     assert_eq!(
@@ -109,12 +113,94 @@ async fn black_python_310() -> Result<()> {
     Ok(())
 }
 
+/// Resolve `black` with a constraint on `mypy-extensions`, to ensure that constraints are
+/// respected.
+#[tokio::test]
+async fn black_mypy_extensions() -> Result<()> {
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let constraints = vec![Requirement::from_str("mypy-extensions<1").unwrap()];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve().await?;
+
+    assert_eq!(
+        format!("{resolution}"),
+        [
+            "black==23.9.1",
+            "click==8.1.7",
+            "mypy-extensions==0.4.3",
+            "packaging==23.2",
+            "pathspec==0.11.2",
+            "platformdirs==3.11.0"
+        ]
+        .join("\n")
+    );
+
+    Ok(())
+}
+
+/// Resolve `black` with a constraint on `mypy-extensions[extra]`, to ensure that extras are
+/// ignored when resolving constraints.
+#[tokio::test]
+async fn black_mypy_extensions_extra() -> Result<()> {
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let constraints = vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve().await?;
+
+    assert_eq!(
+        format!("{resolution}"),
+        [
+            "black==23.9.1",
+            "click==8.1.7",
+            "mypy-extensions==0.4.3",
+            "packaging==23.2",
+            "pathspec==0.11.2",
+            "platformdirs==3.11.0"
+        ]
+        .join("\n")
+    );
+
+    Ok(())
+}
+
+/// Resolve `black` with a redundant constraint on `flake8`, to ensure that constraints don't
+/// introduce new dependencies.
+#[tokio::test]
+async fn black_flake8() -> Result<()> {
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let constraints = vec![Requirement::from_str("flake8<1").unwrap()];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolution = resolver.resolve().await?;
+
+    assert_eq!(
+        format!("{resolution}"),
+        [
+            "black==23.9.1",
+            "click==8.1.7",
+            "mypy-extensions==1.0.0",
+            "packaging==23.2",
+            "pathspec==0.11.2",
+            "platformdirs==3.11.0"
+        ]
+        .join("\n")
+    );
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn htmldate() -> Result<()> {
     let client = PypiClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("htmldate<=1.5.0").unwrap()];
-    let resolver = Resolver::new(requirements, &MARKERS_311, &TAGS_311, &client);
+    let constraints = vec![];
+    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
     let resolution = resolver.resolve().await?;
 
     // Resolves to `htmldate==1.4.3` (rather than `htmldate==1.5.2`) because `htmldate==1.5.2` has

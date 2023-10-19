@@ -27,13 +27,14 @@ use puffin_package::package_name::PackageName;
 use wheel_filename::WheelFilename;
 
 use crate::error::ResolveError;
-use crate::pubgrub::iter_requirements;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
+use crate::pubgrub::{iter_requirements, version_range};
 use crate::resolution::{PinnedPackage, Resolution};
 
 pub struct Resolver<'a> {
     requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
     client: &'a PypiClient,
@@ -44,12 +45,14 @@ impl<'a> Resolver<'a> {
     /// Initialize a new resolver.
     pub fn new(
         requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a PypiClient,
     ) -> Self {
         Self {
             requirements,
+            constraints,
             markers,
             tags,
             client,
@@ -376,6 +379,8 @@ impl<'a> Resolver<'a> {
         match package {
             PubGrubPackage::Root => {
                 let mut constraints = DependencyConstraints::default();
+
+                // Add the root requirements.
                 for (package, version) in
                     iter_requirements(self.requirements.iter(), None, self.markers)
                 {
@@ -388,6 +393,18 @@ impl<'a> Resolver<'a> {
                         }
                     }
                 }
+
+                // If any requirements were further constrained by the user, add those constraints.
+                for constraint in &self.constraints {
+                    let package =
+                        PubGrubPackage::Package(PackageName::normalize(&constraint.name), None);
+                    if let Some(range) = constraints.get_mut(&package) {
+                        *range = range.intersection(
+                            &version_range(constraint.version_or_url.as_ref()).unwrap(),
+                        );
+                    }
+                }
+
                 Ok(Dependencies::Known(constraints))
             }
             PubGrubPackage::Package(package_name, extra) => {
@@ -424,6 +441,17 @@ impl<'a> Resolver<'a> {
                         Entry::Vacant(entry) => {
                             entry.insert(version);
                         }
+                    }
+                }
+
+                // If any packages were further constrained by the user, add those constraints.
+                for constraint in &self.constraints {
+                    let package =
+                        PubGrubPackage::Package(PackageName::normalize(&constraint.name), None);
+                    if let Some(range) = constraints.get_mut(&package) {
+                        *range = range.intersection(
+                            &version_range(constraint.version_or_url.as_ref()).unwrap(),
+                        );
                     }
                 }
 

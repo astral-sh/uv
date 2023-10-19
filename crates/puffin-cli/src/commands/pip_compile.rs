@@ -21,7 +21,8 @@ use crate::requirements::RequirementsSource;
 
 /// Resolve a set of requirements into a set of pinned versions.
 pub(crate) async fn pip_compile(
-    sources: &[RequirementsSource],
+    requirements: &[RequirementsSource],
+    constraints: &[RequirementsSource],
     output_file: Option<&Path>,
     cache: Option<&Path>,
     mut printer: Printer,
@@ -29,7 +30,12 @@ pub(crate) async fn pip_compile(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let requirements = sources
+    let requirements = requirements
+        .iter()
+        .map(RequirementsSource::requirements)
+        .flatten_ok()
+        .collect::<Result<Vec<Requirement>>>()?;
+    let constraints = constraints
         .iter()
         .map(RequirementsSource::requirements)
         .flatten_ok()
@@ -53,7 +59,8 @@ pub(crate) async fn pip_compile(
     let client = PypiClientBuilder::default().cache(cache).build();
 
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(requirements, markers, &tags, &client);
+    let resolver =
+        puffin_resolver::Resolver::new(requirements, constraints, markers, &tags, &client);
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
             mut derivation_tree,
