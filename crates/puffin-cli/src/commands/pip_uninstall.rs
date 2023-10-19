@@ -53,11 +53,11 @@ pub(crate) async fn pip_uninstall(
     };
 
     // Map to the local distributions.
-    let dist_infos = packages
+    let distributions = packages
         .iter()
         .filter_map(|package| {
-            if let Some(dist_info) = site_packages.get(package) {
-                Some(dist_info)
+            if let Some(distribution) = site_packages.get(package) {
+                Some(distribution)
             } else {
                 let _ = writeln!(
                     printer,
@@ -71,7 +71,7 @@ pub(crate) async fn pip_uninstall(
         })
         .collect::<Vec<_>>();
 
-    if dist_infos.is_empty() {
+    if distributions.is_empty() {
         writeln!(
             printer,
             "{}{} No packages to uninstall.",
@@ -82,11 +82,11 @@ pub(crate) async fn pip_uninstall(
     }
 
     // Uninstall each package.
-    for dist_info in &dist_infos {
-        let summary = puffin_installer::uninstall(dist_info).await?;
+    for distribution in &distributions {
+        let summary = puffin_installer::uninstall(distribution).await?;
         debug!(
             "Uninstalled {} ({} file{}, {} director{})",
-            dist_info.name(),
+            distribution.name(),
             summary.file_count,
             if summary.file_count == 1 { "" } else { "s" },
             summary.dir_count,
@@ -101,8 +101,8 @@ pub(crate) async fn pip_uninstall(
             "Uninstalled {} in {}",
             format!(
                 "{} package{}",
-                dist_infos.len(),
-                if dist_infos.len() == 1 { "" } else { "s" }
+                distributions.len(),
+                if distributions.len() == 1 { "" } else { "s" }
             )
             .bold(),
             elapsed(start.elapsed())
@@ -110,13 +110,13 @@ pub(crate) async fn pip_uninstall(
         .dimmed()
     )?;
 
-    for dist_info in dist_infos {
+    for distribution in distributions {
         writeln!(
             printer,
             " {} {}{}",
             "-".red(),
-            dist_info.name().as_ref().white().bold(),
-            format!("@{}", dist_info.version()).dimmed()
+            distribution.name().as_ref().white().bold(),
+            format!("@{}", distribution.version()).dimmed()
         )?;
     }
 

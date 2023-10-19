@@ -66,10 +66,6 @@ struct PipCompileArgs {
 struct PipSyncArgs {
     /// Path to the `requirements.txt` file to install.
     src: PathBuf,
-
-    /// Ignore any installed packages, forcing a re-installation.
-    #[arg(long)]
-    ignore_installed: bool,
 }
 
 #[derive(Args)]
@@ -145,11 +141,6 @@ async fn main() -> ExitCode {
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
-                if args.ignore_installed {
-                    commands::PipSyncFlags::IGNORE_INSTALLED
-                } else {
-                    commands::PipSyncFlags::empty()
-                },
                 printer,
             )
             .await
