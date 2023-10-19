@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use itertools::Either;
 
 use pep508_rs::Requirement;
@@ -37,6 +37,9 @@ impl RequirementsSource {
             }
             Self::Path(path) => {
                 let requirements_txt = RequirementsTxt::parse(path, std::env::current_dir()?)?;
+                if !requirements_txt.constraints.is_empty() {
+                    bail!("Constraints in requirements files are not supported");
+                }
                 Ok(Either::Right(
                     requirements_txt
                         .requirements

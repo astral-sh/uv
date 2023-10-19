@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -16,7 +16,6 @@ use puffin_installer::{
 };
 use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
-use puffin_package::requirements_txt::RequirementsTxt;
 use puffin_resolver::Resolution;
 
 use crate::commands::reporters::{
@@ -24,23 +23,21 @@ use crate::commands::reporters::{
 };
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
+use crate::requirements::RequirementsSource;
 
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn pip_sync(
-    src: &Path,
+    sources: &[RequirementsSource],
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
-    // Read the `requirements.txt` from disk.
-    let requirements_txt = RequirementsTxt::parse(src, std::env::current_dir()?)?;
-    if !requirements_txt.constraints.is_empty() {
-        bail!("Constraints in requirements.txt are not supported");
-    }
-    let requirements = requirements_txt
-        .requirements
-        .into_iter()
-        .map(|entry| entry.requirement)
-        .collect::<Vec<_>>();
+    // Read all requirements from the provided sources.
+    let requirements = sources
+        .iter()
+        .map(RequirementsSource::requirements)
+        .flatten_ok()
+        .collect::<Result<Vec<Requirement>>>()?;
+
     if requirements.is_empty() {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);

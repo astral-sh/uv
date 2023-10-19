@@ -1,42 +1,32 @@
-use fs_err::File;
 use std::fmt::Write;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
 
 use anyhow::Result;
+use fs_err::File;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::report::Reporter;
 use tracing::debug;
 
+use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
-use puffin_package::requirements_txt::RequirementsTxt;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
+use crate::requirements::RequirementsSource;
 
 /// Resolve a set of requirements into a set of pinned versions.
 pub(crate) async fn pip_compile(
-    src: &Path,
+    sources: &[RequirementsSource],
     output_file: Option<&Path>,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
-
-    // Read the `requirements.txt` from disk.
-    let requirements_txt = RequirementsTxt::parse(src, std::env::current_dir()?)?;
-    let requirements = requirements_txt
-        .requirements
-        .into_iter()
-        .map(|entry| entry.requirement)
-        .collect::<Vec<_>>();
-    if requirements.is_empty() {
-        writeln!(printer, "No requirements found")?;
-        return Ok(ExitStatus::Success);
-    }
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -45,6 +35,13 @@ pub(crate) async fn pip_compile(
         "Using Python interpreter: {}",
         python.executable().display()
     );
+
+    // Read all requirements from the provided sources.
+    let requirements = sources
+        .iter()
+        .map(RequirementsSource::requirements)
+        .flatten_ok()
+        .collect::<Result<Vec<Requirement>>>()?;
 
     // Determine the current environment markers.
     let markers = python.markers();
