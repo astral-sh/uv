@@ -286,7 +286,7 @@ impl<'a> Resolver<'a> {
                 true
             }) else {
                 // Short circuit: we couldn't find _any_ compatible versions for a package.
-                let (package, _range) = potential_packages.remove(selection);
+                let (package, _range) = potential_packages.swap_remove(index);
                 return Ok((package, None));
             };
 
@@ -301,7 +301,7 @@ impl<'a> Resolver<'a> {
         // TODO(charlie): This is really ugly, but we need to return `T`, not `&T` (and yet
         // we also need to iterate over `potential_packages` multiple times, so we can't
         // use `into_iter()`.)
-        let (package, range) = potential_packages.remove(selection);
+        let (package, range) = potential_packages.swap_remove(selection);
 
         return match package.borrow() {
             PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
