@@ -677,6 +677,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "distribution-filename"
+version = "0.0.1"
+dependencies = [
+ "pep440_rs 0.3.12",
+ "platform-tags",
+ "puffin-package",
+ "thiserror",
+]
+
+[[package]]
 name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -990,6 +1000,7 @@ dependencies = [
  "clap",
  "configparser",
  "dirs",
+ "distribution-filename",
  "fs-err",
  "install-wheel-rs",
  "rayon",
@@ -1001,7 +1012,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "wheel-filename",
  "which",
 ]
 
@@ -1322,6 +1332,7 @@ dependencies = [
  "configparser",
  "csv",
  "data-encoding",
+ "distribution-filename",
  "fs-err",
  "fs2",
  "fxhash",
@@ -1346,7 +1357,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walkdir",
- "wheel-filename",
  "zip",
 ]
 
@@ -2101,6 +2111,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cacache",
+ "distribution-filename",
  "fs-err",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
@@ -2113,7 +2124,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
- "wheel-filename",
  "zip",
 ]
 
@@ -2164,6 +2174,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.4.1",
  "colored",
+ "distribution-filename",
  "futures",
  "fxhash",
  "insta",
@@ -2180,7 +2191,6 @@ dependencies = [
  "tokio",
  "tracing",
  "waitmap",
- "wheel-filename",
 ]
 
 [[package]]
@@ -3555,14 +3565,6 @@ checksum = "9b85cbef8c220a6abc02aefd892dfc0fc23afb1c6a426316ec33253a3877249b"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "wheel-filename"
-version = "0.0.1"
-dependencies = [
- "platform-tags",
- "thiserror",
 ]
 
 [[package]]

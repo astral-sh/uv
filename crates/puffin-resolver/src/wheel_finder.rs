@@ -11,13 +11,12 @@ use futures::{StreamExt, TryFutureExt};
 use fxhash::FxHashMap;
 use tracing::debug;
 
-use pep440_rs::Version;
+use distribution_filename::WheelFilename;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
-use wheel_filename::WheelFilename;
 
 use crate::error::ResolveError;
 use crate::resolution::{PinnedPackage, Resolution};
@@ -97,15 +96,11 @@ impl<'a> WheelFinder<'a> {
                                 return false;
                             };
 
-                            let Ok(version) = Version::from_str(&name.version) else {
-                                return false;
-                            };
-
                             if !name.is_compatible(self.tags) {
                                 return false;
                             }
 
-                            requirement.is_satisfied_by(&version)
+                            requirement.is_satisfied_by(&name.version)
                         }) else {
                             return Err(ResolveError::NotFound(requirement));
                         };

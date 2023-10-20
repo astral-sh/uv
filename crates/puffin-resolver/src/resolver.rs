@@ -18,13 +18,13 @@ use tokio::select;
 use tracing::{debug, trace};
 use waitmap::WaitMap;
 
+use distribution_filename::WheelFilename;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::{File, PypiClient, SimpleJson};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
-use wheel_filename::WheelFilename;
 
 use crate::error::ResolveError;
 use crate::pubgrub::package::PubGrubPackage;
@@ -268,17 +268,13 @@ impl<'a> Resolver<'a> {
                     return false;
                 };
 
-                let Ok(version) = pep440_rs::Version::from_str(&name.version) else {
-                    return false;
-                };
-
                 if !name.is_compatible(self.tags) {
                     return false;
                 }
 
                 if !range
                     .borrow()
-                    .contains(&PubGrubVersion::from(version.clone()))
+                    .contains(&PubGrubVersion::from(name.version.clone()))
                 {
                     return false;
                 };
@@ -322,17 +318,13 @@ impl<'a> Resolver<'a> {
                         return None;
                     };
 
-                    let Ok(version) = pep440_rs::Version::from_str(&name.version) else {
-                        return None;
-                    };
-
                     if !name.is_compatible(self.tags) {
                         return None;
                     }
 
                     if !range
                         .borrow()
-                        .contains(&PubGrubVersion::from(version.clone()))
+                        .contains(&PubGrubVersion::from(name.version.clone()))
                     {
                         return None;
                     };
@@ -340,7 +332,7 @@ impl<'a> Resolver<'a> {
                     Some(Wheel {
                         file: file.clone(),
                         name: package_name.clone(),
-                        version: version.clone(),
+                        version: name.version.clone(),
                     })
                 }) else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.

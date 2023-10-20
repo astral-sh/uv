@@ -19,7 +19,7 @@ use zip::result::ZipError;
 use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
 
-use wheel_filename::WheelFilename;
+use distribution_filename::WheelFilename;
 
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;

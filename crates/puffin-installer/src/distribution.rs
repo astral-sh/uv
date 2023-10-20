@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 
+use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use puffin_client::File;
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
-use wheel_filename::WheelFilename;
 
 /// A built distribution (wheel), which either exists remotely or locally.
 #[derive(Debug, Clone)]
@@ -79,10 +79,9 @@ impl RemoteDistribution {
     pub fn from_file(file: File) -> Result<Self> {
         let filename = WheelFilename::from_str(&file.filename)?;
         let name = PackageName::normalize(&filename.distribution);
-        let version = Version::from_str(&filename.version).map_err(|err| anyhow!(err))?;
         Ok(Self {
             name,
-            version,
+            version: filename.version.clone(),
             file,
         })
     }

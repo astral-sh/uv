@@ -326,7 +326,7 @@ impl SourceDistributionBuilder {
         let wheel = stdout
             .lines()
             .last()
-            .map(|wheel_filename| wheel_dir.join(wheel_filename));
+            .map(|distribution_filename| wheel_dir.join(distribution_filename));
         let Some(wheel) = wheel.filter(|wheel| wheel.is_file()) else {
             return Err(Error::from_command_output(
                 "Build backend did not return the wheel filename through `build_wheel()`"
