@@ -10,10 +10,11 @@ use anyhow::Result;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::future::Either;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
+use petgraph::visit::Walker;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
-use pubgrub::solver::{Incompatibility, State};
-use pubgrub::type_aliases::{DependencyConstraints, SelectedDependencies};
+use pubgrub::solver::{DependencyConstraints, Incompatibility, State};
+use pubgrub::type_aliases::SelectedDependencies;
 use tokio::select;
 use tracing::{debug, trace};
 use waitmap::WaitMap;
@@ -93,7 +94,7 @@ impl<'a> Resolver<'a> {
             }
         };
 
-        Ok(resolution.into())
+        Ok(Resolution::from(resolution))
     }
 
     /// Run the `PubGrub` solver.
@@ -126,6 +127,36 @@ impl<'a> Resolver<'a> {
                     )
                     .into());
                 };
+
+                for (package, version) in selection.iter() {
+                    let x = &state.incompatibilities[package];
+                    for incompat_id in x.iter() {
+                        let inc = &state.incompatibility_store[*incompat_id];
+                        match &inc.kind {
+                            Kind::NotRoot(_, _) => {}
+                            Kind::NoVersions(_, _) => {}
+                            Kind::UnavailableDependencies(_, _) => {}
+                            Kind::FromDependencyOf(a, b, c, d) => {
+                                if b.contains(version) {
+                                    println!("{} {} {} {}", a, b, c, d);
+                                }
+                            }
+                            Kind::DerivedFrom(_, _) => {}
+                        }
+                        // for y in inc.iter() {
+                        //     println!("{} {}", package, y.0);
+                        // }
+                        // if state.is_terminal(incompat) {
+                        //     return Err(PubGrubError::Failure(
+                        //         "How did we end up with a terminal incompatibility?".into(),
+                        //     )
+                        //     .into());
+                        // }
+                    }
+
+                }
+
+
                 return Ok(PubGrubResolution { selection, pins });
             };
 
@@ -306,8 +337,6 @@ impl<'a> Resolver<'a> {
             PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
             PubGrubPackage::Package(package_name, _) => {
                 // Wait for the metadata to be available.
-                // TODO(charlie): Ideally, we'd choose the first package for which metadata is
-                // available.
                 let entry = self.cache.packages.wait(package_name).await.unwrap();
                 let simple_json = entry.value();
 
@@ -581,8 +610,49 @@ struct PubGrubResolution {
     pins: HashMap<PackageName, HashMap<pep440_rs::Version, File>>,
 }
 
+struct Node<'a> {
+    package: &'a PubGrubPackage,
+    version: &'a PubGrubVersion,
+}
+
 impl From<PubGrubResolution> for Resolution {
     fn from(value: PubGrubResolution) -> Self {
+        let mut graph = petgraph::graph::Graph::<Node, File, petgraph::Directed>::with_capacity(
+            value.selection.len(),
+            value.selection.len(),
+        );
+
+        // Add every package to the graph.
+        let mut inverse = HashMap::with_capacity(value.selection.len());
+        for (package, version) in value.selection.iter() {
+            let index = graph.add_node(Node { package, version });
+            inverse.insert(package, index);
+        }
+
+        // Add edges between dependencies.
+        for index in graph.node_indices() {
+            let node = &graph[index];
+
+            let package = match node.package {
+                PubGrubPackage::Package(package_name, None) => package_name,
+                _ => continue,
+            };
+
+            let file = value
+                .pins
+                .get(package)
+                .and_then(|versions| versions.get(node.version.into()))
+                .unwrap()
+                .clone();
+
+            // for requirement in file.
+
+            // graph.add_edge(index, inverse[&PubGrubPackage::Root], file);
+
+            // println!("node: {:?}", node);
+        }
+
+
         let mut packages = BTreeMap::new();
         for (package, version) in value.selection {
             let PubGrubPackage::Package(package_name, None) = package else {

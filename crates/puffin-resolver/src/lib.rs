@@ -8,3 +8,4 @@ mod pubgrub;
 mod resolution;
 mod resolver;
 mod wheel_finder;
+mod graph;
