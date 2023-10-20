@@ -54,7 +54,9 @@ pub(crate) fn iter_requirements<'a>(
 }
 
 /// Convert a PEP 508 specifier to a `PubGrub` range.
-fn version_range(specifiers: Option<&pep508_rs::VersionOrUrl>) -> Result<Range<PubGrubVersion>> {
+pub(crate) fn version_range(
+    specifiers: Option<&pep508_rs::VersionOrUrl>,
+) -> Result<Range<PubGrubVersion>> {
     let Some(specifiers) = specifiers else {
         return Ok(Range::any());
     };
