@@ -42,7 +42,7 @@ pub enum Error {
     InvalidPoetry(String),
     /// Doesn't follow file name schema
     #[error(transparent)]
-    InvalidWheelFileName(#[from] wheel_filename::Error),
+    InvalidWheelFileName(#[from] distribution_filename::WheelFilenameError),
     #[error("Failed to read the wheel file {0}")]
     Zip(String, #[source] ZipError),
     #[error("Failed to run python subcommand")]

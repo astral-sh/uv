@@ -6,8 +6,8 @@ use fs_err::File;
 #[cfg(feature = "rayon")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use distribution_filename::WheelFilename;
 use install_wheel_rs::{install_wheel, Error, InstallLocation};
-use wheel_filename::WheelFilename;
 
 /// Low level install CLI, mainly used for testing
 #[derive(Parser)]

@@ -15,7 +15,7 @@ license = { workspace = true }
 
 [dependencies]
 install-wheel-rs = { path = "../install-wheel-rs", optional = true }
-wheel-filename = { path = "../wheel-filename" }
+distribution-filename = { path = "../distribution-filename" }
 
 camino = { workspace = true }
 clap = { workspace = true }

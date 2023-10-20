@@ -1,5 +1,5 @@
 [package]
-name = "wheel-filename"
+name = "distribution-filename"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -11,5 +11,7 @@ license = { workspace = true }
 
 [dependencies]
 platform-tags = { path = "../platform-tags" }
+puffin-package = { path = "../puffin-package" }
+pep440_rs = { path = "../pep440-rs" }
 
 thiserror = { workspace = true }

@@ -1,6 +1,7 @@
 #![allow(clippy::format_push_string)] // I will not replace clear and infallible with fallible, io looking code
 
 use crate::{install_wheel, Error, InstallLocation, LockedDir};
+use distribution_filename::WheelFilename;
 use fs_err::File;
 use pyo3::create_exception;
 use pyo3::types::PyModule;
@@ -8,7 +9,6 @@ use pyo3::{pyclass, pymethods, pymodule, PyErr, PyResult, Python};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use wheel_filename::WheelFilename;
 
 create_exception!(
     install_wheel_rs,

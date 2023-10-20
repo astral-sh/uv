@@ -40,6 +40,6 @@ Types and functionality for working with Python packages, e.g., parsing wheel fi
 
 Functionality for resolving Python packages and their dependencies.
 
-## [wheel-filename](./wheel-filename)
+## [distribution-filename](./distribution-filename)
 
 Functionality for parsing wheel filenames as per [PEP 427](https://peps.python.org/pep-0427/).

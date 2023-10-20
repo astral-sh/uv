@@ -10,8 +10,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tempfile::NamedTempFile;
 use tracing::debug;
 
+use distribution_filename::WheelFilename;
 use install_wheel_rs::{install_wheel, InstallLocation};
-use wheel_filename::WheelFilename;
 
 use crate::bare::VenvPaths;
 use crate::interpreter::InterpreterInfo;

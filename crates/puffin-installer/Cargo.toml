@@ -15,7 +15,7 @@ pep440_rs = { path = "../pep440-rs" }
 puffin-client = { path = "../puffin-client" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-package = { path = "../puffin-package" }
-wheel-filename = { path = "../wheel-filename" }
+distribution-filename = { path = "../distribution-filename" }
 
 anyhow = { workspace = true }
 cacache = { workspace = true }
