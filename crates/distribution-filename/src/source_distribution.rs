@@ -69,7 +69,6 @@ impl SourceDistributionFilename {
             ));
         };
 
-        // Avoid out of bounds, the comparison will fail when the filename is to short
         if stem.len() <= package_name.as_ref().len() + "-".len()
             || &PackageName::normalize(&stem[..package_name.as_ref().len()]) != package_name
         {
@@ -79,6 +78,7 @@ impl SourceDistributionFilename {
             });
         }
 
+        // We checked the length above
         let version = Version::from_str(&stem[package_name.as_ref().len() + "-".len()..])
             .map_err(SourceDistributionFilenameError::InvalidVersion)?;
 
