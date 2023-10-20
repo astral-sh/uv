@@ -28,6 +28,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 waitmap = { workspace = true }
+petgraph = "0.6.4"
 
 [dev-dependencies]
 once_cell = { version = "1.18.0" }
+insta = { version = "1.34.0" }

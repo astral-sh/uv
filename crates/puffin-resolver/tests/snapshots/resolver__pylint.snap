@@ -1,0 +1,12 @@
+---
+source: crates/puffin-resolver/tests/resolver.rs
+expression: resolution
+---
+astroid==3.0.1
+    # via pylint
+isort==6.0.0b2
+    # via pylint
+mccabe==0.7.0
+    # via pylint
+pylint==2.3.0
+

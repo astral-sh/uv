@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
-use pubgrub::type_aliases::{DependencyConstraints, SelectedDependencies};
+use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
 use tracing::{debug, trace};
 use waitmap::WaitMap;
@@ -30,7 +30,7 @@ use crate::error::ResolveError;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
-use crate::resolution::{PinnedPackage, Resolution};
+use crate::resolution::Graph;
 
 pub struct Resolver<'a> {
     requirements: Vec<Requirement>,
@@ -61,7 +61,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
-    pub async fn resolve(self) -> Result<Resolution, ResolveError> {
+    pub async fn resolve(self) -> Result<Graph, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
@@ -93,14 +93,14 @@ impl<'a> Resolver<'a> {
             }
         };
 
-        Ok(resolution.into())
+        Ok(resolution)
     }
 
     /// Run the `PubGrub` solver.
     async fn solve(
         &self,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-    ) -> Result<PubGrubResolution, ResolveError> {
+    ) -> Result<Graph, ResolveError> {
         let root = PubGrubPackage::Root;
 
         // Keep track of the packages for which we've requested metadata.
@@ -126,7 +126,8 @@ impl<'a> Resolver<'a> {
                     )
                     .into());
                 };
-                return Ok(PubGrubResolution { selection, pins });
+
+                return Ok(Graph::from_state(&selection, &pins, &state));
             };
 
             // Choose a package version.
@@ -306,8 +307,6 @@ impl<'a> Resolver<'a> {
             PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
             PubGrubPackage::Package(package_name, _) => {
                 // Wait for the metadata to be available.
-                // TODO(charlie): Ideally, we'd choose the first package for which metadata is
-                // available.
                 let entry = self.cache.packages.wait(package_name).await.unwrap();
                 let simple_json = entry.value();
 
@@ -571,34 +570,4 @@ enum Dependencies {
     Unknown,
     /// Container for all available package versions.
     Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
-}
-
-#[derive(Debug)]
-struct PubGrubResolution {
-    /// The selected dependencies.
-    selection: SelectedDependencies<PubGrubPackage, PubGrubVersion>,
-    /// The selected file (source or built distribution) for each package.
-    pins: HashMap<PackageName, HashMap<pep440_rs::Version, File>>,
-}
-
-impl From<PubGrubResolution> for Resolution {
-    fn from(value: PubGrubResolution) -> Self {
-        let mut packages = BTreeMap::new();
-        for (package, version) in value.selection {
-            let PubGrubPackage::Package(package_name, None) = package else {
-                continue;
-            };
-
-            let version = pep440_rs::Version::from(version);
-            let file = value
-                .pins
-                .get(&package_name)
-                .and_then(|versions| versions.get(&version))
-                .unwrap()
-                .clone();
-            let pinned_package = PinnedPackage::new(package_name.clone(), version, file);
-            packages.insert(package_name, pinned_package);
-        }
-        Resolution::new(packages)
-    }
 }

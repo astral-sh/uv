@@ -16,7 +16,6 @@ use puffin_installer::{
 };
 use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
-use puffin_resolver::Resolution;
 
 use crate::commands::reporters::{
     DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
@@ -93,8 +92,8 @@ pub(crate) async fn sync_requirements(
     let client = PypiClientBuilder::default().cache(cache).build();
 
     // Resolve the dependencies.
-    let resolution = if remote.is_empty() {
-        Resolution::default()
+    let remote = if remote.is_empty() {
+        Vec::new()
     } else {
         let start = std::time::Instant::now();
 
@@ -115,33 +114,32 @@ pub(crate) async fn sync_requirements(
         )?;
 
         resolution
+            .into_files()
+            .map(RemoteDistribution::from_file)
+            .collect::<Result<Vec<_>>>()?
     };
 
     // Download any missing distributions.
     let staging = tempfile::tempdir()?;
-    let uncached = resolution
-        .into_files()
-        .map(RemoteDistribution::from_file)
-        .collect::<Result<Vec<_>>>()?;
-    let downloads = if uncached.is_empty() {
+    let downloads = if remote.is_empty() {
         vec![]
     } else {
         let start = std::time::Instant::now();
 
         let downloader = puffin_installer::Downloader::new(&client, cache)
-            .with_reporter(DownloadReporter::from(printer).with_length(uncached.len() as u64));
+            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let downloads = downloader
-            .download(&uncached, cache.unwrap_or(staging.path()))
+            .download(&remote, cache.unwrap_or(staging.path()))
             .await?;
 
-        let s = if uncached.len() == 1 { "" } else { "s" };
+        let s = if remote.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Downloaded {} in {}",
-                format!("{} package{}", uncached.len(), s).bold(),
+                format!("{} package{}", remote.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()

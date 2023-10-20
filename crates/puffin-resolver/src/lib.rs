@@ -1,5 +1,5 @@
 pub use error::ResolveError;
-pub use resolution::{PinnedPackage, Resolution};
+pub use resolution::PinnedPackage;
 pub use resolver::Resolver;
 pub use wheel_finder::{Reporter, WheelFinder};
 

@@ -1,0 +1,16 @@
+---
+source: crates/puffin-resolver/tests/resolver.rs
+expression: resolution
+---
+black==23.9.1
+click==8.1.7
+    # via black
+mypy-extensions==0.4.3
+    # via black
+packaging==23.2
+    # via black
+pathspec==0.11.2
+    # via black
+platformdirs==3.11.0
+    # via black
+
