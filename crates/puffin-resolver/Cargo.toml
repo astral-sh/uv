@@ -21,6 +21,7 @@ wheel-filename = { path = "../wheel-filename" }
 
 anyhow = { workspace = true }
 bitflags = { workspace = true }
+colored = { workspace = true }
 futures = { workspace = true }
 once_cell = { workspace = true }
 thiserror = { workspace = true }

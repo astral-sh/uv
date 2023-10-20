@@ -1,6 +1,4 @@
 use std::collections::BTreeMap;
-use std::io;
-use std::io::Write;
 
 use pep440_rs::Version;
 use puffin_client::File;
@@ -34,16 +32,9 @@ impl Resolution {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-
-    /// Write the resolution in the `{name}=={version}` format of requirements.txt that pip uses.
-    pub fn write_requirement_format(&self, writer: &mut impl Write) -> io::Result<()> {
-        for (name, package) in self.iter() {
-            writeln!(writer, "{}=={}", name, package.version())?;
-        }
-        Ok(())
-    }
 }
 
+/// Write the resolution in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for Resolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut first = true;
