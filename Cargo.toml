@@ -28,6 +28,7 @@ flate2 = { version = "1.0.28" }
 fs-err = { version = "2.9.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.28" }
+fxhash = { version = "0.2.1" }
 glibc_version = { version = "0.1.2" }
 goblin = { version = "0.7.1" }
 http-cache-reqwest = { version = "0.11.3" }
@@ -38,6 +39,7 @@ mailparse = { version = "0.14.0" }
 memchr = { version = "2.6.4" }
 miette = { version = "5.10.0" }
 once_cell = { version = "1.18.0" }
+petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.5.0" }
 pyproject-toml = { version = "0.7.0" }

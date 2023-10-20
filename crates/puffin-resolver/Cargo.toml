@@ -23,12 +23,13 @@ anyhow = { workspace = true }
 bitflags = { workspace = true }
 colored = { workspace = true }
 futures = { workspace = true }
+fxhash = { workspace = true }
 once_cell = { workspace = true }
+petgraph = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 waitmap = { workspace = true }
-petgraph = "0.6.4"
 
 [dev-dependencies]
 once_cell = { version = "1.18.0" }

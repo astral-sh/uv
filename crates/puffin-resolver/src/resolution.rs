@@ -1,6 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::hash::BuildHasherDefault;
 
 use colored::Colorize;
+use fxhash::FxHashMap;
 use petgraph::visit::EdgeRef;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
@@ -49,11 +50,11 @@ impl PinnedPackage {
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default)]
-pub struct Resolution(BTreeMap<PackageName, PinnedPackage>);
+pub struct Resolution(FxHashMap<PackageName, PinnedPackage>);
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub(crate) fn new(packages: BTreeMap<PackageName, PinnedPackage>) -> Self {
+    pub(crate) fn new(packages: FxHashMap<PackageName, PinnedPackage>) -> Self {
         Self(packages)
     }
 
@@ -87,7 +88,7 @@ impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
     pub fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
-        pins: &HashMap<PackageName, HashMap<Version, File>>,
+        pins: &FxHashMap<PackageName, FxHashMap<Version, File>>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>>,
     ) -> Self {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
@@ -95,7 +96,8 @@ impl Graph {
         let mut graph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
 
         // Add every package to the graph.
-        let mut inverse = HashMap::with_capacity(selection.len());
+        let mut inverse =
+            FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         for (package, version) in selection {
             let PubGrubPackage::Package(package_name, None) = package else {
                 continue;

@@ -1,20 +1,8 @@
-use std::collections::{HashMap, HashSet};
-
+use fxhash::FxHashSet;
 use regex::Regex;
 use serde::Serialize;
 
 use crate::Error;
-
-/// Minimal `direct_url.json` schema
-///
-/// <https://packaging.python.org/en/latest/specifications/direct-url/>
-/// <https://www.python.org/dev/peps/pep-0610/>
-#[derive(Serialize)]
-struct DirectUrl {
-    #[allow(clippy::zero_sized_map_values)]
-    archive_info: HashMap<(), ()>,
-    url: String,
-}
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
@@ -57,12 +45,12 @@ impl Script {
             .captures(value)
             .ok_or_else(|| Error::InvalidWheel(format!("invalid console script: '{value}'")))?;
         if let Some(script_extras) = captures.name("extras") {
-            let script_extras = script_extras
-                .as_str()
-                .split(',')
-                .map(|extra| extra.trim().to_string())
-                .collect::<HashSet<String>>();
             if let Some(extras) = extras {
+                let script_extras = script_extras
+                    .as_str()
+                    .split(',')
+                    .map(|extra| extra.trim().to_string())
+                    .collect::<FxHashSet<String>>();
                 if !script_extras.is_subset(&extras.iter().cloned().collect()) {
                     return Ok(None);
                 }
