@@ -31,9 +31,6 @@ mod wheel;
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    /// This shouldn't actually be possible to occur
-    #[error("Failed to serialize direct_url.json ಠ_ಠ")]
-    DirectUrlSerdeJson(#[source] serde_json::Error),
     /// Tags/metadata didn't match platform
     #[error("The wheel is incompatible with the current platform {os} {arch}")]
     IncompatibleWheel { os: Os, arch: Arch },

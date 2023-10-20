@@ -26,6 +26,7 @@ csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
+fxhash = { workspace = true }
 glibc_version = { workspace = true }
 goblin = { workspace = true }
 mailparse = { workspace = true }

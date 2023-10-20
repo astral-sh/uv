@@ -2,7 +2,6 @@
 
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -10,6 +9,7 @@ use anyhow::Result;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::future::Either;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
+use fxhash::{FxHashMap, FxHashSet};
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
@@ -104,14 +104,14 @@ impl<'a> Resolver<'a> {
         let root = PubGrubPackage::Root;
 
         // Keep track of the packages for which we've requested metadata.
-        let mut requested_packages = HashSet::new();
-        let mut requested_versions = HashSet::new();
-        let mut pins = HashMap::new();
+        let mut requested_packages = FxHashSet::default();
+        let mut requested_versions = FxHashSet::default();
+        let mut pins = FxHashMap::default();
 
         // Start the solve.
         let mut state = State::init(root.clone(), MIN_VERSION.clone());
-        let mut added_dependencies: HashMap<PubGrubPackage, HashSet<PubGrubVersion>> =
-            HashMap::default();
+        let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<PubGrubVersion>> =
+            FxHashMap::default();
         let mut next = root;
 
         loop {
@@ -243,8 +243,8 @@ impl<'a> Resolver<'a> {
     async fn choose_package_version<T: Borrow<PubGrubPackage>, U: Borrow<Range<PubGrubVersion>>>(
         &self,
         mut potential_packages: Vec<(T, U)>,
-        pins: &mut HashMap<PackageName, HashMap<pep440_rs::Version, File>>,
-        in_flight: &mut HashSet<String>,
+        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        in_flight: &mut FxHashSet<String>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(T, Option<PubGrubVersion>), ResolveError> {
         let mut selection = 0usize;
@@ -373,8 +373,8 @@ impl<'a> Resolver<'a> {
         &self,
         package: &PubGrubPackage,
         version: &PubGrubVersion,
-        pins: &mut HashMap<PackageName, HashMap<pep440_rs::Version, File>>,
-        requested_packages: &mut HashSet<PackageName>,
+        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        requested_packages: &mut FxHashSet<PackageName>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {

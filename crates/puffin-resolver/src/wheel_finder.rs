@@ -2,12 +2,13 @@
 //!
 //! This is similar to running `pip install` with the `--no-deps` flag.
 
-use std::collections::BTreeMap;
+use std::hash::BuildHasherDefault;
 use std::str::FromStr;
 
 use anyhow::Result;
 use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
+use fxhash::FxHashMap;
 use tracing::debug;
 
 use pep440_rs::Version;
@@ -81,7 +82,8 @@ impl<'a> WheelFinder<'a> {
         }
 
         // Resolve the requirements.
-        let mut resolution: BTreeMap<PackageName, PinnedPackage> = BTreeMap::new();
+        let mut resolution: FxHashMap<PackageName, PinnedPackage> =
+            FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         while let Some(chunk) = package_stream.next().await {
             for result in chunk {

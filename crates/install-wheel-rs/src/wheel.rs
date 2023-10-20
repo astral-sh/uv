@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -9,6 +9,7 @@ use configparser::ini::Ini;
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
+use fxhash::{FxHashMap, FxHashSet};
 use mailparse::MailHeaderMap;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
@@ -158,7 +159,7 @@ fn unpack_wheel_files<R: Read + Seek>(
     // Cache the created parent dirs to avoid io calls
     // When deactivating bytecode compilation and sha2 those were 5% of total runtime, with
     // cache it 2.3%
-    let mut created_dirs = HashSet::new();
+    let mut created_dirs = FxHashSet::default();
     // https://github.com/zip-rs/zip/blob/7edf2489d5cff8b80f02ee6fc5febf3efd0a9442/examples/extract.rs
     for i in 0..archive.len() {
         let mut file = archive
@@ -858,8 +859,8 @@ pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Erro
 pub fn parse_key_value_file(
     file: &mut impl Read,
     debug_filename: &str,
-) -> Result<HashMap<String, Vec<String>>, Error> {
-    let mut data: HashMap<String, Vec<String>> = HashMap::new();
+) -> Result<FxHashMap<String, Vec<String>>, Error> {
+    let mut data: FxHashMap<String, Vec<String>> = FxHashMap::default();
 
     let file = BufReader::new(file);
     for (line_no, line) in file.lines().enumerate() {
