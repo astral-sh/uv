@@ -47,7 +47,7 @@ impl<'a> Downloader<'a> {
     ) -> Result<Vec<InMemoryDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
-        wheel_cache.init().await?;
+        wheel_cache.init()?;
 
         // Phase 1: Fetch the wheels in parallel.
         let mut fetches = JoinSet::new();

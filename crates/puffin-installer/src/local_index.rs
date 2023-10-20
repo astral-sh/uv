@@ -14,16 +14,17 @@ pub struct LocalIndex(HashMap<PackageName, CachedDistribution>);
 
 impl LocalIndex {
     /// Build an index of cached distributions from a directory.
-    pub async fn from_directory(path: &Path) -> Result<Self> {
+    pub fn try_from_directory(path: &Path) -> Result<Self> {
         let mut index = HashMap::new();
 
         let cache = WheelCache::new(path);
-        let Ok(mut dir) = cache.read_dir().await else {
+        let Ok(dir) = cache.read_dir() else {
             return Ok(Self(index));
         };
 
-        while let Some(entry) = dir.next_entry().await? {
-            if entry.file_type().await?.is_dir() {
+        for entry in dir {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
                 if let Some(dist_info) = CachedDistribution::try_from_path(&entry.path())? {
                     index.insert(dist_info.name().clone(), dist_info);
                 }

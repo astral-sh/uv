@@ -39,7 +39,7 @@ pub(crate) async fn pip_uninstall(
     );
 
     // Index the current `site-packages` directory.
-    let site_packages = puffin_installer::SitePackages::from_executable(&python).await?;
+    let site_packages = puffin_installer::SitePackages::try_from_executable(&python)?;
 
     // Sort and deduplicate the requirements.
     let packages = {

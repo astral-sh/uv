@@ -436,7 +436,7 @@ async fn resolve_and_install(
     debug!("Installing {} build requirements", requirements.len());
 
     let local_index = if let Some(cache) = cache {
-        LocalIndex::from_directory(cache).await?
+        LocalIndex::try_from_directory(cache)?
     } else {
         LocalIndex::default()
     };
