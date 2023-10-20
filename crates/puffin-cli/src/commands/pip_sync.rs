@@ -69,7 +69,7 @@ pub(crate) async fn sync_requirements(
         local,
         remote,
         extraneous,
-    } = PartitionedRequirements::try_from_requirements(requirements, cache, &python).await?;
+    } = PartitionedRequirements::try_from_requirements(requirements, cache, &python)?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && extraneous.is_empty() {
@@ -284,17 +284,17 @@ struct PartitionedRequirements {
 impl PartitionedRequirements {
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
-    pub(crate) async fn try_from_requirements(
+    pub(crate) fn try_from_requirements(
         requirements: &[Requirement],
         cache: Option<&Path>,
         python: &PythonExecutable,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
-        let mut site_packages = SitePackages::from_executable(python).await?;
+        let mut site_packages = SitePackages::try_from_executable(python)?;
 
         // Index all the already-downloaded wheels in the cache.
         let local_index = if let Some(cache) = cache {
-            LocalIndex::from_directory(cache).await?
+            LocalIndex::try_from_directory(cache)?
         } else {
             LocalIndex::default()
         };

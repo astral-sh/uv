@@ -1,8 +1,6 @@
 use std::path::Path;
 
 use anyhow::Result;
-use fs_err::tokio as fs;
-use fs_err::File;
 use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
 use tracing::debug;
@@ -38,7 +36,7 @@ impl Unzipper {
     ) -> Result<Vec<CachedDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
-        wheel_cache.init().await?;
+        wheel_cache.init()?;
 
         let staging = tempfile::tempdir_in(wheel_cache.root())?;
 
@@ -57,7 +55,7 @@ impl Unzipper {
             .await??;
 
             // Write the unzipped wheel to the target directory.
-            fs::rename(
+            fs_err::tokio::rename(
                 staging.path().join(remote.id()),
                 wheel_cache.entry(&remote.id()),
             )
@@ -104,15 +102,15 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
             // Create necessary parent directories.
             let path = target.join(file_path);
             if file.is_dir() {
-                std::fs::create_dir_all(path)?;
+                fs_err::create_dir_all(path)?;
                 return Ok(());
             }
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
+                fs_err::create_dir_all(parent)?;
             }
 
             // Write the file.
-            let mut outfile = File::create(&path)?;
+            let mut outfile = fs_err::File::create(&path)?;
             std::io::copy(&mut file, &mut outfile)?;
 
             // Set permissions.

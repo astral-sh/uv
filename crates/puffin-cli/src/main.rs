@@ -198,7 +198,6 @@ async fn main() -> ExitCode {
                     .filter(|_| !cli.no_cache),
                 printer,
             )
-            .await
         }
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
         Commands::Add(args) => commands::add(&args.name, printer),

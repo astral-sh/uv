@@ -11,7 +11,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-pub(crate) async fn freeze(cache: Option<&Path>, _printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn freeze(cache: Option<&Path>, _printer: Printer) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
@@ -21,7 +21,7 @@ pub(crate) async fn freeze(cache: Option<&Path>, _printer: Printer) -> Result<Ex
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&python).await?;
+    let site_packages = SitePackages::try_from_executable(&python)?;
     for (name, dist_info) in site_packages.iter() {
         #[allow(clippy::print_stdout)]
         {
