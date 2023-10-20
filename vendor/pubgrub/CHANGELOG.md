@@ -48,7 +48,7 @@ The gist of it is:
 
 #### Added
 
-- Links to code items in the code documenation.
+- Links to code items in the code documentation.
 - New `"serde"` feature that allows serializing some library types, useful for making simple reproducible bug reports.
 - New variants for `error::PubGrubError` which are `DependencyOnTheEmptySet`,
   `SelfDependency`, `ErrorChoosingPackageVersion` and `ErrorInShouldCancel`.

@@ -58,19 +58,19 @@ pub(crate) fn version_range(
     specifiers: Option<&pep508_rs::VersionOrUrl>,
 ) -> Result<Range<PubGrubVersion>> {
     let Some(specifiers) = specifiers else {
-        return Ok(Range::any());
+        return Ok(Range::full());
     };
 
     let pep508_rs::VersionOrUrl::VersionSpecifier(specifiers) = specifiers else {
-        return Ok(Range::any());
+        return Ok(Range::full());
     };
 
-    let mut final_range = Range::any();
+    let mut final_range = Range::full();
     for spec in specifiers.iter() {
         let spec_range =
             PubGrubSpecifier::try_from(spec)?
                 .into_iter()
-                .fold(Range::none(), |accum, range| {
+                .fold(Range::empty(), |accum, range| {
                     accum.union(&if range.end < *MAX_VERSION {
                         Range::between(range.start, range.end)
                     } else {

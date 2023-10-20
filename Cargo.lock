@@ -1967,6 +1967,7 @@ dependencies = [
 name = "pubgrub"
 version = "0.2.1"
 dependencies = [
+ "log",
  "rustc-hash",
  "thiserror",
 ]

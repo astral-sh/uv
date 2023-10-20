@@ -12,8 +12,8 @@ use futures::future::Either;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
-use pubgrub::solver::{DependencyConstraints, Incompatibility, State};
-use pubgrub::type_aliases::SelectedDependencies;
+use pubgrub::solver::{Incompatibility, State};
+use pubgrub::type_aliases::{DependencyConstraints, SelectedDependencies};
 use tokio::select;
 use tracing::{debug, trace};
 use waitmap::WaitMap;
@@ -190,8 +190,9 @@ impl<'a> Resolver<'a> {
                             }
                             .into());
                         }
-                        if let Some((dependent, _)) =
-                            constraints.iter().find(|(_, r)| r == &&Range::none())
+                        if let Some((dependent, _)) = constraints
+                            .iter()
+                            .find(|(_, r)| r == &&Range::<PubGrubVersion>::empty())
                         {
                             return Err(PubGrubError::DependencyOnTheEmptySet {
                                 package: package.clone(),
@@ -378,7 +379,8 @@ impl<'a> Resolver<'a> {
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root => {
-                let mut constraints = DependencyConstraints::default();
+                let mut constraints =
+                    DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
 
                 // Add the root requirements.
                 for (package, version) in
@@ -420,7 +422,9 @@ impl<'a> Resolver<'a> {
                 let entry = self.cache.versions.wait(&file.hashes.sha256).await.unwrap();
                 let metadata = entry.value();
 
-                let mut constraints = DependencyConstraints::default();
+                let mut constraints =
+                    DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
+
                 for (package, version) in
                     iter_requirements(metadata.requires_dist.iter(), extra.as_ref(), self.markers)
                 {
@@ -465,7 +469,7 @@ impl<'a> Resolver<'a> {
                     }
                     constraints.insert(
                         PubGrubPackage::Package(package_name.clone(), None),
-                        Range::exact(version.clone()),
+                        Range::singleton(version.clone()),
                     );
                 }
 
@@ -559,13 +563,13 @@ impl Default for SolverCache {
 }
 
 /// An enum used by [`DependencyProvider`] that holds information about package dependencies.
-/// For each [Package] there is a [Range] of concrete versions it allows as a dependency.
+/// For each [Package] there is a set of versions allowed as a dependency.
 #[derive(Clone)]
 enum Dependencies {
     /// Package dependencies are unavailable.
     Unknown,
     /// Container for all available package versions.
-    Known(DependencyConstraints<PubGrubPackage, PubGrubVersion>),
+    Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
 }
 
 #[derive(Debug)]

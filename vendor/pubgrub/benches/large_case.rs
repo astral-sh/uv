@@ -5,16 +5,19 @@ extern crate criterion;
 use self::criterion::*;
 
 use pubgrub::package::Package;
+use pubgrub::range::Range;
 use pubgrub::solver::{resolve, OfflineDependencyProvider};
-use pubgrub::version::{NumberVersion, SemanticVersion, Version};
+use pubgrub::version::{NumberVersion, SemanticVersion};
+use pubgrub::version_set::VersionSet;
 use serde::de::Deserialize;
-use std::hash::Hash;
 
-fn bench<'a, P: Package + Deserialize<'a>, V: Version + Hash + Deserialize<'a>>(
+fn bench<'a, P: Package + Deserialize<'a>, VS: VersionSet + Deserialize<'a>>(
     b: &mut Bencher,
     case: &'a str,
-) {
-    let dependency_provider: OfflineDependencyProvider<P, V> = ron::de::from_str(&case).unwrap();
+) where
+    <VS as VersionSet>::V: Deserialize<'a>,
+{
+    let dependency_provider: OfflineDependencyProvider<P, VS> = ron::de::from_str(&case).unwrap();
 
     b.iter(|| {
         for p in dependency_provider.packages() {
@@ -35,11 +38,11 @@ fn bench_nested(c: &mut Criterion) {
         let data = std::fs::read_to_string(&case).unwrap();
         if name.ends_with("u16_NumberVersion.ron") {
             group.bench_function(name, |b| {
-                bench::<u16, NumberVersion>(b, &data);
+                bench::<u16, Range<NumberVersion>>(b, &data);
             });
         } else if name.ends_with("str_SemanticVersion.ron") {
             group.bench_function(name, |b| {
-                bench::<&str, SemanticVersion>(b, &data);
+                bench::<&str, Range<SemanticVersion>>(b, &data);
             });
         }
     }

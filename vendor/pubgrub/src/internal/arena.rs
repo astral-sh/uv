@@ -55,7 +55,7 @@ impl<T> Id<T> {
     }
     fn from(n: u32) -> Self {
         Self {
-            raw: n as u32,
+            raw: n,
             _ty: PhantomData,
         }
     }

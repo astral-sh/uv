@@ -3,7 +3,7 @@
 use pubgrub::package::Package;
 use pubgrub::solver::{Dependencies, DependencyProvider, OfflineDependencyProvider};
 use pubgrub::type_aliases::{Map, SelectedDependencies};
-use pubgrub::version::Version;
+use pubgrub::version_set::VersionSet;
 use varisat::ExtendFormula;
 
 const fn num_bits<T>() -> usize {
@@ -46,17 +46,17 @@ fn sat_at_most_one(solver: &mut impl varisat::ExtendFormula, vars: &[varisat::Va
 ///
 /// The SAT library does not optimize for the newer version,
 /// so the selected packages may not match the real resolver.
-pub struct SatResolve<P: Package, V: Version> {
+pub struct SatResolve<P: Package, VS: VersionSet> {
     solver: varisat::Solver<'static>,
-    all_versions_by_p: Map<P, Vec<(V, varisat::Var)>>,
+    all_versions_by_p: Map<P, Vec<(VS::V, varisat::Var)>>,
 }
 
-impl<P: Package, V: Version> SatResolve<P, V> {
-    pub fn new(dp: &OfflineDependencyProvider<P, V>) -> Self {
+impl<P: Package, VS: VersionSet> SatResolve<P, VS> {
+    pub fn new(dp: &OfflineDependencyProvider<P, VS>) -> Self {
         let mut cnf = varisat::CnfFormula::new();
 
         let mut all_versions = vec![];
-        let mut all_versions_by_p: Map<P, Vec<(V, varisat::Var)>> = Map::default();
+        let mut all_versions_by_p: Map<P, Vec<(VS::V, varisat::Var)>> = Map::default();
 
         for p in dp.packages() {
             let mut versions_for_p = vec![];
@@ -82,7 +82,7 @@ impl<P: Package, V: Version> SatResolve<P, V> {
             for (p1, range) in &deps {
                 let empty_vec = vec![];
                 let mut matches: Vec<varisat::Lit> = all_versions_by_p
-                    .get(&p1)
+                    .get(p1)
                     .unwrap_or(&empty_vec)
                     .iter()
                     .filter(|(v1, _)| range.contains(v1))
@@ -110,7 +110,7 @@ impl<P: Package, V: Version> SatResolve<P, V> {
         }
     }
 
-    pub fn sat_resolve(&mut self, name: &P, ver: &V) -> bool {
+    pub fn sat_resolve(&mut self, name: &P, ver: &VS::V) -> bool {
         if let Some(vers) = self.all_versions_by_p.get(name) {
             if let Some((_, var)) = vers.iter().find(|(v, _)| v == ver) {
                 self.solver.assume(&[var.positive()]);
@@ -126,7 +126,7 @@ impl<P: Package, V: Version> SatResolve<P, V> {
         }
     }
 
-    pub fn sat_is_valid_solution(&mut self, pids: &SelectedDependencies<P, V>) -> bool {
+    pub fn sat_is_valid_solution(&mut self, pids: &SelectedDependencies<P, VS::V>) -> bool {
         let mut assumption = vec![];
 
         for (p, vs) in &self.all_versions_by_p {

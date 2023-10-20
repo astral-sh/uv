@@ -5,16 +5,18 @@ use pubgrub::range::Range;
 use pubgrub::solver::{resolve, OfflineDependencyProvider};
 use pubgrub::version::NumberVersion;
 
+type NumVS = Range<NumberVersion>;
+
 #[test]
 fn same_result_on_repeated_runs() {
-    let mut dependency_provider = OfflineDependencyProvider::<_, NumberVersion>::new();
+    let mut dependency_provider = OfflineDependencyProvider::<_, NumVS>::new();
 
-    dependency_provider.add_dependencies("c", 0, vec![]);
-    dependency_provider.add_dependencies("c", 2, vec![]);
-    dependency_provider.add_dependencies("b", 0, vec![]);
-    dependency_provider.add_dependencies("b", 1, vec![("c", Range::between(0, 1))]);
+    dependency_provider.add_dependencies("c", 0, []);
+    dependency_provider.add_dependencies("c", 2, []);
+    dependency_provider.add_dependencies("b", 0, []);
+    dependency_provider.add_dependencies("b", 1, [("c", Range::between(0, 1))]);
 
-    dependency_provider.add_dependencies("a", 0, vec![("b", Range::any()), ("c", Range::any())]);
+    dependency_provider.add_dependencies("a", 0, [("b", Range::full()), ("c", Range::full())]);
 
     let name = "a";
     let ver = NumberVersion(0);
@@ -29,14 +31,14 @@ fn same_result_on_repeated_runs() {
 
 #[test]
 fn should_always_find_a_satisfier() {
-    let mut dependency_provider = OfflineDependencyProvider::<_, NumberVersion>::new();
-    dependency_provider.add_dependencies("a", 0, vec![("b", Range::none())]);
+    let mut dependency_provider = OfflineDependencyProvider::<_, NumVS>::new();
+    dependency_provider.add_dependencies("a", 0, [("b", Range::empty())]);
     assert!(matches!(
         resolve(&dependency_provider, "a", 0),
         Err(PubGrubError::DependencyOnTheEmptySet { .. })
     ));
 
-    dependency_provider.add_dependencies("c", 0, vec![("a", Range::any())]);
+    dependency_provider.add_dependencies("c", 0, [("a", Range::full())]);
     assert!(matches!(
         resolve(&dependency_provider, "c", 0),
         Err(PubGrubError::DependencyOnTheEmptySet { .. })
@@ -45,8 +47,8 @@ fn should_always_find_a_satisfier() {
 
 #[test]
 fn cannot_depend_on_self() {
-    let mut dependency_provider = OfflineDependencyProvider::<_, NumberVersion>::new();
-    dependency_provider.add_dependencies("a", 0, vec![("a", Range::any())]);
+    let mut dependency_provider = OfflineDependencyProvider::<_, NumVS>::new();
+    dependency_provider.add_dependencies("a", 0, [("a", Range::full())]);
     assert!(matches!(
         resolve(&dependency_provider, "a", 0),
         Err(PubGrubError::SelfDependency { .. })
