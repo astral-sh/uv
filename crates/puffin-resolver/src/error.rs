@@ -1,3 +1,4 @@
+use pubgrub::range::Range;
 use thiserror::Error;
 
 use pep508_rs::Requirement;
@@ -23,7 +24,7 @@ pub enum ResolveError {
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
-    PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, PubGrubVersion>),
+    PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {

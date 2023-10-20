@@ -37,6 +37,13 @@ impl pubgrub::version::Version for PubGrubVersion {
         self.next()
     }
 }
+
+// impl From<PubGrubVersion> for Range<PubGrubVersion> {
+//     fn from(value: PubGrubVersion) -> Self {
+//         Range::from(value)
+//     }
+// }
+
 impl<'a> From<&'a PubGrubVersion> for &'a pep440_rs::Version {
     fn from(version: &'a PubGrubVersion) -> Self {
         &version.0

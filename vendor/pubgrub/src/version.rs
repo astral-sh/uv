@@ -80,6 +80,21 @@ impl From<(u32, u32, u32)> for SemanticVersion {
     }
 }
 
+// Convert a &(major, minor, patch) into a version.
+impl From<&(u32, u32, u32)> for SemanticVersion {
+    fn from(tuple: &(u32, u32, u32)) -> Self {
+        let (major, minor, patch) = *tuple;
+        Self::new(major, minor, patch)
+    }
+}
+
+// Convert an &version into a version.
+impl From<&SemanticVersion> for SemanticVersion {
+    fn from(v: &SemanticVersion) -> Self {
+        *v
+    }
+}
+
 // Convert a version into a tuple (major, minor, patch).
 impl From<SemanticVersion> for (u32, u32, u32) {
     fn from(v: SemanticVersion) -> Self {
@@ -234,6 +249,20 @@ pub struct NumberVersion(pub u32);
 impl From<u32> for NumberVersion {
     fn from(v: u32) -> Self {
         Self(v)
+    }
+}
+
+// Convert an &usize into a version.
+impl From<&u32> for NumberVersion {
+    fn from(v: &u32) -> Self {
+        Self(*v)
+    }
+}
+
+// Convert an &version into a version.
+impl From<&NumberVersion> for NumberVersion {
+    fn from(v: &NumberVersion) -> Self {
+        *v
     }
 }
 

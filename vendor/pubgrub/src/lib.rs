@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+#![allow(clippy::all, unreachable_pub)]
+
 //! PubGrub version solving algorithm.
 //!
 //! Version solving consists in efficiently finding a set of packages and versions
@@ -49,15 +51,17 @@
 //! # use pubgrub::solver::{OfflineDependencyProvider, resolve};
 //! # use pubgrub::version::NumberVersion;
 //! # use pubgrub::range::Range;
-//! #
-//! let mut dependency_provider = OfflineDependencyProvider::<&str, NumberVersion>::new();
+//!
+//! type NumVS = Range<NumberVersion>;
+//!
+//! let mut dependency_provider = OfflineDependencyProvider::<&str, NumVS>::new();
 //!
 //! dependency_provider.add_dependencies(
-//!     "root", 1, vec![("menu", Range::any()), ("icons", Range::any())],
+//!     "root", 1, [("menu", Range::full()), ("icons", Range::full())],
 //! );
-//! dependency_provider.add_dependencies("menu", 1, vec![("dropdown", Range::any())]);
-//! dependency_provider.add_dependencies("dropdown", 1, vec![("icons", Range::any())]);
-//! dependency_provider.add_dependencies("icons", 1, vec![]);
+//! dependency_provider.add_dependencies("menu", 1, [("dropdown", Range::full())]);
+//! dependency_provider.add_dependencies("dropdown", 1, [("icons", Range::full())]);
+//! dependency_provider.add_dependencies("icons", 1, []);
 //!
 //! // Run the algorithm.
 //! let solution = resolve(&dependency_provider, "root", 1).unwrap();
@@ -84,8 +88,10 @@
 //! #
 //! # struct MyDependencyProvider;
 //! #
-//! impl DependencyProvider<String, SemanticVersion> for MyDependencyProvider {
-//!     fn choose_package_version<T: Borrow<String>, U: Borrow<Range<SemanticVersion>>>(&self,packages: impl Iterator<Item=(T, U)>) -> Result<(T, Option<SemanticVersion>), Box<dyn Error>> {
+//! type SemVS = Range<SemanticVersion>;
+//!
+//! impl DependencyProvider<String, SemVS> for MyDependencyProvider {
+//!     fn choose_package_version<T: Borrow<String>, U: Borrow<SemVS>>(&self,packages: impl Iterator<Item=(T, U)>) -> Result<(T, Option<SemanticVersion>), Box<dyn Error + Send + Sync>> {
 //!         unimplemented!()
 //!     }
 //!
@@ -93,7 +99,7 @@
 //!         &self,
 //!         package: &String,
 //!         version: &SemanticVersion,
-//!     ) -> Result<Dependencies<String, SemanticVersion>, Box<dyn Error>> {
+//!     ) -> Result<Dependencies<String, SemVS>, Box<dyn Error + Send + Sync>> {
 //!         unimplemented!()
 //!     }
 //! }
@@ -153,13 +159,13 @@
 //! [Output](crate::report::Reporter::Output) type and a single method.
 //! ```
 //! # use pubgrub::package::Package;
-//! # use pubgrub::version::Version;
+//! # use pubgrub::version_set::VersionSet;
 //! # use pubgrub::report::DerivationTree;
 //! #
-//! pub trait Reporter<P: Package, V: Version> {
+//! pub trait Reporter<P: Package, VS: VersionSet> {
 //!     type Output;
 //!
-//!     fn report(derivation_tree: &DerivationTree<P, V>) -> Self::Output;
+//!     fn report(derivation_tree: &DerivationTree<P, VS>) -> Self::Output;
 //! }
 //! ```
 //! Implementing a [Reporter](crate::report::Reporter) may involve a lot of heuristics
@@ -173,8 +179,11 @@
 //! # use pubgrub::report::{DefaultStringReporter, Reporter};
 //! # use pubgrub::error::PubGrubError;
 //! # use pubgrub::version::NumberVersion;
+//! # use pubgrub::range::Range;
 //! #
-//! # let dependency_provider = OfflineDependencyProvider::<&str, NumberVersion>::new();
+//! # type NumVS = Range<NumberVersion>;
+//! #
+//! # let dependency_provider = OfflineDependencyProvider::<&str, NumVS>::new();
 //! # let root_package = "root";
 //! # let root_version = 1;
 //! #
@@ -217,5 +226,6 @@ pub mod solver;
 pub mod term;
 pub mod type_aliases;
 pub mod version;
+pub mod version_set;
 
 mod internal;

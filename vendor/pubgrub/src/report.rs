@@ -7,50 +7,49 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 
 use crate::package::Package;
-use crate::range::Range;
 use crate::term::Term;
 use crate::type_aliases::Map;
-use crate::version::Version;
+use crate::version_set::VersionSet;
 
 /// Reporter trait.
-pub trait Reporter<P: Package, V: Version> {
+pub trait Reporter<P: Package, VS: VersionSet> {
     /// Output type of the report.
     type Output;
 
     /// Generate a report from the derivation tree
     /// describing the resolution failure.
-    fn report(derivation_tree: &DerivationTree<P, V>) -> Self::Output;
+    fn report(derivation_tree: &DerivationTree<P, VS>) -> Self::Output;
 }
 
 /// Derivation tree resulting in the impossibility
 /// to solve the dependencies of our root package.
 #[derive(Debug, Clone)]
-pub enum DerivationTree<P: Package, V: Version> {
+pub enum DerivationTree<P: Package, VS: VersionSet> {
     /// External incompatibility.
-    External(External<P, V>),
+    External(External<P, VS>),
     /// Incompatibility derived from two others.
-    Derived(Derived<P, V>),
+    Derived(Derived<P, VS>),
 }
 
 /// Incompatibilities that are not derived from others,
 /// they have their own reason.
 #[derive(Debug, Clone)]
-pub enum External<P: Package, V: Version> {
+pub enum External<P: Package, VS: VersionSet> {
     /// Initial incompatibility aiming at picking the root package for the first decision.
-    NotRoot(P, V),
-    /// There are no versions in the given range for this package.
-    NoVersions(P, Range<V>),
-    /// Dependencies of the package are unavailable for versions in that range.
-    UnavailableDependencies(P, Range<V>),
+    NotRoot(P, VS::V),
+    /// There are no versions in the given set for this package.
+    NoVersions(P, VS),
+    /// Dependencies of the package are unavailable for versions in that set.
+    UnavailableDependencies(P, VS),
     /// Incompatibility coming from the dependencies of a given package.
-    FromDependencyOf(P, Range<V>, P, Range<V>),
+    FromDependencyOf(P, VS, P, VS),
 }
 
 /// Incompatibility derived from two others.
 #[derive(Debug, Clone)]
-pub struct Derived<P: Package, V: Version> {
+pub struct Derived<P: Package, VS: VersionSet> {
     /// Terms of the incompatibility.
-    pub terms: Map<P, Term<V>>,
+    pub terms: Map<P, Term<VS>>,
     /// Indicate if that incompatibility is present multiple times
     /// in the derivation tree.
     /// If that is the case, it has a unique id, provided in that option.
@@ -58,12 +57,12 @@ pub struct Derived<P: Package, V: Version> {
     /// and refer to the explanation for the other times.
     pub shared_id: Option<usize>,
     /// First cause.
-    pub cause1: Box<DerivationTree<P, V>>,
+    pub cause1: Box<DerivationTree<P, VS>>,
     /// Second cause.
-    pub cause2: Box<DerivationTree<P, V>>,
+    pub cause2: Box<DerivationTree<P, VS>>,
 }
 
-impl<P: Package, V: Version> DerivationTree<P, V> {
+impl<P: Package, VS: VersionSet> DerivationTree<P, VS> {
     /// Merge the [NoVersions](External::NoVersions) external incompatibilities
     /// with the other one they are matched with
     /// in a derived incompatibility.
@@ -100,7 +99,7 @@ impl<P: Package, V: Version> DerivationTree<P, V> {
         }
     }
 
-    fn merge_no_versions(self, package: P, range: Range<V>) -> Option<Self> {
+    fn merge_no_versions(self, package: P, set: VS) -> Option<Self> {
         match self {
             // TODO: take care of the Derived case.
             // Once done, we can remove the Option.
@@ -109,19 +108,16 @@ impl<P: Package, V: Version> DerivationTree<P, V> {
                 panic!("How did we end up with a NoVersions merged with a NotRoot?")
             }
             DerivationTree::External(External::NoVersions(_, r)) => Some(DerivationTree::External(
-                External::NoVersions(package, range.union(&r)),
+                External::NoVersions(package, set.union(&r)),
             )),
-            DerivationTree::External(External::UnavailableDependencies(_, r)) => {
-                Some(DerivationTree::External(External::UnavailableDependencies(
-                    package,
-                    range.union(&r),
-                )))
-            }
+            DerivationTree::External(External::UnavailableDependencies(_, r)) => Some(
+                DerivationTree::External(External::UnavailableDependencies(package, set.union(&r))),
+            ),
             DerivationTree::External(External::FromDependencyOf(p1, r1, p2, r2)) => {
                 if p1 == package {
                     Some(DerivationTree::External(External::FromDependencyOf(
                         p1,
-                        r1.union(&range),
+                        r1.union(&set),
                         p2,
                         r2,
                     )))
@@ -130,7 +126,7 @@ impl<P: Package, V: Version> DerivationTree<P, V> {
                         p1,
                         r1,
                         p2,
-                        r2.union(&range),
+                        r2.union(&set),
                     )))
                 }
             }
@@ -138,39 +134,39 @@ impl<P: Package, V: Version> DerivationTree<P, V> {
     }
 }
 
-impl<P: Package, V: Version> fmt::Display for External<P, V> {
+impl<P: Package, VS: VersionSet> fmt::Display for External<P, VS> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotRoot(package, version) => {
                 write!(f, "we are solving dependencies of {} {}", package, version)
             }
-            Self::NoVersions(package, range) => {
-                if range == &Range::any() {
+            Self::NoVersions(package, set) => {
+                if set == &VS::full() {
                     write!(f, "there is no available version for {}", package)
                 } else {
-                    write!(f, "there is no version of {} in {}", package, range)
+                    write!(f, "there is no version of {} in {}", package, set)
                 }
             }
-            Self::UnavailableDependencies(package, range) => {
-                if range == &Range::any() {
+            Self::UnavailableDependencies(package, set) => {
+                if set == &VS::full() {
                     write!(f, "dependencies of {} are unavailable", package)
                 } else {
                     write!(
                         f,
                         "dependencies of {} at version {} are unavailable",
-                        package, range
+                        package, set
                     )
                 }
             }
-            Self::FromDependencyOf(p, range_p, dep, range_dep) => {
-                if range_p == &Range::any() && range_dep == &Range::any() {
+            Self::FromDependencyOf(p, set_p, dep, set_dep) => {
+                if set_p == &VS::full() && set_dep == &VS::full() {
                     write!(f, "{} depends on {}", p, dep)
-                } else if range_p == &Range::any() {
-                    write!(f, "{} depends on {} {}", p, dep, range_dep)
-                } else if range_dep == &Range::any() {
-                    write!(f, "{} {} depends on {}", p, range_p, dep)
+                } else if set_p == &VS::full() {
+                    write!(f, "{} depends on {} {}", p, dep, set_dep)
+                } else if set_dep == &VS::full() {
+                    write!(f, "{} {} depends on {}", p, set_p, dep)
                 } else {
-                    write!(f, "{} {} depends on {} {}", p, range_p, dep, range_dep)
+                    write!(f, "{} {} depends on {} {}", p, set_p, dep, set_dep)
                 }
             }
         }
@@ -198,17 +194,17 @@ impl DefaultStringReporter {
         }
     }
 
-    fn build_recursive<P: Package, V: Version>(&mut self, derived: &Derived<P, V>) {
+    fn build_recursive<P: Package, VS: VersionSet>(&mut self, derived: &Derived<P, VS>) {
         self.build_recursive_helper(derived);
         if let Some(id) = derived.shared_id {
-            if self.shared_with_ref.get(&id) == None {
+            if self.shared_with_ref.get(&id).is_none() {
                 self.add_line_ref();
                 self.shared_with_ref.insert(id, self.ref_count);
             }
         };
     }
 
-    fn build_recursive_helper<P: Package, V: Version>(&mut self, current: &Derived<P, V>) {
+    fn build_recursive_helper<P: Package, VS: VersionSet>(&mut self, current: &Derived<P, VS>) {
         match (current.cause1.deref(), current.cause2.deref()) {
             (DerivationTree::External(external1), DerivationTree::External(external2)) => {
                 // Simplest case, we just combine two external incompatibilities.
@@ -264,7 +260,7 @@ impl DefaultStringReporter {
                     //     and finally conclude.
                     (None, None) => {
                         self.build_recursive(derived1);
-                        if derived1.shared_id != None {
+                        if derived1.shared_id.is_some() {
                             self.lines.push("".into());
                             self.build_recursive(current);
                         } else {
@@ -285,11 +281,11 @@ impl DefaultStringReporter {
     ///
     /// The result will depend on the fact that the derived incompatibility
     /// has already been explained or not.
-    fn report_one_each<P: Package, V: Version>(
+    fn report_one_each<P: Package, VS: VersionSet>(
         &mut self,
-        derived: &Derived<P, V>,
-        external: &External<P, V>,
-        current_terms: &Map<P, Term<V>>,
+        derived: &Derived<P, VS>,
+        external: &External<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) {
         match self.line_ref_of(derived.shared_id) {
             Some(ref_id) => self.lines.push(Self::explain_ref_and_external(
@@ -303,11 +299,11 @@ impl DefaultStringReporter {
     }
 
     /// Report one derived (without a line ref yet) and one external.
-    fn report_recurse_one_each<P: Package, V: Version>(
+    fn report_recurse_one_each<P: Package, VS: VersionSet>(
         &mut self,
-        derived: &Derived<P, V>,
-        external: &External<P, V>,
-        current_terms: &Map<P, Term<V>>,
+        derived: &Derived<P, VS>,
+        external: &External<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) {
         match (derived.cause1.deref(), derived.cause2.deref()) {
             // If the derived cause has itself one external prior cause,
@@ -341,10 +337,10 @@ impl DefaultStringReporter {
     // String explanations #####################################################
 
     /// Simplest case, we just combine two external incompatibilities.
-    fn explain_both_external<P: Package, V: Version>(
-        external1: &External<P, V>,
-        external2: &External<P, V>,
-        current_terms: &Map<P, Term<V>>,
+    fn explain_both_external<P: Package, VS: VersionSet>(
+        external1: &External<P, VS>,
+        external2: &External<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
         format!(
@@ -356,12 +352,12 @@ impl DefaultStringReporter {
     }
 
     /// Both causes have already been explained so we use their refs.
-    fn explain_both_ref<P: Package, V: Version>(
+    fn explain_both_ref<P: Package, VS: VersionSet>(
         ref_id1: usize,
-        derived1: &Derived<P, V>,
+        derived1: &Derived<P, VS>,
         ref_id2: usize,
-        derived2: &Derived<P, V>,
-        current_terms: &Map<P, Term<V>>,
+        derived2: &Derived<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
         format!(
@@ -377,11 +373,11 @@ impl DefaultStringReporter {
     /// One cause is derived (already explained so one-line),
     /// the other is a one-line external cause,
     /// and finally we conclude with the current incompatibility.
-    fn explain_ref_and_external<P: Package, V: Version>(
+    fn explain_ref_and_external<P: Package, VS: VersionSet>(
         ref_id: usize,
-        derived: &Derived<P, V>,
-        external: &External<P, V>,
-        current_terms: &Map<P, Term<V>>,
+        derived: &Derived<P, VS>,
+        external: &External<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
         format!(
@@ -394,9 +390,9 @@ impl DefaultStringReporter {
     }
 
     /// Add an external cause to the chain of explanations.
-    fn and_explain_external<P: Package, V: Version>(
-        external: &External<P, V>,
-        current_terms: &Map<P, Term<V>>,
+    fn and_explain_external<P: Package, VS: VersionSet>(
+        external: &External<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) -> String {
         format!(
             "And because {}, {}.",
@@ -406,10 +402,10 @@ impl DefaultStringReporter {
     }
 
     /// Add an already explained incompat to the chain of explanations.
-    fn and_explain_ref<P: Package, V: Version>(
+    fn and_explain_ref<P: Package, VS: VersionSet>(
         ref_id: usize,
-        derived: &Derived<P, V>,
-        current_terms: &Map<P, Term<V>>,
+        derived: &Derived<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) -> String {
         format!(
             "And because {} ({}), {}.",
@@ -420,10 +416,10 @@ impl DefaultStringReporter {
     }
 
     /// Add an already explained incompat to the chain of explanations.
-    fn and_explain_prior_and_external<P: Package, V: Version>(
-        prior_external: &External<P, V>,
-        external: &External<P, V>,
-        current_terms: &Map<P, Term<V>>,
+    fn and_explain_prior_and_external<P: Package, VS: VersionSet>(
+        prior_external: &External<P, VS>,
+        external: &External<P, VS>,
+        current_terms: &Map<P, Term<VS>>,
     ) -> String {
         format!(
             "And because {} and {}, {}.",
@@ -434,7 +430,7 @@ impl DefaultStringReporter {
     }
 
     /// Try to print terms of an incompatibility in a human-readable way.
-    pub fn string_terms<P: Package, V: Version>(terms: &Map<P, Term<V>>) -> String {
+    pub fn string_terms<P: Package, VS: VersionSet>(terms: &Map<P, Term<VS>>) -> String {
         let terms_vec: Vec<_> = terms.iter().collect();
         match terms_vec.as_slice() {
             [] => "version solving failed".into(),
@@ -469,10 +465,10 @@ impl DefaultStringReporter {
     }
 }
 
-impl<P: Package, V: Version> Reporter<P, V> for DefaultStringReporter {
+impl<P: Package, VS: VersionSet> Reporter<P, VS> for DefaultStringReporter {
     type Output = String;
 
-    fn report(derivation_tree: &DerivationTree<P, V>) -> Self::Output {
+    fn report(derivation_tree: &DerivationTree<P, VS>) -> Self::Output {
         match derivation_tree {
             DerivationTree::External(external) => external.to_string(),
             DerivationTree::Derived(derived) => {

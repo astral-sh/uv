@@ -2,9 +2,9 @@
 
 //! Non exposed modules.
 
-pub(crate) mod arena;
-pub(crate) mod core;
-pub(crate) mod incompatibility;
-pub(crate) mod partial_solution;
-pub(crate) mod small_map;
-pub(crate) mod small_vec;
+pub mod arena;
+pub mod core;
+pub mod incompatibility;
+pub mod partial_solution;
+pub mod small_map;
+pub mod small_vec;
