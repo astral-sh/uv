@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -10,11 +10,10 @@ use anyhow::Result;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::future::Either;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
-use petgraph::visit::Walker;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
-use pubgrub::solver::{DependencyConstraints, Incompatibility, State};
-use pubgrub::type_aliases::SelectedDependencies;
+use pubgrub::solver::{Incompatibility, State};
+use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
 use tracing::{debug, trace};
 use waitmap::WaitMap;
@@ -31,7 +30,7 @@ use crate::error::ResolveError;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
-use crate::resolution::{PinnedPackage, Resolution};
+use crate::resolution::Graph;
 
 pub struct Resolver<'a> {
     requirements: Vec<Requirement>,
@@ -62,7 +61,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
-    pub async fn resolve(self) -> Result<Resolution, ResolveError> {
+    pub async fn resolve(self) -> Result<Graph, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
@@ -94,14 +93,14 @@ impl<'a> Resolver<'a> {
             }
         };
 
-        Ok(Resolution::from(resolution))
+        Ok(resolution)
     }
 
     /// Run the `PubGrub` solver.
     async fn solve(
         &self,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-    ) -> Result<PubGrubResolution, ResolveError> {
+    ) -> Result<Graph, ResolveError> {
         let root = PubGrubPackage::Root;
 
         // Keep track of the packages for which we've requested metadata.
@@ -128,36 +127,7 @@ impl<'a> Resolver<'a> {
                     .into());
                 };
 
-                for (package, version) in selection.iter() {
-                    let x = &state.incompatibilities[package];
-                    for incompat_id in x.iter() {
-                        let inc = &state.incompatibility_store[*incompat_id];
-                        match &inc.kind {
-                            Kind::NotRoot(_, _) => {}
-                            Kind::NoVersions(_, _) => {}
-                            Kind::UnavailableDependencies(_, _) => {}
-                            Kind::FromDependencyOf(a, b, c, d) => {
-                                if b.contains(version) {
-                                    println!("{} {} {} {}", a, b, c, d);
-                                }
-                            }
-                            Kind::DerivedFrom(_, _) => {}
-                        }
-                        // for y in inc.iter() {
-                        //     println!("{} {}", package, y.0);
-                        // }
-                        // if state.is_terminal(incompat) {
-                        //     return Err(PubGrubError::Failure(
-                        //         "How did we end up with a terminal incompatibility?".into(),
-                        //     )
-                        //     .into());
-                        // }
-                    }
-
-                }
-
-
-                return Ok(PubGrubResolution { selection, pins });
+                return Ok(Graph::from_state(&selection, &pins, &state));
             };
 
             // Choose a package version.
@@ -600,75 +570,4 @@ enum Dependencies {
     Unknown,
     /// Container for all available package versions.
     Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
-}
-
-#[derive(Debug)]
-struct PubGrubResolution {
-    /// The selected dependencies.
-    selection: SelectedDependencies<PubGrubPackage, PubGrubVersion>,
-    /// The selected file (source or built distribution) for each package.
-    pins: HashMap<PackageName, HashMap<pep440_rs::Version, File>>,
-}
-
-struct Node<'a> {
-    package: &'a PubGrubPackage,
-    version: &'a PubGrubVersion,
-}
-
-impl From<PubGrubResolution> for Resolution {
-    fn from(value: PubGrubResolution) -> Self {
-        let mut graph = petgraph::graph::Graph::<Node, File, petgraph::Directed>::with_capacity(
-            value.selection.len(),
-            value.selection.len(),
-        );
-
-        // Add every package to the graph.
-        let mut inverse = HashMap::with_capacity(value.selection.len());
-        for (package, version) in value.selection.iter() {
-            let index = graph.add_node(Node { package, version });
-            inverse.insert(package, index);
-        }
-
-        // Add edges between dependencies.
-        for index in graph.node_indices() {
-            let node = &graph[index];
-
-            let package = match node.package {
-                PubGrubPackage::Package(package_name, None) => package_name,
-                _ => continue,
-            };
-
-            let file = value
-                .pins
-                .get(package)
-                .and_then(|versions| versions.get(node.version.into()))
-                .unwrap()
-                .clone();
-
-            // for requirement in file.
-
-            // graph.add_edge(index, inverse[&PubGrubPackage::Root], file);
-
-            // println!("node: {:?}", node);
-        }
-
-
-        let mut packages = BTreeMap::new();
-        for (package, version) in value.selection {
-            let PubGrubPackage::Package(package_name, None) = package else {
-                continue;
-            };
-
-            let version = pep440_rs::Version::from(version);
-            let file = value
-                .pins
-                .get(&package_name)
-                .and_then(|versions| versions.get(&version))
-                .unwrap()
-                .clone();
-            let pinned_package = PinnedPackage::new(package_name.clone(), version, file);
-            packages.insert(package_name, pinned_package);
-        }
-        Resolution::new(packages)
-    }
 }

@@ -71,11 +71,11 @@ pub(crate) async fn pip_compile(
             derivation_tree.collapse_no_versions();
             #[allow(clippy::print_stderr)]
             {
-                eprintln!("{}: {}", "error".red().bold(), "no solution found".bold());
-                eprintln!(
-                    "{}",
-                    pubgrub::report::DefaultStringReporter::report(&derivation_tree)
-                );
+                let report = miette::Report::msg(pubgrub::report::DefaultStringReporter::report(
+                    &derivation_tree,
+                ))
+                .context("No solution found when resolving dependencies:");
+                eprint!("{report:?}");
             }
             return Ok(ExitStatus::Failure);
         }
@@ -111,7 +111,7 @@ pub(crate) async fn pip_compile(
         "{}",
         format!("#    {}", env::args().join(" ")).green()
     )?;
-    writeln!(writer, "{resolution}")?;
+    write!(writer, "{resolution}")?;
 
     Ok(ExitStatus::Success)
 }

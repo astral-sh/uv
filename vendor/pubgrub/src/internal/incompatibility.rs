@@ -30,15 +30,15 @@ use crate::version_set::VersionSet;
 /// [PubGrub documentation](https://github.com/dart-lang/pub/blob/master/doc/solver.md#incompatibility).
 #[derive(Debug, Clone)]
 pub struct Incompatibility<P: Package, VS: VersionSet> {
-    package_terms: SmallMap<P, Term<VS>>,
-    kind: Kind<P, VS>,
+    pub package_terms: SmallMap<P, Term<VS>>,
+    pub kind: Kind<P, VS>,
 }
 
 /// Type alias of unique identifiers for incompatibilities.
 pub type IncompId<P, VS> = Id<Incompatibility<P, VS>>;
 
 #[derive(Debug, Clone)]
-enum Kind<P: Package, VS: VersionSet> {
+pub enum Kind<P: Package, VS: VersionSet> {
     /// Initial incompatibility aiming at picking the root package for the first decision.
     NotRoot(P, VS::V),
     /// There are no versions in the given range for this package.
