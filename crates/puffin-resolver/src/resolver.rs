@@ -249,18 +249,19 @@ impl<'a> Resolver<'a> {
         let mut selection = 0usize;
 
         // Iterate over the potential packages, and fetch file metadata for any of them. These
-        // represent our current best guesses for the versions that we might want to select.
+        // represent our current best guesses for the versions that we _might_ select.
         for (index, (package, range)) in potential_packages.iter().enumerate() {
             let PubGrubPackage::Package(package_name, _) = package.borrow() else {
                 continue;
             };
 
-            // If we don't have metadata for this package,  we can't make an early decision.
+            // If we don't have metadata for this package, we can't make an early decision.
             let Some(entry) = self.cache.packages.get(package_name) else {
                 continue;
             };
-
             let simple_json = entry.value();
+
+            // Select the latest compatible version.
             let Some(file) = simple_json.files.iter().rev().find(|file| {
                 let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
                     return false;
@@ -283,7 +284,9 @@ impl<'a> Resolver<'a> {
 
                 true
             }) else {
-                continue;
+                // Short circuit: we couldn't find _any_ compatible versions for a package.
+                let (package, _range) = potential_packages.remove(selection);
+                return Ok((package, None));
             };
 
             // Emit a request to fetch the metadata for this version.
@@ -311,11 +314,11 @@ impl<'a> Resolver<'a> {
                 debug!(
                     "Searching for a compatible version of {} ({})",
                     package_name,
-                    range.borrow()
+                    range.borrow(),
                 );
 
                 // Find a compatible version.
-                let wheel = simple_json.files.iter().rev().find_map(|file| {
+                let Some(wheel) = simple_json.files.iter().rev().find_map(|file| {
                     let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
                         return None;
                     };
@@ -340,30 +343,28 @@ impl<'a> Resolver<'a> {
                         name: package_name.clone(),
                         version: version.clone(),
                     })
-                });
+                }) else {
+                    // Short circuit: we couldn't find _any_ compatible versions for a package.
+                    return Ok((package, None));
+                };
 
-                if let Some(wheel) = wheel {
-                    debug!(
-                        "Selecting: {}=={} ({})",
-                        wheel.name, wheel.version, wheel.file.filename
-                    );
+                debug!(
+                    "Selecting: {}=={} ({})",
+                    wheel.name, wheel.version, wheel.file.filename
+                );
 
-                    // We want to return a package pinned to a specific version; but we _also_ want to
-                    // store the exact file that we selected to satisfy that version.
-                    pins.entry(wheel.name)
-                        .or_default()
-                        .insert(wheel.version.clone(), wheel.file.clone());
+                // We want to return a package pinned to a specific version; but we _also_ want to
+                // store the exact file that we selected to satisfy that version.
+                pins.entry(wheel.name)
+                    .or_default()
+                    .insert(wheel.version.clone(), wheel.file.clone());
 
-                    // Emit a request to fetch the metadata for this version.
-                    if in_flight.insert(wheel.file.hashes.sha256.clone()) {
-                        request_sink.unbounded_send(Request::Version(wheel.file.clone()))?;
-                    }
-
-                    Ok((package, Some(PubGrubVersion::from(wheel.version))))
-                } else {
-                    // We have metadata for the package, but no compatible version.
-                    Ok((package, None))
+                // Emit a request to fetch the metadata for this version.
+                if in_flight.insert(wheel.file.hashes.sha256.clone()) {
+                    request_sink.unbounded_send(Request::Version(wheel.file.clone()))?;
                 }
+
+                Ok((package, Some(PubGrubVersion::from(wheel.version))))
             }
         };
     }
