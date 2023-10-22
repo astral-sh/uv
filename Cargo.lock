@@ -2173,11 +2173,13 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.4.1",
+ "clap",
  "colored",
  "distribution-filename",
  "futures",
  "fxhash",
  "insta",
+ "itertools",
  "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",

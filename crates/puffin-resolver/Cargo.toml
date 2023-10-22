@@ -21,9 +21,11 @@ distribution-filename = { path = "../distribution-filename" }
 
 anyhow = { workspace = true }
 bitflags = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
 colored = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
+itertools = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
 thiserror = { workspace = true }

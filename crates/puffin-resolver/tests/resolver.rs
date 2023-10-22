@@ -10,7 +10,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
-use puffin_resolver::Resolver;
+use puffin_resolver::{ResolutionMode, Resolver};
 
 #[tokio::test]
 async fn pylint() -> Result<()> {
@@ -20,7 +20,14 @@ async fn pylint() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("pylint==2.3.0").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -36,7 +43,14 @@ async fn black() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -52,7 +66,14 @@ async fn black_colorama() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -68,7 +89,14 @@ async fn black_python_310() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_310, &TAGS_310, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_310,
+        &TAGS_310,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -86,7 +114,14 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("mypy-extensions<1").unwrap()];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -104,7 +139,14 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -122,7 +164,60 @@ async fn black_flake8() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("flake8<1").unwrap()];
-    let resolver = Resolver::new(requirements, constraints, &MARKERS_311, &TAGS_311, &client);
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::default(),
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn black_lowest() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black>21").unwrap()];
+    let constraints = vec![];
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::Lowest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn black_lowest_direct() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = PypiClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black>21").unwrap()];
+    let constraints = vec![];
+    let resolver = Resolver::new(
+        requirements,
+        constraints,
+        ResolutionMode::LowestDirect,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);

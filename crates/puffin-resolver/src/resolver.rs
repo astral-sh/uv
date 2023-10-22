@@ -27,6 +27,7 @@ use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 
 use crate::error::ResolveError;
+use crate::mode::{CandidateSelector, ResolutionMode};
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
@@ -38,6 +39,7 @@ pub struct Resolver<'a> {
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
     client: &'a PypiClient,
+    selector: CandidateSelector,
     cache: Arc<SolverCache>,
 }
 
@@ -46,17 +48,19 @@ impl<'a> Resolver<'a> {
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
+        mode: ResolutionMode,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a PypiClient,
     ) -> Self {
         Self {
+            selector: CandidateSelector::from_mode(mode, &requirements),
+            cache: Arc::new(SolverCache::default()),
             requirements,
             constraints,
             markers,
             tags,
             client,
-            cache: Arc::new(SolverCache::default()),
         }
     }
 
@@ -263,24 +267,28 @@ impl<'a> Resolver<'a> {
             let simple_json = entry.value();
 
             // Select the latest compatible version.
-            let Some(file) = simple_json.files.iter().rev().find(|file| {
-                let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
-                    return false;
-                };
+            let Some(file) = self
+                .selector
+                .iter_candidates(package_name, &simple_json.files)
+                .find(|file| {
+                    let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
+                        return false;
+                    };
 
-                if !name.is_compatible(self.tags) {
-                    return false;
-                }
+                    if !name.is_compatible(self.tags) {
+                        return false;
+                    }
 
-                if !range
-                    .borrow()
-                    .contains(&PubGrubVersion::from(name.version.clone()))
-                {
-                    return false;
-                };
+                    if !range
+                        .borrow()
+                        .contains(&PubGrubVersion::from(name.version.clone()))
+                    {
+                        return false;
+                    };
 
-                true
-            }) else {
+                    true
+                })
+            else {
                 // Short circuit: we couldn't find _any_ compatible versions for a package.
                 let (package, _range) = potential_packages.swap_remove(index);
                 return Ok((package, None));
@@ -313,28 +321,32 @@ impl<'a> Resolver<'a> {
                 );
 
                 // Find a compatible version.
-                let Some(wheel) = simple_json.files.iter().rev().find_map(|file| {
-                    let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
-                        return None;
-                    };
+                let Some(wheel) = self
+                    .selector
+                    .iter_candidates(package_name, &simple_json.files)
+                    .find_map(|file| {
+                        let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
+                            return None;
+                        };
 
-                    if !name.is_compatible(self.tags) {
-                        return None;
-                    }
+                        if !name.is_compatible(self.tags) {
+                            return None;
+                        }
 
-                    if !range
-                        .borrow()
-                        .contains(&PubGrubVersion::from(name.version.clone()))
-                    {
-                        return None;
-                    };
+                        if !range
+                            .borrow()
+                            .contains(&PubGrubVersion::from(name.version.clone()))
+                        {
+                            return None;
+                        };
 
-                    Some(Wheel {
-                        file: file.clone(),
-                        name: package_name.clone(),
-                        version: name.version.clone(),
+                        Some(Wheel {
+                            file: file.clone(),
+                            name: package_name.clone(),
+                            version: name.version.clone(),
+                        })
                     })
-                }) else {
+                else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
                     return Ok((package, None));
                 };
