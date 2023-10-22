@@ -11,7 +11,7 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-puffin::remove::parse_error
+puffin::remove::parse
 
   × Failed to remove `flask` from `pyproject.toml`
   ╰─▶ no `[project.dependencies]` array found in `pyproject.toml`

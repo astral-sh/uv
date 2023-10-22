@@ -38,11 +38,11 @@ enum AddError {
     InvalidRequirement(String, #[source] pep508_rs::Pep508Error),
 
     #[error("Failed to parse `pyproject.toml` at: `{0}`")]
-    #[diagnostic(code(puffin::add::parse_error))]
+    #[diagnostic(code(puffin::add::parse))]
     ParseError(PathBuf, #[source] WorkspaceError),
 
     #[error("Failed to write `pyproject.toml` to: `{0}`")]
-    #[diagnostic(code(puffin::add::write_error))]
+    #[diagnostic(code(puffin::add::write))]
     WriteError(PathBuf, #[source] WorkspaceError),
 }
 
