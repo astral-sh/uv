@@ -2,14 +2,14 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use fs_err::tokio as fs;
+use fs_err as fs;
 use tracing::debug;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Clear the cache.
-pub(crate) async fn clean(cache: Option<&Path>, mut printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn clean(cache: Option<&Path>, mut printer: Printer) -> Result<ExitStatus> {
     let Some(cache) = cache else {
         return Err(anyhow::anyhow!("No cache found"));
     };
@@ -33,11 +33,9 @@ pub(crate) async fn clean(cache: Option<&Path>, mut printer: Printer) -> Result<
     {
         if entry.file_type()?.is_dir() {
             fs::remove_dir_all(entry.path())
-                .await
                 .with_context(|| format!("Failed to clear cache at {}", cache.display()))?;
         } else {
             fs::remove_file(entry.path())
-                .await
                 .with_context(|| format!("Failed to clear cache at {}", cache.display()))?;
         }
     }
