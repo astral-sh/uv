@@ -187,7 +187,7 @@ async fn main() -> ExitCode {
         }
         Commands::Clean => commands::clean(cache_dir, printer),
         Commands::Freeze => commands::freeze(cache_dir, printer),
-        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
+        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer),
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),
     };

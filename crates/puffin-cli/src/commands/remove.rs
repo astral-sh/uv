@@ -34,15 +34,15 @@ enum RemoveError {
     WorkspaceNotFound,
 
     #[error("Failed to parse `pyproject.toml` at: `{0}`")]
-    #[diagnostic(code(puffin::remove::parse_error))]
+    #[diagnostic(code(puffin::remove::parse))]
     ParseError(PathBuf, #[source] WorkspaceError),
 
     #[error("Failed to write `pyproject.toml` to: `{0}`")]
-    #[diagnostic(code(puffin::remove::write_error))]
+    #[diagnostic(code(puffin::remove::write))]
     WriteError(PathBuf, #[source] WorkspaceError),
 
     #[error("Failed to remove `{0}` from `pyproject.toml`")]
-    #[diagnostic(code(puffin::remove::parse_error))]
+    #[diagnostic(code(puffin::remove::parse))]
     RemovalError(String, #[source] WorkspaceError),
 }
 
