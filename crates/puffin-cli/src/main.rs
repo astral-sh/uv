@@ -185,7 +185,7 @@ async fn main() -> ExitCode {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache_dir, printer).await
         }
-        Commands::Clean => commands::clean(cache_dir, printer).await,
+        Commands::Clean => commands::clean(cache_dir, printer),
         Commands::Freeze => commands::freeze(cache_dir, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
         Commands::Add(args) => commands::add(&args.name, printer),
