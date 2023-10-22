@@ -32,6 +32,10 @@ struct Cli {
     /// Avoid reading from or writing to the cache.
     #[arg(global = true, long, short)]
     no_cache: bool,
+
+    /// Path to the cache directory.
+    #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
+    cache_dir: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -133,9 +137,17 @@ async fn main() -> ExitCode {
         printer::Printer::Default
     };
 
+    let project_dirs = ProjectDirs::from("", "", "puffin");
+    let cache_dir = (!cli.no_cache)
+        .then(|| {
+            cli.cache_dir
+                .as_deref()
+                .or_else(|| project_dirs.as_ref().map(ProjectDirs::cache_dir))
+        })
+        .flatten();
+
     let result = match cli.command {
         Commands::PipCompile(args) => {
-            let dirs = ProjectDirs::from("", "", "puffin");
             let requirements = args
                 .src_file
                 .into_iter()
@@ -151,59 +163,30 @@ async fn main() -> ExitCode {
                 &constraints,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
-                dirs.as_ref()
-                    .map(ProjectDirs::cache_dir)
-                    .filter(|_| !cli.no_cache),
+                cache_dir,
                 printer,
             )
             .await
         }
         Commands::PipSync(args) => {
-            let dirs = ProjectDirs::from("", "", "puffin");
             let sources = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
-            commands::pip_sync(
-                &sources,
-                dirs.as_ref()
-                    .map(ProjectDirs::cache_dir)
-                    .filter(|_| !cli.no_cache),
-                printer,
-            )
-            .await
+            commands::pip_sync(&sources, cache_dir, printer).await
         }
         Commands::PipUninstall(args) => {
-            let dirs = ProjectDirs::from("", "", "puffin");
             let sources = args
                 .package
                 .into_iter()
                 .map(RequirementsSource::from)
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(
-                &sources,
-                dirs.as_ref()
-                    .map(ProjectDirs::cache_dir)
-                    .filter(|_| !cli.no_cache),
-                printer,
-            )
-            .await
+            commands::pip_uninstall(&sources, cache_dir, printer).await
         }
-        Commands::Clean => {
-            let dirs = ProjectDirs::from("", "", "puffin");
-            commands::clean(dirs.as_ref().map(ProjectDirs::cache_dir), printer).await
-        }
-        Commands::Freeze => {
-            let dirs = ProjectDirs::from("", "", "puffin");
-            commands::freeze(
-                dirs.as_ref()
-                    .map(ProjectDirs::cache_dir)
-                    .filter(|_| !cli.no_cache),
-                printer,
-            )
-        }
+        Commands::Clean => commands::clean(cache_dir, printer).await,
+        Commands::Freeze => commands::freeze(cache_dir, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer).await,
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),

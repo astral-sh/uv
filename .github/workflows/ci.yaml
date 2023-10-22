@@ -15,6 +15,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+  PYTHON_VERSION: "3.12"
 
 jobs:
   cargo-fmt:
@@ -47,6 +48,10 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+      - name: "Install Python"
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: "Install Rust toolchain"
         run: rustup show
       - name: "Install cargo insta"

@@ -48,4 +48,11 @@ which = { workspace = true }
 assert_cmd = { version = "2.0.8" }
 assert_fs = { version = "1.0.13" }
 insta-cmd = { version = "0.4.0" }
+insta = { version = "1.34.0", features = ["filters"] }
 predicates = { version = "3.0.4" }
+
+[features]
+# Introduces a dependency on a local Python installation.
+python = []
+# Introduces a dependency on PyPI.
+pypi = []

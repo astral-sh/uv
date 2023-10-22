@@ -36,3 +36,7 @@ waitmap = { workspace = true }
 [dev-dependencies]
 once_cell = { version = "1.18.0" }
 insta = { version = "1.34.0" }
+
+[features]
+# Introduces a dependency on PyPI.
+pypi = []
