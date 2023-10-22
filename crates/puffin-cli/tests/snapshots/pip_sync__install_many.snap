@@ -1,0 +1,24 @@
+---
+source: crates/puffin-cli/tests/pip_sync.rs
+info:
+  program: puffin
+  args:
+    - pip-sync
+    - requirements.txt
+    - "--cache-dir"
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpoqh2hP
+  env:
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpZCdve2/.venv
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Resolved 2 packages in [TIME]
+Downloaded 2 packages in [TIME]
+Unzipped 2 packages in [TIME]
+Installed 2 packages in [TIME]
+ + markupsafe@2.1.3
+ + tomli@2.0.1
+

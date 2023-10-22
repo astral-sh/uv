@@ -1,3 +1,5 @@
+#![cfg(feature = "pypi")]
+
 //! Integration tests for the resolver. These tests rely on a live network connection, and hit
 //! `PyPI` directly.
 
