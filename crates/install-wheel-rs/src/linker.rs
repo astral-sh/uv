@@ -27,6 +27,7 @@ use crate::{read_record_file, Error, Script};
 pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
+    link_mode: LinkMode,
 ) -> Result<(), Error> {
     let base_location = location.venv_base();
 
@@ -65,7 +66,7 @@ pub fn install_wheel(
     // > 1.d Else unpack archive into platlib (site-packages).
     // We always install in the same virtualenv site packages
     debug!(name, "Extracting file");
-    let num_unpacked = unpack_wheel_files(&site_packages, &wheel)?;
+    let num_unpacked = link_mode.link_wheel_files(&site_packages, &wheel)?;
     debug!(name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
@@ -243,14 +244,51 @@ fn parse_scripts(
     Ok((console_scripts, gui_scripts))
 }
 
-/// Extract all files from the wheel into the site packages.
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn unpack_wheel_files(
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum LinkMode {
+    /// Clone (i.e., copy-on-write) packages from the wheel into the site packages.
+    Clone,
+    /// Copy packages from the wheel into the site packages.
+    Copy,
+    /// Hard link packages from the wheel into the site packages.
+    Hardlink,
+}
+
+impl Default for LinkMode {
+    fn default() -> Self {
+        if cfg!(any(target_os = "macos", target_os = "ios")) {
+            Self::Clone
+        } else {
+            Self::Hardlink
+        }
+    }
+}
+
+impl LinkMode {
+    /// Extract a wheel by linking all of its files into site packages.
+    pub fn link_wheel_files(
+        self,
+        site_packages: impl AsRef<Path>,
+        wheel: impl AsRef<Path>,
+    ) -> Result<usize, Error> {
+        match self {
+            Self::Clone => clone_wheel_files(site_packages, wheel),
+            Self::Copy => copy_wheel_files(site_packages, wheel),
+            Self::Hardlink => hardlink_wheel_files(site_packages, wheel),
+        }
+    }
+}
+
+/// Extract a wheel by cloning all of its files into site packages. The files will be cloned
+/// via copy-on-write, which is similar to a hard link, but allows the files to be modified
+/// independently (that is, the file is copied upon modification).
+///
+/// This method uses `clonefile` on macOS, and `reflink` on Linux.
+fn clone_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
 ) -> Result<usize, Error> {
-    use crate::reflink::reflink;
-
     let mut count = 0usize;
 
     // On macOS, directly can be recursively copied with a single `clonefile` call.
@@ -264,16 +302,12 @@ fn unpack_wheel_files(
             .join(from.strip_prefix(&wheel).unwrap());
 
         // Delete the destination if it already exists.
-        if let Ok(metadata) = to.metadata() {
-            if metadata.is_dir() {
-                fs::remove_dir_all(&to)?;
-            } else if metadata.is_file() {
-                fs::remove_file(&to)?;
-            }
-        }
+        fs::remove_dir_all(&to)
+            .or_else(|_| fs::remove_file(&to))
+            .ok();
 
         // Copy the file.
-        reflink(&from, &to)?;
+        reflink_copy::reflink(&from, &to)?;
 
         count += 1;
     }
@@ -281,9 +315,8 @@ fn unpack_wheel_files(
     Ok(count)
 }
 
-/// Extract all files from the wheel into the site packages
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn unpack_wheel_files(
+/// Extract a wheel by copying all of its files into site packages.
+fn copy_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
 ) -> Result<usize, Error> {
@@ -300,7 +333,8 @@ fn unpack_wheel_files(
             continue;
         }
 
-        reflink_copy::reflink_or_copy(entry.path(), &out_path)?;
+        // Copy the file.
+        fs::copy(entry.path(), &out_path)?;
 
         #[cfg(unix)]
         {
@@ -314,6 +348,33 @@ fn unpack_wheel_files(
                 )?;
             }
         }
+
+        count += 1;
+    }
+
+    Ok(count)
+}
+
+/// Extract a wheel by hard-linking all of its files into site packages.
+fn hardlink_wheel_files(
+    site_packages: impl AsRef<Path>,
+    wheel: impl AsRef<Path>,
+) -> Result<usize, Error> {
+    let mut count = 0usize;
+
+    // Walk over the directory.
+    for entry in walkdir::WalkDir::new(&wheel) {
+        let entry = entry?;
+        let relative = entry.path().strip_prefix(&wheel).unwrap();
+        let out_path = site_packages.as_ref().join(relative);
+
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&out_path)?;
+            continue;
+        }
+
+        // Copy the file.
+        fs::hard_link(entry.path(), &out_path)?;
 
         count += 1;
     }

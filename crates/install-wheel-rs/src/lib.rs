@@ -17,14 +17,12 @@ pub use wheel::{
 };
 
 mod install_location;
+pub mod linker;
 #[cfg(feature = "python_bindings")]
 mod python_bindings;
 mod record;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-mod reflink;
 mod script;
 mod uninstall;
-pub mod unpacked;
 mod wheel;
 
 #[derive(Error, Debug)]

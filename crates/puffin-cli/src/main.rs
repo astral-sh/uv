@@ -81,6 +81,10 @@ struct PipSyncArgs {
     /// Include all packages listed in the given `requirements.txt` files.
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
+
+    /// The method to use when installing packages from the global cache.
+    #[clap(long, value_enum)]
+    link_mode: Option<install_wheel_rs::linker::LinkMode>,
 }
 
 #[derive(Args)]
@@ -174,7 +178,13 @@ async fn main() -> ExitCode {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
-            commands::pip_sync(&sources, cache_dir, printer).await
+            commands::pip_sync(
+                &sources,
+                args.link_mode.unwrap_or_default(),
+                cache_dir,
+                printer,
+            )
+            .await
         }
         Commands::PipUninstall(args) => {
             let sources = args
