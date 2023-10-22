@@ -15,6 +15,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::PypiClientBuilder;
 use puffin_interpreter::PythonExecutable;
+use puffin_resolver::ResolutionMode;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -27,6 +28,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     output_file: Option<&Path>,
+    mode: ResolutionMode,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -63,7 +65,7 @@ pub(crate) async fn pip_compile(
 
     // Resolve the dependencies.
     let resolver =
-        puffin_resolver::Resolver::new(requirements, constraints, markers, &tags, &client);
+        puffin_resolver::Resolver::new(requirements, constraints, mode, markers, &tags, &client);
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
             mut derivation_tree,

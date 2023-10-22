@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
+use puffin_resolver::ResolutionMode;
 
 use crate::commands::ExitStatus;
 use crate::requirements::RequirementsSource;
@@ -62,6 +63,9 @@ struct PipCompileArgs {
     /// Constrain versions using the given constraints files.
     #[clap(short, long)]
     constraint: Vec<PathBuf>,
+
+    #[clap(long, value_enum)]
+    resolution: Option<ResolutionMode>,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
@@ -146,6 +150,7 @@ async fn main() -> ExitCode {
                 &requirements,
                 &constraints,
                 args.output_file.as_deref(),
+                args.resolution.unwrap_or_default(),
                 dirs.as_ref()
                     .map(ProjectDirs::cache_dir)
                     .filter(|_| !cli.no_cache),
