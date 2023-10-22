@@ -47,7 +47,8 @@ fn missing_venv() -> Result<()> {
     Ok(())
 }
 
-/// Install a package into a virtual environment.
+/// Install a package into a virtual environment using the default link semantics. (On macOS,
+/// this using `clone` semantics.)
 #[test]
 fn install() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -76,6 +77,100 @@ fn install() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
             .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import markupsafe")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Install a package into a virtual environment using copy semantics.
+#[test]
+fn install_copy() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+ms", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--link-mode")
+            .arg("copy")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import markupsafe")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Install a package into a virtual environment using hardlink semantics.
+#[test]
+fn install_hardlink() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+ms", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--link-mode")
+            .arg("hardlink")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
@@ -379,6 +474,66 @@ fn install_sequential() -> Result<()> {
     Command::new(venv.join("bin").join("python"))
         .arg("-c")
         .arg("import markupsafe; import tomli")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Install a package into a virtual environment, then install a second package into the same
+/// virtual environment.
+#[test]
+fn upgrade() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("tomli==2.0.0")?;
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-sync")
+        .arg("requirements.txt")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("tomli==2.0.1")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+ms", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import tomli")
         .current_dir(&temp_dir)
         .assert()
         .success();

@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use colored::Colorize;
+use install_wheel_rs::linker::LinkMode;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -27,6 +28,7 @@ use crate::requirements::RequirementsSource;
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
+    link_mode: LinkMode,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -42,12 +44,13 @@ pub(crate) async fn pip_sync(
         return Ok(ExitStatus::Success);
     }
 
-    sync_requirements(&requirements, cache, printer).await
+    sync_requirements(&requirements, link_mode, cache, printer).await
 }
 
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
+    link_mode: LinkMode,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -211,6 +214,7 @@ pub(crate) async fn sync_requirements(
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         puffin_installer::Installer::new(&python)
+            .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;
 

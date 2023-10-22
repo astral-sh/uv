@@ -44,7 +44,7 @@ platform-info = { version = "2.0.2" }
 plist = { version = "1.5.0" }
 pyproject-toml = { version = "0.7.0" }
 rayon = { version = "1.8.0" }
-reflink-copy = { version = "0.1.9" }
+reflink-copy = { version = "0.1.10" }
 regex = { version = "1.9.6" }
 reqwest = { version = "0.11.22", features = ["json", "gzip", "brotli", "stream"] }
 reqwest-middleware = { version = "0.2.3" }

@@ -9,6 +9,7 @@ use crate::CachedDistribution;
 
 pub struct Installer<'a> {
     python: &'a PythonExecutable,
+    link_mode: install_wheel_rs::linker::LinkMode,
     reporter: Option<Box<dyn Reporter>>,
 }
 
@@ -17,11 +18,18 @@ impl<'a> Installer<'a> {
     pub fn new(python: &'a PythonExecutable) -> Self {
         Self {
             python,
+            link_mode: install_wheel_rs::linker::LinkMode::default(),
             reporter: None,
         }
     }
 
-    /// Set the [`Reporter`] to use for this installer..
+    /// Set the [`Mode`] to use for this installer.
+    #[must_use]
+    pub fn with_link_mode(self, link_mode: install_wheel_rs::linker::LinkMode) -> Self {
+        Self { link_mode, ..self }
+    }
+
+    /// Set the [`Reporter`] to use for this installer.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
@@ -39,7 +47,7 @@ impl<'a> Installer<'a> {
                     self.python.simple_version(),
                 );
 
-                install_wheel_rs::unpacked::install_wheel(&location, wheel.path())?;
+                install_wheel_rs::linker::install_wheel(&location, wheel.path(), self.link_mode)?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_install_progress(wheel.name(), wheel.version());
