@@ -5,11 +5,14 @@ use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
 use puffin_resolver::ResolutionMode;
+use url::Url;
 
 use crate::commands::ExitStatus;
+use crate::index_urls::IndexUrls;
 use crate::requirements::RequirementsSource;
 
 mod commands;
+mod index_urls;
 mod logging;
 mod printer;
 mod requirements;
@@ -74,6 +77,18 @@ struct PipCompileArgs {
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
     output_file: Option<PathBuf>,
+
+    /// The URL of the Python Package Index (default: https://pypi.org/simple).
+    #[clap(long, short)]
+    index_url: Option<Url>,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    #[clap(long)]
+    extra_index_url: Vec<Url>,
+
+    /// Ignore the package index, instead relying on local archives and caches.
+    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    no_index: bool,
 }
 
 #[derive(Args)]
@@ -85,6 +100,18 @@ struct PipSyncArgs {
     /// The method to use when installing packages from the global cache.
     #[clap(long, value_enum)]
     link_mode: Option<install_wheel_rs::linker::LinkMode>,
+
+    /// The URL of the Python Package Index (default: https://pypi.org/simple).
+    #[clap(long, short)]
+    index_url: Option<Url>,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    #[clap(long)]
+    extra_index_url: Vec<Url>,
+
+    /// Ignore the package index, instead relying on local archives and caches.
+    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    no_index: bool,
 }
 
 #[derive(Args)]
@@ -162,17 +189,22 @@ async fn main() -> ExitCode {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
+            let index_urls =
+                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
             commands::pip_compile(
                 &requirements,
                 &constraints,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
+                index_urls,
                 cache_dir,
                 printer,
             )
             .await
         }
         Commands::PipSync(args) => {
+            let index_urls =
+                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
             let sources = args
                 .src_file
                 .into_iter()
@@ -181,6 +213,7 @@ async fn main() -> ExitCode {
             commands::pip_sync(
                 &sources,
                 args.link_mode.unwrap_or_default(),
+                index_urls,
                 cache_dir,
                 printer,
             )

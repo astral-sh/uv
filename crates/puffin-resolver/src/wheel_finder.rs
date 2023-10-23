@@ -14,7 +14,7 @@ use tracing::debug;
 use distribution_filename::WheelFilename;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
-use puffin_client::{File, PypiClient, SimpleJson};
+use puffin_client::{File, RegistryClient, SimpleJson};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 
@@ -23,13 +23,13 @@ use crate::resolution::{PinnedPackage, Resolution};
 
 pub struct WheelFinder<'a> {
     tags: &'a Tags,
-    client: &'a PypiClient,
+    client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> WheelFinder<'a> {
     /// Initialize a new wheel finder.
-    pub fn new(tags: &'a Tags, client: &'a PypiClient) -> Self {
+    pub fn new(tags: &'a Tags, client: &'a RegistryClient) -> Self {
         Self {
             tags,
             client,

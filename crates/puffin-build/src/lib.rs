@@ -12,7 +12,7 @@ use itertools::{Either, Itertools};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_client::PypiClientBuilder;
+use puffin_client::RegistryClientBuilder;
 use puffin_installer::{CachedDistribution, Downloader, LocalIndex, RemoteDistribution, Unzipper};
 use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
@@ -453,7 +453,7 @@ async fn resolve_and_install(
             }
         });
 
-    let client = PypiClientBuilder::default().cache(cache).build();
+    let client = RegistryClientBuilder::default().cache(cache).build();
 
     let platform = Platform::current()?;
     let python = PythonExecutable::from_venv(platform, venv.as_ref(), cache)?;
