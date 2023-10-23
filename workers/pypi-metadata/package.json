@@ -13,8 +13,8 @@
     "fmt": "prettier --cache -w ."
   },
   "dependencies": {
+    "@zip.js/zip.js": "^2.7.30",
     "install": "^0.13.0",
-    "jszip": "^3.10.1",
     "npm": "^10.2.1",
     "prettier": "^3.0.3"
   }
