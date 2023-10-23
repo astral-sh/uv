@@ -1,0 +1,16 @@
+# Source: https://github.com/jazzband/pip-tools/issues/1829#issue-1642121710
+bert_score
+blobfile
+nltk
+numpy<1.24.0
+packaging
+psutil
+PyYAML
+setuptools
+spacy
+torch
+torchmetrics
+tqdm
+transformers
+wandb
+datasets
