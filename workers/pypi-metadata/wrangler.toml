@@ -1,0 +1,3 @@
+name = "pypi-metadata"
+main = "src/index.ts"
+compatibility_date = "2023-09-17"

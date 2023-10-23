@@ -1,0 +1,21 @@
+{
+  "name": "api",
+  "version": "0.0.0",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20230914.0",
+    "typescript": "^5.2.2",
+    "wrangler": "2.0.27"
+  },
+  "private": true,
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler publish",
+    "fmt": "prettier --cache -w ."
+  },
+  "dependencies": {
+    "install": "^0.13.0",
+    "jszip": "^3.10.1",
+    "npm": "^10.2.1",
+    "prettier": "^3.0.3"
+  }
+}
