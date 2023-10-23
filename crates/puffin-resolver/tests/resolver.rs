@@ -11,14 +11,14 @@ use once_cell::sync::Lazy;
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
-use puffin_client::PypiClientBuilder;
+use puffin_client::RegistryClientBuilder;
 use puffin_resolver::{ResolutionMode, Resolver};
 
 #[tokio::test]
 async fn pylint() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("pylint==2.3.0").unwrap()];
     let constraints = vec![];
@@ -41,7 +41,7 @@ async fn pylint() -> Result<()> {
 async fn black() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![];
@@ -64,7 +64,7 @@ async fn black() -> Result<()> {
 async fn black_colorama() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
     let constraints = vec![];
@@ -87,7 +87,7 @@ async fn black_colorama() -> Result<()> {
 async fn black_python_310() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![];
@@ -112,7 +112,7 @@ async fn black_python_310() -> Result<()> {
 async fn black_mypy_extensions() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("mypy-extensions<1").unwrap()];
@@ -137,7 +137,7 @@ async fn black_mypy_extensions() -> Result<()> {
 async fn black_mypy_extensions_extra() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()];
@@ -162,7 +162,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 async fn black_flake8() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("flake8<1").unwrap()];
@@ -185,7 +185,7 @@ async fn black_flake8() -> Result<()> {
 async fn black_lowest() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black>21").unwrap()];
     let constraints = vec![];
@@ -208,7 +208,7 @@ async fn black_lowest() -> Result<()> {
 async fn black_lowest_direct() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = PypiClientBuilder::default().build();
+    let client = RegistryClientBuilder::default().build();
 
     let requirements = vec![Requirement::from_str("black>21").unwrap()];
     let constraints = vec![];

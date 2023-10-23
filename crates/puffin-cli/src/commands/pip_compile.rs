@@ -13,11 +13,12 @@ use tracing::debug;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_client::PypiClientBuilder;
+use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_resolver::ResolutionMode;
 
 use crate::commands::{elapsed, ExitStatus};
+use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
 use crate::requirements::RequirementsSource;
 
@@ -29,6 +30,7 @@ pub(crate) async fn pip_compile(
     constraints: &[RequirementsSource],
     output_file: Option<&Path>,
     mode: ResolutionMode,
+    index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -61,7 +63,19 @@ pub(crate) async fn pip_compile(
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
 
     // Instantiate a client.
-    let client = PypiClientBuilder::default().cache(cache).build();
+    let client = {
+        let mut builder = RegistryClientBuilder::default();
+        builder = builder.cache(cache);
+        if let Some(IndexUrls { index, extra_index }) = index_urls {
+            if let Some(index) = index {
+                builder = builder.index(index);
+            }
+            builder = builder.extra_index(extra_index);
+        } else {
+            builder = builder.no_index();
+        }
+        builder.build()
+    };
 
     // Resolve the dependencies.
     let resolver =

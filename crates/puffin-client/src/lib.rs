@@ -1,7 +1,7 @@
-pub use api::{File, SimpleJson};
-pub use client::{PypiClient, PypiClientBuilder};
-pub use error::PypiClientError;
+pub use client::{RegistryClient, RegistryClientBuilder};
+pub use error::Error;
+pub use types::{File, SimpleJson};
 
-mod api;
 mod client;
 mod error;
+mod types;

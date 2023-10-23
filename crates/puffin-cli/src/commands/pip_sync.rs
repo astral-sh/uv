@@ -10,7 +10,7 @@ use tracing::debug;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_client::PypiClientBuilder;
+use puffin_client::RegistryClientBuilder;
 use puffin_installer::{
     CachedDistribution, Distribution, InstalledDistribution, LocalIndex, RemoteDistribution,
     SitePackages,
@@ -22,6 +22,7 @@ use crate::commands::reporters::{
     DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
 };
 use crate::commands::{elapsed, ExitStatus};
+use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
 use crate::requirements::RequirementsSource;
 
@@ -29,6 +30,7 @@ use crate::requirements::RequirementsSource;
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     link_mode: LinkMode,
+    index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -44,13 +46,14 @@ pub(crate) async fn pip_sync(
         return Ok(ExitStatus::Success);
     }
 
-    sync_requirements(&requirements, link_mode, cache, printer).await
+    sync_requirements(&requirements, link_mode, index_urls, cache, printer).await
 }
 
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     link_mode: LinkMode,
+    index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -92,7 +95,21 @@ pub(crate) async fn sync_requirements(
 
     // Determine the current environment markers.
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
-    let client = PypiClientBuilder::default().cache(cache).build();
+
+    // Instantiate a client.
+    let client = {
+        let mut builder = RegistryClientBuilder::default();
+        builder = builder.cache(cache);
+        if let Some(IndexUrls { index, extra_index }) = index_urls {
+            if let Some(index) = index {
+                builder = builder.index(index);
+            }
+            builder = builder.extra_index(extra_index);
+        } else {
+            builder = builder.no_index();
+        }
+        builder.build()
+    };
 
     // Resolve the dependencies.
     let remote = if remote.is_empty() {

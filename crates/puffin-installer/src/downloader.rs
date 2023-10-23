@@ -8,21 +8,21 @@ use tracing::debug;
 use url::Url;
 
 use pep440_rs::Version;
-use puffin_client::PypiClient;
+use puffin_client::RegistryClient;
 use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
 use crate::distribution::RemoteDistribution;
 
 pub struct Downloader<'a> {
-    client: &'a PypiClient,
+    client: &'a RegistryClient,
     cache: Option<&'a Path>,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> Downloader<'a> {
     /// Initialize a new downloader.
-    pub fn new(client: &'a PypiClient, cache: Option<&'a Path>) -> Self {
+    pub fn new(client: &'a RegistryClient, cache: Option<&'a Path>) -> Self {
         Self {
             client,
             cache,
@@ -91,7 +91,7 @@ pub struct InMemoryDistribution {
 /// Download a wheel to a given path.
 async fn fetch_wheel(
     remote: RemoteDistribution,
-    client: PypiClient,
+    client: RegistryClient,
     cache: Option<impl AsRef<Path>>,
 ) -> Result<InMemoryDistribution> {
     // Parse the wheel's SRI.

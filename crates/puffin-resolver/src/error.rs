@@ -15,7 +15,7 @@ pub enum ResolveError {
     StreamTermination,
 
     #[error(transparent)]
-    Client(#[from] puffin_client::PypiClientError),
+    Client(#[from] puffin_client::Error),
 
     #[error(transparent)]
     TrySend(#[from] futures::channel::mpsc::SendError),

@@ -21,7 +21,7 @@ use waitmap::WaitMap;
 use distribution_filename::WheelFilename;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_client::{File, PypiClient, SimpleJson};
+use puffin_client::{File, RegistryClient, SimpleJson};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
@@ -38,7 +38,7 @@ pub struct Resolver<'a> {
     constraints: Vec<Requirement>,
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
-    client: &'a PypiClient,
+    client: &'a RegistryClient,
     selector: CandidateSelector,
     cache: Arc<SolverCache>,
 }
@@ -51,7 +51,7 @@ impl<'a> Resolver<'a> {
         mode: ResolutionMode,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
-        client: &'a PypiClient,
+        client: &'a RegistryClient,
     ) -> Self {
         Self {
             selector: CandidateSelector::from_mode(mode, &requirements),

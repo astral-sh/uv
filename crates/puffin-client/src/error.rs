@@ -4,7 +4,7 @@ use url::Url;
 use puffin_package::metadata;
 
 #[derive(Debug, Error)]
-pub enum PypiClientError {
+pub enum Error {
     /// An invalid URL was provided.
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
@@ -13,16 +13,20 @@ pub enum PypiClientError {
     ///
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
-    #[error("Package `{1}` was not found in registry {0}.")]
-    PackageNotFound(Url, String),
+    #[error("Package `{0}` was not found in the registry.")]
+    PackageNotFound(String),
 
     /// The metadata file could not be parsed.
     #[error(transparent)]
     MetadataParseError(#[from] metadata::Error),
 
     /// The metadata file was not found in the registry.
-    #[error("File `{1}` was not found in registry {0}.")]
-    FileNotFound(Url, String),
+    #[error("File `{0}` was not found in the registry.")]
+    FileNotFound(String),
+
+    /// The resource was not found in the registry.
+    #[error("Resource `{0}` was not found in the registry.")]
+    ResourceNotFound(Url),
 
     /// A generic request error happened while making a request. Refer to the
     /// error message for more details.
@@ -41,7 +45,7 @@ pub enum PypiClientError {
     },
 }
 
-impl PypiClientError {
+impl Error {
     pub fn from_json_err(err: serde_json::Error, url: String) -> Self {
         Self::BadJson { source: err, url }
     }
