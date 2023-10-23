@@ -1,0 +1,23 @@
+# Source: https://github.com/python-trio/trio/blob/01638f87a7344031c10b95a76546d21ccc888c5d/docs-requirements.in
+# RTD is currently installing 1.5.3, which has a bug in :lineno-match:
+sphinx >= 4.0, < 6.2
+jinja2
+sphinx_rtd_theme
+sphinxcontrib-jquery
+sphinxcontrib-trio
+towncrier
+
+# Trio's own dependencies
+cffi; os_name == "nt"
+attrs >= 19.2.0
+sortedcontainers
+idna
+outcome
+sniffio
+exceptiongroup >= 1.0.0rc9
+
+# See note in test-requirements.in
+immutables >= 0.6
+
+# types used in annotations
+pyOpenSSL

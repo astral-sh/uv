@@ -1,0 +1,35 @@
+# Source: https://github.com/flyteorg/flytekit/blob/2a5fa355fdd790f525731b3634a96579e9f744e1/dev-requirements.in
+coverage[toml]
+hypothesis
+joblib
+mock
+pytest
+pytest-asyncio
+pytest-cov
+mypy
+pre-commit
+codespell
+google-cloud-bigquery
+google-cloud-bigquery-storage
+IPython
+keyrings.alt
+
+# Only install tensorflow if not running on an arm Mac.
+tensorflow==2.8.1; python_version<'3.11' and (platform_machine!='arm64' or platform_system!='Darwin')
+# Tensorflow release candidate supports python 3.11
+tensorflow==2.13.0; python_version>='3.11' and (platform_machine!='arm64' or platform_system!='Darwin')
+
+# Newer versions of torch bring in nvidia dependencies that are not present in windows, so
+# we put this constraint while we do not have per-environment requirements files
+torch<=1.12.1; python_version<'3.11'
+# pytorch 2 supports python 3.11
+torch<=2.0.0; python_version>='3.11' or platform_system!='Windows'
+
+pillow
+scikit-learn
+types-protobuf
+types-croniter
+types-mock
+autoflake
+types-requests
+prometheus-client

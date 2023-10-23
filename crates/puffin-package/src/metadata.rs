@@ -199,7 +199,9 @@ impl Metadata21 {
     }
 }
 
-static REQUIREMENT_FIXUP_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
+static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
+
+static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -213,7 +215,7 @@ impl FromStr for LenientRequirement {
             Ok(requirement) => Ok(Self(requirement)),
             Err(err) => {
                 // Given `elasticsearch-dsl (>=7.2.0<8.0.0)`, rewrite to `elasticsearch-dsl (>=7.2.0,<8.0.0)`.
-                let patched = REQUIREMENT_FIXUP_REGEX.replace(s, r"$1,$2");
+                let patched = MISSING_COMMA.replace(s, r"$1,$2");
                 if patched != s {
                     if let Ok(requirement) = Requirement::from_str(&patched) {
                         warn!(
@@ -222,6 +224,18 @@ impl FromStr for LenientRequirement {
                         return Ok(Self(requirement));
                     }
                 }
+
+                // Given `jupyter-core (!=~5.0,>=4.12)`, rewrite to `jupyter-core (!=5.0.*,>=4.12)`.
+                let patched = NOT_EQUAL_TILDE.replace(s, r"!=${1}.*");
+                if patched != s {
+                    if let Ok(requirement) = Requirement::from_str(&patched) {
+                        warn!(
+                        "Adding wildcard after invalid tilde operator (before: `{s}`; after: `{patched}`)",
+                    );
+                        return Ok(Self(requirement));
+                    }
+                }
+
                 Err(err)
             }
         }
@@ -279,5 +293,39 @@ impl FromStr for LenientVersionSpecifiers {
 impl From<LenientVersionSpecifiers> for VersionSpecifiers {
     fn from(specifiers: LenientVersionSpecifiers) -> Self {
         specifiers.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use pep508_rs::Requirement;
+
+    use crate::metadata::LenientRequirement;
+
+    #[test]
+    fn missing_comma() {
+        let actual: Requirement = LenientRequirement::from_str("elasticsearch-dsl (>=7.2.0<8.0.0)")
+            .unwrap()
+            .into();
+        let expected: Requirement =
+            Requirement::from_str("elasticsearch-dsl (>=7.2.0,<8.0.0)").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn not_equal_tile() {
+        let actual: Requirement = LenientRequirement::from_str("jupyter-core (!=~5.0,>=4.12)")
+            .unwrap()
+            .into();
+        let expected: Requirement = Requirement::from_str("jupyter-core (!=5.0.*,>=4.12)").unwrap();
+        assert_eq!(actual, expected);
+
+        let actual: Requirement = LenientRequirement::from_str("jupyter-core (!=~5,>=4.12)")
+            .unwrap()
+            .into();
+        let expected: Requirement = Requirement::from_str("jupyter-core (!=5.*,>=4.12)").unwrap();
+        assert_eq!(actual, expected);
     }
 }

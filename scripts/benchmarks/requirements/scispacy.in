@@ -1,0 +1,29 @@
+# Source: https://github.com/allenai/scispacy/blob/0969c54d21e18a171fc90f1478392412e2c54894/requirements.in
+numpy
+scipy<1.11
+spacy>=3.6.0,<3.7.0
+spacy-lookups-data
+pandas
+requests>=2.0.0,<3.0.0
+conllu
+
+# Candidate generation and entity linking
+joblib
+scikit-learn>=0.20.3
+
+# Required for testing.
+pytest
+pytest-cov
+flake8
+# black currently pinned because of a dependency issue with spacy, typer, and click
+black
+mypy
+types-requests
+types-setuptools
+types-tabulate
+
+# Required for releases.
+twine
+
+# required for the tests to run, or to use the custom sentence splitter
+pysbd
