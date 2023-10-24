@@ -3,16 +3,57 @@
 //! Integration tests for the resolver. These tests rely on a live network connection, and hit
 //! `PyPI` directly.
 
+use std::future::Future;
+use std::path::Path;
+use std::pin::Pin;
 use std::str::FromStr;
 
 use anyhow::Result;
+use gourgeist::Venv;
 use once_cell::sync::Lazy;
 
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
+use puffin_interpreter::PythonExecutable;
 use puffin_resolver::{ResolutionMode, Resolver};
+use puffin_traits::PuffinCtx;
+
+struct DummyContext;
+
+impl PuffinCtx for DummyContext {
+    fn cache(&self) -> Option<&Path> {
+        unimplemented!()
+    }
+
+    fn python(&self) -> &PythonExecutable {
+        unimplemented!()
+    }
+
+    fn resolve<'a>(
+        &'a self,
+        _requirements: &'a [Requirement],
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + 'a>> {
+        unimplemented!()
+    }
+
+    fn install<'a>(
+        &'a self,
+        _requirements: &'a [Requirement],
+        _venv: &'a Venv,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
+        unimplemented!()
+    }
+
+    fn build_source_distribution<'a>(
+        &'a self,
+        _sdist: &'a Path,
+        _wheel_dir: &'a Path,
+    ) -> Pin<Box<dyn Future<Output = Result<String>> + 'a>> {
+        unimplemented!()
+    }
+}
 
 #[tokio::test]
 async fn pylint() -> Result<()> {
@@ -29,7 +70,7 @@ async fn pylint() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -53,7 +94,7 @@ async fn black() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -77,7 +118,7 @@ async fn black_colorama() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -101,7 +142,7 @@ async fn black_python_310() -> Result<()> {
         &MARKERS_310,
         &TAGS_310,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -127,7 +168,7 @@ async fn black_mypy_extensions() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -153,7 +194,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -179,7 +220,7 @@ async fn black_flake8() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -203,7 +244,7 @@ async fn black_lowest() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 
@@ -227,7 +268,7 @@ async fn black_lowest_direct() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
-        None,
+        &DummyContext,
     );
     let resolution = resolver.resolve().await?;
 

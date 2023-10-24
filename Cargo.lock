@@ -2232,6 +2232,7 @@ dependencies = [
  "platform-tags",
  "pubgrub",
  "puffin-client",
+ "puffin-interpreter",
  "puffin-package",
  "puffin-traits",
  "tempfile",
