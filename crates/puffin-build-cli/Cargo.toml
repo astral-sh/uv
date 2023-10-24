@@ -23,6 +23,7 @@ puffin-package = { path = "../puffin-package" }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+colored = { workspace = true }
 directories = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
@@ -32,4 +33,3 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 which = { workspace = true }
-colored = "2.0.4"
