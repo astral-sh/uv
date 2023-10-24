@@ -10,8 +10,8 @@ if [ ! -f downloads/geoextract-0.3.1.tar.gz ]; then
   wget https://files.pythonhosted.org/packages/c4/00/9d9826a6e1c9139cc7183647f47f6b7acb290fa4c572140aa84a12728e60/geoextract-0.3.1.tar.gz -O downloads/geoextract-0.3.1.tar.gz
 fi
 rm -rf wheels
-RUST_LOG=puffin_build=debug cargo run -p puffin-build --bin puffin-build -- --wheels wheels downloads/tqdm-4.66.1.tar.gz
-RUST_LOG=puffin_build=debug cargo run -p puffin-build --bin puffin-build -- --wheels wheels downloads/geoextract-0.3.1.tar.gz
+RUST_LOG=puffin_build=debug cargo run -p puffin-build-cli --bin puffin-build-cli -- --wheels wheels downloads/tqdm-4.66.1.tar.gz
+RUST_LOG=puffin_build=debug cargo run -p puffin-build-cli --bin puffin-build-cli -- --wheels wheels downloads/geoextract-0.3.1.tar.gz
 
 # Check that pip accepts the wheels. It would be better to do functional checks
 virtualenv -p 3.8 -q --clear wheels/.venv

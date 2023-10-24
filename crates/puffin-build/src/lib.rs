@@ -105,7 +105,6 @@ impl SourceDistributionBuilder {
     /// Extract the source distribution and create a venv with the required packages
     pub async fn setup(
         sdist: &Path,
-        base_python: &Path,
         interpreter_info: &InterpreterInfo,
         puffin_ctx: &impl PuffinCtx,
     ) -> Result<SourceDistributionBuilder, Error> {
@@ -141,7 +140,6 @@ impl SourceDistributionBuilder {
             create_pep517_build_environment(
                 temp_dir.path(),
                 &source_tree,
-                base_python,
                 interpreter_info,
                 pep517_backend,
                 puffin_ctx,
@@ -156,7 +154,7 @@ impl SourceDistributionBuilder {
             }
             let venv = gourgeist::create_venv(
                 temp_dir.path().join("venv"),
-                base_python,
+                puffin_ctx.python().executable(),
                 interpreter_info,
                 true,
             )?;
@@ -345,12 +343,16 @@ fn escape_path_for_python(path: &Path) -> String {
 async fn create_pep517_build_environment(
     root: &Path,
     source_tree: &Path,
-    base_python: &Path,
     data: &InterpreterInfo,
     pep517_backend: &Pep517Backend,
     puffin_ctx: &impl PuffinCtx,
 ) -> Result<Venv, Error> {
-    let venv = gourgeist::create_venv(root.join(".venv"), base_python, data, true)?;
+    let venv = gourgeist::create_venv(
+        root.join(".venv"),
+        puffin_ctx.python().executable(),
+        data,
+        true,
+    )?;
     let resolved_requirements = puffin_ctx
         .resolve(&pep517_backend.requirements)
         .await

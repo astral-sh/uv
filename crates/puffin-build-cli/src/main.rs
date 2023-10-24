@@ -6,14 +6,14 @@ use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
 use platform_host::Platform;
-use puffin_build::{Error, SourceDistributionBuilder};
+use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::PuffinDispatch;
 use puffin_interpreter::PythonExecutable;
+use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
-use std::{env, io};
 use tracing::debug;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
@@ -44,26 +44,15 @@ async fn run() -> anyhow::Result<()> {
     let dirs = ProjectDirs::from("", "", "puffin");
     let cache = dirs.as_ref().map(ProjectDirs::cache_dir);
 
-    // TODO: That's no way to deal with paths in PATH
-    let base_python = which::which(args.python.unwrap_or("python3".into())).map_err(|err| {
-        Error::IO(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Can't find `python3` ({err})"),
-        ))
-    })?;
-    let interpreter_info = gourgeist::get_interpreter_info(&base_python)?;
-
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
+
+    let interpreter_info = gourgeist::get_interpreter_info(python.executable())?;
+
     let puffin_dispatch =
         PuffinDispatch::new(RegistryClientBuilder::default().build(), python, cache);
-    let builder = SourceDistributionBuilder::setup(
-        &args.sdist,
-        &base_python,
-        &interpreter_info,
-        &puffin_dispatch,
-    )
-    .await?;
+    let builder =
+        SourceDistributionBuilder::setup(&args.sdist, &interpreter_info, &puffin_dispatch).await?;
     let wheel = builder.build(&wheel_dir)?;
     println!("Wheel built to {}", wheel_dir.join(wheel).display());
     Ok(())

@@ -47,6 +47,10 @@ impl PuffinCtx for PuffinDispatch {
         self.cache.as_deref()
     }
 
+    fn python(&self) -> &PythonExecutable {
+        &self.python
+    }
+
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
@@ -187,13 +191,7 @@ impl PuffinCtx for PuffinDispatch {
             // TODO: Merge this with PythonExecutable
             let interpreter_info = gourgeist::get_interpreter_info(self.python.executable())?;
 
-            let builder = SourceDistributionBuilder::setup(
-                sdist,
-                self.python.executable(),
-                &interpreter_info,
-                self,
-            )
-            .await?;
+            let builder = SourceDistributionBuilder::setup(sdist, &interpreter_info, self).await?;
             Ok(builder.build(wheel_dir)?)
         })
     }

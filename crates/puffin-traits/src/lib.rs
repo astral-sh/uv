@@ -1,5 +1,6 @@
 use gourgeist::Venv;
 use pep508_rs::Requirement;
+use puffin_interpreter::PythonExecutable;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -8,6 +9,7 @@ use std::pin::Pin;
 pub trait PuffinCtx {
     // TODO(konstin): Add a cache abstraction
     fn cache(&self) -> Option<&Path>;
+    fn python(&self) -> &PythonExecutable;
 
     fn resolve<'a>(
         &'a self,

@@ -56,6 +56,7 @@ pub enum Error {
 }
 
 /// Provides the paths inside a venv
+#[derive(Debug, Clone)]
 pub struct Venv(Utf8PathBuf);
 
 impl Deref for Venv {
