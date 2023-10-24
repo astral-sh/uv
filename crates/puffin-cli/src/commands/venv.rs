@@ -5,6 +5,8 @@ use anyhow::Result;
 use colored::Colorize;
 use fs_err as fs;
 use miette::{Diagnostic, IntoDiagnostic};
+use platform_host::Platform;
+use puffin_interpreter::InterpreterInfo;
 use thiserror::Error;
 
 use crate::commands::ExitStatus;
@@ -37,7 +39,7 @@ enum VenvError {
 
     #[error("Failed to extract Python interpreter info")]
     #[diagnostic(code(puffin::venv::interpreter))]
-    InterpreterError(#[source] gourgeist::Error),
+    InterpreterError(#[source] anyhow::Error),
 
     #[error("Failed to create virtual environment")]
     #[diagnostic(code(puffin::venv::creation))]
@@ -59,8 +61,10 @@ fn venv_impl(
             .or_else(|_| which::which("python"))
             .map_err(|_| VenvError::PythonNotFound)?
     };
-    let interpreter_info =
-        gourgeist::get_interpreter_info(&base_python).map_err(VenvError::InterpreterError)?;
+    let platform = Platform::current().into_diagnostic()?;
+    // TODO(konstin): Add caching
+    let interpreter_info = InterpreterInfo::query_cached(&base_python, platform, None)
+        .map_err(VenvError::InterpreterError)?;
 
     writeln!(
         printer,

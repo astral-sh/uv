@@ -6,7 +6,7 @@ use platform_host::{Os, Platform};
 
 /// A Python-aware wrapper around [`Platform`].
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct PythonPlatform(Platform);
+pub(crate) struct PythonPlatform(pub(crate) Platform);
 
 impl PythonPlatform {
     /// Returns the path to the `python` executable inside a virtual environment.

@@ -14,8 +14,10 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-install-wheel-rs = { path = "../install-wheel-rs", optional = true }
 distribution-filename = { path = "../distribution-filename" }
+install-wheel-rs = { path = "../install-wheel-rs", optional = true }
+platform-host = { path = "../platform-host" }
+puffin-interpreter = { path = "../puffin-interpreter" }
 
 camino = { workspace = true }
 clap = { workspace = true }
@@ -24,7 +26,6 @@ dirs = { workspace = true }
 fs-err = { workspace = true }
 reqwest = { workspace = true, optional = true, features = ["blocking"] }
 rayon = { workspace = true, optional = true }
-seahash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

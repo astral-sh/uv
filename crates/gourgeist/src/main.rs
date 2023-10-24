@@ -4,12 +4,13 @@ use std::time::Instant;
 
 use camino::Utf8PathBuf;
 use clap::Parser;
+use gourgeist::{create_venv, parse_python_cli};
+use platform_host::Platform;
+use puffin_interpreter::InterpreterInfo;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-
-use gourgeist::{create_venv, get_interpreter_info, parse_python_cli};
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -24,8 +25,9 @@ fn run() -> Result<(), gourgeist::Error> {
     let cli = Cli::parse();
     let location = cli.path.unwrap_or(Utf8PathBuf::from(".venv"));
     let python = parse_python_cli(cli.python)?;
-    let data = get_interpreter_info(&python)?;
-    create_venv(location, &python, &data, cli.bare)?;
+    let platform = Platform::current()?;
+    let info = InterpreterInfo::query_cached(python.as_std_path(), platform, None).unwrap();
+    create_venv(location, &python, &info, cli.bare)?;
 
     Ok(())
 }

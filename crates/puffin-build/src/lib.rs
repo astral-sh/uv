@@ -19,8 +19,8 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use zip::ZipArchive;
 
-use gourgeist::{InterpreterInfo, Venv};
 use pep508_rs::Requirement;
+use puffin_interpreter::{InterpreterInfo, Venv};
 use puffin_traits::BuildContext;
 
 #[derive(Error, Debug)]
@@ -154,7 +154,7 @@ impl SourceDistributionBuilder {
             }
             let venv = gourgeist::create_venv(
                 temp_dir.path().join("venv"),
-                build_context.python().executable(),
+                build_context.base_python(),
                 interpreter_info,
                 true,
             )?;
@@ -211,8 +211,7 @@ impl SourceDistributionBuilder {
                 print()
             "#, pep517_backend.backend_import(), escape_path_for_python(&metadata_directory)
         };
-        let output =
-            run_python_script(&self.venv.python_interpreter(), &script, &self.source_tree)?;
+        let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
@@ -259,7 +258,7 @@ impl SourceDistributionBuilder {
             self.pep517_build_wheel(&wheel_dir, pep517_backend)
         } else {
             // We checked earlier that setup.py exists
-            let python_interpreter = self.venv.python_interpreter();
+            let python_interpreter = self.venv.python_executable();
             let output = Command::new(&python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
                 .current_dir(&self.source_tree)
@@ -310,8 +309,7 @@ impl SourceDistributionBuilder {
             print(backend.build_wheel("{}", metadata_directory={}))
             "#, pep517_backend.backend_import(), escaped_wheel_dir, metadata_directory 
         };
-        let output =
-            run_python_script(&self.venv.python_interpreter(), &script, &self.source_tree)?;
+        let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to build wheel through `build_wheel()` ".to_string(),
@@ -347,12 +345,7 @@ async fn create_pep517_build_environment(
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
 ) -> Result<Venv, Error> {
-    let venv = gourgeist::create_venv(
-        root.join(".venv"),
-        build_context.python().executable(),
-        data,
-        true,
-    )?;
+    let venv = gourgeist::create_venv(root.join(".venv"), build_context.base_python(), data, true)?;
     let resolved_requirements = build_context
         .resolve(&pep517_backend.requirements)
         .await
@@ -377,7 +370,7 @@ async fn create_pep517_build_environment(
             print(json.dumps(requires))
         "#, pep517_backend.backend_import()
     };
-    let output = run_python_script(&venv.python_interpreter(), &script, source_tree)?;
+    let output = run_python_script(&venv.python_executable(), &script, source_tree)?;
     if !output.status.success() {
         return Err(Error::from_command_output(
             "Build backend failed to determine extras requires with `get_requires_for_build_wheel`"

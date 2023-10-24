@@ -5,7 +5,7 @@ use tracing::debug;
 
 use platform_host::Platform;
 use puffin_installer::SitePackages;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Venv;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -14,10 +14,10 @@ use crate::printer::Printer;
 pub(crate) fn freeze(cache: Option<&Path>, _printer: Printer) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform, cache)?;
+    let python = Venv::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
-        python.executable().display()
+        python.python_executable().display()
     );
 
     // Build the installed index.

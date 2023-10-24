@@ -1003,9 +1003,10 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "install-wheel-rs",
+ "platform-host",
+ "puffin-interpreter",
  "rayon",
  "reqwest",
- "seahash",
  "serde",
  "serde_json",
  "tempfile",
@@ -2021,6 +2022,7 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
+ "puffin-interpreter",
  "puffin-traits",
  "pyproject-toml",
  "serde",
@@ -2180,7 +2182,9 @@ dependencies = [
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",
+ "serde",
  "serde_json",
+ "thiserror",
  "tokio",
  "tracing",
 ]
@@ -2243,7 +2247,6 @@ dependencies = [
  "tracing",
  "url",
  "waitmap",
- "which",
  "zip",
 ]
 
@@ -2252,7 +2255,6 @@ name = "puffin-traits"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "gourgeist",
  "pep508_rs",
  "puffin-interpreter",
 ]
@@ -2707,12 +2709,6 @@ dependencies = [
  "quote",
  "syn 2.0.38",
 ]
-
-[[package]]
-name = "seahash"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "security-framework"

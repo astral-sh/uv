@@ -12,9 +12,9 @@ use tracing::debug;
 
 use distribution_filename::WheelFilename;
 use install_wheel_rs::{install_wheel, InstallLocation};
+use puffin_interpreter::InterpreterInfo;
 
 use crate::bare::VenvPaths;
-use crate::interpreter::InterpreterInfo;
 use crate::{crate_cache_dir, Error};
 
 pub(crate) fn download_wheel_cached(filename: &str, url: &str) -> Result<Utf8PathBuf, Error> {
@@ -51,7 +51,7 @@ pub(crate) fn install_base_packages(
     info: &InterpreterInfo,
     paths: &VenvPaths,
 ) -> Result<(), Error> {
-    let install_location = InstallLocation::new(location.canonicalize()?, (info.major, info.minor));
+    let install_location = InstallLocation::new(location.canonicalize()?, info.simple_version());
     let install_location = install_location.acquire_lock()?;
 
     // TODO: Use the json api instead

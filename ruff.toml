@@ -1,0 +1,4 @@
+exclude = [
+    "crates/gourgeist/src/activator/activate_this.py",
+    "crates/gourgeist/src/_virtualenv.py"
+]

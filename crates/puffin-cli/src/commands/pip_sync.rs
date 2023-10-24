@@ -12,7 +12,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_installer::{Distribution, PartitionedRequirements, RemoteDistribution};
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Venv;
 
 use crate::commands::reporters::{
     DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
@@ -58,10 +58,10 @@ pub(crate) async fn sync_requirements(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform, cache)?;
+    let venv = Venv::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
-        python.executable().display()
+        venv.python_executable().display()
     );
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
@@ -70,7 +70,7 @@ pub(crate) async fn sync_requirements(
         local,
         remote,
         extraneous,
-    } = PartitionedRequirements::try_from_requirements(requirements, cache, &python)?;
+    } = PartitionedRequirements::try_from_requirements(requirements, cache, &venv)?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && extraneous.is_empty() {
@@ -90,7 +90,10 @@ pub(crate) async fn sync_requirements(
     }
 
     // Determine the current environment markers.
-    let tags = Tags::from_env(python.platform(), python.simple_version())?;
+    let tags = Tags::from_env(
+        venv.interpreter_info().platform(),
+        venv.interpreter_info().simple_version(),
+    )?;
 
     // Instantiate a client.
     let client = {
@@ -226,7 +229,7 @@ pub(crate) async fn sync_requirements(
     let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        puffin_installer::Installer::new(&python)
+        puffin_installer::Installer::new(&venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;
