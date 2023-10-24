@@ -25,26 +25,75 @@ impl FromStr for WheelFilename {
                 "Must end with .whl".to_string(),
             )
         })?;
+
+        // The wheel filename should contain either five or six entries. If six, then the third
+        // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        match basename.split('-').collect::<Vec<_>>().as_slice() {
-            // TODO(charlie): Build tag precedence
-            &[distribution, version, _, python_tag, abi_tag, platform_tag]
-            | &[distribution, version, python_tag, abi_tag, platform_tag] => {
-                let version = Version::from_str(version)
-                    .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-                Ok(WheelFilename {
-                    distribution: distribution.to_string(),
-                    version,
-                    python_tag: python_tag.split('.').map(String::from).collect(),
-                    abi_tag: abi_tag.split('.').map(String::from).collect(),
-                    platform_tag: platform_tag.split('.').map(String::from).collect(),
-                })
-            }
-            _ => Err(WheelFilenameError::InvalidWheelFileName(
+        let mut parts = basename.split('-');
+
+        let Some(distribution) = parts.next() else {
+            return Err(WheelFilenameError::InvalidWheelFileName(
                 filename.to_string(),
-                "Expected four \"-\" in the filename".to_string(),
-            )),
-        }
+                "Must have a distribution name".to_string(),
+            ));
+        };
+
+        let Some(version) = parts.next() else {
+            return Err(WheelFilenameError::InvalidWheelFileName(
+                filename.to_string(),
+                "Must have a version".to_string(),
+            ));
+        };
+
+        let Some(build_tag_or_python_tag) = parts.next() else {
+            return Err(WheelFilenameError::InvalidWheelFileName(
+                filename.to_string(),
+                "Must have a Python tag".to_string(),
+            ));
+        };
+
+        let Some(python_tag_or_abi_tag) = parts.next() else {
+            return Err(WheelFilenameError::InvalidWheelFileName(
+                filename.to_string(),
+                "Must have an ABI tag".to_string(),
+            ));
+        };
+
+        let Some(abi_tag_or_platform_tag) = parts.next() else {
+            return Err(WheelFilenameError::InvalidWheelFileName(
+                filename.to_string(),
+                "Must have a platform tag".to_string(),
+            ));
+        };
+
+        let (distribution, version, python_tag, abi_tag, platform_tag) =
+            if let Some(platform_tag) = parts.next() {
+                (
+                    distribution,
+                    version,
+                    python_tag_or_abi_tag,
+                    abi_tag_or_platform_tag,
+                    platform_tag,
+                )
+            } else {
+                (
+                    distribution,
+                    version,
+                    build_tag_or_python_tag,
+                    python_tag_or_abi_tag,
+                    abi_tag_or_platform_tag,
+                )
+            };
+
+        let version = Version::from_str(version)
+            .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
+        Ok(WheelFilename {
+            distribution: distribution.to_string(),
+            version,
+            python_tag: python_tag.split('.').map(String::from).collect(),
+            abi_tag: abi_tag.split('.').map(String::from).collect(),
+            platform_tag: platform_tag.split('.').map(String::from).collect(),
+        })
     }
 }
 
