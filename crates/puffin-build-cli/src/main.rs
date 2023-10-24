@@ -5,7 +5,11 @@ use clap::Parser;
 use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
+use platform_host::Platform;
 use puffin_build::{Error, SourceDistributionBuilder};
+use puffin_client::RegistryClientBuilder;
+use puffin_dispatch::PuffinDispatch;
+use puffin_interpreter::PythonExecutable;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -49,11 +53,19 @@ async fn run() -> anyhow::Result<()> {
     })?;
     let interpreter_info = gourgeist::get_interpreter_info(&base_python)?;
 
-    let builder =
-        SourceDistributionBuilder::setup(&args.sdist, &base_python, &interpreter_info, cache)
-            .await?;
+    let platform = Platform::current()?;
+    let python = PythonExecutable::from_env(platform, cache)?;
+    let puffin_dispatch =
+        PuffinDispatch::new(RegistryClientBuilder::default().build(), python, cache);
+    let builder = SourceDistributionBuilder::setup(
+        &args.sdist,
+        &base_python,
+        &interpreter_info,
+        &puffin_dispatch,
+    )
+    .await?;
     let wheel = builder.build(&wheel_dir)?;
-    println!("Wheel built to {}", wheel.display());
+    println!("Wheel built to {}", wheel_dir.join(wheel).display());
     Ok(())
 }
 

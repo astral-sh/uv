@@ -10,6 +10,8 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+gourgeist = { path = "../gourgeist" }
+install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
@@ -17,21 +19,28 @@ platform-tags = { path = "../platform-tags" }
 pubgrub = { path = "../../vendor/pubgrub" }
 puffin-client = { path = "../puffin-client" }
 puffin-package = { path = "../puffin-package" }
+puffin-traits = { path = "../puffin-traits" }
 distribution-filename = { path = "../distribution-filename" }
 
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 colored = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 fxhash = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
+url = { workspace = true }
 waitmap = { workspace = true }
+which = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
 once_cell = { version = "1.18.0" }

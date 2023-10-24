@@ -7,15 +7,15 @@ use anyhow::Result;
 use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
-use pubgrub::report::Reporter;
-use tracing::debug;
-
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
+use pubgrub::report::Reporter;
 use puffin_client::RegistryClientBuilder;
+use puffin_dispatch::PuffinDispatch;
 use puffin_interpreter::PythonExecutable;
 use puffin_resolver::ResolutionMode;
+use tracing::debug;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
@@ -51,13 +51,15 @@ pub(crate) async fn pip_compile(
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
-    debug!(
-        "Using Python interpreter: {}",
-        python.executable().display()
-    );
 
     // Determine the current environment markers.
-    let markers = python.markers();
+    let markers = python.markers().clone();
+
+    debug!(
+        "Using Python {} at {}",
+        markers.python_version,
+        python.executable().display()
+    );
 
     // Determine the compatible platform tags.
     let tags = Tags::from_env(python.platform(), python.simple_version())?;
@@ -77,9 +79,19 @@ pub(crate) async fn pip_compile(
         builder.build()
     };
 
+    let puffin_dispatch =
+        PuffinDispatch::new(RegistryClientBuilder::default().build(), python, cache);
+
     // Resolve the dependencies.
-    let resolver =
-        puffin_resolver::Resolver::new(requirements, constraints, mode, markers, &tags, &client);
+    let resolver = puffin_resolver::Resolver::new(
+        requirements,
+        constraints,
+        mode,
+        &markers,
+        &tags,
+        &client,
+        &puffin_dispatch,
+    );
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
             mut derivation_tree,

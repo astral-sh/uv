@@ -1,0 +1,30 @@
+[package]
+name = "puffin-dispatch"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+gourgeist = { path = "../gourgeist" }
+pep508_rs = { path = "../pep508-rs" }
+platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
+puffin-build = { path = "../puffin-build" }
+puffin-client = { path = "../puffin-client" }
+puffin-installer = { path = "../puffin-installer" }
+puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-package = { path = "../puffin-package" }
+puffin-resolver = { path = "../puffin-resolver" }
+puffin-traits = { path = "../puffin-traits" }
+
+anyhow = { workspace = true }
+itertools = { workspace = true }
+tempfile = { workspace = true }
+log = "0.4.20"

@@ -1,13 +1,14 @@
-use std::hash::BuildHasherDefault;
-
 use colored::Colorize;
 use fxhash::FxHashMap;
 use petgraph::visit::EdgeRef;
+use std::hash::BuildHasherDefault;
+
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
 
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_client::File;
 use puffin_package::package_name::PackageName;
 
@@ -147,6 +148,27 @@ impl Graph {
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
         self.0.node_count() == 0
+    }
+
+    pub fn requirements(&self) -> Vec<Requirement> {
+        // Collect and sort all packages.
+        let mut nodes = self
+            .0
+            .node_indices()
+            .map(|node| (node, &self.0[node]))
+            .collect::<Vec<_>>();
+        nodes.sort_unstable_by_key(|(_, package)| package.name());
+        self.0
+            .node_indices()
+            .map(|node| Requirement {
+                name: self.0[node].name.to_string(),
+                extras: None,
+                version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+                    VersionSpecifier::equals_version(self.0[node].version.clone()),
+                ))),
+                marker: None,
+            })
+            .collect()
     }
 }
 

@@ -2,12 +2,14 @@
 
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
+use std::future::Future;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
 use futures::channel::mpsc::UnboundedReceiver;
-use futures::future::Either;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
 use fxhash::{FxHashMap, FxHashSet};
 use pubgrub::error::PubGrubError;
@@ -18,13 +20,14 @@ use tokio::select;
 use tracing::{debug, trace};
 use waitmap::WaitMap;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::{File, RegistryClient, SimpleJson};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
+use puffin_traits::PuffinCtx;
 
 use crate::error::ResolveError;
 use crate::mode::{CandidateSelector, ResolutionMode};
@@ -32,8 +35,10 @@ use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::resolution::Graph;
+use crate::source_distribution::{download_and_build_sdist, read_dist_info};
+use crate::BuiltSourceDistributionCache;
 
-pub struct Resolver<'a> {
+pub struct Resolver<'a, Ctx: PuffinCtx> {
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     markers: &'a MarkerEnvironment,
@@ -41,9 +46,10 @@ pub struct Resolver<'a> {
     client: &'a RegistryClient,
     selector: CandidateSelector,
     cache: Arc<SolverCache>,
+    puffin_ctx: &'a Ctx,
 }
 
-impl<'a> Resolver<'a> {
+impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
     /// Initialize a new resolver.
     pub fn new(
         requirements: Vec<Requirement>,
@@ -52,6 +58,7 @@ impl<'a> Resolver<'a> {
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a RegistryClient,
+        puffin_ctx: &'a Ctx,
     ) -> Self {
         Self {
             selector: CandidateSelector::from_mode(mode, &requirements),
@@ -61,6 +68,7 @@ impl<'a> Resolver<'a> {
             markers,
             tags,
             client,
+            puffin_ctx,
         }
     }
 
@@ -266,27 +274,46 @@ impl<'a> Resolver<'a> {
             };
             let simple_json = entry.value();
 
-            // Select the latest compatible version.
-            let Some(file) = self
+            // Try to find a wheel. If there isn't any, to a find a source distribution. If there
+            // isn't any either, short circuit and fail the resolution.
+            // TODO: Group files by version, then check for each version first for compatible wheels
+            // and then for a compatible sdist. This is required to still select the most recent
+            // version.
+            let Some((file, request)) = self
                 .selector
                 .iter_candidates(package_name, &simple_json.files)
-                .find(|file| {
-                    let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
-                        return false;
-                    };
-
-                    if !name.is_compatible(self.tags) {
-                        return false;
+                .find_map(|file| {
+                    let wheel_filename = WheelFilename::from_str(file.filename.as_str()).ok()?;
+                    if !wheel_filename.is_compatible(self.tags) {
+                        return None;
                     }
 
-                    if !range
+                    if range
                         .borrow()
-                        .contains(&PubGrubVersion::from(name.version.clone()))
+                        .contains(&PubGrubVersion::from(wheel_filename.version.clone()))
                     {
-                        return false;
-                    };
+                        Some((file, Request::WheelVersion(file.clone())))
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| {
+                    self.selector
+                        .iter_candidates(package_name, &simple_json.files)
+                        .find_map(|file| {
+                            let sdist_filename =
+                                SourceDistributionFilename::parse(&file.filename, package_name)
+                                    .ok()?;
 
-                    true
+                            if range
+                                .borrow()
+                                .contains(&PubGrubVersion::from(sdist_filename.version.clone()))
+                            {
+                                Some((file, Request::SdistVersion((file.clone(), sdist_filename))))
+                            } else {
+                                None
+                            }
+                        })
                 })
             else {
                 // Short circuit: we couldn't find _any_ compatible versions for a package.
@@ -296,7 +323,7 @@ impl<'a> Resolver<'a> {
 
             // Emit a request to fetch the metadata for this version.
             if in_flight.insert(file.hashes.sha256.clone()) {
-                request_sink.unbounded_send(Request::Version(file.clone()))?;
+                request_sink.unbounded_send(request)?;
             }
 
             selection = index;
@@ -321,7 +348,7 @@ impl<'a> Resolver<'a> {
                 );
 
                 // Find a compatible version.
-                let Some(wheel) = self
+                let mut wheel = self
                     .selector
                     .iter_candidates(package_name, &simple_json.files)
                     .find_map(|file| {
@@ -345,29 +372,69 @@ impl<'a> Resolver<'a> {
                             name: package_name.clone(),
                             version: name.version.clone(),
                         })
-                    })
-                else {
-                    // Short circuit: we couldn't find _any_ compatible versions for a package.
-                    return Ok((package, None));
-                };
+                    });
 
-                debug!(
-                    "Selecting: {}=={} ({})",
-                    wheel.name, wheel.version, wheel.file.filename
-                );
+                if wheel.is_none() {
+                    if let Some((sdist_file, parsed_filename)) = simple_json
+                        .files
+                        .iter()
+                        .rev()
+                        .filter_map(|file| {
+                            let Ok(parsed_filename) =
+                                SourceDistributionFilename::parse(&file.filename, package_name)
+                            else {
+                                return None;
+                            };
 
-                // We want to return a package pinned to a specific version; but we _also_ want to
-                // store the exact file that we selected to satisfy that version.
-                pins.entry(wheel.name)
-                    .or_default()
-                    .insert(wheel.version.clone(), wheel.file.clone());
+                            if !range
+                                .borrow()
+                                .contains(&PubGrubVersion::from(parsed_filename.version.clone()))
+                            {
+                                return None;
+                            };
 
-                // Emit a request to fetch the metadata for this version.
-                if in_flight.insert(wheel.file.hashes.sha256.clone()) {
-                    request_sink.unbounded_send(Request::Version(wheel.file.clone()))?;
+                            Some((file, parsed_filename))
+                        })
+                        .max_by(|left, right| left.1.version.cmp(&right.1.version))
+                    {
+                        // Emit a request to fetch the metadata for this version.
+                        if in_flight.insert(sdist_file.hashes.sha256.clone()) {
+                            request_sink.unbounded_send(Request::SdistVersion((
+                                sdist_file.clone(),
+                                parsed_filename.clone(),
+                            )))?;
+                        }
+                        // TODO(konstin): That's not a wheel
+                        wheel = Some(Wheel {
+                            file: sdist_file.clone(),
+                            name: package_name.clone(),
+                            version: parsed_filename.version.clone(),
+                        });
+                    }
                 }
 
-                Ok((package, Some(PubGrubVersion::from(wheel.version))))
+                if let Some(wheel) = wheel {
+                    debug!(
+                        "Selecting: {}=={} ({})",
+                        wheel.name, wheel.version, wheel.file.filename
+                    );
+
+                    // We want to return a package pinned to a specific version; but we _also_ want to
+                    // store the exact file that we selected to satisfy that version.
+                    pins.entry(wheel.name)
+                        .or_default()
+                        .insert(wheel.version.clone(), wheel.file.clone());
+
+                    // Emit a request to fetch the metadata for this version.
+                    if in_flight.insert(wheel.file.hashes.sha256.clone()) {
+                        request_sink.unbounded_send(Request::WheelVersion(wheel.file.clone()))?;
+                    }
+
+                    Ok((package, Some(PubGrubVersion::from(wheel.version))))
+                } else {
+                    // Short circuit: we couldn't find _any_ compatible versions for a package.
+                    Ok((package, None))
+                }
             }
         };
     }
@@ -485,20 +552,7 @@ impl<'a> Resolver<'a> {
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch(&self, request_stream: UnboundedReceiver<Request>) -> Result<(), ResolveError> {
         let mut response_stream = request_stream
-            .map({
-                |request: Request| match request {
-                    Request::Package(package_name) => Either::Left(
-                        self.client
-                            .simple(package_name.clone())
-                            .map_ok(move |metadata| Response::Package(package_name, metadata)),
-                    ),
-                    Request::Version(file) => Either::Right(
-                        self.client
-                            .file(file.clone())
-                            .map_ok(move |metadata| Response::Version(file, metadata)),
-                    ),
-                }
-            })
+            .map(|request| self.process_request(request))
             .buffer_unordered(32)
             .ready_chunks(32);
 
@@ -515,11 +569,79 @@ impl<'a> Resolver<'a> {
                             .versions
                             .insert(file.hashes.sha256.clone(), metadata);
                     }
+                    Response::Sdist(file, metadata) => {
+                        trace!("Received sdist build metadata for {}", file.filename);
+                        self.cache
+                            .versions
+                            .insert(file.hashes.sha256.clone(), metadata);
+                    }
                 }
             }
         }
 
         Ok::<(), ResolveError>(())
+    }
+
+    fn process_request(
+        &'a self,
+        request: Request,
+    ) -> Pin<Box<dyn Future<Output = Result<Response, ResolveError>> + 'a>> {
+        match request {
+            Request::Package(package_name) => Box::pin(
+                self.client
+                    .simple(package_name.clone())
+                    .map_ok(move |metadata| Response::Package(package_name, metadata))
+                    .map_err(ResolveError::Client),
+            ),
+            Request::WheelVersion(file) => Box::pin(
+                self.client
+                    .file(file.clone())
+                    .map_ok(move |metadata| Response::Version(file, metadata))
+                    .map_err(ResolveError::Client),
+            ),
+            Request::SdistVersion((file, filename)) => Box::pin(async move {
+                let cached_wheel = self.find_cached_built_wheel(self.puffin_ctx.cache(), &filename);
+                let metadata21 = if let Some(cached_wheel) = cached_wheel {
+                    read_dist_info(cached_wheel).await
+                } else {
+                    download_and_build_sdist(&file, self.client, self.puffin_ctx, &filename).await
+                }
+                .map_err(|err| ResolveError::SourceDistribution {
+                    filename: file.filename.clone(),
+                    err,
+                })?;
+
+                Ok(Response::Sdist(file, metadata21))
+            }),
+        }
+    }
+
+    fn find_cached_built_wheel(
+        &self,
+        cache: Option<&Path>,
+        filename: &SourceDistributionFilename,
+    ) -> Option<PathBuf> {
+        let Some(cache) = cache else {
+            return None;
+        };
+        let cache = BuiltSourceDistributionCache::new(cache);
+        let Ok(read_dir) = fs_err::read_dir(cache.version(&filename.name, &filename.version))
+        else {
+            return None;
+        };
+
+        for entry in read_dir {
+            let Ok(entry) = entry else { continue };
+            let Ok(wheel) = WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
+            else {
+                continue;
+            };
+
+            if wheel.is_compatible(self.tags) {
+                return Some(entry.path().clone());
+            }
+        }
+        None
     }
 }
 
@@ -537,8 +659,10 @@ struct Wheel {
 enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
+    /// A request to fetch and build the source distribution for a specific package version
+    SdistVersion((File, SourceDistributionFilename)),
     /// A request to fetch the metadata for a specific version of a package.
-    Version(File),
+    WheelVersion(File),
 }
 
 #[derive(Debug)]
@@ -547,6 +671,8 @@ enum Response {
     Package(PackageName, SimpleJson),
     /// The returned metadata for a specific version of a package.
     Version(File, Metadata21),
+    /// The returned metadata for an sdist build.
+    Sdist(File, Metadata21),
 }
 
 struct SolverCache {

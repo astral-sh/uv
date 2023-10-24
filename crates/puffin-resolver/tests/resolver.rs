@@ -29,6 +29,7 @@ async fn pylint() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -52,6 +53,7 @@ async fn black() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -75,6 +77,7 @@ async fn black_colorama() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -98,6 +101,7 @@ async fn black_python_310() -> Result<()> {
         &MARKERS_310,
         &TAGS_310,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -123,6 +127,7 @@ async fn black_mypy_extensions() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -148,6 +153,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -173,6 +179,7 @@ async fn black_flake8() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -196,6 +203,7 @@ async fn black_lowest() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 
@@ -219,6 +227,7 @@ async fn black_lowest_direct() -> Result<()> {
         &MARKERS_311,
         &TAGS_311,
         &client,
+        None,
     );
     let resolution = resolver.resolve().await?;
 

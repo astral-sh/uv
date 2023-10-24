@@ -1,5 +1,5 @@
 [package]
-name = "puffin-build"
+name = "puffin-build-cli"
 version = "0.0.1"
 description = "Build wheels from source distributions"
 edition = { workspace = true }
@@ -15,21 +15,21 @@ gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-traits = { path = "../puffin-traits" }
+puffin-build = { path = "../puffin-build" }
+puffin-client = { path = "../puffin-client" }
+puffin-dispatch = { path = "../puffin-dispatch" }
+puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-package = { path = "../puffin-package" }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-flate2 = { workspace = true }
+directories = { workspace = true }
 fs-err = { workspace = true }
-indoc = { workspace = true }
-pyproject-toml = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tar = { workspace = true }
+futures = { workspace = true }
+itertools = { workspace = true }
 tempfile = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 tracing = { workspace = true }
-which = { workspace = true}
-zip = { workspace = true }
+tracing-subscriber = { workspace = true }
+which = { workspace = true }
+colored = "2.0.4"

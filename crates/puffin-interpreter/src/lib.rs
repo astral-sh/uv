@@ -13,7 +13,7 @@ mod python_platform;
 mod virtual_env;
 
 /// A Python executable and its associated platform markers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PythonExecutable {
     platform: PythonPlatform,
     venv: PathBuf,
@@ -48,6 +48,17 @@ impl PythonExecutable {
             executable,
             markers,
         })
+    }
+
+    /// Create a [`PythonExecutable`] for a venv with a known base [`PythonExecutable`].
+    pub fn from_venv_with_base(venv: &Path, base: &Self) -> Self {
+        let executable = base.platform.venv_python(venv);
+
+        Self {
+            venv: venv.to_path_buf(),
+            executable,
+            ..base.clone()
+        }
     }
 
     /// Returns the path to the Python virtual environment.

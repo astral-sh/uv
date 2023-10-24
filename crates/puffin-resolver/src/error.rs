@@ -25,6 +25,14 @@ pub enum ResolveError {
 
     #[error(transparent)]
     PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>),
+
+    #[error("Failed to build source distribution {filename}")]
+    SourceDistribution {
+        filename: String,
+        // TODO: Gives this a proper error type
+        #[source]
+        err: anyhow::Error,
+    },
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {

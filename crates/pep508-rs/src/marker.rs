@@ -312,6 +312,12 @@ impl FromStr for StringVersion {
     }
 }
 
+impl Display for StringVersion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.version.fmt(f)
+    }
+}
+
 #[cfg(feature = "serde")]
 impl Serialize for StringVersion {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
