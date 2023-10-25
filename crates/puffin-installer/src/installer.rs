@@ -2,22 +2,22 @@ use anyhow::{Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use pep440_rs::Version;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::CachedDistribution;
 
 pub struct Installer<'a> {
-    python: &'a PythonExecutable,
+    venv: &'a Virtualenv,
     link_mode: install_wheel_rs::linker::LinkMode,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(python: &'a PythonExecutable) -> Self {
+    pub fn new(venv: &'a Virtualenv) -> Self {
         Self {
-            python,
+            venv,
             link_mode: install_wheel_rs::linker::LinkMode::default(),
             reporter: None,
         }
@@ -43,8 +43,8 @@ impl<'a> Installer<'a> {
         tokio::task::block_in_place(|| {
             wheels.par_iter().try_for_each(|wheel| {
                 let location = install_wheel_rs::InstallLocation::new(
-                    self.python.venv().to_path_buf(),
-                    self.python.simple_version(),
+                    self.venv.root(),
+                    self.venv.interpreter_info().simple_version(),
                 );
 
                 install_wheel_rs::linker::install_wheel(&location, wheel.path(), self.link_mode)?;

@@ -6,22 +6,22 @@ use platform_host::{Os, Platform};
 
 /// A Python-aware wrapper around [`Platform`].
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct PythonPlatform(Platform);
+pub(crate) struct PythonPlatform(pub(crate) Platform);
 
 impl PythonPlatform {
     /// Returns the path to the `python` executable inside a virtual environment.
-    pub(crate) fn venv_python(&self, venv_base: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn venv_python(&self, venv_root: impl AsRef<Path>) -> PathBuf {
         let python = if matches!(self.0.os(), Os::Windows) {
             "python.exe"
         } else {
             "python"
         };
-        self.venv_bin_dir(venv_base).join(python)
+        self.venv_bin_dir(venv_root).join(python)
     }
 
     /// Returns the directory in which the binaries are stored inside a virtual environment.
-    pub(crate) fn venv_bin_dir(&self, venv_base: impl AsRef<Path>) -> PathBuf {
-        let venv = venv_base.as_ref();
+    pub(crate) fn venv_bin_dir(&self, venv_root: impl AsRef<Path>) -> PathBuf {
+        let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             let bin_dir = venv.join("Scripts");
             if bin_dir.join("python.exe").exists() {
@@ -43,10 +43,10 @@ impl PythonPlatform {
     /// Returns the path to the `site-packages` directory inside a virtual environment.
     pub(crate) fn venv_site_packages(
         &self,
-        venv_base: impl AsRef<Path>,
+        venv_root: impl AsRef<Path>,
         version: (u8, u8),
     ) -> PathBuf {
-        let venv = venv_base.as_ref();
+        let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             venv.join("Lib").join("site-packages")
         } else {

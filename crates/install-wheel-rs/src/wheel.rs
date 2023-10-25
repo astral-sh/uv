@@ -722,7 +722,7 @@ fn install_script(
 /// Move the files from the .data directory to the right location in the venv
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn install_data(
-    venv_base: &Path,
+    venv_root: &Path,
     site_packages: &Path,
     data_dir: &Path,
     dist_name: &str,
@@ -736,7 +736,7 @@ pub(crate) fn install_data(
         match data_entry.file_name().as_os_str().to_str() {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&data_entry.path(), venv_base, site_packages, record)?;
+                move_folder_recorded(&data_entry.path(), venv_root, site_packages, record)?;
             }
             Some("scripts") => {
                 for file in fs::read_dir(data_entry.path())? {
@@ -762,7 +762,7 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                let target_path = venv_base
+                let target_path = venv_root
                     .join("include")
                     .join("site")
                     .join(format!(
@@ -901,7 +901,7 @@ pub fn install_wheel(
     let name = &filename.distribution;
     let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_str());
 
-    let base_location = location.venv_base();
+    let base_location = location.venv_root();
 
     let site_packages_python = format!(
         "python{}.{}",

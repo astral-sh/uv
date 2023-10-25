@@ -29,7 +29,7 @@ pub fn install_wheel(
     wheel: impl AsRef<Path>,
     link_mode: LinkMode,
 ) -> Result<(), Error> {
-    let base_location = location.venv_base();
+    let root = location.venv_root();
 
     // TODO(charlie): Pass this in.
     let site_packages_python = format!(
@@ -38,10 +38,9 @@ pub fn install_wheel(
         location.python_version().1
     );
     let site_packages = if cfg!(target_os = "windows") {
-        base_location.as_ref().join("Lib").join("site-packages")
+        root.as_ref().join("Lib").join("site-packages")
     } else {
-        base_location
-            .as_ref()
+        root.as_ref()
             .join("lib")
             .join(site_packages_python)
             .join("site-packages")
@@ -88,7 +87,7 @@ pub fn install_wheel(
     if data_dir.is_dir() {
         debug!(name, "Installing data");
         install_data(
-            base_location.as_ref(),
+            root.as_ref(),
             &site_packages,
             &data_dir,
             &name,

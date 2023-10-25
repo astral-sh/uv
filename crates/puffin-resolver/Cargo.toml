@@ -10,7 +10,6 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-gourgeist = { path = "../gourgeist" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
@@ -39,10 +38,10 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
-which = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
+gourgeist = { path = "../gourgeist" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
 once_cell = { version = "1.18.0" }

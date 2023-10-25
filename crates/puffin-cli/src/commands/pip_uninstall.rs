@@ -8,7 +8,7 @@ use tracing::debug;
 
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::commands::{elapsed, ExitStatus};
@@ -32,14 +32,14 @@ pub(crate) async fn pip_uninstall(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
-        python.executable().display()
+        venv.python_executable().display()
     );
 
     // Index the current `site-packages` directory.
-    let site_packages = puffin_installer::SitePackages::try_from_executable(&python)?;
+    let site_packages = puffin_installer::SitePackages::try_from_executable(&venv)?;
 
     // Sort and deduplicate the requirements.
     let packages = {

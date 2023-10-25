@@ -10,7 +10,6 @@ use anyhow::Context;
 use itertools::Itertools;
 use tempfile::tempdir;
 
-use gourgeist::Venv;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::SourceDistributionBuilder;
@@ -18,7 +17,7 @@ use puffin_client::RegistryClient;
 use puffin_installer::{
     uninstall, Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
 };
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
 use tracing::debug;
@@ -27,19 +26,23 @@ use tracing::debug;
 /// documentation.
 pub struct BuildDispatch {
     client: RegistryClient,
-    python: PythonExecutable,
     cache: Option<PathBuf>,
+    interpreter_info: InterpreterInfo,
+    base_python: PathBuf,
 }
 
 impl BuildDispatch {
-    pub fn new<T>(client: RegistryClient, python: PythonExecutable, cache: Option<T>) -> Self
-    where
-        T: Into<PathBuf>,
-    {
+    pub fn new(
+        client: RegistryClient,
+        cache: Option<PathBuf>,
+        interpreter_info: InterpreterInfo,
+        base_python: PathBuf,
+    ) -> Self {
         Self {
             client,
-            python,
-            cache: cache.map(Into::into),
+            cache,
+            interpreter_info,
+            base_python,
         }
     }
 }
@@ -49,8 +52,12 @@ impl BuildContext for BuildDispatch {
         self.cache.as_deref()
     }
 
-    fn python(&self) -> &PythonExecutable {
-        &self.python
+    fn interpreter_info(&self) -> &InterpreterInfo {
+        &self.interpreter_info
+    }
+
+    fn base_python(&self) -> &Path {
+        &self.base_python
     }
 
     fn resolve<'a>(
@@ -58,12 +65,15 @@ impl BuildContext for BuildDispatch {
         requirements: &'a [Requirement],
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + 'a>> {
         Box::pin(async {
-            let tags = Tags::from_env(self.python.platform(), self.python.simple_version())?;
+            let tags = Tags::from_env(
+                self.interpreter_info.platform(),
+                self.interpreter_info.simple_version(),
+            )?;
             let resolver = Resolver::new(
                 requirements.to_vec(),
                 Vec::default(),
                 ResolutionMode::Highest,
-                self.python.markers(),
+                self.interpreter_info.markers(),
                 &tags,
                 &self.client,
                 self,
@@ -78,25 +88,20 @@ impl BuildContext for BuildDispatch {
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        venv: &'a Venv,
+        venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>> {
         Box::pin(async move {
             debug!(
                 "Install in {} requirements {}",
-                venv.as_str(),
+                venv.root().display(),
                 requirements.iter().map(ToString::to_string).join(", ")
             );
-            let python = self.python().with_venv(venv.as_std_path());
 
             let PartitionedRequirements {
                 local,
                 remote,
                 extraneous,
-            } = PartitionedRequirements::try_from_requirements(
-                requirements,
-                self.cache(),
-                &python,
-            )?;
+            } = PartitionedRequirements::try_from_requirements(requirements, self.cache(), venv)?;
 
             if !extraneous.is_empty() {
                 debug!(
@@ -117,7 +122,10 @@ impl BuildContext for BuildDispatch {
                 remote.iter().map(ToString::to_string).join(", ")
             );
 
-            let tags = Tags::from_env(python.platform(), python.simple_version())?;
+            let tags = Tags::from_env(
+                self.interpreter_info.platform(),
+                self.interpreter_info.simple_version(),
+            )?;
             let resolution = WheelFinder::new(&tags, &self.client)
                 .resolve(&remote)
                 .await?;
@@ -144,7 +152,7 @@ impl BuildContext for BuildDispatch {
                     .join(", ")
             );
             let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
-            Installer::new(&python).install(&wheels)?;
+            Installer::new(venv).install(&wheels)?;
             Ok(())
         })
     }
@@ -155,8 +163,8 @@ impl BuildContext for BuildDispatch {
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + 'a>> {
         Box::pin(async move {
-            let interpreter_info = gourgeist::get_interpreter_info(self.python.executable())?;
-            let builder = SourceDistributionBuilder::setup(sdist, &interpreter_info, self).await?;
+            let builder =
+                SourceDistributionBuilder::setup(sdist, &self.interpreter_info, self).await?;
             Ok(builder.build(wheel_dir)?)
         })
     }

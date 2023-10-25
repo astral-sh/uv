@@ -10,7 +10,6 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 

@@ -1,5 +1,4 @@
 use std::io;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -7,7 +6,9 @@ use dirs::cache_dir;
 use tempfile::PersistError;
 use thiserror::Error;
 
-pub use interpreter::{get_interpreter_info, parse_python_cli, InterpreterInfo};
+pub use interpreter::parse_python_cli;
+use platform_host::PlatformError;
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 
 use crate::bare::create_bare_venv;
 
@@ -53,44 +54,8 @@ pub enum Error {
     },
     #[error("{0} is not a valid UTF-8 path")]
     NonUTF8Path(PathBuf),
-}
-
-/// Provides the paths inside a venv
-#[derive(Debug, Clone)]
-pub struct Venv(Utf8PathBuf);
-
-impl Deref for Venv {
-    type Target = Utf8Path;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Venv {
-    pub fn new(location: impl Into<PathBuf>) -> Result<Self, Error> {
-        let location = Utf8PathBuf::from_path_buf(location.into()).map_err(Error::NonUTF8Path)?;
-        Ok(Self(location))
-    }
-
-    /// Returns the location of the python interpreter
-    pub fn python_interpreter(&self) -> PathBuf {
-        #[cfg(unix)]
-        {
-            self.0.join("bin").join("python").into_std_path_buf()
-        }
-        #[cfg(windows)]
-        {
-            self.0
-                .join("Scripts")
-                .join("python.exe")
-                .into_std_path_buf()
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("Only windows and unix (linux, mac os, etc.) are supported")
-        }
-    }
+    #[error(transparent)]
+    Platform(#[from] PlatformError),
 }
 
 pub(crate) fn crate_cache_dir() -> io::Result<Utf8PathBuf> {
@@ -106,7 +71,7 @@ pub fn create_venv(
     base_python: impl AsRef<Path>,
     info: &InterpreterInfo,
     bare: bool,
-) -> Result<Venv, Error> {
+) -> Result<Virtualenv, Error> {
     let location = Utf8PathBuf::from_path_buf(location.into()).map_err(Error::NonUTF8Path)?;
     let base_python = Utf8Path::from_path(base_python.as_ref())
         .ok_or_else(|| Error::NonUTF8Path(base_python.as_ref().to_path_buf()))?;
@@ -128,5 +93,5 @@ pub fn create_venv(
         }
     }
 
-    Ok(Venv(location))
+    Ok(Virtualenv::new_prefix(location.as_std_path(), info))
 }

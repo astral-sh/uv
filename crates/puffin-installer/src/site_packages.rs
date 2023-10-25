@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use fs_err as fs;
+use puffin_interpreter::Virtualenv;
 
-use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 
 use crate::InstalledDistribution;
@@ -13,10 +13,10 @@ pub struct SitePackages(BTreeMap<PackageName, InstalledDistribution>);
 
 impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
-    pub fn try_from_executable(python: &PythonExecutable) -> Result<Self> {
+    pub fn try_from_executable(venv: &Virtualenv) -> Result<Self> {
         let mut index = BTreeMap::new();
 
-        for entry in fs::read_dir(python.site_packages())? {
+        for entry in fs::read_dir(venv.site_packages())? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 if let Some(dist_info) = InstalledDistribution::try_from_path(&entry.path())? {

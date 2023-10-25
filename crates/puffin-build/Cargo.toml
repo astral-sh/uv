@@ -15,6 +15,7 @@ gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-traits = { path = "../puffin-traits" }
 
 anyhow = { workspace = true }

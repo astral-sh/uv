@@ -9,14 +9,13 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use anyhow::Result;
-use gourgeist::Venv;
 use once_cell::sync::Lazy;
 
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
 
@@ -27,7 +26,11 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    fn python(&self) -> &PythonExecutable {
+    fn interpreter_info(&self) -> &InterpreterInfo {
+        panic!("The test should not need to build source distributions")
+    }
+
+    fn base_python(&self) -> &Path {
         panic!("The test should not need to build source distributions")
     }
 
@@ -41,7 +44,7 @@ impl BuildContext for DummyContext {
     fn install<'a>(
         &'a self,
         _requirements: &'a [Requirement],
-        _venv: &'a Venv,
+        _venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
         panic!("The test should not need to build source distributions")
     }

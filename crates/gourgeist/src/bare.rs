@@ -8,9 +8,8 @@ use fs_err as fs;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
 use fs_err::File;
+use puffin_interpreter::InterpreterInfo;
 use tracing::info;
-
-use crate::interpreter::InterpreterInfo;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -111,10 +110,17 @@ pub(crate) fn create_bare_venv(
     #[cfg(unix)]
     {
         symlink(base_python, &venv_python)?;
-        symlink("python", bin_dir.join(format!("python{}", info.major)))?;
         symlink(
             "python",
-            bin_dir.join(format!("python{}.{}", info.major, info.minor)),
+            bin_dir.join(format!("python{}", info.simple_version().0)),
+        )?;
+        symlink(
+            "python",
+            bin_dir.join(format!(
+                "python{}.{}",
+                info.simple_version().0,
+                info.simple_version().1
+            )),
         )?;
     }
 
@@ -124,7 +130,11 @@ pub(crate) fn create_bare_venv(
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
-                &format!("../lib/python{}.{}/site-packages", info.major, info.minor),
+                &format!(
+                    "../lib/python{}.{}/site-packages",
+                    info.simple_version().0,
+                    info.simple_version().1
+                ),
             );
         fs::write(bin_dir.join(name), activator)?;
     }
@@ -142,12 +152,18 @@ pub(crate) fn create_bare_venv(
     let pyvenv_cfg_data = &[
         ("home", python_home),
         ("implementation", "CPython".to_string()),
-        ("version_info", info.python_version.clone()),
+        ("version_info", info.markers().python_version.string.clone()),
         ("gourgeist", env!("CARGO_PKG_VERSION").to_string()),
         // I wouldn't allow this option anyway
         ("include-system-site-packages", "false".to_string()),
-        ("base-prefix", info.base_prefix.clone()),
-        ("base-exec-prefix", info.base_exec_prefix.clone()),
+        (
+            "base-prefix",
+            info.base_prefix().to_string_lossy().to_string(),
+        ),
+        (
+            "base-exec-prefix",
+            info.base_exec_prefix().to_string_lossy().to_string(),
+        ),
         ("base-executable", base_python.to_string()),
     ];
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
@@ -157,7 +173,11 @@ pub(crate) fn create_bare_venv(
     // TODO: This is different on windows
     let site_packages = location
         .join("lib")
-        .join(format!("python{}.{}", info.major, info.minor))
+        .join(format!(
+            "python{}.{}",
+            info.simple_version().0,
+            info.simple_version().1
+        ))
         .join("site-packages");
     fs::create_dir_all(&site_packages)?;
     // Install _virtualenv.py patch.

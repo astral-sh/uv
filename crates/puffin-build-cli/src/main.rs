@@ -20,7 +20,7 @@ use platform_host::Platform;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Virtualenv;
 
 #[derive(Parser)]
 struct Args {
@@ -44,17 +44,22 @@ async fn run() -> Result<()> {
     };
 
     let dirs = ProjectDirs::from("", "", "puffin");
-    let cache = dirs.as_ref().map(ProjectDirs::cache_dir);
+    let cache = dirs
+        .as_ref()
+        .map(|dir| ProjectDirs::cache_dir(dir).to_path_buf());
 
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache.as_deref())?;
 
-    let interpreter_info = gourgeist::get_interpreter_info(python.executable())?;
-
-    let build_dispatch =
-        BuildDispatch::new(RegistryClientBuilder::default().build(), python, cache);
+    let build_dispatch = BuildDispatch::new(
+        RegistryClientBuilder::default().build(),
+        cache,
+        venv.interpreter_info().clone(),
+        fs::canonicalize(venv.python_executable())?,
+    );
     let builder =
-        SourceDistributionBuilder::setup(&args.sdist, &interpreter_info, &build_dispatch).await?;
+        SourceDistributionBuilder::setup(&args.sdist, venv.interpreter_info(), &build_dispatch)
+            .await?;
     let wheel = builder.build(&wheel_dir)?;
     println!("Wheel built to {}", wheel_dir.join(wheel).display());
     Ok(())

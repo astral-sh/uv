@@ -4,9 +4,8 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 
-use gourgeist::Venv;
 use pep508_rs::Requirement;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -53,7 +52,9 @@ pub trait BuildContext {
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).
-    fn python(&self) -> &PythonExecutable;
+    fn interpreter_info(&self) -> &InterpreterInfo;
+    /// The system (or conda) python interpreter to create venvs.
+    fn base_python(&self) -> &Path;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -65,7 +66,7 @@ pub trait BuildContext {
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        venv: &'a Venv,
+        venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>>;
     /// Build a source distribution into a wheel from an archive.
     ///

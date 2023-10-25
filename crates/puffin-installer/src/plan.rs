@@ -4,7 +4,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use pep508_rs::Requirement;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::{CachedDistribution, InstalledDistribution, LocalIndex, SitePackages};
@@ -30,10 +30,10 @@ impl PartitionedRequirements {
     pub fn try_from_requirements(
         requirements: &[Requirement],
         cache: Option<&Path>,
-        python: &PythonExecutable,
+        venv: &Virtualenv,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
-        let mut site_packages = SitePackages::try_from_executable(python)?;
+        let mut site_packages = SitePackages::try_from_executable(venv)?;
 
         // Index all the already-downloaded wheels in the cache.
         let local_index = if let Some(cache) = cache {

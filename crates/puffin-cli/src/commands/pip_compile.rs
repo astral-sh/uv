@@ -1,7 +1,7 @@
-use std::env;
 use std::fmt::Write;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
+use std::{env, fs};
 
 use anyhow::Result;
 use colored::Colorize;
@@ -13,7 +13,7 @@ use platform_tags::Tags;
 use pubgrub::report::Reporter;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_interpreter::PythonExecutable;
+use puffin_interpreter::Virtualenv;
 use puffin_resolver::ResolutionMode;
 use tracing::debug;
 
@@ -50,16 +50,19 @@ pub(crate) async fn pip_compile(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = PythonExecutable::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache)?;
 
     debug!(
         "Using Python {} at {}",
-        python.markers().python_version,
-        python.executable().display()
+        venv.interpreter_info().markers().python_version,
+        venv.python_executable().display()
     );
 
     // Determine the compatible platform tags.
-    let tags = Tags::from_env(python.platform(), python.simple_version())?;
+    let tags = Tags::from_env(
+        venv.interpreter_info().platform(),
+        venv.interpreter_info().simple_version(),
+    )?;
 
     // Instantiate a client.
     let client = {
@@ -78,8 +81,9 @@ pub(crate) async fn pip_compile(
 
     let build_dispatch = BuildDispatch::new(
         RegistryClientBuilder::default().build(),
-        python.clone(),
-        cache,
+        cache.map(Path::to_path_buf),
+        venv.interpreter_info().clone(),
+        fs::canonicalize(venv.python_executable())?,
     );
 
     // Resolve the dependencies.
@@ -87,7 +91,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         mode,
-        python.markers(),
+        venv.interpreter_info().markers(),
         &tags,
         &client,
         &build_dispatch,
