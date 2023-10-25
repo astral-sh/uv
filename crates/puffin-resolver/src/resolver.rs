@@ -45,7 +45,7 @@ pub struct Resolver<'a, Ctx: BuildContext> {
     client: &'a RegistryClient,
     selector: CandidateSelector,
     cache: Arc<SolverCache>,
-    puffin_ctx: &'a Ctx,
+    build_context: &'a Ctx,
 }
 
 impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
@@ -57,7 +57,7 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a RegistryClient,
-        puffin_ctx: &'a Ctx,
+        build_context: &'a Ctx,
     ) -> Self {
         Self {
             selector: CandidateSelector::from_mode(mode, &requirements),
@@ -67,7 +67,7 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
             markers,
             tags,
             client,
-            puffin_ctx,
+            build_context,
         }
     }
 
@@ -594,13 +594,14 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
                     .map_err(ResolveError::Client),
             ),
             Request::Sdist((file, filename)) => Box::pin(async move {
-                let cached_wheel = self.puffin_ctx.cache().and_then(|cache| {
+                let cached_wheel = self.build_context.cache().and_then(|cache| {
                     BuiltSourceDistributionCache::new(cache).find_wheel(&filename, self.tags)
                 });
                 let metadata21 = if let Some(cached_wheel) = cached_wheel {
                     read_dist_info(cached_wheel).await
                 } else {
-                    download_and_build_sdist(&file, self.client, self.puffin_ctx, &filename).await
+                    download_and_build_sdist(&file, self.client, self.build_context, &filename)
+                        .await
                 }
                 .map_err(|err| ResolveError::SourceDistribution {
                     filename: file.filename.clone(),

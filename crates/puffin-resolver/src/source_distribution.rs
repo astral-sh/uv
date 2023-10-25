@@ -64,7 +64,7 @@ impl BuiltSourceDistributionCache {
 pub(crate) async fn download_and_build_sdist(
     file: &File,
     client: &RegistryClient,
-    puffin_ctx: &impl BuildContext,
+    build_context: &impl BuildContext,
     sdist_filename: &SourceDistributionFilename,
 ) -> Result<Metadata21> {
     debug!("Building {}", &file.filename);
@@ -79,7 +79,7 @@ pub(crate) async fn download_and_build_sdist(
     let mut writer = tokio::fs::File::create(&sdist_file).await?;
     tokio::io::copy(&mut reader, &mut writer).await?;
 
-    let wheel_dir = if let Some(cache) = &puffin_ctx.cache() {
+    let wheel_dir = if let Some(cache) = &build_context.cache() {
         BuiltSourceDistributionCache::new(cache)
             .version(&sdist_filename.name, &sdist_filename.version)
     } else {
@@ -88,7 +88,7 @@ pub(crate) async fn download_and_build_sdist(
 
     fs::create_dir_all(&wheel_dir).await?;
 
-    let disk_filename = puffin_ctx
+    let disk_filename = build_context
         .build_source_distribution(&sdist_file, &wheel_dir)
         .await?;
 

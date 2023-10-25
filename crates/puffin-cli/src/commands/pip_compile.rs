@@ -76,7 +76,7 @@ pub(crate) async fn pip_compile(
         builder.build()
     };
 
-    let puffin_dispatch = BuildDispatch::new(
+    let build_dispatch = BuildDispatch::new(
         RegistryClientBuilder::default().build(),
         python.clone(),
         cache,
@@ -90,7 +90,7 @@ pub(crate) async fn pip_compile(
         python.markers(),
         &tags,
         &client,
-        &puffin_dispatch,
+        &build_dispatch,
     );
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(

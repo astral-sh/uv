@@ -106,7 +106,7 @@ impl SourceDistributionBuilder {
     pub async fn setup(
         sdist: &Path,
         interpreter_info: &InterpreterInfo,
-        puffin_ctx: &impl BuildContext,
+        build_context: &impl BuildContext,
     ) -> Result<SourceDistributionBuilder, Error> {
         let temp_dir = tempdir()?;
 
@@ -142,7 +142,7 @@ impl SourceDistributionBuilder {
                 &source_tree,
                 interpreter_info,
                 pep517_backend,
-                puffin_ctx,
+                build_context,
             )
             .await?
         } else {
@@ -154,7 +154,7 @@ impl SourceDistributionBuilder {
             }
             let venv = gourgeist::create_venv(
                 temp_dir.path().join("venv"),
-                puffin_ctx.python().executable(),
+                build_context.python().executable(),
                 interpreter_info,
                 true,
             )?;
@@ -164,11 +164,11 @@ impl SourceDistributionBuilder {
                 Requirement::from_str("setuptools").unwrap(),
                 Requirement::from_str("pip").unwrap(),
             ];
-            let resolved_requirements = puffin_ctx
+            let resolved_requirements = build_context
                 .resolve(&requirements)
                 .await
                 .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
-            puffin_ctx
+            build_context
                 .install(&resolved_requirements, &venv)
                 .await
                 .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
@@ -345,19 +345,19 @@ async fn create_pep517_build_environment(
     source_tree: &Path,
     data: &InterpreterInfo,
     pep517_backend: &Pep517Backend,
-    puffin_ctx: &impl BuildContext,
+    build_context: &impl BuildContext,
 ) -> Result<Venv, Error> {
     let venv = gourgeist::create_venv(
         root.join(".venv"),
-        puffin_ctx.python().executable(),
+        build_context.python().executable(),
         data,
         true,
     )?;
-    let resolved_requirements = puffin_ctx
+    let resolved_requirements = build_context
         .resolve(&pep517_backend.requirements)
         .await
         .map_err(|err| Error::RequirementsInstall("get_requires_for_build_wheel", err))?;
-    puffin_ctx
+    build_context
         .install(&resolved_requirements, &venv)
         .await
         .map_err(|err| Error::RequirementsInstall("get_requires_for_build_wheel", err))?;
@@ -420,12 +420,12 @@ async fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
-        let resolved_requirements = puffin_ctx
+        let resolved_requirements = build_context
             .resolve(&requirements)
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
 
-        puffin_ctx
+        build_context
             .install(&resolved_requirements, &venv)
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;

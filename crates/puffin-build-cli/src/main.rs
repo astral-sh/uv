@@ -49,10 +49,10 @@ async fn run() -> Result<()> {
 
     let interpreter_info = gourgeist::get_interpreter_info(python.executable())?;
 
-    let puffin_dispatch =
+    let build_dispatch =
         BuildDispatch::new(RegistryClientBuilder::default().build(), python, cache);
     let builder =
-        SourceDistributionBuilder::setup(&args.sdist, &interpreter_info, &puffin_dispatch).await?;
+        SourceDistributionBuilder::setup(&args.sdist, &interpreter_info, &build_dispatch).await?;
     let wheel = builder.build(&wheel_dir)?;
     println!("Wheel built to {}", wheel_dir.join(wheel).display());
     Ok(())
