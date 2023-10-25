@@ -2,20 +2,20 @@ use anyhow::{Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use pep440_rs::Version;
-use puffin_interpreter::Venv;
+use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::CachedDistribution;
 
 pub struct Installer<'a> {
-    venv: &'a Venv,
+    venv: &'a Virtualenv,
     link_mode: install_wheel_rs::linker::LinkMode,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(venv: &'a Venv) -> Self {
+    pub fn new(venv: &'a Virtualenv) -> Self {
         Self {
             venv,
             link_mode: install_wheel_rs::linker::LinkMode::default(),

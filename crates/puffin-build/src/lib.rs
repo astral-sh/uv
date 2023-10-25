@@ -20,7 +20,7 @@ use tracing::{debug, instrument};
 use zip::ZipArchive;
 
 use pep508_rs::Requirement;
-use puffin_interpreter::{InterpreterInfo, Venv};
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_traits::BuildContext;
 
 #[derive(Error, Debug)]
@@ -88,7 +88,7 @@ pub struct SourceDistributionBuilder {
     source_tree: PathBuf,
     /// `Some` if this is a PEP 517 build
     pep517_backend: Option<Pep517Backend>,
-    venv: Venv,
+    venv: Virtualenv,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
     /// > If the build frontend has previously called prepare_metadata_for_build_wheel and depends
@@ -344,7 +344,7 @@ async fn create_pep517_build_environment(
     data: &InterpreterInfo,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
-) -> Result<Venv, Error> {
+) -> Result<Virtualenv, Error> {
     let venv = gourgeist::create_venv(root.join(".venv"), build_context.base_python(), data, true)?;
     let resolved_requirements = build_context
         .resolve(&pep517_backend.requirements)

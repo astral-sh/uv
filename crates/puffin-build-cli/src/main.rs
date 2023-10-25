@@ -11,16 +11,16 @@ use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
 use tracing::debug;
-use tracing_subscriber::{EnvFilter, fmt};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{fmt, EnvFilter};
 
 use platform_host::Platform;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_interpreter::Venv;
+use puffin_interpreter::Virtualenv;
 
 #[derive(Parser)]
 struct Args {
@@ -49,7 +49,7 @@ async fn run() -> Result<()> {
         .map(|dir| ProjectDirs::cache_dir(dir).to_path_buf());
 
     let platform = Platform::current()?;
-    let venv = Venv::from_env(platform, cache.as_deref())?;
+    let venv = Virtualenv::from_env(platform, cache.as_deref())?;
 
     let build_dispatch = BuildDispatch::new(
         RegistryClientBuilder::default().build(),

@@ -12,7 +12,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_installer::{Distribution, PartitionedRequirements, RemoteDistribution};
-use puffin_interpreter::Venv;
+use puffin_interpreter::Virtualenv;
 
 use crate::commands::reporters::{
     DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
@@ -58,7 +58,7 @@ pub(crate) async fn sync_requirements(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Venv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()

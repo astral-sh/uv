@@ -17,7 +17,7 @@ use puffin_client::RegistryClient;
 use puffin_installer::{
     uninstall, Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
 };
-use puffin_interpreter::{InterpreterInfo, Venv};
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
 use tracing::debug;
@@ -88,7 +88,7 @@ impl BuildContext for BuildDispatch {
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        venv: &'a Venv,
+        venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>> {
         Box::pin(async move {
             debug!(

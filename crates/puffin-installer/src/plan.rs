@@ -4,7 +4,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use pep508_rs::Requirement;
-use puffin_interpreter::Venv;
+use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::{CachedDistribution, InstalledDistribution, LocalIndex, SitePackages};
@@ -30,7 +30,7 @@ impl PartitionedRequirements {
     pub fn try_from_requirements(
         requirements: &[Requirement],
         cache: Option<&Path>,
-        venv: &Venv,
+        venv: &Virtualenv,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
         let mut site_packages = SitePackages::try_from_executable(venv)?;

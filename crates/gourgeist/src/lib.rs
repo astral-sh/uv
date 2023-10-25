@@ -8,7 +8,7 @@ use thiserror::Error;
 
 pub use interpreter::parse_python_cli;
 use platform_host::PlatformError;
-use puffin_interpreter::{InterpreterInfo, Venv};
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 
 use crate::bare::create_bare_venv;
 
@@ -71,7 +71,7 @@ pub fn create_venv(
     base_python: impl AsRef<Path>,
     info: &InterpreterInfo,
     bare: bool,
-) -> Result<Venv, Error> {
+) -> Result<Virtualenv, Error> {
     let location = Utf8PathBuf::from_path_buf(location.into()).map_err(Error::NonUTF8Path)?;
     let base_python = Utf8Path::from_path(base_python.as_ref())
         .ok_or_else(|| Error::NonUTF8Path(base_python.as_ref().to_path_buf()))?;
@@ -93,5 +93,5 @@ pub fn create_venv(
         }
     }
 
-    Ok(Venv::new_prefix(location.as_std_path(), info))
+    Ok(Virtualenv::new_prefix(location.as_std_path(), info))
 }

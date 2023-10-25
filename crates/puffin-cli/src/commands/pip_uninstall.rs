@@ -8,7 +8,7 @@ use tracing::debug;
 
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_interpreter::Venv;
+use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::commands::{elapsed, ExitStatus};
@@ -32,7 +32,7 @@ pub(crate) async fn pip_uninstall(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Venv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()

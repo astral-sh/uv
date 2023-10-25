@@ -10,12 +10,12 @@ use crate::python_platform::PythonPlatform;
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
-pub struct Venv {
-    venv: PathBuf,
+pub struct Virtualenv {
+    root: PathBuf,
     interpreter_info: InterpreterInfo,
 }
 
-impl Venv {
+impl Virtualenv {
     /// Venv the current Python executable from the host environment.
     pub fn from_env(platform: Platform, cache: Option<&Path>) -> Result<Self> {
         let platform = PythonPlatform::from(platform);
@@ -24,18 +24,18 @@ impl Venv {
         let interpreter_info = InterpreterInfo::query_cached(&executable, platform.0, cache)?;
 
         Ok(Self {
-            venv,
+            root: venv,
             interpreter_info,
         })
     }
 
-    pub fn from_venv(platform: Platform, venv: &Path, cache: Option<&Path>) -> Result<Self> {
+    pub fn from_virtualenv(platform: Platform, root: &Path, cache: Option<&Path>) -> Result<Self> {
         let platform = PythonPlatform::from(platform);
-        let executable = platform.venv_python(venv);
+        let executable = platform.venv_python(root);
         let interpreter_info = InterpreterInfo::query_cached(&executable, platform.0, cache)?;
 
         Ok(Self {
-            venv: venv.to_path_buf(),
+            root: root.to_path_buf(),
             interpreter_info,
         })
     }
@@ -43,7 +43,7 @@ impl Venv {
     /// Creating a new venv from a python interpreter changes this
     pub fn new_prefix(venv: &Path, interpreter_info: &InterpreterInfo) -> Self {
         Self {
-            venv: venv.to_path_buf(),
+            root: venv.to_path_buf(),
             interpreter_info: InterpreterInfo {
                 base_prefix: venv.to_path_buf(),
                 ..interpreter_info.clone()
@@ -55,7 +55,7 @@ impl Venv {
     pub fn python_executable(&self) -> PathBuf {
         #[cfg(unix)]
         {
-            self.venv.join("bin").join("python")
+            self.root.join("bin").join("python")
         }
         #[cfg(windows)]
         {
@@ -71,7 +71,7 @@ impl Venv {
     }
 
     pub fn root(&self) -> &Path {
-        &self.venv
+        &self.root
     }
 
     pub fn interpreter_info(&self) -> &InterpreterInfo {
@@ -82,7 +82,7 @@ impl Venv {
     pub fn site_packages(&self) -> PathBuf {
         self.interpreter_info
             .platform
-            .venv_site_packages(&self.venv, self.interpreter_info().simple_version())
+            .venv_site_packages(&self.root, self.interpreter_info().simple_version())
     }
 }
 

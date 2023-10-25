@@ -75,14 +75,14 @@ impl AsRef<Path> for LockedDir {
 /// non-deterministically fail.
 pub struct InstallLocation<T> {
     /// absolute path
-    venv_base: T,
+    venv_root: T,
     python_version: (u8, u8),
 }
 
 impl<T: AsRef<Path>> InstallLocation<T> {
     pub fn new(venv_base: T, python_version: (u8, u8)) -> Self {
         Self {
-            venv_base,
+            venv_root: venv_base,
             python_version,
         }
     }
@@ -90,10 +90,10 @@ impl<T: AsRef<Path>> InstallLocation<T> {
     /// Returns the location of the `python` interpreter.
     pub fn python(&self) -> PathBuf {
         if cfg!(windows) {
-            self.venv_base.as_ref().join("Scripts").join("python.exe")
+            self.venv_root.as_ref().join("Scripts").join("python.exe")
         } else {
             // canonicalize on python would resolve the symlink
-            self.venv_base.as_ref().join("bin").join("python")
+            self.venv_root.as_ref().join("bin").join("python")
         }
     }
 
@@ -101,25 +101,25 @@ impl<T: AsRef<Path>> InstallLocation<T> {
         self.python_version
     }
 
-    pub fn venv_base(&self) -> &T {
-        &self.venv_base
+    pub fn venv_root(&self) -> &T {
+        &self.venv_root
     }
 }
 
 impl InstallLocation<PathBuf> {
     pub fn acquire_lock(&self) -> io::Result<InstallLocation<LockedDir>> {
-        let locked_dir = if let Some(locked_dir) = LockedDir::try_acquire(&self.venv_base)? {
+        let locked_dir = if let Some(locked_dir) = LockedDir::try_acquire(&self.venv_root)? {
             locked_dir
         } else {
             warn!(
                 "Could not acquire exclusive lock for installing, is another installation process \
                 running? Sleeping until lock becomes free"
             );
-            LockedDir::acquire(&self.venv_base)?
+            LockedDir::acquire(&self.venv_root)?
         };
 
         Ok(InstallLocation {
-            venv_base: locked_dir,
+            venv_root: locked_dir,
             python_version: self.python_version,
         })
     }

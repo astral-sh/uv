@@ -13,7 +13,7 @@ use platform_tags::Tags;
 use pubgrub::report::Reporter;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_interpreter::Venv;
+use puffin_interpreter::Virtualenv;
 use puffin_resolver::ResolutionMode;
 use tracing::debug;
 
@@ -50,7 +50,7 @@ pub(crate) async fn pip_compile(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Venv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache)?;
 
     debug!(
         "Using Python {} at {}",

@@ -5,7 +5,7 @@ use std::path::Path;
 use std::pin::Pin;
 
 use pep508_rs::Requirement;
-use puffin_interpreter::{InterpreterInfo, Venv};
+use puffin_interpreter::{InterpreterInfo, Virtualenv};
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -66,7 +66,7 @@ pub trait BuildContext {
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        venv: &'a Venv,
+        venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>>;
     /// Build a source distribution into a wheel from an archive.
     ///
