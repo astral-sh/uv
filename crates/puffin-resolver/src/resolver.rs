@@ -3,7 +3,6 @@
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
 use std::future::Future;
-use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -598,7 +597,9 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
                     .map_err(ResolveError::Client),
             ),
             Request::Sdist((file, filename)) => Box::pin(async move {
-                let cached_wheel = self.find_cached_built_wheel(self.puffin_ctx.cache(), &filename);
+                let cached_wheel = self.puffin_ctx.cache().and_then(|cache| {
+                    BuiltSourceDistributionCache::new(cache).find_wheel(&filename, self.tags)
+                });
                 let metadata21 = if let Some(cached_wheel) = cached_wheel {
                     read_dist_info(cached_wheel).await
                 } else {
@@ -612,31 +613,6 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
                 Ok(Response::Sdist(file, metadata21))
             }),
         }
-    }
-
-    fn find_cached_built_wheel(
-        &self,
-        cache: Option<&Path>,
-        filename: &SourceDistributionFilename,
-    ) -> Option<PathBuf> {
-        let cache = BuiltSourceDistributionCache::new(cache?);
-        let Ok(read_dir) = fs_err::read_dir(cache.version(&filename.name, &filename.version))
-        else {
-            return None;
-        };
-
-        for entry in read_dir {
-            let Ok(entry) = entry else { continue };
-            let Ok(wheel) = WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
-            else {
-                continue;
-            };
-
-            if wheel.is_compatible(self.tags) {
-                return Some(entry.path().clone());
-            }
-        }
-        None
     }
 }
 

@@ -51,13 +51,14 @@ impl PythonExecutable {
     }
 
     /// Create a [`PythonExecutable`] for a venv with a known base [`PythonExecutable`].
-    pub fn from_venv_with_base(venv: &Path, base: &Self) -> Self {
-        let executable = base.platform.venv_python(venv);
+    #[must_use]
+    pub fn with_venv(&self, venv: &Path) -> Self {
+        let executable = self.platform.venv_python(venv);
 
         Self {
             venv: venv.to_path_buf(),
             executable,
-            ..base.clone()
+            ..self.clone()
         }
     }
 

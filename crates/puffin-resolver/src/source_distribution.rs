@@ -11,6 +11,7 @@ use zip::ZipArchive;
 
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep440_rs::Version;
+use platform_tags::Tags;
 use puffin_client::{File, RegistryClient};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
@@ -32,6 +33,30 @@ impl BuiltSourceDistributionCache {
 
     pub fn version(&self, name: &PackageName, version: &Version) -> PathBuf {
         self.0.join(name.to_string()).join(version.to_string())
+    }
+
+    /// Search for a wheel matching the tags that was built from the given source distribution.  
+    pub fn find_wheel(
+        &self,
+        filename: &SourceDistributionFilename,
+        tags: &Tags,
+    ) -> Option<PathBuf> {
+        let Ok(read_dir) = fs_err::read_dir(self.version(&filename.name, &filename.version)) else {
+            return None;
+        };
+
+        for entry in read_dir {
+            let Ok(entry) = entry else { continue };
+            let Ok(wheel) = WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
+            else {
+                continue;
+            };
+
+            if wheel.is_compatible(tags) {
+                return Some(entry.path().clone());
+            }
+        }
+        None
     }
 }
 

@@ -1,3 +1,7 @@
+//! Avoid cyclic crate dependencies between [resolver][`puffin_resolver`],
+//! [installer][`puffin_installer`] and [build][`puffin_build`] through [`BuildDispatch`]
+//! implementing [`BuildContext`].
+
 // `Itertools::intersperse` could be shadowed by an unstable std intersperse, but that
 // https://github.com/rust-lang/rust/issues/79524 has no activity and would only move itertools'
 // feature to std.
@@ -8,8 +12,9 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use anyhow::Context;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use tempfile::tempdir;
+use tracing::debug;
 
 use gourgeist::Venv;
 use pep508_rs::Requirement;
@@ -17,22 +22,21 @@ use platform_tags::Tags;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClient;
 use puffin_installer::{
-    uninstall, CachedDistribution, Downloader, Installer, LocalIndex, RemoteDistribution,
-    SitePackages, Unzipper,
+    uninstall, Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
 };
 use puffin_interpreter::PythonExecutable;
-use puffin_package::package_name::PackageName;
 use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
-use tracing::debug;
 
-pub struct PuffinDispatch {
+/// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
+/// documentation.
+pub struct BuildDispatch {
     client: RegistryClient,
     python: PythonExecutable,
     cache: Option<PathBuf>,
 }
 
-impl PuffinDispatch {
+impl BuildDispatch {
     pub fn new<T>(client: RegistryClient, python: PythonExecutable, cache: Option<T>) -> Self
     where
         T: Into<PathBuf>,
@@ -45,7 +49,7 @@ impl PuffinDispatch {
     }
 }
 
-impl BuildContext for PuffinDispatch {
+impl BuildContext for BuildDispatch {
     fn cache(&self) -> Option<&Path> {
         self.cache.as_deref()
     }
@@ -92,79 +96,45 @@ impl BuildContext for PuffinDispatch {
                     .intersperse(", ".to_string())
                     .collect::<String>()
             );
-            let python = PythonExecutable::from_venv_with_base(venv.as_std_path(), &self.python);
+            let python = self.python().with_venv(venv.as_std_path());
 
-            let site_packages = SitePackages::try_from_executable(&python)?;
+            let PartitionedRequirements {
+                local,
+                remote,
+                extraneous,
+            } = PartitionedRequirements::try_from_requirements(
+                requirements,
+                self.cache(),
+                &python,
+            )?;
 
-            // We have three buckets:
-            // * Not installed
-            // * Installed and a matching version
-            // * Install but an incorrect version, we need to remove it first
-            let mut to_remove = Vec::new();
-            let mut to_install = Vec::new();
-            for requirement in requirements {
-                if let Some((_name, installed)) =
-                    site_packages.iter().find(|(name, _distribution)| {
-                        name == &&PackageName::normalize(&requirement.name)
-                    })
-                {
-                    if requirement.is_satisfied_by(installed.version()) {
-                        // Nothing to do
-                    } else {
-                        to_remove.push(installed);
-                        to_install.push(requirement.clone());
-                    }
-                } else {
-                    to_install.push(requirement.clone());
-                }
-            }
-
-            if !to_remove.is_empty() {
+            if !extraneous.is_empty() {
                 debug!(
                     "Removing {:?}",
-                    to_remove
+                    extraneous
                         .iter()
-                        .map(|dist| dist.id())
+                        .map(puffin_installer::InstalledDistribution::id)
                         .intersperse(", ".to_string())
                         .collect::<String>()
                 );
 
-                for dist_info in to_remove {
-                    uninstall(dist_info).await?;
+                for dist_info in extraneous {
+                    uninstall(&dist_info).await?;
                 }
             }
 
             debug!(
-                "Installing {}",
-                to_install
+                "Fetching {}",
+                remote
                     .iter()
-                    .map(std::string::ToString::to_string)
+                    .map(ToString::to_string)
                     .intersperse(", ".to_string())
                     .collect::<String>()
             );
 
-            let local_index = if let Some(cache) = &self.cache {
-                LocalIndex::try_from_directory(cache)?
-            } else {
-                LocalIndex::default()
-            };
-
-            let (cached, uncached): (Vec<CachedDistribution>, Vec<Requirement>) =
-                to_install.iter().partition_map(|requirement| {
-                    let package = PackageName::normalize(&requirement.name);
-                    if let Some(distribution) = local_index
-                        .get(&package)
-                        .filter(|dist| requirement.is_satisfied_by(dist.version()))
-                    {
-                        Either::Left(distribution.clone())
-                    } else {
-                        Either::Right(requirement.clone())
-                    }
-                });
-
             let tags = Tags::from_env(python.platform(), python.simple_version())?;
             let resolution = WheelFinder::new(&tags, &self.client)
-                .resolve(&uncached)
+                .resolve(&remote)
                 .await?;
 
             let uncached = resolution
@@ -179,7 +149,17 @@ impl BuildContext for PuffinDispatch {
                 .download(downloads, self.cache.as_deref().unwrap_or(staging.path()))
                 .await
                 .context("Failed to download and unpack wheels")?;
-            let wheels = unzips.into_iter().chain(cached).collect::<Vec<_>>();
+
+            debug!(
+                "Fetching {}",
+                unzips
+                    .iter()
+                    .chain(&local)
+                    .map(puffin_installer::CachedDistribution::id)
+                    .intersperse(", ".to_string())
+                    .collect::<String>()
+            );
+            let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
             Installer::new(&python).install(&wheels)?;
             Ok(())
         })

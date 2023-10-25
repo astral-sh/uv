@@ -8,7 +8,7 @@ use fs_err as fs;
 use platform_host::Platform;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
-use puffin_dispatch::PuffinDispatch;
+use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::PythonExecutable;
 use std::env;
 use std::path::PathBuf;
@@ -50,7 +50,7 @@ async fn run() -> anyhow::Result<()> {
     let interpreter_info = gourgeist::get_interpreter_info(python.executable())?;
 
     let puffin_dispatch =
-        PuffinDispatch::new(RegistryClientBuilder::default().build(), python, cache);
+        BuildDispatch::new(RegistryClientBuilder::default().build(), python, cache);
     let builder =
         SourceDistributionBuilder::setup(&args.sdist, &interpreter_info, &puffin_dispatch).await?;
     let wheel = builder.build(&wheel_dir)?;

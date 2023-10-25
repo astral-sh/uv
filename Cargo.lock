@@ -2157,6 +2157,7 @@ dependencies = [
  "fs-err",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
+ "pep508_rs",
  "puffin-client",
  "puffin-interpreter",
  "puffin-package",

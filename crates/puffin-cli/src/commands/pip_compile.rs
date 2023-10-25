@@ -12,7 +12,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use pubgrub::report::Reporter;
 use puffin_client::RegistryClientBuilder;
-use puffin_dispatch::PuffinDispatch;
+use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::PythonExecutable;
 use puffin_resolver::ResolutionMode;
 use tracing::debug;
@@ -76,7 +76,7 @@ pub(crate) async fn pip_compile(
         builder.build()
     };
 
-    let puffin_dispatch = PuffinDispatch::new(
+    let puffin_dispatch = BuildDispatch::new(
         RegistryClientBuilder::default().build(),
         python.clone(),
         cache,
@@ -87,7 +87,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         mode,
-        &python.markers(),
+        python.markers(),
         &tags,
         &client,
         &puffin_dispatch,
