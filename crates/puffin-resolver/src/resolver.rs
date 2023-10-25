@@ -275,9 +275,6 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
 
             // Try to find a wheel. If there isn't any, to a find a source distribution. If there
             // isn't any either, short circuit and fail the resolution.
-            // TODO: Group files by version, then check for each version first for compatible wheels
-            // and then for a compatible sdist. This is required to still select the most recent
-            // version.
             let Some((file, request)) = self
                 .selector
                 .iter_candidates(package_name, &simple_json.files)

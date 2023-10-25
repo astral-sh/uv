@@ -19,7 +19,7 @@ use puffin_traits::BuildContext;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
-/// TODO: Find a better home for me?
+/// TODO(konstin): Find a better home for me?
 ///
 /// Stores wheels built from source distributions. We need to keep those separate from the regular
 /// wheel cache since a wheel with the same name may be uploaded after we made our build and in that

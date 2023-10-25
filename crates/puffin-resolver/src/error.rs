@@ -29,7 +29,7 @@ pub enum ResolveError {
     #[error("Failed to build source distribution {filename}")]
     SourceDistribution {
         filename: String,
-        // TODO: Gives this a proper error type
+        // TODO(konstin): Gives this a proper error type
         #[source]
         err: anyhow::Error,
     },

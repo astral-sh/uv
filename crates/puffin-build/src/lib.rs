@@ -158,7 +158,7 @@ impl SourceDistributionBuilder {
                 interpreter_info,
                 true,
             )?;
-            // TODO: Resolve those once globally and cache per puffin invocation
+            // TODO(konstin): Resolve those once globally and cache per puffin invocation
             let requirements = [
                 Requirement::from_str("wheel").unwrap(),
                 Requirement::from_str("setuptools").unwrap(),

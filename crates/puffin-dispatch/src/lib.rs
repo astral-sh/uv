@@ -71,7 +71,6 @@ impl BuildContext for BuildDispatch {
                 self.python.markers(),
                 &tags,
                 &self.client,
-                // TODO: nested builds are not supported yet
                 self,
             );
             let resolution_graph = resolver.resolve().await.context(
@@ -171,9 +170,7 @@ impl BuildContext for BuildDispatch {
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + 'a>> {
         Box::pin(async move {
-            // TODO: Merge this with PythonExecutable
             let interpreter_info = gourgeist::get_interpreter_info(self.python.executable())?;
-
             let builder = SourceDistributionBuilder::setup(sdist, &interpreter_info, self).await?;
             Ok(builder.build(wheel_dir)?)
         })
