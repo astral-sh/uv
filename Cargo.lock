@@ -2133,7 +2133,6 @@ dependencies = [
  "anyhow",
  "gourgeist",
  "itertools",
- "log",
  "pep508_rs",
  "platform-host",
  "platform-tags",
@@ -2145,6 +2144,7 @@ dependencies = [
  "puffin-resolver",
  "puffin-traits",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]

@@ -12,7 +12,6 @@ use itertools::{Either, Itertools};
 use tempfile::tempdir;
 
 use gourgeist::Venv;
-use log::debug;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::SourceDistributionBuilder;
@@ -25,6 +24,7 @@ use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
+use tracing::debug;
 
 pub struct PuffinDispatch {
     client: RegistryClient,

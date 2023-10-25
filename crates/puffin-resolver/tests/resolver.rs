@@ -24,18 +24,18 @@ struct DummyContext;
 
 impl BuildContext for DummyContext {
     fn cache(&self) -> Option<&Path> {
-        unimplemented!()
+        panic!("The test should not need to build source distributions")
     }
 
     fn python(&self) -> &PythonExecutable {
-        unimplemented!()
+        panic!("The test should not need to build source distributions")
     }
 
     fn resolve<'a>(
         &'a self,
         _requirements: &'a [Requirement],
     ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + 'a>> {
-        unimplemented!()
+        panic!("The test should not need to build source distributions")
     }
 
     fn install<'a>(
@@ -43,7 +43,7 @@ impl BuildContext for DummyContext {
         _requirements: &'a [Requirement],
         _venv: &'a Venv,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
-        unimplemented!()
+        panic!("The test should not need to build source distributions")
     }
 
     fn build_source_distribution<'a>(
@@ -51,7 +51,7 @@ impl BuildContext for DummyContext {
         _sdist: &'a Path,
         _wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + 'a>> {
-        unimplemented!()
+        panic!("The test should not need to build source distributions")
     }
 }
 

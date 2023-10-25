@@ -27,4 +27,4 @@ puffin-traits = { path = "../puffin-traits" }
 anyhow = { workspace = true }
 itertools = { workspace = true }
 tempfile = { workspace = true }
-log = "0.4.20"
+tracing = { workspace = true }
