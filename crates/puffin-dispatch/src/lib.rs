@@ -1,4 +1,7 @@
-#![allow(unstable_name_collisions)] // intersperse
+// `Itertools::intersperse` could be shadowed by an unstable std intersperse, but that
+// https://github.com/rust-lang/rust/issues/79524 has no activity and would only move itertools'
+// feature to std.
+#![allow(unstable_name_collisions)]
 
 use std::future::Future;
 use std::path::{Path, PathBuf};

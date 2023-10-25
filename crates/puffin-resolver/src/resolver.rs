@@ -292,7 +292,7 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
                         .borrow()
                         .contains(&PubGrubVersion::from(wheel_filename.version.clone()))
                     {
-                        Some((file, Request::WheelVersion(file.clone())))
+                        Some((file, Request::Wheel(file.clone())))
                     } else {
                         None
                     }
@@ -309,7 +309,7 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
                                 .borrow()
                                 .contains(&PubGrubVersion::from(sdist_filename.version.clone()))
                             {
-                                Some((file, Request::SdistVersion((file.clone(), sdist_filename))))
+                                Some((file, Request::Sdist((file.clone(), sdist_filename))))
                             } else {
                                 None
                             }
@@ -375,31 +375,29 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
                     });
 
                 if wheel.is_none() {
-                    if let Some((sdist_file, parsed_filename)) = simple_json
-                        .files
-                        .iter()
-                        .rev()
-                        .filter_map(|file| {
-                            let Ok(parsed_filename) =
-                                SourceDistributionFilename::parse(&file.filename, package_name)
-                            else {
-                                return None;
-                            };
+                    if let Some((sdist_file, parsed_filename)) =
+                        self.selector
+                            .iter_candidates(package_name, &simple_json.files)
+                            .filter_map(|file| {
+                                let Ok(parsed_filename) =
+                                    SourceDistributionFilename::parse(&file.filename, package_name)
+                                else {
+                                    return None;
+                                };
 
-                            if !range
-                                .borrow()
-                                .contains(&PubGrubVersion::from(parsed_filename.version.clone()))
-                            {
-                                return None;
-                            };
+                                if !range.borrow().contains(&PubGrubVersion::from(
+                                    parsed_filename.version.clone(),
+                                )) {
+                                    return None;
+                                };
 
-                            Some((file, parsed_filename))
-                        })
-                        .max_by(|left, right| left.1.version.cmp(&right.1.version))
+                                Some((file, parsed_filename))
+                            })
+                            .max_by(|left, right| left.1.version.cmp(&right.1.version))
                     {
                         // Emit a request to fetch the metadata for this version.
                         if in_flight.insert(sdist_file.hashes.sha256.clone()) {
-                            request_sink.unbounded_send(Request::SdistVersion((
+                            request_sink.unbounded_send(Request::Sdist((
                                 sdist_file.clone(),
                                 parsed_filename.clone(),
                             )))?;
@@ -427,7 +425,7 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
 
                     // Emit a request to fetch the metadata for this version.
                     if in_flight.insert(wheel.file.hashes.sha256.clone()) {
-                        request_sink.unbounded_send(Request::WheelVersion(wheel.file.clone()))?;
+                        request_sink.unbounded_send(Request::Wheel(wheel.file.clone()))?;
                     }
 
                     Ok((package, Some(PubGrubVersion::from(wheel.version))))
@@ -563,7 +561,7 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
                         trace!("Received package metadata for {}", package_name);
                         self.cache.packages.insert(package_name.clone(), metadata);
                     }
-                    Response::Version(file, metadata) => {
+                    Response::Wheel(file, metadata) => {
                         trace!("Received file metadata for {}", file.filename);
                         self.cache
                             .versions
@@ -593,13 +591,13 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
                     .map_ok(move |metadata| Response::Package(package_name, metadata))
                     .map_err(ResolveError::Client),
             ),
-            Request::WheelVersion(file) => Box::pin(
+            Request::Wheel(file) => Box::pin(
                 self.client
                     .file(file.clone())
-                    .map_ok(move |metadata| Response::Version(file, metadata))
+                    .map_ok(move |metadata| Response::Wheel(file, metadata))
                     .map_err(ResolveError::Client),
             ),
-            Request::SdistVersion((file, filename)) => Box::pin(async move {
+            Request::Sdist((file, filename)) => Box::pin(async move {
                 let cached_wheel = self.find_cached_built_wheel(self.puffin_ctx.cache(), &filename);
                 let metadata21 = if let Some(cached_wheel) = cached_wheel {
                     read_dist_info(cached_wheel).await
@@ -621,10 +619,7 @@ impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
         cache: Option<&Path>,
         filename: &SourceDistributionFilename,
     ) -> Option<PathBuf> {
-        let Some(cache) = cache else {
-            return None;
-        };
-        let cache = BuiltSourceDistributionCache::new(cache);
+        let cache = BuiltSourceDistributionCache::new(cache?);
         let Ok(read_dir) = fs_err::read_dir(cache.version(&filename.name, &filename.version))
         else {
             return None;
@@ -655,14 +650,15 @@ struct Wheel {
     version: pep440_rs::Version,
 }
 
+/// Fetch the metadata for an item
 #[derive(Debug)]
 enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
     /// A request to fetch and build the source distribution for a specific package version
-    SdistVersion((File, SourceDistributionFilename)),
+    Sdist((File, SourceDistributionFilename)),
     /// A request to fetch the metadata for a specific version of a package.
-    WheelVersion(File),
+    Wheel(File),
 }
 
 #[derive(Debug)]
@@ -670,7 +666,7 @@ enum Response {
     /// The returned metadata for a package.
     Package(PackageName, SimpleJson),
     /// The returned metadata for a specific version of a package.
-    Version(File, Metadata21),
+    Wheel(File, Metadata21),
     /// The returned metadata for an sdist build.
     Sdist(File, Metadata21),
 }

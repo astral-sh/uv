@@ -141,13 +141,7 @@ impl<P: Package, VS: VersionSet> PartialSolution<P, VS> {
                     AssignmentsIntersection::Decision(_) => panic!("Already existing decision"),
                     // Cannot be called if the versions is not contained in the terms intersection.
                     AssignmentsIntersection::Derivations(term) => {
-                        debug_assert!(
-                            term.contains(&version),
-                            "{} {:?} {}",
-                            package,
-                            version,
-                            term,
-                        )
+                        debug_assert!(term.contains(&version))
                     }
                 },
             }

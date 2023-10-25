@@ -52,12 +52,9 @@ pub(crate) async fn pip_compile(
     let platform = Platform::current()?;
     let python = PythonExecutable::from_env(platform, cache)?;
 
-    // Determine the current environment markers.
-    let markers = python.markers().clone();
-
     debug!(
         "Using Python {} at {}",
-        markers.python_version,
+        python.markers().python_version,
         python.executable().display()
     );
 
@@ -79,15 +76,18 @@ pub(crate) async fn pip_compile(
         builder.build()
     };
 
-    let puffin_dispatch =
-        PuffinDispatch::new(RegistryClientBuilder::default().build(), python, cache);
+    let puffin_dispatch = PuffinDispatch::new(
+        RegistryClientBuilder::default().build(),
+        python.clone(),
+        cache,
+    );
 
     // Resolve the dependencies.
     let resolver = puffin_resolver::Resolver::new(
         requirements,
         constraints,
         mode,
-        &markers,
+        &python.markers(),
         &tags,
         &client,
         &puffin_dispatch,
