@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use anyhow::Result;
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -30,7 +31,7 @@ impl PartitionedRequirements {
         requirements: &[Requirement],
         cache: Option<&Path>,
         python: &PythonExecutable,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
         let mut site_packages = SitePackages::try_from_executable(python)?;
 

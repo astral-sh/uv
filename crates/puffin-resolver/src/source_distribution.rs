@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::Result;
 use fs_err::tokio as fs;
 use tempfile::tempdir;
 use tokio::task::spawn_blocking;
@@ -65,7 +66,7 @@ pub(crate) async fn download_and_build_sdist(
     client: &RegistryClient,
     puffin_ctx: &impl BuildContext,
     sdist_filename: &SourceDistributionFilename,
-) -> anyhow::Result<Metadata21> {
+) -> Result<Metadata21> {
     debug!("Building {}", &file.filename);
     let url = Url::parse(&file.url)?;
     let reader = client.stream_external(&url).await?;
@@ -97,8 +98,8 @@ pub(crate) async fn download_and_build_sdist(
     Ok(metadata21)
 }
 
-pub(crate) async fn read_dist_info(wheel: PathBuf) -> anyhow::Result<Metadata21> {
-    let dist_info = spawn_blocking(move || -> anyhow::Result<String> {
+pub(crate) async fn read_dist_info(wheel: PathBuf) -> Result<Metadata21> {
+    let dist_info = spawn_blocking(move || -> Result<String> {
         let mut archive = ZipArchive::new(std::fs::File::open(&wheel)?)?;
         let dist_info_prefix = install_wheel_rs::find_dist_info(
             &WheelFilename::from_str(wheel.file_name().unwrap().to_string_lossy().as_ref())?,

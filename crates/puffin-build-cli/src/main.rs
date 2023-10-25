@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use directories::ProjectDirs;
@@ -32,7 +32,7 @@ struct Args {
     sdist: PathBuf,
 }
 
-async fn run() -> anyhow::Result<()> {
+async fn run() -> Result<()> {
     let args = Args::parse();
     let wheel_dir = if let Some(wheel_dir) = args.wheels {
         fs::create_dir_all(&wheel_dir).context("Invalid wheel directory")?;
