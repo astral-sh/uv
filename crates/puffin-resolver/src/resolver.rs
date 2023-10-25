@@ -44,7 +44,7 @@ pub struct Resolver<'a, Ctx: BuildContext> {
     tags: &'a Tags,
     client: &'a RegistryClient,
     selector: CandidateSelector,
-    cache: Arc<SolverCache>,
+    index: Arc<Index>,
     build_context: &'a Ctx,
 }
 
@@ -61,7 +61,7 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
     ) -> Self {
         Self {
             selector: CandidateSelector::from_mode(mode, &requirements),
-            cache: Arc::new(SolverCache::default()),
+            index: Arc::new(Index::default()),
             requirements,
             constraints,
             markers,
@@ -268,7 +268,7 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
             };
 
             // If we don't have metadata for this package, we can't make an early decision.
-            let Some(entry) = self.cache.packages.get(package_name) else {
+            let Some(entry) = self.index.packages.get(package_name) else {
                 continue;
             };
             let simple_json = entry.value();
@@ -334,7 +334,7 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
             PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
             PubGrubPackage::Package(package_name, _) => {
                 // Wait for the metadata to be available.
-                let entry = self.cache.packages.wait(package_name).await.unwrap();
+                let entry = self.index.packages.wait(package_name).await.unwrap();
                 let simple_json = entry.value();
 
                 debug!(
@@ -484,7 +484,7 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
                 // Wait for the metadata to be available.
                 let versions = pins.get(package_name).unwrap();
                 let file = versions.get(version.into()).unwrap();
-                let entry = self.cache.versions.wait(&file.hashes.sha256).await.unwrap();
+                let entry = self.index.versions.wait(&file.hashes.sha256).await.unwrap();
                 let metadata = entry.value();
 
                 let mut constraints =
@@ -555,17 +555,17 @@ impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
                 match response? {
                     Response::Package(package_name, metadata) => {
                         trace!("Received package metadata for {}", package_name);
-                        self.cache.packages.insert(package_name.clone(), metadata);
+                        self.index.packages.insert(package_name.clone(), metadata);
                     }
                     Response::Wheel(file, metadata) => {
                         trace!("Received file metadata for {}", file.filename);
-                        self.cache
+                        self.index
                             .versions
                             .insert(file.hashes.sha256.clone(), metadata);
                     }
                     Response::Sdist(file, metadata) => {
                         trace!("Received sdist build metadata for {}", file.filename);
-                        self.cache
+                        self.index
                             .versions
                             .insert(file.hashes.sha256.clone(), metadata);
                     }
@@ -645,7 +645,8 @@ enum Response {
     Sdist(File, Metadata21),
 }
 
-struct SolverCache {
+/// In-memory index of package metadata.
+struct Index {
     /// A map from package name to the metadata for that package.
     packages: WaitMap<PackageName, SimpleJson>,
 
@@ -653,7 +654,7 @@ struct SolverCache {
     versions: WaitMap<String, Metadata21>,
 }
 
-impl Default for SolverCache {
+impl Default for Index {
     fn default() -> Self {
         Self {
             packages: WaitMap::new(),
