@@ -78,7 +78,7 @@ struct PipCompileArgs {
     #[clap(short, long)]
     output_file: Option<PathBuf>,
 
-    /// The URL of the Python Package Index (default: https://pypi.org/simple).
+    /// The URL of the Python Package Index (default: <https://pypi.org/simple>).
     #[clap(long, short)]
     index_url: Option<Url>,
 
@@ -101,7 +101,7 @@ struct PipSyncArgs {
     #[clap(long, value_enum)]
     link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
-    /// The URL of the Python Package Index (default: https://pypi.org/simple).
+    /// The URL of the Python Package Index (default: <https://pypi.org/simple>).
     #[clap(long, short)]
     index_url: Option<Url>,
 

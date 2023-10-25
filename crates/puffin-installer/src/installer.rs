@@ -23,7 +23,7 @@ impl<'a> Installer<'a> {
         }
     }
 
-    /// Set the [`Mode`] to use for this installer.
+    /// Set the [`LinkMode`][`install_wheel_rs::linker::LinkMode`] to use for this installer.
     #[must_use]
     pub fn with_link_mode(self, link_mode: install_wheel_rs::linker::LinkMode) -> Self {
         Self { link_mode, ..self }

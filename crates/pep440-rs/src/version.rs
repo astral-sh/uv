@@ -306,7 +306,7 @@ impl<'source> FromPyObject<'source> for Version {
     }
 }
 
-/// Workaround for https://github.com/PyO3/pyo3/pull/2786
+/// Workaround for <https://github.com/PyO3/pyo3/pull/2786>
 #[cfg(feature = "pyo3")]
 #[derive(Clone, Debug)]
 #[pyclass(name = "Version")]
