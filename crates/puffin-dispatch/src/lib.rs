@@ -2,11 +2,6 @@
 //! [installer][`puffin_installer`] and [build][`puffin_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-// `Itertools::intersperse` could be shadowed by an unstable std intersperse, but that
-// https://github.com/rust-lang/rust/issues/79524 has no activity and would only move itertools'
-// feature to std.
-#![allow(unstable_name_collisions)]
-
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -89,11 +84,7 @@ impl BuildContext for BuildDispatch {
             debug!(
                 "Install in {} requirements {}",
                 venv.as_str(),
-                requirements
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .intersperse(", ".to_string())
-                    .collect::<String>()
+                requirements.iter().map(ToString::to_string).join(", ")
             );
             let python = self.python().with_venv(venv.as_std_path());
 
@@ -113,8 +104,7 @@ impl BuildContext for BuildDispatch {
                     extraneous
                         .iter()
                         .map(puffin_installer::InstalledDistribution::id)
-                        .intersperse(", ".to_string())
-                        .collect::<String>()
+                        .join(", ")
                 );
 
                 for dist_info in extraneous {
@@ -124,11 +114,7 @@ impl BuildContext for BuildDispatch {
 
             debug!(
                 "Fetching {}",
-                remote
-                    .iter()
-                    .map(ToString::to_string)
-                    .intersperse(", ".to_string())
-                    .collect::<String>()
+                remote.iter().map(ToString::to_string).join(", ")
             );
 
             let tags = Tags::from_env(python.platform(), python.simple_version())?;
@@ -155,8 +141,7 @@ impl BuildContext for BuildDispatch {
                     .iter()
                     .chain(&local)
                     .map(puffin_installer::CachedDistribution::id)
-                    .intersperse(", ".to_string())
-                    .collect::<String>()
+                    .join(", ")
             );
             let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
             Installer::new(&python).install(&wheels)?;
