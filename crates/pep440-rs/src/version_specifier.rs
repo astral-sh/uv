@@ -86,6 +86,12 @@ impl FromStr for VersionSpecifiers {
     }
 }
 
+impl From<VersionSpecifier> for VersionSpecifiers {
+    fn from(specifier: VersionSpecifier) -> Self {
+        Self(vec![specifier])
+    }
+}
+
 impl Display for VersionSpecifiers {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (idx, version_specifier) in self.0.iter().enumerate() {
@@ -339,6 +345,14 @@ impl VersionSpecifier {
         }
 
         Ok(Self { operator, version })
+    }
+
+    /// `==<version>`
+    pub fn equals_version(version: Version) -> Self {
+        Self {
+            operator: Operator::Equal,
+            version,
+        }
     }
 
     /// Get the operator, e.g. `>=` in `>= 2.0.0`

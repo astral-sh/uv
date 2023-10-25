@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 puffin-package = { path = "../puffin-package" }
 
+futures = { workspace = true }
 http-cache-reqwest = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
@@ -13,6 +14,6 @@ reqwest-retry = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-url = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
-futures = { workspace = true }
+url = { workspace = true }

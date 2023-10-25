@@ -1,6 +1,7 @@
 [package]
-name = "puffin-installer"
-version = "0.0.1"
+name = "puffin-dispatch"
+version = "0.1.0"
+description = "Avoid cyclic crate dependencies between resolver, installer and builder"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -10,21 +11,19 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
-pep440_rs = { path = "../pep440-rs" }
+gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
+platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
+puffin-build = { path = "../puffin-build" }
 puffin-client = { path = "../puffin-client" }
+puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-package = { path = "../puffin-package" }
-distribution-filename = { path = "../distribution-filename" }
+puffin-resolver = { path = "../puffin-resolver" }
+puffin-traits = { path = "../puffin-traits" }
 
 anyhow = { workspace = true }
-cacache = { workspace = true }
-fs-err = { workspace = true }
-rayon = { workspace = true }
+itertools = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
-tokio-util = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
-zip = { workspace = true }

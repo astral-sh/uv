@@ -15,21 +15,13 @@ gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-client = { path = "../puffin-client" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-package = { path = "../puffin-package" }
-puffin-resolver = { path = "../puffin-resolver" }
-puffin-workspace = { path = "../puffin-workspace" }
+puffin-traits = { path = "../puffin-traits" }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-colored = { workspace = true }
-directories = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
-itertools = { workspace = true }
 pyproject-toml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -39,6 +31,5 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 which = { workspace = true}
 zip = { workspace = true }

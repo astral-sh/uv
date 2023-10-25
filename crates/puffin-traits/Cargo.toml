@@ -1,6 +1,6 @@
 [package]
-name = "puffin-interpreter"
-version = "0.0.1"
+name = "puffin-traits"
+version = "0.1.0"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -10,13 +10,8 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-pep440_rs = { path = "../pep440-rs" }
+gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
+puffin-interpreter = { path = "../puffin-interpreter" }
 
 anyhow = { workspace = true }
-cacache = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"] }
-serde_json = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }

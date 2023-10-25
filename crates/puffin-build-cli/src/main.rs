@@ -1,20 +1,26 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use anyhow::Context;
+use std::env;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::time::Instant;
+
+use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
-use puffin_build::{Error, SourceDistributionBuilder};
-use std::path::PathBuf;
-use std::process::ExitCode;
-use std::time::Instant;
-use std::{env, io};
 use tracing::debug;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+
+use platform_host::Platform;
+use puffin_build::SourceDistributionBuilder;
+use puffin_client::RegistryClientBuilder;
+use puffin_dispatch::BuildDispatch;
+use puffin_interpreter::PythonExecutable;
 
 #[derive(Parser)]
 struct Args {
@@ -28,7 +34,7 @@ struct Args {
     sdist: PathBuf,
 }
 
-async fn run() -> anyhow::Result<()> {
+async fn run() -> Result<()> {
     let args = Args::parse();
     let wheel_dir = if let Some(wheel_dir) = args.wheels {
         fs::create_dir_all(&wheel_dir).context("Invalid wheel directory")?;
@@ -40,20 +46,17 @@ async fn run() -> anyhow::Result<()> {
     let dirs = ProjectDirs::from("", "", "puffin");
     let cache = dirs.as_ref().map(ProjectDirs::cache_dir);
 
-    // TODO: That's no way to deal with paths in PATH
-    let base_python = which::which(args.python.unwrap_or("python3".into())).map_err(|err| {
-        Error::IO(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Can't find `python3` ({err})"),
-        ))
-    })?;
-    let interpreter_info = gourgeist::get_interpreter_info(&base_python)?;
+    let platform = Platform::current()?;
+    let python = PythonExecutable::from_env(platform, cache)?;
 
+    let interpreter_info = gourgeist::get_interpreter_info(python.executable())?;
+
+    let build_dispatch =
+        BuildDispatch::new(RegistryClientBuilder::default().build(), python, cache);
     let builder =
-        SourceDistributionBuilder::setup(&args.sdist, &base_python, &interpreter_info, cache)
-            .await?;
+        SourceDistributionBuilder::setup(&args.sdist, &interpreter_info, &build_dispatch).await?;
     let wheel = builder.build(&wheel_dir)?;
-    println!("Wheel built to {}", wheel.display());
+    println!("Wheel built to {}", wheel_dir.join(wheel).display());
     Ok(())
 }
 

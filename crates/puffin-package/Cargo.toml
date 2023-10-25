@@ -7,7 +7,6 @@ edition = "2021"
 pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 
-anyhow = { workspace = true }
 fs-err = { workspace = true }
 mailparse = { workspace = true }
 memchr = { workspace = true }
@@ -20,6 +19,7 @@ tracing.workspace = true
 unscanny = { workspace = true }
 
 [dev-dependencies]
+anyhow = { version = "1.0.75" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.33.0" }
 serde_json = { version = "1.0.107" }

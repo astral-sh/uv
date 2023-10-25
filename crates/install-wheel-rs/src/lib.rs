@@ -12,8 +12,8 @@ pub use record::RecordEntry;
 pub use script::Script;
 pub use uninstall::{uninstall_wheel, Uninstall};
 pub use wheel::{
-    get_script_launcher, install_wheel, parse_key_value_file, read_record_file, relative_to,
-    SHEBANG_PYTHON,
+    find_dist_info, get_script_launcher, install_wheel, parse_key_value_file, read_record_file,
+    relative_to, SHEBANG_PYTHON,
 };
 
 mod install_location;

@@ -55,11 +55,19 @@ impl Unzipper {
             .await??;
 
             // Write the unzipped wheel to the target directory.
-            fs_err::tokio::rename(
+            let result = fs_err::tokio::rename(
                 staging.path().join(remote.id()),
                 wheel_cache.entry(&remote.id()),
             )
-            .await?;
+            .await;
+
+            if let Err(err) = result {
+                // If the renaming failed because another instance was faster, that's fine
+                // (`DirectoryNotEmpty` is not stable so we can't match on it)
+                if !wheel_cache.entry(&remote.id()).is_dir() {
+                    return Err(err.into());
+                }
+            }
 
             wheels.push(CachedDistribution::new(
                 remote.name().clone(),

@@ -2,33 +2,26 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
-use anyhow::Context;
-use flate2::read::GzDecoder;
-use fs_err as fs;
-use fs_err::{DirEntry, File};
-use gourgeist::{InterpreterInfo, Venv};
-use indoc::formatdoc;
-use itertools::{Either, Itertools};
-use pep508_rs::Requirement;
-use platform_host::Platform;
-use platform_tags::Tags;
-use puffin_client::RegistryClientBuilder;
-use puffin_installer::{CachedDistribution, Downloader, LocalIndex, RemoteDistribution, Unzipper};
-use puffin_interpreter::PythonExecutable;
-use puffin_package::package_name::PackageName;
-use puffin_resolver::WheelFinder;
-use pyproject_toml::PyProjectToml;
 use std::io;
 use std::io::BufRead;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::str::FromStr;
+
+use flate2::read::GzDecoder;
+use fs_err as fs;
+use fs_err::{DirEntry, File};
+use indoc::formatdoc;
+use pyproject_toml::PyProjectToml;
 use tar::Archive;
 use tempfile::{tempdir, TempDir};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use zip::ZipArchive;
+
+use gourgeist::{InterpreterInfo, Venv};
+use pep508_rs::Requirement;
+use puffin_traits::BuildContext;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -42,8 +35,8 @@ pub enum Error {
     InvalidSourceDistribution(String),
     #[error("Invalid pyproject.toml")]
     InvalidPyprojectToml(#[from] toml::de::Error),
-    #[error("Failed to install requirements")]
-    RequirementsInstall(#[source] anyhow::Error),
+    #[error("Failed to install requirements from {0}")]
+    RequirementsInstall(&'static str, #[source] anyhow::Error),
     #[error("Failed to create temporary virtual environment")]
     Gourgeist(#[from] gourgeist::Error),
     #[error("Failed to run {0}")]
@@ -112,9 +105,8 @@ impl SourceDistributionBuilder {
     /// Extract the source distribution and create a venv with the required packages
     pub async fn setup(
         sdist: &Path,
-        base_python: &Path,
         interpreter_info: &InterpreterInfo,
-        cache: Option<&Path>,
+        build_context: &impl BuildContext,
     ) -> Result<SourceDistributionBuilder, Error> {
         let temp_dir = tempdir()?;
 
@@ -148,10 +140,9 @@ impl SourceDistributionBuilder {
             create_pep517_build_environment(
                 temp_dir.path(),
                 &source_tree,
-                base_python,
                 interpreter_info,
                 pep517_backend,
-                cache,
+                build_context,
             )
             .await?
         } else {
@@ -163,19 +154,24 @@ impl SourceDistributionBuilder {
             }
             let venv = gourgeist::create_venv(
                 temp_dir.path().join("venv"),
-                base_python,
+                build_context.python().executable(),
                 interpreter_info,
                 true,
             )?;
-            // TODO: Resolve those once globally and cache per puffin invocation
+            // TODO(konstin): Resolve those once globally and cache per puffin invocation
             let requirements = [
                 Requirement::from_str("wheel").unwrap(),
                 Requirement::from_str("setuptools").unwrap(),
                 Requirement::from_str("pip").unwrap(),
             ];
-            resolve_and_install(venv.as_std_path(), &requirements, cache)
+            let resolved_requirements = build_context
+                .resolve(&requirements)
                 .await
-                .map_err(Error::RequirementsInstall)?;
+                .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
+            build_context
+                .install(&resolved_requirements, &venv)
+                .await
+                .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
             venv
         };
 
@@ -209,8 +205,8 @@ impl SourceDistributionBuilder {
             r#"{} as backend
             import json
             
-            if get_requires_for_build_wheel := getattr(backend, "prepare_metadata_for_build_wheel", None):
-                print(get_requires_for_build_wheel("{}"))
+            if prepare_metadata_for_build_wheel := getattr(backend, "prepare_metadata_for_build_wheel", None):
+                print(prepare_metadata_for_build_wheel("{}"))
             else:
                 print()
             "#, pep517_backend.backend_import(), escape_path_for_python(&metadata_directory)
@@ -255,7 +251,7 @@ impl SourceDistributionBuilder {
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip(self))]
-    pub fn build(&self, wheel_dir: &Path) -> Result<PathBuf, Error> {
+    pub fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
@@ -287,9 +283,9 @@ impl SourceDistributionBuilder {
             };
             // TODO(konstin): Faster copy such as reflink? Or maybe don't really let the user pick the target dir
             let wheel = wheel_dir.join(dist_wheel.file_name());
-            fs::copy(dist_wheel.path(), &wheel)?;
+            fs::copy(dist_wheel.path(), wheel)?;
             // TODO(konstin): Check wheel filename
-            Ok(wheel)
+            Ok(dist_wheel.file_name().to_string_lossy().to_string())
         }
     }
 
@@ -297,7 +293,7 @@ impl SourceDistributionBuilder {
         &self,
         wheel_dir: &Path,
         pep517_backend: &Pep517Backend,
-    ) -> Result<PathBuf, Error> {
+    ) -> Result<String, Error> {
         let metadata_directory = self
             .metadata_directory
             .as_deref()
@@ -323,18 +319,17 @@ impl SourceDistributionBuilder {
             ));
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let wheel = stdout
-            .lines()
-            .last()
-            .map(|distribution_filename| wheel_dir.join(distribution_filename));
-        let Some(wheel) = wheel.filter(|wheel| wheel.is_file()) else {
+        let distribution_filename = stdout.lines().last();
+        let Some(distribution_filename) =
+            distribution_filename.filter(|wheel| wheel_dir.join(wheel).is_file())
+        else {
             return Err(Error::from_command_output(
                 "Build backend did not return the wheel filename through `build_wheel()`"
                     .to_string(),
                 &output,
             ));
         };
-        Ok(wheel)
+        Ok(distribution_filename.to_string())
     }
 }
 
@@ -348,19 +343,24 @@ fn escape_path_for_python(path: &Path) -> String {
 async fn create_pep517_build_environment(
     root: &Path,
     source_tree: &Path,
-    base_python: &Path,
     data: &InterpreterInfo,
     pep517_backend: &Pep517Backend,
-    cache: Option<&Path>,
+    build_context: &impl BuildContext,
 ) -> Result<Venv, Error> {
-    let venv = gourgeist::create_venv(root.join(".venv"), base_python, data, true)?;
-    resolve_and_install(
-        venv.deref().as_std_path(),
-        &pep517_backend.requirements,
-        cache,
-    )
-    .await
-    .map_err(Error::RequirementsInstall)?;
+    let venv = gourgeist::create_venv(
+        root.join(".venv"),
+        build_context.python().executable(),
+        data,
+        true,
+    )?;
+    let resolved_requirements = build_context
+        .resolve(&pep517_backend.requirements)
+        .await
+        .map_err(|err| Error::RequirementsInstall("get_requires_for_build_wheel", err))?;
+    build_context
+        .install(&resolved_requirements, &venv)
+        .await
+        .map_err(|err| Error::RequirementsInstall("get_requires_for_build_wheel", err))?;
 
     debug!(
         "Calling `{}.get_requires_for_build_wheel()`",
@@ -375,7 +375,7 @@ async fn create_pep517_build_environment(
             else:
                 requires = []
             print(json.dumps(requires))
-            "#, pep517_backend.backend_import()
+        "#, pep517_backend.backend_import()
     };
     let output = run_python_script(&venv.python_interpreter(), &script, source_tree)?;
     if !output.status.success() {
@@ -420,63 +420,18 @@ async fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
-        resolve_and_install(&*venv, &requirements, cache)
+        let resolved_requirements = build_context
+            .resolve(&requirements)
             .await
-            .map_err(Error::RequirementsInstall)?;
+            .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+
+        build_context
+            .install(&resolved_requirements, &venv)
+            .await
+            .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
     }
     Ok(venv)
 }
-
-#[instrument(skip_all)]
-async fn resolve_and_install(
-    venv: impl AsRef<Path>,
-    requirements: &[Requirement],
-    cache: Option<&Path>,
-) -> anyhow::Result<()> {
-    debug!("Installing {} build requirements", requirements.len());
-
-    let local_index = if let Some(cache) = cache {
-        LocalIndex::try_from_directory(cache)?
-    } else {
-        LocalIndex::default()
-    };
-    let (cached, uncached): (Vec<CachedDistribution>, Vec<Requirement>) =
-        requirements.iter().partition_map(|requirement| {
-            let package = PackageName::normalize(&requirement.name);
-            if let Some(distribution) = local_index
-                .get(&package)
-                .filter(|dist| requirement.is_satisfied_by(dist.version()))
-            {
-                Either::Left(distribution.clone())
-            } else {
-                Either::Right(requirement.clone())
-            }
-        });
-
-    let client = RegistryClientBuilder::default().cache(cache).build();
-
-    let platform = Platform::current()?;
-    let python = PythonExecutable::from_venv(platform, venv.as_ref(), cache)?;
-    let tags = Tags::from_env(python.platform(), python.simple_version())?;
-    let resolution = WheelFinder::new(&tags, &client).resolve(&uncached).await?;
-    let uncached = resolution
-        .into_files()
-        .map(RemoteDistribution::from_file)
-        .collect::<anyhow::Result<Vec<_>>>()?;
-    let staging = tempdir()?;
-    let downloads = Downloader::new(&client, cache)
-        .download(&uncached, cache.unwrap_or(staging.path()))
-        .await?;
-    let unzips = Unzipper::default()
-        .download(downloads, cache.unwrap_or(staging.path()))
-        .await
-        .context("Failed to download and unpack wheels")?;
-    let wheels = unzips.into_iter().chain(cached).collect::<Vec<_>>();
-    puffin_installer::Installer::new(&python).install(&wheels)?;
-
-    Ok(())
-}
-
 /// Returns the directory with the `pyproject.toml`/`setup.py`
 #[instrument(skip_all, fields(path))]
 fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {

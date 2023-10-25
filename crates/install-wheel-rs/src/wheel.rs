@@ -1026,7 +1026,7 @@ pub fn install_wheel(
 /// Either way, we just search the wheel for the name
 ///
 /// <https://github.com/PyO3/python-pkginfo-rs>
-fn find_dist_info(
+pub fn find_dist_info(
     filename: &WheelFilename,
     archive: &mut ZipArchive<impl Read + Seek + Sized>,
 ) -> Result<String, Error> {
