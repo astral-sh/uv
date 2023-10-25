@@ -14,7 +14,6 @@ use std::pin::Pin;
 use anyhow::Context;
 use itertools::Itertools;
 use tempfile::tempdir;
-use tracing::debug;
 
 use gourgeist::Venv;
 use pep508_rs::Requirement;
@@ -27,6 +26,7 @@ use puffin_installer::{
 use puffin_interpreter::PythonExecutable;
 use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
+use tracing::debug;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.

@@ -1,24 +1,26 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use std::env;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::time::Instant;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
-use platform_host::Platform;
-use puffin_build::SourceDistributionBuilder;
-use puffin_client::RegistryClientBuilder;
-use puffin_dispatch::BuildDispatch;
-use puffin_interpreter::PythonExecutable;
-use std::env;
-use std::path::PathBuf;
-use std::process::ExitCode;
-use std::time::Instant;
 use tracing::debug;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+
+use platform_host::Platform;
+use puffin_build::SourceDistributionBuilder;
+use puffin_client::RegistryClientBuilder;
+use puffin_dispatch::BuildDispatch;
+use puffin_interpreter::PythonExecutable;
 
 #[derive(Parser)]
 struct Args {

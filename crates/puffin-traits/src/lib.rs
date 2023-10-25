@@ -1,11 +1,12 @@
 //! Avoid cyclic crate dependencies between resolver, installer and builder.
 
-use gourgeist::Venv;
-use pep508_rs::Requirement;
-use puffin_interpreter::PythonExecutable;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+
+use gourgeist::Venv;
+use pep508_rs::Requirement;
+use puffin_interpreter::PythonExecutable;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
