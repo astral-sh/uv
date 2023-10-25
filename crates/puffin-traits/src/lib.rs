@@ -6,7 +6,7 @@ use std::path::Path;
 use std::pin::Pin;
 
 // TODO(konstin): Proper error types
-pub trait PuffinCtx {
+pub trait BuildContext {
     // TODO(konstin): Add a cache abstraction
     fn cache(&self) -> Option<&Path>;
     fn python(&self) -> &PythonExecutable;

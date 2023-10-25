@@ -27,7 +27,7 @@ use puffin_client::{File, RegistryClient, SimpleJson};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
-use puffin_traits::PuffinCtx;
+use puffin_traits::BuildContext;
 
 use crate::error::ResolveError;
 use crate::mode::{CandidateSelector, ResolutionMode};
@@ -38,7 +38,7 @@ use crate::resolution::Graph;
 use crate::source_distribution::{download_and_build_sdist, read_dist_info};
 use crate::BuiltSourceDistributionCache;
 
-pub struct Resolver<'a, Ctx: PuffinCtx> {
+pub struct Resolver<'a, Ctx: BuildContext> {
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     markers: &'a MarkerEnvironment,
@@ -49,7 +49,7 @@ pub struct Resolver<'a, Ctx: PuffinCtx> {
     puffin_ctx: &'a Ctx,
 }
 
-impl<'a, Ctx: PuffinCtx> Resolver<'a, Ctx> {
+impl<'a, Ctx: BuildContext> Resolver<'a, Ctx> {
     /// Initialize a new resolver.
     pub fn new(
         requirements: Vec<Requirement>,

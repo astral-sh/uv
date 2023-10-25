@@ -24,7 +24,7 @@ use puffin_installer::{
 use puffin_interpreter::PythonExecutable;
 use puffin_package::package_name::PackageName;
 use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
-use puffin_traits::PuffinCtx;
+use puffin_traits::BuildContext;
 
 pub struct PuffinDispatch {
     client: RegistryClient,
@@ -45,7 +45,7 @@ impl PuffinDispatch {
     }
 }
 
-impl PuffinCtx for PuffinDispatch {
+impl BuildContext for PuffinDispatch {
     fn cache(&self) -> Option<&Path> {
         self.cache.as_deref()
     }

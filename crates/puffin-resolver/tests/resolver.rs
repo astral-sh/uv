@@ -18,11 +18,11 @@ use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::PythonExecutable;
 use puffin_resolver::{ResolutionMode, Resolver};
-use puffin_traits::PuffinCtx;
+use puffin_traits::BuildContext;
 
 struct DummyContext;
 
-impl PuffinCtx for DummyContext {
+impl BuildContext for DummyContext {
     fn cache(&self) -> Option<&Path> {
         unimplemented!()
     }

@@ -21,7 +21,7 @@ use zip::ZipArchive;
 
 use gourgeist::{InterpreterInfo, Venv};
 use pep508_rs::Requirement;
-use puffin_traits::PuffinCtx;
+use puffin_traits::BuildContext;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -106,7 +106,7 @@ impl SourceDistributionBuilder {
     pub async fn setup(
         sdist: &Path,
         interpreter_info: &InterpreterInfo,
-        puffin_ctx: &impl PuffinCtx,
+        puffin_ctx: &impl BuildContext,
     ) -> Result<SourceDistributionBuilder, Error> {
         let temp_dir = tempdir()?;
 
@@ -345,7 +345,7 @@ async fn create_pep517_build_environment(
     source_tree: &Path,
     data: &InterpreterInfo,
     pep517_backend: &Pep517Backend,
-    puffin_ctx: &impl PuffinCtx,
+    puffin_ctx: &impl BuildContext,
 ) -> Result<Venv, Error> {
     let venv = gourgeist::create_venv(
         root.join(".venv"),

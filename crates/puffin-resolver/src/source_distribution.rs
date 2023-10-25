@@ -14,7 +14,7 @@ use pep440_rs::Version;
 use puffin_client::{File, RegistryClient};
 use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
-use puffin_traits::PuffinCtx;
+use puffin_traits::BuildContext;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
@@ -38,7 +38,7 @@ impl BuiltSourceDistributionCache {
 pub(crate) async fn download_and_build_sdist(
     file: &File,
     client: &RegistryClient,
-    puffin_ctx: &impl PuffinCtx,
+    puffin_ctx: &impl BuildContext,
     sdist_filename: &SourceDistributionFilename,
 ) -> anyhow::Result<Metadata21> {
     debug!("Building {}", &file.filename);
