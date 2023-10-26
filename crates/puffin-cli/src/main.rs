@@ -89,6 +89,10 @@ struct PipCompileArgs {
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Allow package upgrades, ignoring pinned versions in the existing output file.
+    #[clap(long)]
+    upgrade: bool,
 }
 
 #[derive(Args)]
@@ -196,6 +200,7 @@ async fn main() -> ExitCode {
                 &constraints,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
+                args.upgrade.into(),
                 index_urls,
                 cache_dir,
                 printer,

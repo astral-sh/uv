@@ -18,7 +18,7 @@ use puffin_installer::{
     uninstall, Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
 };
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{ResolutionMode, Resolver, WheelFinder};
+use puffin_resolver::{Manifest, ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
 use tracing::debug;
 
@@ -70,9 +70,12 @@ impl BuildContext for BuildDispatch {
                 self.interpreter_info.simple_version(),
             )?;
             let resolver = Resolver::new(
-                requirements.to_vec(),
-                Vec::default(),
-                ResolutionMode::Highest,
+                Manifest::new(
+                    requirements.to_vec(),
+                    Vec::default(),
+                    Vec::default(),
+                    ResolutionMode::default(),
+                ),
                 self.interpreter_info.markers(),
                 &tags,
                 &self.client,

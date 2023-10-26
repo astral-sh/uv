@@ -66,6 +66,19 @@ impl From<SdistFile> for DistributionFile {
     }
 }
 
+impl From<File> for DistributionFile {
+    fn from(file: File) -> Self {
+        if std::path::Path::new(file.filename.as_str())
+            .extension()
+            .map_or(false, |ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            Self::Wheel(WheelFile::from(file))
+        } else {
+            Self::Sdist(SdistFile::from(file))
+        }
+    }
+}
+
 impl DistributionFile {
     pub(crate) fn filename(&self) -> &str {
         match self {

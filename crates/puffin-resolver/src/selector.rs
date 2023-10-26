@@ -1,11 +1,10 @@
-use fxhash::FxHashSet;
+use fxhash::{FxHashMap, FxHashSet};
 use pubgrub::range::Range;
 
-use crate::distribution::DistributionFile;
-use pep508_rs::Requirement;
-
+use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_package::package_name::PackageName;
 
+use crate::distribution::DistributionFile;
 use crate::pubgrub::version::PubGrubVersion;
 use crate::resolver::VersionMap;
 
@@ -22,8 +21,10 @@ pub enum ResolutionMode {
     LowestDirect,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum CandidateSelector {
+/// Like [`ResolutionMode`], but with any additional information required to select a candidate,
+/// like the set of direct dependencies.
+#[derive(Debug)]
+enum ResolutionStrategy {
     /// Resolve the highest compatible version of each package.
     Highest,
     /// Resolve the lowest compatible version of each package.
@@ -33,9 +34,8 @@ pub(crate) enum CandidateSelector {
     LowestDirect(FxHashSet<PackageName>),
 }
 
-impl CandidateSelector {
-    /// Return a candidate selector for the given resolution mode.
-    pub(crate) fn from_mode(mode: ResolutionMode, direct_dependencies: &[Requirement]) -> Self {
+impl ResolutionStrategy {
+    fn from_mode(mode: ResolutionMode, direct_dependencies: &[Requirement]) -> Self {
         match mode {
             ResolutionMode::Highest => Self::Highest,
             ResolutionMode::Lowest => Self::Lowest,
@@ -49,26 +49,87 @@ impl CandidateSelector {
     }
 }
 
+/// A set of pinned packages that should be preserved during resolution, if possible.
+#[derive(Debug)]
+struct Preferences(FxHashMap<PackageName, PubGrubVersion>);
+
+impl Preferences {
+    fn get(&self, package_name: &PackageName) -> Option<&PubGrubVersion> {
+        self.0.get(package_name)
+    }
+}
+
+impl From<&[Requirement]> for Preferences {
+    fn from(requirements: &[Requirement]) -> Self {
+        Self(
+            requirements
+                .iter()
+                .filter_map(|requirement| {
+                    let Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =
+                        requirement.version_or_url.as_ref()
+                    else {
+                        return None;
+                    };
+                    let [version_specifier] = &**version_specifiers else {
+                        return None;
+                    };
+                    let package_name = PackageName::normalize(&requirement.name);
+                    let version = PubGrubVersion::from(version_specifier.version().clone());
+                    Some((package_name, version))
+                })
+                .collect(),
+        )
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CandidateSelector {
+    strategy: ResolutionStrategy,
+    preferences: Preferences,
+}
+
+impl CandidateSelector {
+    /// Return a candidate selector for the given resolution mode.
+    pub(crate) fn from_mode(
+        mode: ResolutionMode,
+        direct_dependencies: &[Requirement],
+        resolution: &[Requirement],
+    ) -> Self {
+        Self {
+            strategy: ResolutionStrategy::from_mode(mode, direct_dependencies),
+            preferences: Preferences::from(resolution),
+        }
+    }
+}
+
 impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
-    pub(crate) fn select<'a>(
+    pub(crate) fn select(
         &self,
-        package_name: &'a PackageName,
-        range: &'a Range<PubGrubVersion>,
-        version_map: &'a VersionMap,
-    ) -> Option<Candidate<'a>> {
-        match self {
-            CandidateSelector::Highest => {
-                CandidateSelector::select_highest(package_name, range, version_map)
+        package_name: &PackageName,
+        range: &Range<PubGrubVersion>,
+        version_map: &VersionMap,
+    ) -> Option<Candidate> {
+        if let Some(version) = self.preferences.get(package_name) {
+            if range.contains(version) {
+                if let Some(file) = version_map.get(version) {
+                    return Some(Candidate {
+                        package_name: package_name.clone(),
+                        version: version.clone(),
+                        file: file.clone(),
+                    });
+                }
             }
-            CandidateSelector::Lowest => {
-                CandidateSelector::select_lowest(package_name, range, version_map)
-            }
-            CandidateSelector::LowestDirect(direct_dependencies) => {
+        }
+
+        match &self.strategy {
+            ResolutionStrategy::Highest => Self::select_highest(package_name, range, version_map),
+            ResolutionStrategy::Lowest => Self::select_lowest(package_name, range, version_map),
+            ResolutionStrategy::LowestDirect(direct_dependencies) => {
                 if direct_dependencies.contains(package_name) {
-                    CandidateSelector::select_lowest(package_name, range, version_map)
+                    Self::select_lowest(package_name, range, version_map)
                 } else {
-                    CandidateSelector::select_highest(package_name, range, version_map)
+                    Self::select_highest(package_name, range, version_map)
                 }
             }
         }
@@ -76,27 +137,27 @@ impl CandidateSelector {
 
     /// Select the highest-compatible [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over sdists.
-    fn select_highest<'a>(
-        package_name: &'a PackageName,
-        range: &'a Range<PubGrubVersion>,
-        version_map: &'a VersionMap,
-    ) -> Option<Candidate<'a>> {
+    fn select_highest(
+        package_name: &PackageName,
+        range: &Range<PubGrubVersion>,
+        version_map: &VersionMap,
+    ) -> Option<Candidate> {
         let mut sdist = None;
         for (version, file) in version_map.iter().rev() {
             if range.contains(version) {
                 match file {
                     DistributionFile::Wheel(_) => {
                         return Some(Candidate {
-                            package_name,
-                            version,
-                            file,
+                            package_name: package_name.clone(),
+                            version: version.clone(),
+                            file: file.clone(),
                         });
                     }
                     DistributionFile::Sdist(_) => {
                         sdist = Some(Candidate {
-                            package_name,
-                            version,
-                            file,
+                            package_name: package_name.clone(),
+                            version: version.clone(),
+                            file: file.clone(),
                         });
                     }
                 }
@@ -107,27 +168,27 @@ impl CandidateSelector {
 
     /// Select the highest-compatible [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over sdists.
-    fn select_lowest<'a>(
-        package_name: &'a PackageName,
-        range: &'a Range<PubGrubVersion>,
-        version_map: &'a VersionMap,
-    ) -> Option<Candidate<'a>> {
+    fn select_lowest(
+        package_name: &PackageName,
+        range: &Range<PubGrubVersion>,
+        version_map: &VersionMap,
+    ) -> Option<Candidate> {
         let mut sdist = None;
         for (version, file) in version_map {
             if range.contains(version) {
                 match file {
                     DistributionFile::Wheel(_) => {
                         return Some(Candidate {
-                            package_name,
-                            version,
-                            file,
+                            package_name: package_name.clone(),
+                            version: version.clone(),
+                            file: file.clone(),
                         });
                     }
                     DistributionFile::Sdist(_) => {
                         sdist = Some(Candidate {
-                            package_name,
-                            version,
-                            file,
+                            package_name: package_name.clone(),
+                            version: version.clone(),
+                            file: file.clone(),
                         });
                     }
                 }
@@ -138,11 +199,11 @@ impl CandidateSelector {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Candidate<'a> {
+pub(crate) struct Candidate {
     /// The name of the package.
-    pub(crate) package_name: &'a PackageName,
+    pub(crate) package_name: PackageName,
     /// The version of the package.
-    pub(crate) version: &'a PubGrubVersion,
+    pub(crate) version: PubGrubVersion,
     /// The file of the package.
-    pub(crate) file: &'a DistributionFile,
+    pub(crate) file: DistributionFile,
 }
