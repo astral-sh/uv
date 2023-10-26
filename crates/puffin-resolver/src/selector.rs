@@ -153,12 +153,15 @@ impl CandidateSelector {
                             file: file.clone(),
                         });
                     }
-                    DistributionFile::Sdist(_) => {
+                    DistributionFile::Sdist(_) if sdist.is_none() => {
                         sdist = Some(Candidate {
                             package_name: package_name.clone(),
                             version: version.clone(),
                             file: file.clone(),
                         });
+                    }
+                    DistributionFile::Sdist(_) => {
+                        // We already selected a more recent source distribution
                     }
                 }
             }

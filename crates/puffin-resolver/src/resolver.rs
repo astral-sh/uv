@@ -531,10 +531,21 @@ impl<'a, Context: BuildContext> Resolver<'a, Context> {
                             if let Ok(name) = WheelFilename::from_str(file.filename.as_str()) {
                                 if name.is_compatible(self.tags) {
                                     let version = PubGrubVersion::from(name.version);
-                                    if let std::collections::btree_map::Entry::Vacant(entry) =
-                                        version_map.entry(version)
-                                    {
-                                        entry.insert(DistributionFile::from(WheelFile::from(file)));
+
+                                    match version_map.entry(version) {
+                                        std::collections::btree_map::Entry::Occupied(mut entry) => {
+                                            if let DistributionFile::Sdist(_) = entry.get() {
+                                                // Wheels get precedence over source distributions
+                                                entry.insert(DistributionFile::from(
+                                                    WheelFile::from(file),
+                                                ));
+                                            }
+                                        }
+                                        std::collections::btree_map::Entry::Vacant(entry) => {
+                                            entry.insert(DistributionFile::from(WheelFile::from(
+                                                file,
+                                            )));
+                                        }
                                     }
                                 }
                             } else if let Ok(name) = SourceDistributionFilename::parse(
