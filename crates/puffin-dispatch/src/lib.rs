@@ -74,8 +74,6 @@ impl BuildContext for BuildDispatch {
                 Manifest::new(
                     requirements.to_vec(),
                     Vec::default(),
-                    // TODO(charlie): Include locally-available wheels in the list of preferred
-                    // versions.
                     Vec::default(),
                     ResolutionMode::default(),
                 ),
