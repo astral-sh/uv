@@ -1,29 +1,17 @@
-#![allow(clippy::print_stdout, clippy::print_stderr)]
-
-use std::env;
-use std::path::PathBuf;
-use std::process::ExitCode;
-use std::time::Instant;
-
-use anyhow::{Context, Result};
+use anyhow::Context;
 use clap::Parser;
-use colored::Colorize;
 use directories::ProjectDirs;
 use fs_err as fs;
-use tracing::debug;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter};
-
 use platform_host::Platform;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
+use std::env;
+use std::path::PathBuf;
 
 #[derive(Parser)]
-struct Args {
+pub struct BuildArgs {
     /// Base python in a way that can be found with `which`
     /// TODO(konstin): Also use proper python parsing here
     #[clap(short, long)]
@@ -34,8 +22,8 @@ struct Args {
     sdist: PathBuf,
 }
 
-async fn run() -> Result<()> {
-    let args = Args::parse();
+/// Build a source distribution to a wheel
+pub async fn build(args: BuildArgs) -> anyhow::Result<PathBuf> {
     let wheel_dir = if let Some(wheel_dir) = args.wheels {
         fs::create_dir_all(&wheel_dir).context("Invalid wheel directory")?;
         wheel_dir
@@ -61,27 +49,5 @@ async fn run() -> Result<()> {
         SourceDistributionBuilder::setup(&args.sdist, venv.interpreter_info(), &build_dispatch)
             .await?;
     let wheel = builder.build(&wheel_dir)?;
-    println!("Wheel built to {}", wheel_dir.join(wheel).display());
-    Ok(())
-}
-
-#[tokio::main]
-async fn main() -> ExitCode {
-    tracing_subscriber::registry()
-        .with(fmt::layer().with_span_events(FmtSpan::CLOSE))
-        .with(EnvFilter::from_default_env())
-        .init();
-
-    let start = Instant::now();
-    let result = run().await;
-    debug!("Took {}ms", start.elapsed().as_millis());
-    if let Err(err) = result {
-        eprintln!("{}", "puffin-build failed".red().bold());
-        for err in err.chain() {
-            eprintln!("  {}: {}", "Caused by".red().bold(), err);
-        }
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
-    }
+    Ok(wheel_dir.join(wheel))
 }
