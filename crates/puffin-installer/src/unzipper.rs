@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::path::Path;
 
 use anyhow::Result;
@@ -37,6 +38,10 @@ impl Unzipper {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init()?;
+
+        // Sort the wheels by size.
+        let mut downloads = downloads;
+        downloads.sort_unstable_by_key(|wheel| Reverse(wheel.buffer.len()));
 
         let staging = tempfile::tempdir_in(wheel_cache.root())?;
 

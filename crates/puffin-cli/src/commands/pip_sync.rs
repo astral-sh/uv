@@ -149,16 +149,16 @@ pub(crate) async fn sync_requirements(
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let downloads = downloader
-            .download(&remote, cache.unwrap_or(staging.path()))
+            .download(remote, cache.unwrap_or(staging.path()))
             .await?;
 
-        let s = if remote.len() == 1 { "" } else { "s" };
+        let s = if downloads.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Downloaded {} in {}",
-                format!("{} package{}", remote.len(), s).bold(),
+                format!("{} package{}", downloads.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()

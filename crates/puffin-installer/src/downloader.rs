@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::path::Path;
 
 use anyhow::Result;
@@ -42,12 +43,16 @@ impl<'a> Downloader<'a> {
     /// Install a set of wheels into a Python virtual environment.
     pub async fn download(
         &'a self,
-        wheels: &'a [RemoteDistribution],
+        wheels: Vec<RemoteDistribution>,
         target: &'a Path,
     ) -> Result<Vec<InMemoryDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init()?;
+
+        // Sort the wheels by size.
+        let mut wheels = wheels;
+        wheels.sort_unstable_by_key(|wheel| Reverse(wheel.file().size));
 
         // Phase 1: Fetch the wheels in parallel.
         let mut fetches = JoinSet::new();
