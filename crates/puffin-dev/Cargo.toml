@@ -20,6 +20,7 @@ puffin-client = { path = "../puffin-client" }
 puffin-dispatch = { path = "../puffin-dispatch" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-package = { path = "../puffin-package" }
+puffin-traits = { path = "../puffin-traits" }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
@@ -27,9 +28,11 @@ colored = { workspace = true }
 directories = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+indicatif = { workspace = true }
 itertools = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 which = { workspace = true }

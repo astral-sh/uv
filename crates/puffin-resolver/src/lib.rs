@@ -1,5 +1,5 @@
 pub use error::ResolveError;
-pub use resolution::PinnedPackage;
+pub use resolution::{Graph, PinnedPackage};
 pub use resolver::{Manifest, Resolver};
 pub use selector::ResolutionMode;
 pub use source_distribution::BuiltSourceDistributionCache;
