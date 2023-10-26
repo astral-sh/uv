@@ -37,7 +37,7 @@ impl BuildContext for DummyContext {
     fn resolve<'a>(
         &'a self,
         _requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")
     }
 
@@ -45,7 +45,7 @@ impl BuildContext for DummyContext {
         &'a self,
         _requirements: &'a [Requirement],
         _venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")
     }
 
@@ -53,7 +53,7 @@ impl BuildContext for DummyContext {
         &'a self,
         _sdist: &'a Path,
         _wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")
     }
 }

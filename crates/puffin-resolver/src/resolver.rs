@@ -64,7 +64,7 @@ impl Manifest {
     }
 }
 
-pub struct Resolver<'a, Context: BuildContext> {
+pub struct Resolver<'a, Context: BuildContext + Sync> {
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     markers: &'a MarkerEnvironment,
@@ -75,7 +75,7 @@ pub struct Resolver<'a, Context: BuildContext> {
     build_context: &'a Context,
 }
 
-impl<'a, Context: BuildContext> Resolver<'a, Context> {
+impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
@@ -587,7 +587,7 @@ impl<'a, Context: BuildContext> Resolver<'a, Context> {
     fn process_request(
         &'a self,
         request: Request,
-    ) -> Pin<Box<dyn Future<Output = Result<Response, ResolveError>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Response, ResolveError>> + Send + 'a>> {
         match request {
             Request::Package(package_name) => Box::pin(
                 self.client

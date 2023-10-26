@@ -9,6 +9,7 @@ use std::pin::Pin;
 use anyhow::Context;
 use itertools::Itertools;
 use tempfile::tempdir;
+use tracing::{debug, instrument};
 
 use pep508_rs::Requirement;
 use platform_tags::Tags;
@@ -20,7 +21,6 @@ use puffin_installer::{
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
-use tracing::debug;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -60,10 +60,11 @@ impl BuildContext for BuildDispatch {
         &self.base_python
     }
 
+    #[instrument(skip(self))]
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + Send + 'a>> {
         Box::pin(async {
             let tags = Tags::from_env(
                 self.interpreter_info.platform(),
@@ -88,11 +89,12 @@ impl BuildContext for BuildDispatch {
         })
     }
 
+    #[instrument(skip(self))]
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
         venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>> {
         Box::pin(async move {
             debug!(
                 "Install in {} requirements {}",
@@ -160,11 +162,12 @@ impl BuildContext for BuildDispatch {
         })
     }
 
+    #[instrument(skip(self))]
     fn build_source_distribution<'a>(
         &'a self,
         sdist: &'a Path,
         wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let builder =
                 SourceDistributionBuilder::setup(sdist, &self.interpreter_info, self).await?;

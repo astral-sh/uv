@@ -63,6 +63,7 @@ tokio-util = { version = "0.7.9", features = ["compat"] }
 toml = { version = "0.8.2" }
 toml_edit = { version = "0.20.2" }
 tracing = { version = "0.1.37" }
+tracing-indicatif = { version = "0.3.5" }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 tracing-tree = { version = "0.2.5" }
 unicode-width = { version = "0.1.8" }

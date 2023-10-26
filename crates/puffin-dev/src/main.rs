@@ -7,17 +7,27 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 use tracing::debug;
-use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 use puffin_dev::{build, BuildArgs};
+use resolve_many::ResolveManyArgs;
+
+mod resolve_many;
 
 #[derive(Parser)]
 enum Cli {
     /// Build a source distribution into a wheel
     Build(BuildArgs),
+    /// Resolve many requirements independently in parallel and report failures and sucesses.
+    ///
+    /// Run `scripts/resolve/get_pypi_top_8k.sh` once, then
+    /// ```bash
+    /// cargo run --bin puffin-dev -- resolve-many scripts/resolve/pypi_top_8k_flat.txt
+    /// ```
+    ResolveMany(ResolveManyArgs),
 }
 
 async fn run() -> Result<()> {
@@ -27,15 +37,29 @@ async fn run() -> Result<()> {
             let target = build(args).await?;
             println!("Wheel built to {}", target.display());
         }
+        Cli::ResolveMany(args) => {
+            resolve_many::resolve_many(args).await?;
+        }
     }
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let indicatif_layer = IndicatifLayer::new();
+    let indicitif_compatible_writer_layer = tracing_subscriber::fmt::layer()
+        .with_writer(indicatif_layer.get_stderr_writer())
+        .with_target(false);
+    let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::builder()
+            // Show only the important spans
+            .parse("puffin_dev=info,puffin_dispatch=info")
+            .unwrap()
+    });
     tracing_subscriber::registry()
-        .with(fmt::layer().with_span_events(FmtSpan::CLOSE))
-        .with(EnvFilter::from_default_env())
+        .with(filter_layer)
+        .with(indicitif_compatible_writer_layer)
+        .with(indicatif_layer)
         .init();
 
     let start = Instant::now();

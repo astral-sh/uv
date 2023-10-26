@@ -60,14 +60,14 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + Send + 'a>>;
     /// Install the given set of package versions into the virtual environment. The environment must
-    /// use the same base python as [`Self::python`]
+    /// use the same base python as [`BuildContext::base_python`]
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
         venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
     /// Build a source distribution into a wheel from an archive.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
@@ -75,5 +75,5 @@ pub trait BuildContext {
         &'a self,
         sdist: &'a Path,
         wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
 }
