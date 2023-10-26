@@ -1,5 +1,5 @@
 [package]
-name = "puffin-build-cli"
+name = "puffin-dev"
 version = "0.0.1"
 description = "Build wheels from source distributions"
 edition = { workspace = true }

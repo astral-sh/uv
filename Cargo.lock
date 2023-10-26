@@ -2038,33 +2038,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-build-cli"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "clap",
- "colored",
- "directories",
- "fs-err",
- "futures",
- "gourgeist",
- "itertools",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "puffin-build",
- "puffin-client",
- "puffin-dispatch",
- "puffin-interpreter",
- "puffin-package",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "which",
-]
-
-[[package]]
 name = "puffin-cli"
 version = "0.0.1"
 dependencies = [
@@ -2126,6 +2099,33 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "puffin-dev"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "colored",
+ "directories",
+ "fs-err",
+ "futures",
+ "gourgeist",
+ "itertools",
+ "pep508_rs",
+ "platform-host",
+ "platform-tags",
+ "puffin-build",
+ "puffin-client",
+ "puffin-dispatch",
+ "puffin-interpreter",
+ "puffin-package",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "which",
 ]
 
 [[package]]
