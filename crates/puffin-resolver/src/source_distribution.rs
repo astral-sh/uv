@@ -71,7 +71,7 @@ pub(crate) async fn download_and_build_sdist(
     client: &RegistryClient,
     build_context: &impl BuildContext,
 ) -> Result<Metadata21> {
-    debug!("Building {}", &file.filename);
+    debug!("Building: {}", &file.filename);
     let url = Url::parse(&file.url)?;
     let reader = client.stream_external(&url).await?;
     let mut reader = tokio::io::BufReader::new(reader.compat());
@@ -97,7 +97,7 @@ pub(crate) async fn download_and_build_sdist(
 
     let metadata21 = read_dist_info(wheel_dir.join(disk_filename)).await?;
 
-    debug!("Finished Building {}", &file.filename);
+    debug!("Finished building: {}", &file.filename);
     Ok(metadata21)
 }
 

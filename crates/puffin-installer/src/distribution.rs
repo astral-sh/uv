@@ -103,6 +103,12 @@ impl RemoteDistribution {
     }
 }
 
+impl std::fmt::Display for RemoteDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.name(), self.version())
+    }
+}
+
 /// A built distribution (wheel) that exists in a local cache.
 #[derive(Debug, Clone)]
 pub struct CachedDistribution {
@@ -158,6 +164,12 @@ impl CachedDistribution {
 
     pub fn id(&self) -> String {
         format!("{}-{}", DistInfoName::from(self.name()), self.version())
+    }
+}
+
+impl std::fmt::Display for CachedDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.name(), self.version())
     }
 }
 
@@ -222,5 +234,11 @@ impl InstalledDistribution {
 
     pub fn id(&self) -> String {
         format!("{}-{}", DistInfoName::from(self.name()), self.version())
+    }
+}
+
+impl std::fmt::Display for InstalledDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.name(), self.version())
     }
 }
