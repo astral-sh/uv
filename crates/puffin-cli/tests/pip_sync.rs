@@ -163,7 +163,7 @@ fn install_hardlink() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -210,7 +210,7 @@ fn install_many() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -265,7 +265,7 @@ fn noop() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -332,7 +332,7 @@ fn link() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -392,7 +392,7 @@ fn add_remove() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -459,7 +459,7 @@ fn install_sequential() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -519,7 +519,7 @@ fn upgrade() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"\d+ms|\d+\.\d+s", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
