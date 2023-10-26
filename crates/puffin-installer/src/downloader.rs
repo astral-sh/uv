@@ -88,6 +88,12 @@ pub struct InMemoryDistribution {
     pub(crate) buffer: Vec<u8>,
 }
 
+impl std::fmt::Display for InMemoryDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.remote)
+    }
+}
+
 /// Download a wheel to a given path.
 async fn fetch_wheel(
     remote: RemoteDistribution,

@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use anyhow::Context;
+use anyhow::Result;
 use itertools::Itertools;
-use tempfile::tempdir;
 use tracing::{debug, instrument};
 
 use pep508_rs::Requirement;
@@ -16,7 +16,7 @@ use platform_tags::Tags;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClient;
 use puffin_installer::{
-    uninstall, Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
+    Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
 };
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionMode, Resolver, WheelFinder};
@@ -64,7 +64,7 @@ impl BuildContext for BuildDispatch {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>> {
         Box::pin(async {
             let tags = Tags::from_env(
                 self.interpreter_info.platform(),
@@ -94,70 +94,109 @@ impl BuildContext for BuildDispatch {
         &'a self,
         requirements: &'a [Requirement],
         venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             debug!(
-                "Install in {} requirements {}",
+                "Installing in {} in {}",
+                requirements.iter().map(ToString::to_string).join(", "),
                 venv.root().display(),
-                requirements.iter().map(ToString::to_string).join(", ")
             );
 
             let PartitionedRequirements {
                 local,
                 remote,
                 extraneous,
-            } = PartitionedRequirements::try_from_requirements(requirements, self.cache(), venv)?;
-
-            if !extraneous.is_empty() {
-                debug!(
-                    "Removing {:?}",
-                    extraneous
-                        .iter()
-                        .map(puffin_installer::InstalledDistribution::id)
-                        .join(", ")
-                );
-
-                for dist_info in extraneous {
-                    uninstall(&dist_info).await?;
-                }
-            }
-
-            debug!(
-                "Fetching {}",
-                remote.iter().map(ToString::to_string).join(", ")
-            );
+            } = PartitionedRequirements::try_from_requirements(
+                requirements,
+                self.cache.as_deref(),
+                venv,
+            )?;
 
             let tags = Tags::from_env(
                 self.interpreter_info.platform(),
                 self.interpreter_info.simple_version(),
             )?;
-            let resolution = WheelFinder::new(&tags, &self.client)
-                .resolve(&remote)
-                .await?;
 
-            let uncached = resolution
-                .into_files()
-                .map(RemoteDistribution::from_file)
-                .collect::<anyhow::Result<Vec<_>>>()?;
-            let staging = tempdir()?;
-            let downloads = Downloader::new(&self.client, self.cache.as_deref())
-                .download(&uncached, self.cache.as_deref().unwrap_or(staging.path()))
-                .await?;
-            let unzips = Unzipper::default()
-                .download(downloads, self.cache.as_deref().unwrap_or(staging.path()))
-                .await
-                .context("Failed to download and unpack wheels")?;
+            // Resolve the dependencies.
+            let remote = if remote.is_empty() {
+                Vec::new()
+            } else {
+                debug!(
+                    "Fetching build requirement{}: {}",
+                    if remote.len() == 1 { "" } else { "s" },
+                    remote.iter().map(ToString::to_string).join(", ")
+                );
+                let resolution = WheelFinder::new(&tags, &self.client)
+                    .resolve(&remote)
+                    .await
+                    .context("Failed to resolve build dependencies")?;
+                resolution
+                    .into_files()
+                    .map(RemoteDistribution::from_file)
+                    .collect::<Result<Vec<_>>>()?
+            };
 
-            debug!(
-                "Fetching {}",
-                unzips
-                    .iter()
-                    .chain(&local)
-                    .map(puffin_installer::CachedDistribution::id)
-                    .join(", ")
-            );
+            // Download any missing distributions.
+            let staging = tempfile::tempdir()?;
+            let downloads = if remote.is_empty() {
+                vec![]
+            } else {
+                debug!(
+                    "Downloading build requirement{}: {}",
+                    if remote.len() == 1 { "" } else { "s" },
+                    remote.iter().map(ToString::to_string).join(", ")
+                );
+                Downloader::new(&self.client, self.cache.as_deref())
+                    .download(&remote, self.cache.as_deref().unwrap_or(staging.path()))
+                    .await
+                    .context("Failed to download build dependencies")?
+            };
+
+            // Unzip any downloaded distributions.
+            let unzips = if downloads.is_empty() {
+                vec![]
+            } else {
+                debug!(
+                    "Unzipping build requirement{}: {}",
+                    if downloads.len() == 1 { "" } else { "s" },
+                    downloads.iter().map(ToString::to_string).join(", ")
+                );
+                Unzipper::default()
+                    .download(downloads, self.cache.as_deref().unwrap_or(staging.path()))
+                    .await
+                    .context("Failed to unpack build dependencies")?
+            };
+
+            // Remove any unnecessary packages.
+            if !extraneous.is_empty() {
+                for dist_info in &extraneous {
+                    let summary = puffin_installer::uninstall(dist_info)
+                        .await
+                        .context("Failed to uninstall build dependencies")?;
+                    debug!(
+                        "Uninstalled {} ({} file{}, {} director{})",
+                        dist_info.name(),
+                        summary.file_count,
+                        if summary.file_count == 1 { "" } else { "s" },
+                        summary.dir_count,
+                        if summary.dir_count == 1 { "y" } else { "ies" },
+                    );
+                }
+            }
+
+            // Install the resolved distributions.
             let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
-            Installer::new(venv).install(&wheels)?;
+            if !wheels.is_empty() {
+                debug!(
+                    "Installing build requirement{}: {}",
+                    if wheels.len() == 1 { "" } else { "s" },
+                    wheels.iter().map(ToString::to_string).join(", ")
+                );
+                Installer::new(venv)
+                    .install(&wheels)
+                    .context("Failed to install build dependencies")?;
+            }
+
             Ok(())
         })
     }
@@ -167,7 +206,7 @@ impl BuildContext for BuildDispatch {
         &'a self,
         sdist: &'a Path,
         wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let builder =
                 SourceDistributionBuilder::setup(sdist, &self.interpreter_info, self).await?;

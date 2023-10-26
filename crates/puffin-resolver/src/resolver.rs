@@ -444,9 +444,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             PubGrubPackage::Package(package_name, extra) => {
                 if let Some(extra) = extra.as_ref() {
-                    debug!("Fetching dependencies for {}[{:?}]", package_name, extra);
+                    debug!(
+                        "Fetching dependencies for {}[{:?}]@{}",
+                        package_name, extra, version
+                    );
                 } else {
-                    debug!("Fetching dependencies for {}", package_name);
+                    debug!("Fetching dependencies for {}@{}", package_name, version);
                 }
 
                 // Wait for the metadata to be available.
