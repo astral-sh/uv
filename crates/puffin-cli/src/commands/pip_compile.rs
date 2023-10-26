@@ -126,6 +126,10 @@ pub(crate) async fn pip_compile(
         .dimmed()
     )?;
 
+    if output_file.is_some() {
+        colored::control::set_override(false);
+    }
+
     let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
         Box::new(BufWriter::new(File::create(output_file)?))
     } else {
@@ -144,6 +148,10 @@ pub(crate) async fn pip_compile(
         format!("#    {}", env::args().join(" ")).green()
     )?;
     write!(writer, "{resolution}")?;
+
+    if output_file.is_some() {
+        colored::control::unset_override();
+    }
 
     Ok(ExitStatus::Success)
 }
