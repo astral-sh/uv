@@ -69,6 +69,11 @@ impl Resolution {
         self.0.into_values().map(|package| package.file)
     }
 
+    /// Return the pinned package for the given package name, if it exists.
+    pub fn get(&self, package_name: &PackageName) -> Option<&PinnedPackage> {
+        self.0.get(package_name)
+    }
+
     /// Return the number of pinned packages in this resolution.
     pub fn len(&self) -> usize {
         self.0.len()

@@ -7,15 +7,16 @@ use anyhow::Result;
 use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
+use pubgrub::report::Reporter;
+use tracing::debug;
+
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use pubgrub::report::Reporter;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_resolver::ResolutionMode;
-use tracing::debug;
+use puffin_resolver::{Manifest, ResolutionMode};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
@@ -25,11 +26,13 @@ use crate::requirements::RequirementsSource;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Resolve a set of requirements into a set of pinned versions.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     output_file: Option<&Path>,
-    mode: ResolutionMode,
+    resolution_mode: ResolutionMode,
+    upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
     mut printer: Printer,
@@ -47,6 +50,19 @@ pub(crate) async fn pip_compile(
         .map(RequirementsSource::requirements)
         .flatten_ok()
         .collect::<Result<Vec<Requirement>>>()?;
+    let preferences: Vec<Requirement> = output_file
+        .filter(|_| upgrade_mode.is_prefer_pinned())
+        .filter(|output_file| output_file.exists())
+        .map(Path::to_path_buf)
+        .map(RequirementsSource::from)
+        .as_ref()
+        .map(RequirementsSource::requirements)
+        .transpose()?
+        .map(Iterator::collect)
+        .unwrap_or_default();
+
+    // Create a manifest of the requirements.
+    let manifest = Manifest::new(requirements, constraints, preferences, resolution_mode);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -88,9 +104,7 @@ pub(crate) async fn pip_compile(
 
     // Resolve the dependencies.
     let resolver = puffin_resolver::Resolver::new(
-        requirements,
-        constraints,
-        mode,
+        manifest,
         venv.interpreter_info().markers(),
         &tags,
         &client,
@@ -146,4 +160,29 @@ pub(crate) async fn pip_compile(
     write!(writer, "{resolution}")?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Whether to allow package upgrades.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UpgradeMode {
+    /// Allow package upgrades, ignoring the existing lockfile.
+    AllowUpgrades,
+    /// Prefer pinned versions from the existing lockfile, if possible.
+    PreferPinned,
+}
+
+impl UpgradeMode {
+    fn is_prefer_pinned(self) -> bool {
+        self == Self::PreferPinned
+    }
+}
+
+impl From<bool> for UpgradeMode {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::AllowUpgrades
+        } else {
+            Self::PreferPinned
+        }
+    }
 }

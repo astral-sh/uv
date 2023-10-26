@@ -16,7 +16,7 @@ use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{ResolutionMode, Resolver};
+use puffin_resolver::{Manifest, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
 
 struct DummyContext;
@@ -66,15 +66,15 @@ async fn pylint() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("pylint==2.3.0").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -90,15 +90,15 @@ async fn black() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -114,15 +114,15 @@ async fn black_colorama() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -138,15 +138,15 @@ async fn black_python_310() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_310,
-        &TAGS_310,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_310, &TAGS_310, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -164,15 +164,15 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("mypy-extensions<1").unwrap()];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -190,15 +190,15 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -216,15 +216,15 @@ async fn black_flake8() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
     let constraints = vec![Requirement::from_str("flake8<1").unwrap()];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::default(),
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -240,15 +240,15 @@ async fn black_lowest() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black>21").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::Lowest,
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -264,15 +264,63 @@ async fn black_lowest_direct() -> Result<()> {
 
     let requirements = vec![Requirement::from_str("black>21").unwrap()];
     let constraints = vec![];
-    let resolver = Resolver::new(
+    let preferences = vec![];
+    let manifest = Manifest::new(
         requirements,
         constraints,
+        preferences,
         ResolutionMode::LowestDirect,
-        &MARKERS_311,
-        &TAGS_311,
-        &client,
-        &DummyContext,
     );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn black_respect_preference() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let constraints = vec![];
+    let preferences = vec![Requirement::from_str("black==23.9.0").unwrap()];
+    let manifest = Manifest::new(
+        requirements,
+        constraints,
+        preferences,
+        ResolutionMode::default(),
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn black_ignore_preference() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
+    let constraints = vec![];
+    let preferences = vec![Requirement::from_str("black==23.9.2").unwrap()];
+    let manifest = Manifest::new(
+        requirements,
+        constraints,
+        preferences,
+        ResolutionMode::default(),
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);

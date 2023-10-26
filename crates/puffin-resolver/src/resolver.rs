@@ -34,15 +34,39 @@ use crate::error::ResolveError;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
-use crate::resolution::{Graph, Resolution};
+use crate::resolution::Graph;
 use crate::selector::{CandidateSelector, ResolutionMode};
 use crate::source_distribution::{download_and_build_sdist, read_dist_info};
 use crate::BuiltSourceDistributionCache;
 
+/// A manifest of requirements, constraints, and preferences.
+#[derive(Debug)]
+pub struct Manifest {
+    requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
+    preferences: Vec<Requirement>,
+    mode: ResolutionMode,
+}
+
+impl Manifest {
+    pub fn new(
+        requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        preferences: Vec<Requirement>,
+        mode: ResolutionMode,
+    ) -> Self {
+        Self {
+            requirements,
+            constraints,
+            preferences,
+            mode,
+        }
+    }
+}
+
 pub struct Resolver<'a, Context: BuildContext> {
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
-    resolution: Option<Resolution>,
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
     client: &'a RegistryClient,
@@ -54,31 +78,26 @@ pub struct Resolver<'a, Context: BuildContext> {
 impl<'a, Context: BuildContext> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
-        requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
-        mode: ResolutionMode,
+        manifest: Manifest,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
     ) -> Self {
         Self {
-            selector: CandidateSelector::from_mode(mode, &requirements),
+            selector: CandidateSelector::from_mode(
+                manifest.mode,
+                &manifest.requirements,
+                &manifest.preferences,
+            ),
             index: Arc::new(Index::default()),
-            resolution: None,
-            requirements,
-            constraints,
+            requirements: manifest.requirements,
+            constraints: manifest.constraints,
             markers,
             tags,
             client,
             build_context,
         }
-    }
-
-    #[must_use]
-    pub fn with_resolution(mut self, resolution: Resolution) -> Self {
-        self.resolution = Some(resolution);
-        self
     }
 
     /// Resolve a set of requirements into a set of pinned versions.

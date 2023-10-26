@@ -1,6 +1,6 @@
 pub use error::ResolveError;
 pub use resolution::PinnedPackage;
-pub use resolver::Resolver;
+pub use resolver::{Manifest, Resolver};
 pub use selector::ResolutionMode;
 pub use source_distribution::BuiltSourceDistributionCache;
 pub use wheel_finder::{Reporter, WheelFinder};
