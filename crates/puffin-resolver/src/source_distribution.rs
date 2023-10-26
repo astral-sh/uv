@@ -10,7 +10,7 @@ use tracing::debug;
 use url::Url;
 use zip::ZipArchive;
 
-use distribution_filename::{SourceDistributionFilename, WheelFilename};
+use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_client::{File, RegistryClient};
@@ -39,15 +39,18 @@ impl BuiltSourceDistributionCache {
     /// Search for a wheel matching the tags that was built from the given source distribution.  
     pub fn find_wheel(
         &self,
-        filename: &SourceDistributionFilename,
+        package_name: &PackageName,
+        version: &Version,
         tags: &Tags,
     ) -> Option<PathBuf> {
-        let Ok(read_dir) = fs_err::read_dir(self.version(&filename.name, &filename.version)) else {
+        let Ok(read_dir) = fs_err::read_dir(self.version(package_name, version)) else {
             return None;
         };
 
         for entry in read_dir {
-            let Ok(entry) = entry else { continue };
+            let Ok(entry) = entry else {
+                continue;
+            };
             let Ok(wheel) = WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
             else {
                 continue;
@@ -63,9 +66,10 @@ impl BuiltSourceDistributionCache {
 
 pub(crate) async fn download_and_build_sdist(
     file: &File,
+    package_name: &PackageName,
+    version: &Version,
     client: &RegistryClient,
     build_context: &impl BuildContext,
-    sdist_filename: &SourceDistributionFilename,
 ) -> Result<Metadata21> {
     debug!("Building {}", &file.filename);
     let url = Url::parse(&file.url)?;
@@ -80,8 +84,7 @@ pub(crate) async fn download_and_build_sdist(
     tokio::io::copy(&mut reader, &mut writer).await?;
 
     let wheel_dir = if let Some(cache) = &build_context.cache() {
-        BuiltSourceDistributionCache::new(cache)
-            .version(&sdist_filename.name, &sdist_filename.version)
+        BuiltSourceDistributionCache::new(cache).version(package_name, version)
     } else {
         temp_dir.path().join("wheels")
     };
