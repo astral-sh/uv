@@ -24,7 +24,8 @@ async fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli {
         Cli::Build(args) => {
-            build(args).await?;
+            let target = build(args).await?;
+            println!("Wheel built to {}", target.display());
         }
     }
     Ok(())

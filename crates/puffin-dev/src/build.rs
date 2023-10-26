@@ -23,7 +23,7 @@ pub struct BuildArgs {
 }
 
 /// Build a source distribution to a wheel
-pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
+pub async fn build(args: BuildArgs) -> anyhow::Result<PathBuf> {
     let wheel_dir = if let Some(wheel_dir) = args.wheels {
         fs::create_dir_all(&wheel_dir).context("Invalid wheel directory")?;
         wheel_dir
@@ -49,6 +49,5 @@ pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
         SourceDistributionBuilder::setup(&args.sdist, venv.interpreter_info(), &build_dispatch)
             .await?;
     let wheel = builder.build(&wheel_dir)?;
-    println!("Wheel built to {}", wheel_dir.join(wheel).display());
-    Ok(())
+    Ok(wheel_dir.join(wheel))
 }
