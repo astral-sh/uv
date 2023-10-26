@@ -64,13 +64,10 @@ async fn pylint() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("pylint==2.3.0").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("pylint==2.3.0").unwrap()],
+        vec![],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -88,13 +85,10 @@ async fn black() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -112,13 +106,10 @@ async fn black_colorama() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
+        vec![],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -136,13 +127,10 @@ async fn black_python_310() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -162,13 +150,10 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![Requirement::from_str("mypy-extensions<1").unwrap()];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("mypy-extensions<1").unwrap()],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -188,13 +173,10 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -214,13 +196,10 @@ async fn black_flake8() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![Requirement::from_str("flake8<1").unwrap()];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("flake8<1").unwrap()],
+        vec![],
         ResolutionMode::default(),
     );
 
@@ -238,13 +217,10 @@ async fn black_lowest() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black>21").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black>21").unwrap()],
+        vec![],
+        vec![],
         ResolutionMode::Lowest,
     );
 
@@ -262,13 +238,10 @@ async fn black_lowest_direct() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black>21").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black>21").unwrap()],
+        vec![],
+        vec![],
         ResolutionMode::LowestDirect,
     );
 
@@ -286,13 +259,10 @@ async fn black_respect_preference() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![Requirement::from_str("black==23.9.0").unwrap()];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![],
+        vec![Requirement::from_str("black==23.9.0").unwrap()],
         ResolutionMode::default(),
     );
 
@@ -310,13 +280,10 @@ async fn black_ignore_preference() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let requirements = vec![Requirement::from_str("black<=23.9.1").unwrap()];
-    let constraints = vec![];
-    let preferences = vec![Requirement::from_str("black==23.9.2").unwrap()];
     let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
+        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![],
+        vec![Requirement::from_str("black==23.9.2").unwrap()],
         ResolutionMode::default(),
     );
 
