@@ -12,7 +12,8 @@ use flate2::read::GzDecoder;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use indoc::formatdoc;
-use pyproject_toml::PyProjectToml;
+use pyproject_toml::{BuildSystem, Project};
+use serde::{Deserialize, Serialize};
 use tar::Archive;
 use tempfile::{tempdir, TempDir};
 use thiserror::Error;
@@ -57,6 +58,16 @@ impl Error {
             stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         }
     }
+}
+
+/// A pyproject.toml as specified in PEP 517
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct PyProjectToml {
+    /// Build-related data
+    pub build_system: Option<BuildSystem>,
+    /// Project metadata
+    pub project: Option<Project>,
 }
 
 /// `[build-backend]` from pyproject.toml
@@ -125,14 +136,18 @@ impl SourceDistributionBuilder {
             // > source tree is not using this specification, and tools should revert to the legacy
             // > behaviour of running setup.py (either directly, or by implicitly invoking the
             // > setuptools.build_meta:__legacy__ backend).
-            if let Some(backend) = pyproject_toml.build_system.build_backend {
-                pep517 = Some(Pep517Backend {
-                    backend,
-                    requirements: pyproject_toml.build_system.requires,
-                });
-            };
-            if pyproject_toml.build_system.backend_path.is_some() {
-                todo!("backend-path is not supported yet")
+            if let Some(build_system) = pyproject_toml.build_system {
+                if let Some(backend) = build_system.build_backend {
+                    pep517 = Some(Pep517Backend {
+                        backend,
+                        requirements: build_system.requires,
+                    });
+                };
+                if build_system.backend_path.is_some() {
+                    return Err(Error::InvalidSourceDistribution(
+                        "backend-path is not supported yet".to_string(),
+                    ));
+                }
             }
         }
 
