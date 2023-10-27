@@ -16,12 +16,12 @@ use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_resolver::{Manifest, ResolutionMode};
+use puffin_resolver::{ResolutionManifest, ResolutionMode};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
-use crate::requirements::RequirementsSource;
+use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -40,29 +40,23 @@ pub(crate) async fn pip_compile(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let requirements = requirements
-        .iter()
-        .map(RequirementsSource::requirements)
-        .flatten_ok()
-        .collect::<Result<Vec<Requirement>>>()?;
-    let constraints = constraints
-        .iter()
-        .map(RequirementsSource::requirements)
-        .flatten_ok()
-        .collect::<Result<Vec<Requirement>>>()?;
+    let RequirementsSpecification {
+        requirements,
+        constraints,
+    } = RequirementsSpecification::try_from_sources(requirements, constraints)?;
     let preferences: Vec<Requirement> = output_file
         .filter(|_| upgrade_mode.is_prefer_pinned())
         .filter(|output_file| output_file.exists())
         .map(Path::to_path_buf)
         .map(RequirementsSource::from)
         .as_ref()
-        .map(RequirementsSource::requirements)
+        .map(RequirementsSpecification::try_from_source)
         .transpose()?
-        .map(Iterator::collect)
+        .map(|spec| spec.requirements)
         .unwrap_or_default();
 
     // Create a manifest of the requirements.
-    let manifest = Manifest::new(requirements, constraints, preferences, resolution_mode);
+    let manifest = ResolutionManifest::new(requirements, constraints, preferences, resolution_mode);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;

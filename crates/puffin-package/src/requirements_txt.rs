@@ -168,7 +168,9 @@ impl RequirementsTxt {
                                 end,
                             }
                         })?;
-                    // Here we add both to constraints
+                    // Treat any nested requirements or constraints as constraints. This differs
+                    // from `pip`, which seems to treat `-r` requirements in constraints files as
+                    // _requirements_, but we don't want to support that.
                     data.constraints.extend(
                         sub_constraints
                             .requirements
