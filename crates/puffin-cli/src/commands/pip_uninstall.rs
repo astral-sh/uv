@@ -3,17 +3,15 @@ use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
-use itertools::Itertools;
 use tracing::debug;
 
-use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::RequirementsSource;
+use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
@@ -24,11 +22,10 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let requirements = sources
-        .iter()
-        .map(RequirementsSource::requirements)
-        .flatten_ok()
-        .collect::<Result<Vec<Requirement>>>()?;
+    let RequirementsSpecification {
+        requirements,
+        constraints: _,
+    } = RequirementsSpecification::try_from_sources(sources, &[])?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;

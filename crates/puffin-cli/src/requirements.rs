@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use fs_err as fs;
 
 use pep508_rs::Requirement;
@@ -35,50 +35,77 @@ impl From<PathBuf> for RequirementsSource {
     }
 }
 
-impl RequirementsSource {
-    /// Return an iterator over the requirements in this source.
-    pub(crate) fn requirements(&self) -> Result<impl Iterator<Item = Requirement>> {
-        let iter_name = if let Self::Name(name) = self {
-            let requirement =
-                Requirement::from_str(name).with_context(|| format!("Failed to parse `{name}`"))?;
-            Some(std::iter::once(requirement))
-        } else {
-            None
-        };
+#[derive(Debug, Default)]
+pub(crate) struct RequirementsSpecification {
+    /// The requirements for the project.
+    pub(crate) requirements: Vec<Requirement>,
+    /// The constraints for the project.
+    pub(crate) constraints: Vec<Requirement>,
+}
 
-        let iter_requirements_txt = if let Self::RequirementsTxt(path) = self {
-            let requirements_txt = RequirementsTxt::parse(path, std::env::current_dir()?)?;
-            if !requirements_txt.constraints.is_empty() {
-                bail!("Constraints in requirements files are not supported");
+impl RequirementsSpecification {
+    /// Read the requirements and constraints from a source.
+    pub(crate) fn try_from_source(source: &RequirementsSource) -> Result<Self> {
+        Ok(match source {
+            RequirementsSource::Name(name) => {
+                let requirement = Requirement::from_str(name)
+                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                Self {
+                    requirements: vec![requirement],
+                    constraints: vec![],
+                }
             }
-            Some(
-                requirements_txt
-                    .requirements
-                    .into_iter()
-                    .map(|entry| entry.requirement),
-            )
-        } else {
-            None
-        };
-
-        let iter_pyproject_toml = if let Self::PyprojectToml(path) = self {
-            let contents = fs::read_to_string(path)?;
-            let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
-                .with_context(|| format!("Failed to read `{}`", path.display()))?;
-            Some(
-                pyproject_toml
+            RequirementsSource::RequirementsTxt(path) => {
+                let requirements_txt = RequirementsTxt::parse(path, std::env::current_dir()?)?;
+                Self {
+                    requirements: requirements_txt
+                        .requirements
+                        .into_iter()
+                        .map(|entry| entry.requirement)
+                        .collect(),
+                    constraints: requirements_txt.constraints.into_iter().collect(),
+                }
+            }
+            RequirementsSource::PyprojectToml(path) => {
+                let contents = fs::read_to_string(path)?;
+                let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
+                    .with_context(|| format!("Failed to read `{}`", path.display()))?;
+                let requirements = pyproject_toml
                     .project
                     .into_iter()
-                    .flat_map(|project| project.dependencies.into_iter().flatten()),
-            )
-        } else {
-            None
-        };
+                    .flat_map(|project| project.dependencies.into_iter().flatten())
+                    .collect();
+                Self {
+                    requirements,
+                    constraints: vec![],
+                }
+            }
+        })
+    }
 
-        Ok(iter_name
-            .into_iter()
-            .flatten()
-            .chain(iter_requirements_txt.into_iter().flatten())
-            .chain(iter_pyproject_toml.into_iter().flatten()))
+    /// Read the combined requirements and constraints from a set of sources.
+    pub(crate) fn try_from_sources(
+        requirements: &[RequirementsSource],
+        constraints: &[RequirementsSource],
+    ) -> Result<Self> {
+        let mut spec = Self::default();
+
+        // Read all requirements, and keep track of all requirements _and_ constraints.
+        // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
+        // a requirements file can also add constraints.
+        for source in requirements {
+            let source = Self::try_from_source(source)?;
+            spec.requirements.extend(source.requirements);
+            spec.constraints.extend(source.constraints);
+        }
+
+        // Read all constraints, treating both requirements _and_ constraints as constraints.
+        for source in constraints {
+            let source = Self::try_from_source(source)?;
+            spec.constraints.extend(source.requirements);
+            spec.constraints.extend(source.constraints);
+        }
+
+        Ok(spec)
     }
 }

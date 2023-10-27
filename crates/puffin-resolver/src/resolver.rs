@@ -41,14 +41,14 @@ use crate::BuiltSourceDistributionCache;
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Debug)]
-pub struct Manifest {
+pub struct ResolutionManifest {
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     preferences: Vec<Requirement>,
     mode: ResolutionMode,
 }
 
-impl Manifest {
+impl ResolutionManifest {
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
@@ -78,7 +78,7 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
 impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
-        manifest: Manifest,
+        manifest: ResolutionManifest,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a RegistryClient,
