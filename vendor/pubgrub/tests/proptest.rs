@@ -6,10 +6,7 @@ use pubgrub::error::PubGrubError;
 use pubgrub::package::Package;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, Reporter};
-use pubgrub::solver::{
-    choose_package_with_fewest_versions, resolve, Dependencies, DependencyProvider,
-    OfflineDependencyProvider,
-};
+use pubgrub::solver::{resolve, Dependencies, DependencyProvider, OfflineDependencyProvider};
 use pubgrub::version::{NumberVersion, SemanticVersion};
 use pubgrub::version_set::VersionSet;
 
@@ -32,22 +29,32 @@ struct OldestVersionsDependencyProvider<P: Package, VS: VersionSet>(
 impl<P: Package, VS: VersionSet> DependencyProvider<P, VS>
     for OldestVersionsDependencyProvider<P, VS>
 {
-    fn choose_package_version<T: std::borrow::Borrow<P>, U: std::borrow::Borrow<VS>>(
-        &self,
-        potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<VS::V>), Box<dyn Error + Send + Sync>> {
-        Ok(choose_package_with_fewest_versions(
-            |p| self.0.versions(p).into_iter().flatten().cloned(),
-            potential_packages,
-        ))
-    }
-
     fn get_dependencies(
         &self,
         p: &P,
         v: &VS::V,
     ) -> Result<Dependencies<P, VS>, Box<dyn Error + Send + Sync>> {
         self.0.get_dependencies(p, v)
+    }
+
+    fn choose_version(
+        &self,
+        package: &P,
+        range: &VS,
+    ) -> Result<Option<VS::V>, Box<dyn Error + Send + Sync>> {
+        Ok(self
+            .0
+            .versions(package)
+            .into_iter()
+            .flatten()
+            .find(|&v| range.contains(v))
+            .cloned())
+    }
+
+    type Priority = <OfflineDependencyProvider<P, VS> as DependencyProvider<P, VS>>::Priority;
+
+    fn prioritize(&self, package: &P, range: &VS) -> Self::Priority {
+        self.0.prioritize(package, range)
     }
 }
 
@@ -74,13 +81,6 @@ impl<DP> TimeoutDependencyProvider<DP> {
 impl<P: Package, VS: VersionSet, DP: DependencyProvider<P, VS>> DependencyProvider<P, VS>
     for TimeoutDependencyProvider<DP>
 {
-    fn choose_package_version<T: std::borrow::Borrow<P>, U: std::borrow::Borrow<VS>>(
-        &self,
-        potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<VS::V>), Box<dyn Error + Send + Sync>> {
-        self.dp.choose_package_version(potential_packages)
-    }
-
     fn get_dependencies(
         &self,
         p: &P,
@@ -95,6 +95,20 @@ impl<P: Package, VS: VersionSet, DP: DependencyProvider<P, VS>> DependencyProvid
         assert!(calls < self.max_calls);
         self.call_count.set(calls + 1);
         Ok(())
+    }
+
+    fn choose_version(
+        &self,
+        package: &P,
+        range: &VS,
+    ) -> Result<Option<VS::V>, Box<dyn Error + Send + Sync>> {
+        self.dp.choose_version(package, range)
+    }
+
+    type Priority = DP::Priority;
+
+    fn prioritize(&self, package: &P, range: &VS) -> Self::Priority {
+        self.dp.prioritize(package, range)
     }
 }
 

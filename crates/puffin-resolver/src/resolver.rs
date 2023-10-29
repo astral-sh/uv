@@ -1,6 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::borrow::Borrow;
+use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -130,32 +130,34 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Run unit propagation.
             state.unit_propagation(next)?;
 
-            // Fetch the list of candidates.
-            let Some(potential_packages) = state.partial_solution.potential_packages() else {
-                let Some(selection) = state.partial_solution.extract_solution() else {
-                    return Err(PubGrubError::Failure(
-                        "How did we end up with no package to choose but no solution?".into(),
-                    )
-                    .into());
-                };
-
+            // Choose a package version.
+            let Some(highest_priority_pkg) = state
+                .partial_solution
+                .pick_highest_priority_pkg(|p, r| self.prioritize(p, r))
+            else {
+                let selection = state.partial_solution.extract_solution();
                 return Ok(Graph::from_state(&selection, &pins, &state));
             };
+            next = highest_priority_pkg;
 
-            // Choose a package version.
-            let potential_packages = potential_packages.collect::<Vec<_>>();
+            let term_intersection = state
+                .partial_solution
+                .term_intersection_for_package(&next)
+                .ok_or_else(|| {
+                    PubGrubError::Failure("a package was chosen but we don't have a term.".into())
+                })?;
             let decision = self
-                .choose_package_version(
-                    potential_packages,
+                .choose_version(
+                    &next,
+                    term_intersection.unwrap_positive(),
                     &mut pins,
                     &mut requested_versions,
                     request_sink,
                 )
                 .await?;
-            next = decision.0.clone();
 
             // Pick the next compatible version.
-            let version = match decision.1 {
+            let version = match decision {
                 None => {
                     debug!("No compatible version found for: {}", next);
 
@@ -226,65 +228,23 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         }
     }
 
+    fn prioritize(&self, _package: &PubGrubPackage, _range: &Range<PubGrubVersion>) -> Priority {
+        // TODO(charlie): Define a priority function.
+        Reverse(0)
+    }
+
     /// Given a set of candidate packages, choose the next package (and version) to add to the
     /// partial solution.
-    async fn choose_package_version<T: Borrow<PubGrubPackage>, U: Borrow<Range<PubGrubVersion>>>(
+    async fn choose_version(
         &self,
-        mut potential_packages: Vec<(T, U)>,
+        package: &PubGrubPackage,
+        range: &Range<PubGrubVersion>,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
         in_flight: &mut FxHashSet<String>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-    ) -> Result<(T, Option<PubGrubVersion>), ResolveError> {
-        // Iterate over the potential packages, and fetch file metadata for any of them. These
-        // represent our current best guesses for the versions that we _might_ select.
-        for (index, (package, range)) in potential_packages.iter().enumerate() {
-            let PubGrubPackage::Package(package_name, _) = package.borrow() else {
-                continue;
-            };
-
-            // If we don't have metadata for this package, we can't make an early decision.
-            let Some(entry) = self.index.packages.get(package_name) else {
-                continue;
-            };
-            let version_map = entry.value();
-
-            // Try to find a compatible version. If there aren't any compatible versions,
-            // short-circuit and return `None`.
-            let Some(candidate) = self
-                .selector
-                .select(package_name, range.borrow(), version_map)
-            else {
-                // Short circuit: we couldn't find _any_ compatible versions for a package.
-                let (package, _range) = potential_packages.swap_remove(index);
-                return Ok((package, None));
-            };
-
-            // Emit a request to fetch the metadata for this version.
-            match candidate.file {
-                DistributionFile::Wheel(file) => {
-                    if in_flight.insert(file.hashes.sha256.clone()) {
-                        request_sink.unbounded_send(Request::Wheel(file.clone()))?;
-                    }
-                }
-                DistributionFile::Sdist(file) => {
-                    if in_flight.insert(file.hashes.sha256.clone()) {
-                        request_sink.unbounded_send(Request::Sdist(
-                            file.clone(),
-                            candidate.package_name.clone(),
-                            candidate.version.clone().into(),
-                        ))?;
-                    }
-                }
-            }
-        }
-
-        // Always choose the first package.
-        // TODO(charlie): Devise a better strategy here (for example: always choose the package with
-        // the fewest versions).
-        let (package, range) = potential_packages.swap_remove(0);
-
-        return match package.borrow() {
-            PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
+    ) -> Result<Option<PubGrubVersion>, ResolveError> {
+        return match package {
+            PubGrubPackage::Root => Ok(Some(MIN_VERSION.clone())),
             PubGrubPackage::Package(package_name, _) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await.unwrap();
@@ -292,17 +252,13 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 debug!(
                     "Searching for a compatible version of {} ({})",
-                    package_name,
-                    range.borrow(),
+                    package_name, range,
                 );
 
                 // Find a compatible version.
-                let Some(candidate) =
-                    self.selector
-                        .select(package_name, range.borrow(), version_map)
-                else {
+                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
-                    return Ok((package, None));
+                    return Ok(None);
                 };
 
                 debug!(
@@ -340,7 +296,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
 
                 let version = candidate.version.clone();
-                Ok((package, Some(version)))
+                Ok(Some(version))
             }
         };
     }
@@ -578,6 +534,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         }
     }
 }
+
+type Priority = Reverse<usize>;
 
 /// Fetch the metadata for an item
 #[derive(Debug)]

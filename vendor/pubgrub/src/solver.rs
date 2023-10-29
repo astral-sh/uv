@@ -68,7 +68,7 @@
 //! to satisfy the dependencies of that package and version pair.
 //! If there is no solution, the reason will be provided as clear as possible.
 
-use std::borrow::Borrow;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet as Set};
 use std::error::Error;
 
@@ -103,30 +103,27 @@ pub fn resolve<P: Package, VS: VersionSet>(
             state.partial_solution
         );
 
-        let Some(potential_packages) = state.partial_solution.potential_packages() else {
-            return state.partial_solution.extract_solution().ok_or_else(|| {
-                PubGrubError::Failure(
-                    "How did we end up with no package to choose but no solution?".into(),
-                )
-            });
+        let Some(highest_priority_pkg) = state
+            .partial_solution
+            .pick_highest_priority_pkg(|p, r| dependency_provider.prioritize(p, r))
+        else {
+            return Ok(state.partial_solution.extract_solution());
         };
+        next = highest_priority_pkg;
 
-        let decision = dependency_provider
-            .choose_package_version(potential_packages)
-            .map_err(PubGrubError::ErrorChoosingPackageVersion)?;
-        info!("DP chose: {} @ {:?}", decision.0, decision.1);
-
-        next = decision.0.clone();
-
-        // Pick the next compatible version.
         let term_intersection = state
             .partial_solution
             .term_intersection_for_package(&next)
             .ok_or_else(|| {
                 PubGrubError::Failure("a package was chosen but we don't have a term.".into())
             })?;
+        let decision = dependency_provider
+            .choose_version(&next, term_intersection.unwrap_positive())
+            .map_err(PubGrubError::ErrorChoosingPackageVersion)?;
+        info!("DP chose: {} @ {:?}", next, decision);
 
-        let v = match decision.1 {
+        // Pick the next compatible version.
+        let v = match decision {
             None => {
                 let inc = Incompatibility::no_versions(next.clone(), term_intersection.clone());
                 state.add_incompatibility(inc);
@@ -146,51 +143,53 @@ pub fn resolve<P: Package, VS: VersionSet>(
             .or_default()
             .insert(v.clone());
 
-        if !is_new_dependency {
+        if is_new_dependency {
+            // Retrieve that package dependencies.
+            let p = &next;
+            let dependencies = dependency_provider.get_dependencies(p, &v).map_err(|err| {
+                PubGrubError::ErrorRetrievingDependencies {
+                    package: p.clone(),
+                    version: v.clone(),
+                    source: err,
+                }
+            })?;
+
+            let known_dependencies = match dependencies {
+                Dependencies::Unknown => {
+                    state.add_incompatibility(Incompatibility::unavailable_dependencies(
+                        p.clone(),
+                        v.clone(),
+                    ));
+                    continue;
+                }
+                Dependencies::Known(x) if x.contains_key(p) => {
+                    return Err(PubGrubError::SelfDependency {
+                        package: p.clone(),
+                        version: v.clone(),
+                    });
+                }
+                Dependencies::Known(x) => x,
+            };
+
+            // Add that package and version if the dependencies are not problematic.
+            let dep_incompats = state.add_incompatibility_from_dependencies(
+                p.clone(),
+                v.clone(),
+                &known_dependencies,
+            );
+
+            state.partial_solution.add_version(
+                p.clone(),
+                v,
+                dep_incompats,
+                &state.incompatibility_store,
+            );
+        } else {
             // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
             // terms and can add the decision directly.
             info!("add_decision (not first time): {} @ {}", &next, v);
             state.partial_solution.add_decision(next.clone(), v);
-            continue;
         }
-
-        // Retrieve that package dependencies.
-        let p = &next;
-        let dependencies = dependency_provider.get_dependencies(p, &v).map_err(|err| {
-            PubGrubError::ErrorRetrievingDependencies {
-                package: p.clone(),
-                version: v.clone(),
-                source: err,
-            }
-        })?;
-
-        let known_dependencies = match dependencies {
-            Dependencies::Unknown => {
-                state.add_incompatibility(Incompatibility::unavailable_dependencies(
-                    p.clone(),
-                    v.clone(),
-                ));
-                continue;
-            }
-            Dependencies::Known(x) if x.contains_key(p) => {
-                return Err(PubGrubError::SelfDependency {
-                    package: p.clone(),
-                    version: v.clone(),
-                });
-            }
-            Dependencies::Known(x) => x,
-        };
-
-        // Add that package and version if the dependencies are not problematic.
-        let dep_incompats =
-            state.add_incompatibility_from_dependencies(p.clone(), v.clone(), &known_dependencies);
-
-        state.partial_solution.add_version(
-            p.clone(),
-            v,
-            dep_incompats,
-            &state.incompatibility_store,
-        );
     }
 }
 
@@ -210,11 +209,15 @@ pub trait DependencyProvider<P: Package, VS: VersionSet> {
     /// [Decision making](https://github.com/dart-lang/pub/blob/master/doc/solver.md#decision-making)
     /// is the process of choosing the next package
     /// and version that will be appended to the partial solution.
-    /// Every time such a decision must be made,
-    /// potential valid packages and sets of versions are preselected by the resolver,
-    /// and the dependency provider must choose.
     ///
-    /// The strategy employed to choose such package and version
+    /// Every time such a decision must be made, the resolver looks at all the potential valid
+    /// packages that have changed, and a asks the dependency provider how important each one is.
+    /// For each one it calls `prioritize` with the name of the package and the current set of
+    /// acceptable versions.
+    /// The resolver will then pick the package with the highes priority from all the potential valid
+    /// packages.
+    ///
+    /// The strategy employed to prioritize packages
     /// cannot change the existence of a solution or not,
     /// but can drastically change the performances of the solver,
     /// or the properties of the solution.
@@ -227,16 +230,24 @@ pub trait DependencyProvider<P: Package, VS: VersionSet> {
     /// > since these packages will run out of versions to try more quickly.
     /// > But there's likely room for improvement in these heuristics.
     ///
-    /// A helper function [choose_package_with_fewest_versions] is provided to ease
-    /// implementations of this method if you can produce an iterator
-    /// of the available versions in preference order for any package.
+    /// Note: the resolver may call this even when the range has not change,
+    /// if it is more efficient for the resolveres internal data structures.
+    fn prioritize(&self, package: &P, range: &VS) -> Self::Priority;
+    /// The type returned from `prioritize`. The resolver does not care what type this is
+    /// as long as it can pick a largest one and clone it.
     ///
-    /// Note: the type `T` ensures that this returns an item from the `packages` argument.
-    #[allow(clippy::type_complexity)]
-    fn choose_package_version<T: Borrow<P>, U: Borrow<VS>>(
+    /// [std::cmp::Reverse] can be useful if you want to pick the package with
+    /// the fewest versions that match the outstanding constraint.
+    type Priority: Ord + Clone;
+
+    /// Once the resolver has found the highest `Priority` package from all potential valid
+    /// packages, it needs to know what vertion of that package to use. The most common pattern
+    /// is to select the largest vertion that the range contains.
+    fn choose_version(
         &self,
-        potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<VS::V>), Box<dyn Error + Send + Sync>>;
+        package: &P,
+        range: &VS,
+    ) -> Result<Option<VS::V>, Box<dyn Error + Send + Sync>>;
 
     /// Retrieves the package dependencies.
     /// Return [Dependencies::Unknown] if its dependencies are unknown.
@@ -254,35 +265,6 @@ pub trait DependencyProvider<P: Package, VS: VersionSet> {
     fn should_cancel(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         Ok(())
     }
-}
-
-/// This is a helper function to make it easy to implement
-/// [DependencyProvider::choose_package_version].
-/// It takes a function `list_available_versions` that takes a package and returns an iterator
-/// of the available versions in preference order.
-/// The helper finds the package from the `packages` argument with the fewest versions from
-/// `list_available_versions` contained in the constraints. Then takes that package and finds the
-/// first version contained in the constraints.
-pub fn choose_package_with_fewest_versions<P: Package, VS: VersionSet, T, U, I, F>(
-    list_available_versions: F,
-    potential_packages: impl Iterator<Item = (T, U)>,
-) -> (T, Option<VS::V>)
-where
-    T: Borrow<P>,
-    U: Borrow<VS>,
-    I: Iterator<Item = VS::V>,
-    F: Fn(&P) -> I,
-{
-    let count_valid = |(p, set): &(T, U)| {
-        list_available_versions(p.borrow())
-            .filter(|v| set.borrow().contains(v))
-            .count()
-    };
-    let (pkg, set) = potential_packages
-        .min_by_key(count_valid)
-        .expect("potential_packages gave us an empty iterator");
-    let version = list_available_versions(pkg.borrow()).find(|v| set.borrow().contains(v));
-    (pkg, version)
 }
 
 /// A basic implementation of [DependencyProvider].
@@ -354,25 +336,29 @@ impl<P: Package, VS: VersionSet> OfflineDependencyProvider<P, VS> {
 
 /// An implementation of [DependencyProvider] that
 /// contains all dependency information available in memory.
-/// Packages are picked with the fewest versions contained in the constraints first.
+/// Currently packages are picked with the fewest versions contained in the constraints first.
+/// But, that may change in new versions if better heuristics are found.
 /// Versions are picked with the newest versions first.
 impl<P: Package, VS: VersionSet> DependencyProvider<P, VS> for OfflineDependencyProvider<P, VS> {
-    #[allow(clippy::type_complexity)]
-    fn choose_package_version<T: Borrow<P>, U: Borrow<VS>>(
+    fn choose_version(
         &self,
-        potential_packages: impl Iterator<Item = (T, U)>,
-    ) -> Result<(T, Option<VS::V>), Box<dyn Error + Send + Sync>> {
-        Ok(choose_package_with_fewest_versions(
-            |p| {
-                self.dependencies
-                    .get(p)
-                    .into_iter()
-                    .flat_map(|k| k.keys())
-                    .rev()
-                    .cloned()
-            },
-            potential_packages,
-        ))
+        package: &P,
+        range: &VS,
+    ) -> Result<Option<VS::V>, Box<dyn Error + Send + Sync>> {
+        Ok(self
+            .dependencies
+            .get(package)
+            .and_then(|versions| versions.keys().rev().find(|v| range.contains(v)).cloned()))
+    }
+
+    type Priority = Reverse<usize>;
+    fn prioritize(&self, package: &P, range: &VS) -> Self::Priority {
+        Reverse(
+            self.dependencies
+                .get(package)
+                .map(|versions| versions.keys().filter(|v| range.contains(v)).count())
+                .unwrap_or(0),
+        )
     }
 
     fn get_dependencies(

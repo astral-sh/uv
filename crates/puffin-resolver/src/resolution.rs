@@ -1,6 +1,7 @@
 use colored::Colorize;
 use fxhash::FxHashMap;
 use petgraph::visit::EdgeRef;
+use std::cmp::Reverse;
 use std::hash::BuildHasherDefault;
 
 use pubgrub::range::Range;
@@ -95,7 +96,7 @@ impl Graph {
     pub fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FxHashMap<PackageName, FxHashMap<Version, File>>,
-        state: &State<PubGrubPackage, Range<PubGrubVersion>>,
+        state: &State<PubGrubPackage, Range<PubGrubVersion>, Reverse<usize>>,
     ) -> Self {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
