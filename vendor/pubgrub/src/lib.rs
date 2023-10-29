@@ -213,8 +213,7 @@
 //! with a cache, you may want to know that some versions
 //! do not exist in your cache.
 
-#![allow(clippy::rc_buffer)]
-#![warn(missing_docs)]
+#![allow(clippy::all, unreachable_pub)]
 
 pub mod error;
 pub mod package;

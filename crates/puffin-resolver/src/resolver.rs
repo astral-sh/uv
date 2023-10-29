@@ -195,27 +195,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         ));
                         continue;
                     }
-                    Dependencies::Known(constraints) => {
-                        if constraints.contains_key(package) {
-                            return Err(PubGrubError::SelfDependency {
-                                package: package.clone(),
-                                version: version.clone(),
-                            }
-                            .into());
+                    Dependencies::Known(constraints) if constraints.contains_key(package) => {
+                        return Err(PubGrubError::SelfDependency {
+                            package: package.clone(),
+                            version: version.clone(),
                         }
-                        if let Some((dependent, _)) = constraints
-                            .iter()
-                            .find(|(_, r)| r == &&Range::<PubGrubVersion>::empty())
-                        {
-                            return Err(PubGrubError::DependencyOnTheEmptySet {
-                                package: package.clone(),
-                                version: version.clone(),
-                                dependent: dependent.clone(),
-                            }
-                            .into());
-                        }
-                        constraints
+                        .into());
                     }
+                    Dependencies::Known(constraints) => constraints,
                 };
 
                 // Add that package and version if the dependencies are not problematic.
@@ -225,17 +212,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     &dependencies,
                 );
 
-                if state.incompatibility_store[dep_incompats.clone()]
-                    .iter()
-                    .any(|incompat| state.is_terminal(incompat))
-                {
-                    // For a dependency incompatibility to be terminal,
-                    // it can only mean that root depend on not root?
-                    return Err(PubGrubError::Failure(
-                        "Root package depends on itself at a different version?".into(),
-                    )
-                    .into());
-                }
                 state.partial_solution.add_version(
                     package.clone(),
                     version,

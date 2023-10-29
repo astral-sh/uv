@@ -73,8 +73,8 @@ use std::collections::{BTreeMap, BTreeSet as Set};
 use std::error::Error;
 
 use crate::error::PubGrubError;
-use crate::internal::core::State;
-use crate::internal::incompatibility::Incompatibility;
+pub use crate::internal::core::State;
+pub use crate::internal::incompatibility::{Incompatibility, Kind};
 use crate::package::Package;
 use crate::type_aliases::{DependencyConstraints, Map, SelectedDependencies};
 use crate::version_set::VersionSet;
