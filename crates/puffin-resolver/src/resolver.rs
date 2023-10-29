@@ -34,6 +34,7 @@ use crate::distribution::{DistributionFile, SdistFile, WheelFile};
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
 use crate::pubgrub::package::PubGrubPackage;
+use crate::pubgrub::priority::PubGrubPriority;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::resolution::Graph;
@@ -130,10 +131,17 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Run unit propagation.
             state.unit_propagation(next)?;
 
+            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
+            self.pre_visit(
+                state.partial_solution.prioritized_packages(),
+                &mut requested_versions,
+                request_sink,
+            )?;
+
             // Choose a package version.
             let Some(highest_priority_pkg) = state
                 .partial_solution
-                .pick_highest_priority_pkg(|p, r| self.prioritize(p, r))
+                .pick_highest_priority_pkg(|package, range| self.prioritize(package, range))
             else {
                 let selection = state.partial_solution.extract_solution();
                 return Ok(Graph::from_state(&selection, &pins, &state));
@@ -228,9 +236,63 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         }
     }
 
-    fn prioritize(&self, _package: &PubGrubPackage, _range: &Range<PubGrubVersion>) -> Priority {
+    #[allow(clippy::unused_self)]
+    fn prioritize(
+        &self,
+        _package: &PubGrubPackage,
+        _range: &Range<PubGrubVersion>,
+    ) -> PubGrubPriority {
         // TODO(charlie): Define a priority function.
         Reverse(0)
+    }
+
+    /// Visit the set of candidate packages prior to selection. This allows us to fetch metadata for
+    /// all of the packages in parallel.
+    fn pre_visit(
+        &self,
+        packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
+        in_flight: &mut FxHashSet<String>,
+        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+    ) -> Result<(), ResolveError> {
+        // Iterate over the potential packages, and fetch file metadata for any of them. These
+        // represent our current best guesses for the versions that we _might_ select.
+        for (package, range) in packages {
+            let PubGrubPackage::Package(package_name, _) = package else {
+                continue;
+            };
+
+            // If we don't have metadata for this package, we can't make an early decision.
+            let Some(entry) = self.index.packages.get(package_name) else {
+                continue;
+            };
+            let version_map = entry.value();
+
+            // Try to find a compatible version. If there aren't any compatible versions,
+            // short-circuit and return `None`.
+            let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                // Short-circuit: we couldn't find _any_ compatible versions for a package.
+                return Ok(());
+            };
+
+            // Emit a request to fetch the metadata for this version.
+            match candidate.file {
+                DistributionFile::Wheel(file) => {
+                    if in_flight.insert(file.hashes.sha256.clone()) {
+                        request_sink.unbounded_send(Request::Wheel(file.clone()))?;
+                    }
+                }
+                DistributionFile::Sdist(file) => {
+                    if in_flight.insert(file.hashes.sha256.clone()) {
+                        request_sink.unbounded_send(Request::Sdist(
+                            file.clone(),
+                            candidate.package_name.clone(),
+                            candidate.version.clone().into(),
+                        ))?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Given a set of candidate packages, choose the next package (and version) to add to the
@@ -534,8 +596,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         }
     }
 }
-
-type Priority = Reverse<usize>;
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
