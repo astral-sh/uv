@@ -32,6 +32,7 @@ pub(crate) async fn pip_compile(
     constraints: &[RequirementsSource],
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
+    prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
@@ -61,7 +62,7 @@ pub(crate) async fn pip_compile(
         constraints,
         preferences,
         resolution_mode,
-        PreReleaseMode::default(),
+        prerelease_mode,
     );
 
     // Detect the current Python interpreter.

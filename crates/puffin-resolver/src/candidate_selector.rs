@@ -99,8 +99,8 @@ impl CandidateSelector {
 
         // Determine the appropriate prerelease strategy for the current package.
         let allow_prerelease = match &self.prerelease_strategy {
-            PreReleaseStrategy::DisallowAll => AllowPreRelease::No,
-            PreReleaseStrategy::AllowAll => AllowPreRelease::Yes,
+            PreReleaseStrategy::Disallow => AllowPreRelease::No,
+            PreReleaseStrategy::Allow => AllowPreRelease::Yes,
             PreReleaseStrategy::IfNecessary => AllowPreRelease::IfNecessary,
             PreReleaseStrategy::Explicit(packages) => {
                 if packages.contains(package_name) {
