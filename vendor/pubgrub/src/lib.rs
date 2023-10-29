@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
 
-#![allow(clippy::all, unreachable_pub)]
-
 //! PubGrub version solving algorithm.
 //!
 //! Version solving consists in efficiently finding a set of packages and versions
@@ -214,6 +212,9 @@
 //! Beware though that if you are using some kind of offline mode
 //! with a cache, you may want to know that some versions
 //! do not exist in your cache.
+
+#![allow(clippy::rc_buffer)]
+#![warn(missing_docs)]
 
 pub mod error;
 pub mod package;
