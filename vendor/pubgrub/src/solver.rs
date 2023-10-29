@@ -178,35 +178,12 @@ pub fn resolve<P: Package, VS: VersionSet>(
                     version: v.clone(),
                 });
             }
-            Dependencies::Known(x) => {
-                if let Some((dependent, _)) = x.iter().find(|(_, r)| r == &&VS::empty()) {
-                    return Err(PubGrubError::DependencyOnTheEmptySet {
-                        package: p.clone(),
-                        version: v.clone(),
-                        dependent: dependent.clone(),
-                    });
-                }
-
-                x
-            }
+            Dependencies::Known(x) => x,
         };
 
         // Add that package and version if the dependencies are not problematic.
         let dep_incompats =
             state.add_incompatibility_from_dependencies(p.clone(), v.clone(), &known_dependencies);
-
-        // TODO: I don't think this check can actually happen.
-        // We might want to put it under #[cfg(debug_assertions)].
-        let incompatible_self_dependency = state.incompatibility_store[dep_incompats.clone()]
-            .iter()
-            .any(|incompat| state.is_terminal(incompat));
-        if incompatible_self_dependency {
-            // For a dependency incompatibility to be terminal,
-            // it can only mean that root depend on not root?
-            return Err(PubGrubError::Failure(
-                "Root package depends on itself at a different version?".into(),
-            ));
-        }
 
         state.partial_solution.add_version(
             p.clone(),

@@ -109,10 +109,14 @@ impl<P: Package, VS: VersionSet> Incompatibility<P, VS> {
         let set1 = VS::singleton(version);
         let (p2, set2) = dep;
         Self {
-            package_terms: SmallMap::Two([
-                (package.clone(), Term::Positive(set1.clone())),
-                (p2.clone(), Term::Negative(set2.clone())),
-            ]),
+            package_terms: if set2 == &VS::empty() {
+                SmallMap::One([(package.clone(), Term::Positive(set1.clone()))])
+            } else {
+                SmallMap::Two([
+                    (package.clone(), Term::Positive(set1.clone())),
+                    (p2.clone(), Term::Negative(set2.clone())),
+                ])
+            },
             kind: Kind::FromDependencyOf(package, set1, p2.clone(), set2.clone()),
         }
     }

@@ -35,13 +35,13 @@ fn should_always_find_a_satisfier() {
     dependency_provider.add_dependencies("a", 0, [("b", Range::empty())]);
     assert!(matches!(
         resolve(&dependency_provider, "a", 0),
-        Err(PubGrubError::DependencyOnTheEmptySet { .. })
+        Err(PubGrubError::NoSolution { .. })
     ));
 
     dependency_provider.add_dependencies("c", 0, [("a", Range::full())]);
     assert!(matches!(
         resolve(&dependency_provider, "c", 0),
-        Err(PubGrubError::DependencyOnTheEmptySet { .. })
+        Err(PubGrubError::NoSolution { .. })
     ));
 }
 

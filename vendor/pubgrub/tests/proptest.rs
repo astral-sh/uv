@@ -13,7 +13,7 @@ use pubgrub::solver::{
 use pubgrub::version::{NumberVersion, SemanticVersion};
 use pubgrub::version_set::VersionSet;
 
-use proptest::collection::{btree_map, vec};
+use proptest::collection::{btree_map, btree_set, vec};
 use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::string::string_regex;
@@ -131,20 +131,15 @@ fn string_names() -> impl Strategy<Value = String> {
 /// This strategy has a high probability of having valid dependencies
 pub fn registry_strategy<N: Package + Ord>(
     name: impl Strategy<Value = N>,
-    bad_name: N,
 ) -> impl Strategy<Value = (OfflineDependencyProvider<N, NumVS>, Vec<(N, NumberVersion)>)> {
     let max_crates = 40;
     let max_versions = 15;
     let shrinkage = 40;
     let complicated_len = 10usize;
 
-    // If this is false than the crate will depend on the nonexistent "bad"
-    // instead of the complex set we generated for it.
-    let allow_deps = prop::bool::weighted(0.99);
-
     let a_version = ..(max_versions as u32);
 
-    let list_of_versions = btree_map(a_version, allow_deps, 1..=max_versions)
+    let list_of_versions = btree_set(a_version, 1..=max_versions)
         .prop_map(move |ver| ver.into_iter().collect::<Vec<_>>());
 
     let list_of_crates_with_versions = btree_map(name, list_of_versions, 1..=max_crates);
@@ -177,16 +172,12 @@ pub fn registry_strategy<N: Package + Ord>(
     )
         .prop_map(
             move |(crate_vers_by_name, raw_dependencies, reverse_alphabetical, complicated_len)| {
-                let mut list_of_pkgid: Vec<((N, NumberVersion), Option<Vec<(N, NumVS)>>)> =
+                let mut list_of_pkgid: Vec<((N, NumberVersion), Vec<(N, NumVS)>)> =
                     crate_vers_by_name
                         .iter()
                         .flat_map(|(name, vers)| {
-                            vers.iter().map(move |x| {
-                                (
-                                    (name.clone(), NumberVersion::from(x.0)),
-                                    if x.1 { Some(vec![]) } else { None },
-                                )
-                            })
+                            vers.iter()
+                                .map(move |x| ((name.clone(), NumberVersion::from(x)), vec![]))
                         })
                         .collect();
                 let len_all_pkgid = list_of_pkgid.len();
@@ -199,24 +190,24 @@ pub fn registry_strategy<N: Package + Ord>(
                     }
                     let s = &crate_vers_by_name[&dep_name];
                     let s_last_index = s.len() - 1;
-                    let (c, d) = order_index(c, d, s.len());
+                    let (c, d) = order_index(c, d, s.len() + 1);
 
-                    if let (_, Some(deps)) = &mut list_of_pkgid[b] {
-                        deps.push((
-                            dep_name,
-                            if c == 0 && d == s_last_index {
-                                Range::full()
-                            } else if c == 0 {
-                                Range::strictly_lower_than(s[d].0 + 1)
-                            } else if d == s_last_index {
-                                Range::higher_than(s[c].0)
-                            } else if c == d {
-                                Range::singleton(s[c].0)
-                            } else {
-                                Range::between(s[c].0, s[d].0 + 1)
-                            },
-                        ))
-                    }
+                    list_of_pkgid[b].1.push((
+                        dep_name,
+                        if c > s_last_index {
+                            Range::empty()
+                        } else if c == 0 && d >= s_last_index {
+                            Range::full()
+                        } else if c == 0 {
+                            Range::strictly_lower_than(s[d] + 1)
+                        } else if d >= s_last_index {
+                            Range::higher_than(s[c])
+                        } else if c == d {
+                            Range::singleton(s[c])
+                        } else {
+                            Range::between(s[c], s[d] + 1)
+                        },
+                    ));
                 }
 
                 let mut dependency_provider = OfflineDependencyProvider::<N, NumVS>::new();
@@ -232,11 +223,7 @@ pub fn registry_strategy<N: Package + Ord>(
                 .collect();
 
                 for ((name, ver), deps) in list_of_pkgid {
-                    dependency_provider.add_dependencies(
-                        name,
-                        ver,
-                        deps.unwrap_or_else(|| vec![(bad_name.clone(), Range::full())]),
-                    );
+                    dependency_provider.add_dependencies(name, ver, deps);
                 }
 
                 (dependency_provider, complicated)
@@ -252,7 +239,7 @@ fn meta_test_deep_trees_from_strategy() {
 
     let mut dis = [0; 21];
 
-    let strategy = registry_strategy(0u16..665, 666);
+    let strategy = registry_strategy(0u16..665);
     let mut test_runner = TestRunner::deterministic();
     for _ in 0..128 {
         let (dependency_provider, cases) = strategy
@@ -299,7 +286,7 @@ proptest! {
     #[test]
     /// This test is mostly for profiling.
     fn prop_passes_string(
-        (dependency_provider, cases) in registry_strategy(string_names(), "bad".to_owned())
+        (dependency_provider, cases) in registry_strategy(string_names())
     )  {
         for (name, ver) in cases {
             let _ = resolve(&TimeoutDependencyProvider::new(dependency_provider.clone(), 50_000), name, ver);
@@ -309,7 +296,7 @@ proptest! {
     #[test]
     /// This test is mostly for profiling.
     fn prop_passes_int(
-        (dependency_provider, cases) in registry_strategy(0u16..665, 666)
+        (dependency_provider, cases) in registry_strategy(0u16..665)
     )  {
         for (name, ver) in cases {
             let _ = resolve(&TimeoutDependencyProvider::new(dependency_provider.clone(), 50_000), name, ver);
@@ -318,7 +305,7 @@ proptest! {
 
     #[test]
     fn prop_sat_errors_the_same(
-        (dependency_provider, cases) in registry_strategy(0u16..665, 666)
+        (dependency_provider, cases) in registry_strategy(0u16..665)
     )  {
         let mut sat = SatResolve::new(&dependency_provider);
         for (name, ver) in cases {
@@ -333,7 +320,7 @@ proptest! {
     #[test]
     /// This tests whether the algorithm is still deterministic.
     fn prop_same_on_repeated_runs(
-        (dependency_provider, cases) in registry_strategy(0u16..665, 666)
+        (dependency_provider, cases) in registry_strategy(0u16..665)
     )  {
         for (name, ver) in cases {
             let one = resolve(&TimeoutDependencyProvider::new(dependency_provider.clone(), 50_000), name, ver);
@@ -355,7 +342,7 @@ proptest! {
     /// [ReverseDependencyProvider] changes what order the candidates
     /// are tried but not the existence of a solution.
     fn prop_reversed_version_errors_the_same(
-        (dependency_provider, cases) in registry_strategy(0u16..665, 666)
+        (dependency_provider, cases) in registry_strategy(0u16..665)
     )  {
         let reverse_provider = OldestVersionsDependencyProvider(dependency_provider.clone());
         for (name, ver) in cases {
@@ -371,7 +358,7 @@ proptest! {
 
     #[test]
     fn prop_removing_a_dep_cant_break(
-        (dependency_provider, cases) in registry_strategy(0u16..665, 666),
+        (dependency_provider, cases) in registry_strategy(0u16..665),
         indexes_to_remove in prop::collection::vec((any::<prop::sample::Index>(), any::<prop::sample::Index>(), any::<prop::sample::Index>()), 1..10)
     ) {
         let packages: Vec<_> = dependency_provider.packages().collect();
@@ -423,7 +410,7 @@ proptest! {
 
     #[test]
     fn prop_limited_independence_of_irrelevant_alternatives(
-        (dependency_provider, cases) in registry_strategy(0u16..665, 666),
+        (dependency_provider, cases) in registry_strategy(0u16..665),
         indexes_to_remove in prop::collection::vec(any::<prop::sample::Index>(), 1..10)
     )  {
         let all_versions: Vec<(u16, NumberVersion)> = dependency_provider

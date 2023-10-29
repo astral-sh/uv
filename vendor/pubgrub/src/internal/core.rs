@@ -90,11 +90,6 @@ impl<P: Package, VS: VersionSet> State<P, VS> {
         new_incompats_id_range
     }
 
-    /// Check if an incompatibility is terminal.
-    pub fn is_terminal(&self, incompatibility: &Incompatibility<P, VS>) -> bool {
-        incompatibility.is_terminal(&self.root_package, &self.root_version)
-    }
-
     /// Unit propagation is the core mechanism of the solving algorithm.
     /// CF <https://github.com/dart-lang/pub/blob/master/doc/solver.md#unit-propagation>
     pub fn unit_propagation(&mut self, package: P) -> Result<(), PubGrubError<P, VS>> {
@@ -240,7 +235,10 @@ impl<P: Package, VS: VersionSet> State<P, VS> {
     /// It may not be trivial since those incompatibilities
     /// may already have derived others.
     fn merge_incompatibility(&mut self, id: IncompId<P, VS>) {
-        for (pkg, _term) in self.incompatibility_store[id].iter() {
+        for (pkg, term) in self.incompatibility_store[id].iter() {
+            if cfg!(debug_assertions) {
+                assert_ne!(term, &crate::term::Term::any());
+            }
             self.incompatibilities
                 .entry(pkg.clone())
                 .or_default()
