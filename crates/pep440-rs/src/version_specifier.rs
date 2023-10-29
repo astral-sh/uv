@@ -364,6 +364,11 @@ impl VersionSpecifier {
     pub fn version(&self) -> &Version {
         &self.version
     }
+
+    /// Whether the version marker includes a prerelease.
+    pub fn any_prerelease(&self) -> bool {
+        self.version.any_prerelease()
+    }
 }
 
 impl VersionSpecifier {

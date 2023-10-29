@@ -29,40 +29,16 @@ use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
 use puffin_traits::BuildContext;
 
+use crate::candidate_selector::CandidateSelector;
 use crate::distribution::{DistributionFile, SdistFile, WheelFile};
 use crate::error::ResolveError;
+use crate::manifest::Manifest;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::resolution::Graph;
-use crate::selector::{CandidateSelector, ResolutionMode};
 use crate::source_distribution::{download_and_build_sdist, read_dist_info};
 use crate::BuiltSourceDistributionCache;
-
-/// A manifest of requirements, constraints, and preferences.
-#[derive(Debug)]
-pub struct ResolutionManifest {
-    requirements: Vec<Requirement>,
-    constraints: Vec<Requirement>,
-    preferences: Vec<Requirement>,
-    mode: ResolutionMode,
-}
-
-impl ResolutionManifest {
-    pub fn new(
-        requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
-        preferences: Vec<Requirement>,
-        mode: ResolutionMode,
-    ) -> Self {
-        Self {
-            requirements,
-            constraints,
-            preferences,
-            mode,
-        }
-    }
-}
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
     requirements: Vec<Requirement>,
@@ -78,18 +54,14 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
 impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
-        manifest: ResolutionManifest,
+        manifest: Manifest,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
     ) -> Self {
         Self {
-            selector: CandidateSelector::from_mode(
-                manifest.mode,
-                &manifest.requirements,
-                &manifest.preferences,
-            ),
+            selector: CandidateSelector::from(&manifest),
             index: Arc::new(Index::default()),
             requirements: manifest.requirements,
             constraints: manifest.constraints,

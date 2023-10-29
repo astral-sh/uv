@@ -20,6 +20,10 @@ impl PubGrubVersion {
         }
         next
     }
+
+    pub fn any_prerelease(&self) -> bool {
+        self.0.any_prerelease()
+    }
 }
 
 impl std::fmt::Display for PubGrubVersion {

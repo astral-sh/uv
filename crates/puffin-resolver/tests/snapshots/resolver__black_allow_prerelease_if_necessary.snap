@@ -2,15 +2,19 @@
 source: crates/puffin-resolver/tests/resolver.rs
 expression: resolution
 ---
-black==22.1.0
-click==8.0.0
+appdirs==1.4.4
     # via black
-mypy-extensions==0.4.3
+attrs==23.1.0
     # via black
-pathspec==0.9.0
+black==19.10b0
+click==8.1.7
     # via black
-platformdirs==2.0.0
+pathspec==0.11.2
     # via black
-tomli==1.1.0
+regex==2023.10.3
+    # via black
+toml==0.10.2
+    # via black
+typed-ast==1.5.5
     # via black
 

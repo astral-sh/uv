@@ -16,7 +16,7 @@ use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_resolver::{ResolutionManifest, ResolutionMode};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
@@ -56,7 +56,13 @@ pub(crate) async fn pip_compile(
         .unwrap_or_default();
 
     // Create a manifest of the requirements.
-    let manifest = ResolutionManifest::new(requirements, constraints, preferences, resolution_mode);
+    let manifest = Manifest::new(
+        requirements,
+        constraints,
+        preferences,
+        resolution_mode,
+        PreReleaseMode::default(),
+    );
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
