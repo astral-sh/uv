@@ -121,7 +121,7 @@ impl SemanticVersion {
 }
 
 /// Error creating [SemanticVersion] from [String].
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum VersionParseError {
     /// [SemanticVersion] must contain major, minor, patch versions.
     #[error("version {full_version} must contain 3 numbers separated by dot")]

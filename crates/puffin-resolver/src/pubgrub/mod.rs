@@ -10,6 +10,7 @@ use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::version::{PubGrubVersion, MAX_VERSION};
 
 pub(crate) mod package;
+pub(crate) mod priority;
 mod specifier;
 pub(crate) mod version;
 

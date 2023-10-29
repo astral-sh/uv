@@ -46,7 +46,7 @@ pub enum PubGrubError<P: Package, VS: VersionSet> {
     /// Error arising when the implementer of
     /// [DependencyProvider](crate::solver::DependencyProvider)
     /// returned an error in the method
-    /// [choose_package_version](crate::solver::DependencyProvider::choose_package_version).
+    /// [choose_version](crate::solver::DependencyProvider::choose_version).
     #[error("Decision making failed")]
     ErrorChoosingPackageVersion(Box<dyn std::error::Error + Send + Sync>),
 

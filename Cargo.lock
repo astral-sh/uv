@@ -1960,6 +1960,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "priority-queue"
+version = "1.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fff39edfcaec0d64e8d0da38564fad195d2d51b680940295fcc307366e101e61"
+dependencies = [
+ "autocfg",
+ "indexmap 1.9.3",
+]
+
+[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2011,7 +2021,9 @@ dependencies = [
 name = "pubgrub"
 version = "0.2.1"
 dependencies = [
+ "indexmap 2.0.2",
  "log",
+ "priority-queue",
  "rustc-hash",
  "thiserror",
 ]

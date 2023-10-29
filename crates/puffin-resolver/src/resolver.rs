@@ -1,6 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::borrow::Borrow;
+use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -34,6 +34,7 @@ use crate::distribution::{DistributionFile, SdistFile, WheelFile};
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
 use crate::pubgrub::package::PubGrubPackage;
+use crate::pubgrub::priority::PubGrubPriority;
 use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::resolution::Graph;
@@ -130,32 +131,41 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Run unit propagation.
             state.unit_propagation(next)?;
 
-            // Fetch the list of candidates.
-            let Some(potential_packages) = state.partial_solution.potential_packages() else {
-                let Some(selection) = state.partial_solution.extract_solution() else {
-                    return Err(PubGrubError::Failure(
-                        "How did we end up with no package to choose but no solution?".into(),
-                    )
-                    .into());
-                };
-
-                return Ok(Graph::from_state(&selection, &pins, &state));
-            };
+            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
+            self.pre_visit(
+                state.partial_solution.prioritized_packages(),
+                &mut requested_versions,
+                request_sink,
+            )?;
 
             // Choose a package version.
-            let potential_packages = potential_packages.collect::<Vec<_>>();
+            let Some(highest_priority_pkg) = state
+                .partial_solution
+                .pick_highest_priority_pkg(|package, range| self.prioritize(package, range))
+            else {
+                let selection = state.partial_solution.extract_solution();
+                return Ok(Graph::from_state(&selection, &pins, &state));
+            };
+            next = highest_priority_pkg;
+
+            let term_intersection = state
+                .partial_solution
+                .term_intersection_for_package(&next)
+                .ok_or_else(|| {
+                    PubGrubError::Failure("a package was chosen but we don't have a term.".into())
+                })?;
             let decision = self
-                .choose_package_version(
-                    potential_packages,
+                .choose_version(
+                    &next,
+                    term_intersection.unwrap_positive(),
                     &mut pins,
                     &mut requested_versions,
                     request_sink,
                 )
                 .await?;
-            next = decision.0.clone();
 
             // Pick the next compatible version.
-            let version = match decision.1 {
+            let version = match decision {
                 None => {
                     debug!("No compatible version found for: {}", next);
 
@@ -226,19 +236,28 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         }
     }
 
-    /// Given a set of candidate packages, choose the next package (and version) to add to the
-    /// partial solution.
-    async fn choose_package_version<T: Borrow<PubGrubPackage>, U: Borrow<Range<PubGrubVersion>>>(
+    #[allow(clippy::unused_self)]
+    fn prioritize(
         &self,
-        mut potential_packages: Vec<(T, U)>,
-        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        _package: &PubGrubPackage,
+        _range: &Range<PubGrubVersion>,
+    ) -> PubGrubPriority {
+        // TODO(charlie): Define a priority function.
+        Reverse(0)
+    }
+
+    /// Visit the set of candidate packages prior to selection. This allows us to fetch metadata for
+    /// all of the packages in parallel.
+    fn pre_visit(
+        &self,
+        packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
         in_flight: &mut FxHashSet<String>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-    ) -> Result<(T, Option<PubGrubVersion>), ResolveError> {
+    ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
-        for (index, (package, range)) in potential_packages.iter().enumerate() {
-            let PubGrubPackage::Package(package_name, _) = package.borrow() else {
+        for (package, range) in packages {
+            let PubGrubPackage::Package(package_name, _) = package else {
                 continue;
             };
 
@@ -250,13 +269,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
             // Try to find a compatible version. If there aren't any compatible versions,
             // short-circuit and return `None`.
-            let Some(candidate) = self
-                .selector
-                .select(package_name, range.borrow(), version_map)
-            else {
-                // Short circuit: we couldn't find _any_ compatible versions for a package.
-                let (package, _range) = potential_packages.swap_remove(index);
-                return Ok((package, None));
+            let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                // Short-circuit: we couldn't find _any_ compatible versions for a package.
+                return Ok(());
             };
 
             // Emit a request to fetch the metadata for this version.
@@ -277,14 +292,21 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
             }
         }
+        Ok(())
+    }
 
-        // Always choose the first package.
-        // TODO(charlie): Devise a better strategy here (for example: always choose the package with
-        // the fewest versions).
-        let (package, range) = potential_packages.swap_remove(0);
-
-        return match package.borrow() {
-            PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
+    /// Given a set of candidate packages, choose the next package (and version) to add to the
+    /// partial solution.
+    async fn choose_version(
+        &self,
+        package: &PubGrubPackage,
+        range: &Range<PubGrubVersion>,
+        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        in_flight: &mut FxHashSet<String>,
+        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+    ) -> Result<Option<PubGrubVersion>, ResolveError> {
+        return match package {
+            PubGrubPackage::Root => Ok(Some(MIN_VERSION.clone())),
             PubGrubPackage::Package(package_name, _) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await.unwrap();
@@ -292,17 +314,13 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 debug!(
                     "Searching for a compatible version of {} ({})",
-                    package_name,
-                    range.borrow(),
+                    package_name, range,
                 );
 
                 // Find a compatible version.
-                let Some(candidate) =
-                    self.selector
-                        .select(package_name, range.borrow(), version_map)
-                else {
+                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
-                    return Ok((package, None));
+                    return Ok(None);
                 };
 
                 debug!(
@@ -340,7 +358,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
 
                 let version = candidate.version.clone();
-                Ok((package, Some(version)))
+                Ok(Some(version))
             }
         };
     }

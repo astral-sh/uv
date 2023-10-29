@@ -22,6 +22,8 @@ include = ["Cargo.toml", "LICENSE", "README.md", "src/**", "tests/**", "examples
 [dependencies]
 thiserror = "1.0"
 rustc-hash = "1.1.0"
+indexmap = "2.0.2"
+priority-queue = "1.1.1"
 serde = { version = "1.0", features = ["derive"], optional = true }
 log = "0.4.14" # for debug logs in tests
 

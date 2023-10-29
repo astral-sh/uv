@@ -1,8 +1,8 @@
+use std::hash::BuildHasherDefault;
+
 use colored::Colorize;
 use fxhash::FxHashMap;
 use petgraph::visit::EdgeRef;
-use std::hash::BuildHasherDefault;
-
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
@@ -13,6 +13,7 @@ use puffin_client::File;
 use puffin_package::package_name::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
+use crate::pubgrub::priority::PubGrubPriority;
 use crate::pubgrub::version::PubGrubVersion;
 
 /// A package pinned at a specific version.
@@ -95,7 +96,7 @@ impl Graph {
     pub fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FxHashMap<PackageName, FxHashMap<Version, File>>,
-        state: &State<PubGrubPackage, Range<PubGrubVersion>>,
+        state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Self {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.

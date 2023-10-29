@@ -75,7 +75,7 @@
 //! trait for our own type.
 //! Let's say that we will use [String] for packages,
 //! and [SemanticVersion](version::SemanticVersion) for versions.
-//! This may be done quite easily by implementing the two following functions.
+//! This may be done quite easily by implementing the three following functions.
 //! ```
 //! # use pubgrub::solver::{DependencyProvider, Dependencies};
 //! # use pubgrub::version::SemanticVersion;
@@ -89,7 +89,12 @@
 //! type SemVS = Range<SemanticVersion>;
 //!
 //! impl DependencyProvider<String, SemVS> for MyDependencyProvider {
-//!     fn choose_package_version<T: Borrow<String>, U: Borrow<SemVS>>(&self,packages: impl Iterator<Item=(T, U)>) -> Result<(T, Option<SemanticVersion>), Box<dyn Error + Send + Sync>> {
+//!     fn choose_version(&self, package: &String, range: &SemVS) -> Result<Option<SemanticVersion>, Box<dyn Error + Send + Sync>> {
+//!         unimplemented!()
+//!     }
+//!
+//!     type Priority = usize;
+//!     fn prioritize(&self, package: &String, range: &SemVS) -> Self::Priority {
 //!         unimplemented!()
 //!     }
 //!
@@ -104,18 +109,17 @@
 //! ```
 //!
 //! The first method
-//! [choose_package_version](crate::solver::DependencyProvider::choose_package_version)
-//! chooses a package and available version compatible with the provided options.
-//! A helper function
-//! [choose_package_with_fewest_versions](crate::solver::choose_package_with_fewest_versions)
-//! is provided for convenience
-//! in cases when lists of available versions for packages are easily obtained.
-//! The strategy of that helper function consists in choosing the package
-//! with the fewest number of compatible versions to speed up resolution.
+//! [choose_version](crate::solver::DependencyProvider::choose_version)
+//! chooses a version compatible with the provided range for a package.
+//! The second method
+//! [prioritize](crate::solver::DependencyProvider::prioritize)
+//! in which order different packages should be chosen.
+//! Usually prioritizing packages
+//! with the fewest number of compatible versions speeds up resolution.
 //! But in general you are free to employ whatever strategy suits you best
 //! to pick a package and a version.
 //!
-//! The second method [get_dependencies](crate::solver::DependencyProvider::get_dependencies)
+//! The third method [get_dependencies](crate::solver::DependencyProvider::get_dependencies)
 //! aims at retrieving the dependencies of a given package at a given version.
 //! Returns [None] if dependencies are unknown.
 //!
