@@ -295,7 +295,7 @@ async fn black_disallow_prerelease() -> Result<()> {
         vec![],
         vec![],
         ResolutionMode::default(),
-        PreReleaseMode::DisallowAll,
+        PreReleaseMode::Disallow,
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -339,7 +339,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
         vec![],
         vec![],
         ResolutionMode::default(),
-        PreReleaseMode::DisallowAll,
+        PreReleaseMode::Disallow,
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -361,7 +361,7 @@ async fn pylint_allow_prerelease() -> Result<()> {
         vec![],
         vec![],
         ResolutionMode::default(),
-        PreReleaseMode::AllowAll,
+        PreReleaseMode::Allow,
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);

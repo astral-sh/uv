@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
-use puffin_resolver::ResolutionMode;
+use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use url::Url;
 
 use crate::commands::ExitStatus;
@@ -73,6 +73,9 @@ struct PipCompileArgs {
 
     #[clap(long, value_enum)]
     resolution: Option<ResolutionMode>,
+
+    #[clap(long, value_enum)]
+    prerelease: Option<PreReleaseMode>,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
@@ -200,6 +203,7 @@ async fn main() -> ExitCode {
                 &constraints,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
+                args.prerelease.unwrap_or_default(),
                 args.upgrade.into(),
                 index_urls,
                 cache_dir,

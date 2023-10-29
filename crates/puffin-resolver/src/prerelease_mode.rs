@@ -7,10 +7,10 @@ use puffin_package::package_name::PackageName;
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum PreReleaseMode {
     /// Disallow all pre-release versions.
-    DisallowAll,
+    Disallow,
 
     /// Allow all pre-release versions.
-    AllowAll,
+    Allow,
 
     /// Allow pre-release versions if all versions of a package are pre-release.
     IfNecessary,
@@ -30,10 +30,10 @@ pub enum PreReleaseMode {
 #[derive(Debug)]
 pub(crate) enum PreReleaseStrategy {
     /// Disallow all pre-release versions.
-    DisallowAll,
+    Disallow,
 
     /// Allow all pre-release versions.
-    AllowAll,
+    Allow,
 
     /// Allow pre-release versions if all versions of a package are pre-release.
     IfNecessary,
@@ -50,8 +50,8 @@ pub(crate) enum PreReleaseStrategy {
 impl PreReleaseStrategy {
     pub(crate) fn from_mode(mode: PreReleaseMode, direct_dependencies: &[Requirement]) -> Self {
         match mode {
-            PreReleaseMode::DisallowAll => Self::DisallowAll,
-            PreReleaseMode::AllowAll => Self::AllowAll,
+            PreReleaseMode::Disallow => Self::Disallow,
+            PreReleaseMode::Allow => Self::Allow,
             PreReleaseMode::IfNecessary => Self::IfNecessary,
             PreReleaseMode::Explicit => Self::Explicit(
                 direct_dependencies
