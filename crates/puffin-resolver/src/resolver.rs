@@ -259,8 +259,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         in_flight: &mut FxHashSet<String>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(T, Option<PubGrubVersion>), ResolveError> {
-        let mut selection = 0usize;
-
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (index, (package, range)) in potential_packages.iter().enumerate() {
@@ -302,14 +300,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
             }
-
-            selection = index;
         }
 
-        // TODO(charlie): This is really ugly, but we need to return `T`, not `&T` (and yet
-        // we also need to iterate over `potential_packages` multiple times, so we can't
-        // use `into_iter()`.)
-        let (package, range) = potential_packages.swap_remove(selection);
+        // Always choose the first package.
+        // TODO(charlie): Devise a better strategy here (for example: always choose the package with
+        // the fewest versions).
+        let (package, range) = potential_packages.swap_remove(0);
 
         return match package.borrow() {
             PubGrubPackage::Root => Ok((package, Some(MIN_VERSION.clone()))),
