@@ -19,7 +19,7 @@ use puffin_installer::{
     Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
 };
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{ResolutionManifest, ResolutionMode, Resolver, WheelFinder};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -71,11 +71,12 @@ impl BuildContext for BuildDispatch {
                 self.interpreter_info.simple_version(),
             )?;
             let resolver = Resolver::new(
-                ResolutionManifest::new(
+                Manifest::new(
                     requirements.to_vec(),
                     Vec::default(),
                     Vec::default(),
                     ResolutionMode::default(),
+                    PreReleaseMode::default(),
                 ),
                 self.interpreter_info.markers(),
                 &tags,

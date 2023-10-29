@@ -1,15 +1,20 @@
 pub use error::ResolveError;
+pub use manifest::Manifest;
+pub use prerelease_mode::PreReleaseMode;
 pub use resolution::{Graph, PinnedPackage};
-pub use resolver::{ResolutionManifest, Resolver};
-pub use selector::ResolutionMode;
+pub use resolution_mode::ResolutionMode;
+pub use resolver::Resolver;
 pub use source_distribution::BuiltSourceDistributionCache;
 pub use wheel_finder::{Reporter, WheelFinder};
 
+mod candidate_selector;
 mod distribution;
 mod error;
+mod manifest;
+mod prerelease_mode;
 mod pubgrub;
 mod resolution;
+mod resolution_mode;
 mod resolver;
-mod selector;
 mod source_distribution;
 mod wheel_finder;

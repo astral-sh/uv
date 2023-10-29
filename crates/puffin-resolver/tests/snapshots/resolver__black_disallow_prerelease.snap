@@ -1,0 +1,5 @@
+---
+source: crates/puffin-resolver/tests/resolver.rs
+expression: err
+---
+No solution

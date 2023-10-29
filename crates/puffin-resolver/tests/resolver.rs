@@ -16,7 +16,7 @@ use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{ResolutionManifest, ResolutionMode, Resolver};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
 
 struct DummyContext;
@@ -59,37 +59,17 @@ impl BuildContext for DummyContext {
 }
 
 #[tokio::test]
-async fn pylint() -> Result<()> {
-    colored::control::set_override(false);
-
-    let client = RegistryClientBuilder::default().build();
-
-    let manifest = ResolutionManifest::new(
-        vec![Requirement::from_str("pylint==2.3.0").unwrap()],
-        vec![],
-        vec![],
-        ResolutionMode::default(),
-    );
-
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
-
-    insta::assert_display_snapshot!(resolution);
-
-    Ok(())
-}
-
-#[tokio::test]
 async fn black() -> Result<()> {
     colored::control::set_override(false);
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
         vec![],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -106,11 +86,12 @@ async fn black_colorama() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
         vec![],
         vec![],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -127,11 +108,12 @@ async fn black_python_310() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
         vec![],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_310, &TAGS_310, &client, &DummyContext);
@@ -150,11 +132,12 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions<1").unwrap()],
         vec![],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -173,11 +156,12 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()],
         vec![],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -196,11 +180,12 @@ async fn black_flake8() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("flake8<1").unwrap()],
         vec![],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -217,11 +202,12 @@ async fn black_lowest() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
         vec![],
         vec![],
         ResolutionMode::Lowest,
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -238,11 +224,12 @@ async fn black_lowest_direct() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
         vec![],
         vec![],
         ResolutionMode::LowestDirect,
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -259,11 +246,12 @@ async fn black_respect_preference() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
         vec![Requirement::from_str("black==23.9.0").unwrap()],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
@@ -280,11 +268,150 @@ async fn black_ignore_preference() -> Result<()> {
 
     let client = RegistryClientBuilder::default().build();
 
-    let manifest = ResolutionManifest::new(
+    let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
         vec![Requirement::from_str("black==23.9.2").unwrap()],
         ResolutionMode::default(),
+        PreReleaseMode::default(),
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn black_disallow_prerelease() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let manifest = Manifest::new(
+        vec![Requirement::from_str("black<=20.0").unwrap()],
+        vec![],
+        vec![],
+        ResolutionMode::default(),
+        PreReleaseMode::DisallowAll,
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let err = resolver.resolve().await.unwrap_err();
+
+    insta::assert_display_snapshot!(err);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn black_allow_prerelease_if_necessary() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let manifest = Manifest::new(
+        vec![Requirement::from_str("black<=20.0").unwrap()],
+        vec![],
+        vec![],
+        ResolutionMode::default(),
+        PreReleaseMode::IfNecessary,
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pylint_disallow_prerelease() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let manifest = Manifest::new(
+        vec![Requirement::from_str("pylint==2.3.0").unwrap()],
+        vec![],
+        vec![],
+        ResolutionMode::default(),
+        PreReleaseMode::DisallowAll,
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pylint_allow_prerelease() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let manifest = Manifest::new(
+        vec![Requirement::from_str("pylint==2.3.0").unwrap()],
+        vec![],
+        vec![],
+        ResolutionMode::default(),
+        PreReleaseMode::AllowAll,
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let manifest = Manifest::new(
+        vec![
+            Requirement::from_str("pylint==2.3.0").unwrap(),
+            Requirement::from_str("isort>=5.0.0").unwrap(),
+        ],
+        vec![],
+        vec![],
+        ResolutionMode::default(),
+        PreReleaseMode::Explicit,
+    );
+
+    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolution = resolver.resolve().await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
+    colored::control::set_override(false);
+
+    let client = RegistryClientBuilder::default().build();
+
+    let manifest = Manifest::new(
+        vec![
+            Requirement::from_str("pylint==2.3.0").unwrap(),
+            Requirement::from_str("isort>=5.0.0b").unwrap(),
+        ],
+        vec![],
+        vec![],
+        ResolutionMode::default(),
+        PreReleaseMode::Explicit,
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
