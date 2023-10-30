@@ -372,8 +372,12 @@ fn hardlink_wheel_files(
             continue;
         }
 
-        // Copy the file.
-        fs::hard_link(entry.path(), &out_path)?;
+        // Hardlink the file, unless it's the `RECORD` file, which we modify during installation.
+        if entry.path().ends_with("RECORD") {
+            fs::copy(entry.path(), &out_path)?;
+        } else {
+            fs::hard_link(entry.path(), &out_path)?;
+        }
 
         count += 1;
     }
