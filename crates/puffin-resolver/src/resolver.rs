@@ -2,8 +2,6 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -566,24 +564,23 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         Ok::<(), ResolveError>(())
     }
 
-    fn process_request(
-        &'a self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Result<Response, ResolveError>> + Send + 'a>> {
+    async fn process_request(&'a self, request: Request) -> Result<Response, ResolveError> {
         match request {
-            Request::Package(package_name) => Box::pin(
+            Request::Package(package_name) => {
                 self.client
                     .simple(package_name.clone())
                     .map_ok(move |metadata| Response::Package(package_name, metadata))
-                    .map_err(ResolveError::Client),
-            ),
-            Request::Wheel(file) => Box::pin(
+                    .map_err(ResolveError::Client)
+                    .await
+            }
+            Request::Wheel(file) => {
                 self.client
                     .file(file.clone().into())
                     .map_ok(move |metadata| Response::Wheel(file, metadata))
-                    .map_err(ResolveError::Client),
-            ),
-            Request::Sdist(file, package_name, version) => Box::pin(async move {
+                    .map_err(ResolveError::Client)
+                    .await
+            }
+            Request::Sdist(file, package_name, version) => {
                 let cached_wheel = self.build_context.cache().and_then(|cache| {
                     BuiltSourceDistributionCache::new(cache).find_wheel(
                         &package_name,
@@ -607,9 +604,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     filename: file.filename.clone(),
                     err,
                 })?;
-
                 Ok(Response::Sdist(file, metadata21))
-            }),
+            }
         }
     }
 
