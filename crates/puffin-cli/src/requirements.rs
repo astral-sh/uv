@@ -77,7 +77,6 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to read `{}`", path.display()))?;
                 let requirements: Vec<Requirement> = pyproject_toml
                     .project
-                    .clone()
                     .into_iter()
                     .flat_map(|project| {
                         project.dependencies.into_iter().flatten().chain(
