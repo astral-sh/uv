@@ -5,14 +5,15 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 
-use crate::pubgrub::package::PubGrubPackage;
-use crate::pubgrub::specifier::PubGrubSpecifier;
-use crate::pubgrub::version::{PubGrubVersion, MAX_VERSION};
+pub(crate) use crate::pubgrub::package::PubGrubPackage;
+pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};
+pub(crate) use crate::pubgrub::specifier::PubGrubSpecifier;
+pub(crate) use crate::pubgrub::version::{PubGrubVersion, MAX_VERSION, MIN_VERSION};
 
-pub(crate) mod package;
-pub(crate) mod priority;
+mod package;
+mod priority;
 mod specifier;
-pub(crate) mod version;
+mod version;
 
 /// Convert a set of requirements to a set of `PubGrub` packages and ranges.
 pub(crate) fn iter_requirements<'a>(

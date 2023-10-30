@@ -6,7 +6,7 @@ use puffin_package::package_name::PackageName;
 
 use crate::distribution::DistributionFile;
 use crate::prerelease_mode::PreReleaseStrategy;
-use crate::pubgrub::version::PubGrubVersion;
+use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::VersionMap;
 use crate::Manifest;

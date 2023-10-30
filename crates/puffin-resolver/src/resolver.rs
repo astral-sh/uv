@@ -1,6 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -33,10 +32,8 @@ use crate::candidate_selector::CandidateSelector;
 use crate::distribution::{DistributionFile, SdistFile, WheelFile};
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
-use crate::pubgrub::package::PubGrubPackage;
-use crate::pubgrub::priority::PubGrubPriority;
-use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 use crate::pubgrub::{iter_requirements, version_range};
+use crate::pubgrub::{PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION};
 use crate::resolution::Graph;
 use crate::source_distribution::{download_and_build_sdist, read_dist_info};
 use crate::BuiltSourceDistributionCache;
@@ -50,28 +47,6 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     selector: CandidateSelector,
     index: Arc<Index>,
     build_context: &'a Context,
-}
-
-#[derive(Debug, Default)]
-struct Priorities(FxHashMap<PackageName, usize>);
-
-impl Priorities {
-    fn add(&mut self, package: PackageName) {
-        let priority = self.0.len();
-        self.0.entry(package).or_insert(priority);
-    }
-
-    fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
-        match package {
-            PubGrubPackage::Root => Some(Reverse(0)),
-            PubGrubPackage::Package(name, _) => self
-                .0
-                .get(name)
-                .copied()
-                .map(|priority| priority + 1)
-                .map(Reverse),
-        }
-    }
 }
 
 impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
@@ -135,7 +110,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         let mut requested_packages = FxHashSet::default();
         let mut requested_versions = FxHashSet::default();
         let mut pins = FxHashMap::default();
-        let mut priorities = Priorities::default();
+        let mut priorities = PubGrubPriorities::default();
 
         // Push all the requirements into the package sink.
         for requirement in &self.requirements {
@@ -389,7 +364,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         package: &PubGrubPackage,
         version: &PubGrubVersion,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
-        priorities: &mut Priorities,
+        priorities: &mut PubGrubPriorities,
         requested_packages: &mut FxHashSet<PackageName>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
