@@ -151,8 +151,10 @@ impl InterpreterQueryResult {
         let key = if let Some(cache) = cache {
             if let Ok(key) = cache_key(executable) {
                 if let Ok(data) = cacache::read_sync(cache, &key) {
-                    debug!("Using cached markers for {}", executable.display());
-                    return Ok(serde_json::from_slice::<Self>(&data)?);
+                    if let Ok(info) = serde_json::from_slice::<Self>(&data) {
+                        debug!("Using cached markers for {}", executable.display());
+                        return Ok(info);
+                    }
                 }
                 Some(key)
             } else {
