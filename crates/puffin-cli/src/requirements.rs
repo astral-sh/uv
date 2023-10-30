@@ -86,7 +86,7 @@ impl RequirementsSpecification {
                                     extras.iter().flat_map(move |extra| {
                                         optional_dependencies
                                             .get(extra.as_ref())
-                                            .map(Clone::clone)
+                                            .cloned()
                                             // undefined extra requests are ignored silently
                                             .unwrap_or_default()
                                     })
