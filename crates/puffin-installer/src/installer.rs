@@ -49,7 +49,7 @@ impl<'a> Installer<'a> {
 
                 install_wheel_rs::linker::install_wheel(&location, wheel.path(), self.link_mode)
                     .with_context(|| {
-                        format!("Failed to install {} {}", wheel.name(), wheel.version())
+                        format!("Failed to install {} @ {}", wheel.name(), wheel.version())
                     })?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
