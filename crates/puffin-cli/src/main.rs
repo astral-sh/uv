@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
+use puffin_package::extra_name::ExtraName;
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use url::Url;
 
@@ -96,6 +97,9 @@ struct PipCompileArgs {
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[clap(long)]
     upgrade: bool,
+
+    #[clap(long)]
+    extra: Vec<ExtraName>,
 }
 
 #[derive(Args)]
@@ -208,6 +212,7 @@ async fn main() -> ExitCode {
                 index_urls,
                 cache_dir,
                 printer,
+                args.extra,
             )
             .await
         }

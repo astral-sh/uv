@@ -8,6 +8,7 @@ use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
 use pubgrub::report::Reporter;
+use puffin_package::extra_name::ExtraName;
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -38,6 +39,7 @@ pub(crate) async fn pip_compile(
     index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
     mut printer: Printer,
+    extras: Vec<ExtraName>,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 

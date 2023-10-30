@@ -38,6 +38,12 @@ impl AsRef<str> for ExtraName {
     }
 }
 
+impl From<&str> for ExtraName {
+    fn from(name: &str) -> Self {
+        Self::normalize(name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
