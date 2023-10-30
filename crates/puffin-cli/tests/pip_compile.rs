@@ -270,10 +270,10 @@ optional-dependencies.foo = [
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
             .arg("pyproject.toml")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
             .arg("--extra")
             .arg("foo")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
