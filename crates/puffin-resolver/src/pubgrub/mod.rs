@@ -1,6 +1,7 @@
 use anyhow::Result;
 use itertools::Itertools;
 use pubgrub::range::Range;
+use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement};
 use puffin_package::dist_info_name::DistInfoName;
@@ -20,9 +21,20 @@ mod version;
 pub(crate) fn iter_requirements<'a>(
     requirements: impl Iterator<Item = &'a Requirement> + 'a,
     extra: Option<&'a DistInfoName>,
+    source: Option<&'a PackageName>,
     env: &'a MarkerEnvironment,
 ) -> impl Iterator<Item = (PubGrubPackage, Range<PubGrubVersion>)> + 'a {
     requirements
+        .filter(move |requirement| {
+            let normalized = PackageName::normalize(&requirement.name);
+            if source.is_some_and(|source| source == &normalized) {
+                // TODO: Warn only once here
+                warn!("{} depends on itself", normalized);
+                false
+            } else {
+                true
+            }
+        })
         .filter(move |requirement| {
             // TODO(charlie): We shouldn't need a vector here.
             let extra = if let Some(extra) = extra {

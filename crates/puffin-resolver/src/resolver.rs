@@ -390,7 +390,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 // Add the root requirements.
                 for (package, version) in
-                    iter_requirements(self.requirements.iter(), None, self.markers)
+                    iter_requirements(self.requirements.iter(), None, None, self.markers)
                 {
                     // Emit a request to fetch the metadata for this package.
                     if let PubGrubPackage::Package(package_name, None) = &package {
@@ -443,9 +443,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let mut constraints =
                     DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
 
-                for (package, version) in
-                    iter_requirements(metadata.requires_dist.iter(), extra.as_ref(), self.markers)
-                {
+                for (package, version) in iter_requirements(
+                    metadata.requires_dist.iter(),
+                    extra.as_ref(),
+                    Some(package_name),
+                    self.markers,
+                ) {
                     debug!("Adding transitive dependency: {package} {version}");
 
                     // Emit a request to fetch the metadata for this package.

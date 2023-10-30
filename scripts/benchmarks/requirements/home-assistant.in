@@ -1,0 +1,3031 @@
+# Merged from https://github.com/pypa/pip/issues/12314
+
+aiodiscover==1.5.1
+aiohttp==3.8.5;python_version<'3.12'
+aiohttp==3.9.0b0;python_version>='3.12'
+aiohttp_cors==0.7.0
+astral==2.2
+async-upnp-client==0.36.2
+atomicwrites-homeassistant==1.4.1
+attrs==23.1.0
+awesomeversion==23.8.0
+bcrypt==4.0.1
+bleak-retry-connector==3.3.0
+bleak==0.21.1
+bluetooth-adapters==0.16.1
+bluetooth-auto-recovery==1.2.3
+bluetooth-data-tools==1.13.0
+certifi>=2021.5.30
+ciso8601==2.3.0
+cryptography==41.0.4
+dbus-fast==2.12.0
+fnv-hash-fast==0.5.0
+ha-av==10.1.1
+hass-nabucasa==0.74.0
+hassil==1.2.5
+home-assistant-bluetooth==1.10.4
+home-assistant-frontend==20231025.1
+home-assistant-intents==2023.10.16
+httpx==0.25.0
+ifaddr==0.2.0
+janus==1.0.0
+Jinja2==3.1.2
+lru-dict==1.2.0
+mutagen==1.47.0
+orjson==3.9.9
+packaging>=23.1
+paho-mqtt==1.6.1
+Pillow==10.1.0
+pip>=21.3.1
+psutil-home-assistant==0.0.1
+PyJWT==2.8.0
+PyNaCl==1.5.0
+pyOpenSSL==23.2.0
+pyserial==3.5
+python-slugify==4.0.1
+PyTurboJPEG==1.7.1
+pyudev==0.23.2
+PyYAML==6.0.1
+requests==2.31.0
+scapy==2.5.0
+SQLAlchemy==2.0.22
+typing-extensions>=4.8.0,<5.0
+ulid-transform==0.9.0
+voluptuous-serialize==2.6.0
+voluptuous==0.13.1
+webrtc-noise-gain==1.2.3
+yarl==1.9.2
+zeroconf==0.119.0
+
+# Constrain pycryptodome to avoid vulnerability
+# see https://github.com/home-assistant/core/pull/16238
+pycryptodome>=3.6.6
+
+# Constrain urllib3 to ensure we deal with CVE-2020-26137 and CVE-2021-33503
+# Temporary setting an upper bound, to prevent compat issues with urllib3>=2
+# https://github.com/home-assistant/core/issues/97248
+urllib3>=1.26.5,<2
+
+# Constrain httplib2 to protect against GHSA-93xj-8mrv-444m
+# https://github.com/advisories/GHSA-93xj-8mrv-444m
+httplib2>=0.19.0
+
+# gRPC is an implicit dependency that we want to make explicit so we manage
+# upgrades intentionally. It is a large package to build from source and we
+# want to ensure we have wheels built.
+grpcio==1.59.0
+grpcio-status==1.59.0
+grpcio-reflection==1.59.0
+
+# libcst >=0.4.0 requires a newer Rust than we currently have available,
+# thus our wheels builds fail. This pins it to the last working version,
+# which at this point satisfies our needs.
+libcst==0.3.23
+
+# This is a old unmaintained library and is replaced with pycryptodome
+
+# This is a old unmaintained library and is replaced with faust-cchardet
+
+# To remove reliance on typing
+btlewrap>=0.0.10
+
+# This overrides a built-in Python package
+
+# regex causes segfault with version 2021.8.27
+# https://bitbucket.org/mrabarnett/mrab-regex/issues/421/2021827-results-in-fatal-python-error
+# This is fixed in 2021.8.28
+regex==2021.8.28
+
+# httpx requires httpcore, and httpcore requires anyio and h11, but the version constraints on
+# these requirements are quite loose. As the entire stack has some outstanding issues, and
+# even newer versions seem to introduce new issues, it's useful for us to pin all these
+# requirements so we can directly link HA versions to these library versions.
+anyio==4.0.0
+h11==0.14.0
+httpcore==0.18.0
+
+# Ensure we have a hyperframe version that works in Python 3.10
+# 5.2.0 fixed a collections abc deprecation
+hyperframe>=5.2.0
+
+# Ensure we run compatible with musllinux build env
+numpy==1.26.0
+
+# Prevent dependency conflicts between sisyphus-control and aioambient
+# until upper bounds for sisyphus-control have been updated
+# https://github.com/jkeljo/sisyphus-control/issues/6
+python-engineio>=3.13.1,<4.0
+python-socketio>=4.6.0,<5.0
+
+# Constrain multidict to avoid typing issues
+# https://github.com/home-assistant/core/pull/67046
+multidict>=6.0.2
+
+# Version 2.0 added typing, prevent accidental fallbacks
+backoff>=2.0
+
+# Required to avoid breaking (#101042).
+# v2 has breaking changes (#99218).
+pydantic==1.10.12
+
+# Breaks asyncio
+# https://github.com/pubnub/python/issues/130
+pubnub!=6.4.0
+
+# Package's __init__.pyi stub has invalid syntax and breaks mypy
+# https://github.com/dahlia/iso4217/issues/16
+iso4217!=1.10.20220401
+
+# Matplotlib 3.6.2 has issues building wheels on armhf/armv7
+# We need at least >=2.1.0 (tensorflow integration -> pycocotools)
+matplotlib==3.6.1
+
+# pyOpenSSL 23.1.0 or later required to avoid import errors when
+# cryptography 40.0.1 is installed with botocore
+pyOpenSSL>=23.1.0
+
+# protobuf must be in package constraints for the wheel
+# builder to build binary wheels
+protobuf==4.24.3
+
+# faust-cchardet: Ensure we have a version we can build wheels
+# 2.1.18 is the first version that works with our wheel builder
+faust-cchardet>=2.1.18
+
+# websockets 11.0 is missing files in the source distribution
+# which break wheel builds so we need at least 11.0.1
+# https://github.com/aaugustin/websockets/issues/1329
+websockets>=11.0.1
+
+# pyasn1 0.5.0 has breaking changes which cause pysnmplib to fail
+# until they are resolved, we need to pin pyasn1 to 0.4.8 and
+# pysnmplib to 5.0.21 to avoid the issue.
+# https://github.com/pyasn1/pyasn1/pull/30#issuecomment-1517564335
+# https://github.com/pysnmp/pysnmp/issues/51
+pyasn1==0.4.8
+pysnmplib==5.0.21
+# pysnmp is no longer maintained and does not work with newer
+# python
+
+# The get-mac package has been replaced with getmac. Installing get-mac alongside getmac
+# breaks getmac due to them both sharing the same python package name inside 'getmac'.
+
+# We want to skip the binary wheels for the 'charset-normalizer' packages.
+# They are build with mypyc, but causes issues with our wheel builder.
+# In order to do so, we need to constrain the version.
+charset-normalizer==3.2.0
+
+# Home Assistant Core
+aiohttp==3.9.0b0;python_version>='3.12'
+aiohttp==3.8.5;python_version<'3.12'
+astral==2.2
+attrs==23.1.0
+atomicwrites-homeassistant==1.4.1
+awesomeversion==23.8.0
+bcrypt==4.0.1
+certifi>=2021.5.30
+ciso8601==2.3.0
+httpx==0.25.0
+home-assistant-bluetooth==1.10.4
+ifaddr==0.2.0
+Jinja2==3.1.2
+lru-dict==1.2.0
+PyJWT==2.8.0
+cryptography==41.0.4
+pyOpenSSL==23.2.0
+orjson==3.9.9
+packaging>=23.1
+pip>=21.3.1
+python-slugify==4.0.1
+PyYAML==6.0.1
+requests==2.31.0
+typing-extensions>=4.8.0,<5.0
+ulid-transform==0.9.0
+voluptuous==0.13.1
+voluptuous-serialize==2.6.0
+yarl==1.9.2
+
+# homeassistant.components.aemet
+AEMET-OpenData==0.4.5
+
+# homeassistant.components.aladdin_connect
+AIOAladdinConnect==0.1.58
+
+# homeassistant.components.honeywell
+AIOSomecomfort==0.0.17
+
+# homeassistant.components.adax
+Adax-local==0.1.5
+
+# homeassistant.components.ambiclimate
+Ambiclimate==0.2.1
+
+# homeassistant.components.blinksticklight
+BlinkStick==1.2.0
+
+# homeassistant.components.co2signal
+CO2Signal==0.4.2
+
+# homeassistant.components.doorbird
+DoorBirdPy==2.1.0
+
+# homeassistant.components.homekit
+HAP-python==4.9.1
+
+# homeassistant.components.tasmota
+HATasmota==0.7.3
+
+# homeassistant.components.mastodon
+Mastodon.py==1.5.1
+
+# homeassistant.components.doods
+# homeassistant.components.generic
+# homeassistant.components.image_upload
+# homeassistant.components.matrix
+# homeassistant.components.proxy
+# homeassistant.components.qrcode
+# homeassistant.components.seven_segments
+# homeassistant.components.sighthound
+# homeassistant.components.tensorflow
+Pillow==10.1.0
+
+# homeassistant.components.plex
+PlexAPI==4.15.4
+
+# homeassistant.components.progettihwsw
+ProgettiHWSW==0.1.3
+
+# homeassistant.components.bluetooth_tracker
+# PyBluez==0.22
+
+# homeassistant.components.cast
+PyChromecast==13.0.7
+
+# homeassistant.components.flick_electric
+PyFlick==0.0.2
+
+# homeassistant.components.flume
+PyFlume==0.6.5
+
+# homeassistant.components.fronius
+PyFronius==0.7.2
+
+# homeassistant.components.mvglive
+PyMVGLive==1.1.4
+
+# homeassistant.components.met_eireann
+PyMetEireann==2021.8.0
+
+# homeassistant.components.met
+# homeassistant.components.norway_air
+PyMetno==0.11.0
+
+# homeassistant.components.keymitt_ble
+PyMicroBot==0.0.9
+
+# homeassistant.components.nina
+PyNINA==0.3.3
+
+# homeassistant.components.mobile_app
+# homeassistant.components.owntracks
+PyNaCl==1.5.0
+
+# homeassistant.auth.mfa_modules.totp
+# homeassistant.components.homekit
+PyQRCode==1.2.1
+
+# homeassistant.components.rmvtransport
+PyRMVtransport==0.3.3
+
+# homeassistant.components.telegram_bot
+PySocks==1.7.1
+
+# homeassistant.components.switchbot
+PySwitchbot==0.40.1
+
+# homeassistant.components.switchmate
+PySwitchmate==0.5.1
+
+# homeassistant.components.syncthru
+PySyncThru==0.7.10
+
+# homeassistant.components.transport_nsw
+PyTransportNSW==0.1.1
+
+# homeassistant.components.camera
+# homeassistant.components.stream
+PyTurboJPEG==1.7.1
+
+# homeassistant.components.vicare
+PyViCare==2.25.0
+
+# homeassistant.components.xiaomi_aqara
+PyXiaomiGateway==0.14.3
+
+# homeassistant.components.rachio
+RachioPy==1.0.3
+
+# homeassistant.components.python_script
+RestrictedPython==6.2;python_version<'3.12'
+
+# homeassistant.components.python_script
+RestrictedPython==7.0a1.dev0;python_version>='3.12'
+
+# homeassistant.components.remember_the_milk
+RtmAPI==0.7.2
+
+# homeassistant.components.recorder
+# homeassistant.components.sql
+SQLAlchemy==2.0.22
+
+# homeassistant.components.tami4
+Tami4EdgeAPI==2.1
+
+# homeassistant.components.travisci
+TravisPy==0.3.5
+
+# homeassistant.components.twitter
+TwitterAPI==2.7.12
+
+# homeassistant.components.onvif
+WSDiscovery==2.0.0
+
+# homeassistant.components.accuweather
+accuweather==2.0.0
+
+# homeassistant.components.adax
+adax==0.3.0
+
+# homeassistant.components.androidtv
+adb-shell[async]==0.4.4
+
+# homeassistant.components.alarmdecoder
+adext==0.4.2
+
+# homeassistant.components.adguard
+adguardhome==0.6.2
+
+# homeassistant.components.advantage_air
+advantage-air==0.4.4
+
+# homeassistant.components.frontier_silicon
+afsapi==0.2.7
+
+# homeassistant.components.agent_dvr
+agent-py==0.0.23
+
+# homeassistant.components.geo_json_events
+aio-geojson-generic-client==0.3
+
+# homeassistant.components.geonetnz_quakes
+aio-geojson-geonetnz-quakes==0.15
+
+# homeassistant.components.geonetnz_volcano
+aio-geojson-geonetnz-volcano==0.8
+
+# homeassistant.components.nsw_rural_fire_service_feed
+aio-geojson-nsw-rfs-incidents==0.6
+
+# homeassistant.components.usgs_earthquakes_feed
+aio-geojson-usgs-earthquakes==0.2
+
+# homeassistant.components.gdacs
+aio-georss-gdacs==0.8
+
+# homeassistant.components.airq
+aioairq==0.2.4
+
+# homeassistant.components.airzone_cloud
+aioairzone-cloud==0.3.0
+
+# homeassistant.components.airzone
+aioairzone==0.6.9
+
+# homeassistant.components.ambient_station
+aioambient==2023.04.0
+
+# homeassistant.components.aseko_pool_live
+aioaseko==0.0.2
+
+# homeassistant.components.asuswrt
+aioasuswrt==1.4.0
+
+# homeassistant.components.azure_devops
+aioazuredevops==1.3.5
+
+# homeassistant.components.baf
+aiobafi6==0.9.0
+
+# homeassistant.components.aws
+aiobotocore==2.6.0
+
+# homeassistant.components.comelit
+aiocomelit==0.3.0
+
+# homeassistant.components.dhcp
+aiodiscover==1.5.1
+
+# homeassistant.components.dnsip
+aiodns==3.0.0
+
+# homeassistant.components.eafm
+aioeafm==0.1.2
+
+# homeassistant.components.rainforest_eagle
+aioeagle==1.1.0
+
+# homeassistant.components.ecowitt
+aioecowitt==2023.5.0
+
+# homeassistant.components.emonitor
+aioemonitor==1.0.5
+
+# homeassistant.components.esphome
+aioesphomeapi==18.2.0
+
+# homeassistant.components.flo
+aioflo==2021.11.0
+
+# homeassistant.components.yi
+aioftp==0.21.3
+
+# homeassistant.components.github
+aiogithubapi==22.10.1
+
+# homeassistant.components.guardian
+aioguardian==2022.07.0
+
+# homeassistant.components.harmony
+aioharmony==0.2.10
+
+# homeassistant.components.homekit_controller
+aiohomekit==3.0.8
+
+# homeassistant.components.emulated_hue
+# homeassistant.components.http
+aiohttp_cors==0.7.0
+
+# homeassistant.components.hue
+aiohue==4.7.0
+
+# homeassistant.components.imap
+aioimaplib==1.0.1
+
+# homeassistant.components.apache_kafka
+aiokafka==0.7.2
+
+# homeassistant.components.kef
+aiokef==0.2.16
+
+# homeassistant.components.lifx
+aiolifx-effects==0.3.2
+
+# homeassistant.components.lifx
+aiolifx-themes==0.4.5
+
+# homeassistant.components.lifx
+aiolifx==0.8.10
+
+# homeassistant.components.livisi
+aiolivisi==0.0.19
+
+# homeassistant.components.lookin
+aiolookin==1.0.0
+
+# homeassistant.components.lyric
+aiolyric==1.1.0
+
+# homeassistant.components.modern_forms
+aiomodernforms==0.1.8
+
+# homeassistant.components.yamaha_musiccast
+aiomusiccast==0.14.8
+
+# homeassistant.components.nanoleaf
+aionanoleaf==0.2.1
+
+# homeassistant.components.notion
+aionotion==2023.05.5
+
+# homeassistant.components.oncue
+aiooncue==0.3.5
+
+# homeassistant.components.openexchangerates
+aioopenexchangerates==0.4.0
+
+# homeassistant.components.pegel_online
+aiopegelonline==0.0.6
+
+# homeassistant.components.acmeda
+aiopulse==0.4.3
+
+# homeassistant.components.purpleair
+aiopurpleair==2022.12.1
+
+# homeassistant.components.hunterdouglas_powerview
+aiopvapi==2.0.4
+
+# homeassistant.components.pvpc_hourly_pricing
+aiopvpc==4.2.2
+
+# homeassistant.components.lidarr
+# homeassistant.components.radarr
+# homeassistant.components.sonarr
+aiopyarr==23.4.0
+
+# homeassistant.components.qnap_qsw
+aioqsw==0.3.5
+
+# homeassistant.components.recollect_waste
+aiorecollect==2023.09.0
+
+# homeassistant.components.ridwell
+aioridwell==2023.07.0
+
+# homeassistant.components.ruckus_unleashed
+aioruckus==0.34
+
+# homeassistant.components.ruuvi_gateway
+aioruuvigateway==0.1.0
+
+# homeassistant.components.senz
+aiosenz==1.0.0
+
+# homeassistant.components.shelly
+aioshelly==6.0.0
+
+# homeassistant.components.skybell
+aioskybell==22.7.0
+
+# homeassistant.components.slimproto
+aioslimproto==2.3.3
+
+# homeassistant.components.steamist
+aiosteamist==0.3.2
+
+# homeassistant.components.switcher_kis
+aioswitcher==3.3.0
+
+# homeassistant.components.syncthing
+aiosyncthing==0.5.1
+
+# homeassistant.components.tractive
+aiotractive==0.5.6
+
+# homeassistant.components.unifi
+aiounifi==64
+
+# homeassistant.components.vlc_telnet
+aiovlc==0.1.0
+
+# homeassistant.components.vodafone_station
+aiovodafone==0.4.1
+
+# homeassistant.components.waqi
+aiowaqi==2.1.0
+
+# homeassistant.components.watttime
+aiowatttime==0.1.1
+
+# homeassistant.components.webostv
+aiowebostv==0.3.3
+
+# homeassistant.components.withings
+aiowithings==1.0.1
+
+# homeassistant.components.yandex_transport
+aioymaps==1.2.2
+
+# homeassistant.components.airly
+airly==1.1.0
+
+# homeassistant.components.airthings_ble
+airthings-ble==0.5.6-2
+
+# homeassistant.components.airthings
+airthings-cloud==0.1.0
+
+# homeassistant.components.airtouch4
+airtouch4pyapi==1.0.5
+
+# homeassistant.components.alpha_vantage
+alpha-vantage==2.3.1
+
+# homeassistant.components.amberelectric
+amberelectric==1.0.4
+
+# homeassistant.components.amcrest
+amcrest==1.9.8
+
+# homeassistant.components.androidtv
+androidtv[async]==0.0.72
+
+# homeassistant.components.androidtv_remote
+androidtvremote2==0.0.14
+
+# homeassistant.components.anel_pwrctrl
+anel-pwrctrl-homeassistant==0.0.1.dev2
+
+# homeassistant.components.anova
+anova-wifi==0.10.0
+
+# homeassistant.components.anthemav
+anthemav==1.4.1
+
+# homeassistant.components.apcupsd
+apcaccess==0.0.13
+
+# homeassistant.components.weatherkit
+apple_weatherkit==1.0.4
+
+# homeassistant.components.apprise
+apprise==1.6.0
+
+# homeassistant.components.aprs
+aprslib==0.7.0
+
+# homeassistant.components.aqualogic
+aqualogic==2.6
+
+# homeassistant.components.aranet
+aranet4==2.2.2
+
+# homeassistant.components.arcam_fmj
+arcam-fmj==1.4.0
+
+# homeassistant.components.arris_tg2492lg
+arris-tg2492lg==1.2.1
+
+# homeassistant.components.ampio
+asmog==0.0.6
+
+# homeassistant.components.asterisk_mbox
+asterisk_mbox==0.5.0
+
+# homeassistant.components.esphome
+async-interrupt==1.1.1
+
+# homeassistant.components.dlna_dmr
+# homeassistant.components.dlna_dms
+# homeassistant.components.samsungtv
+# homeassistant.components.ssdp
+# homeassistant.components.upnp
+# homeassistant.components.yeelight
+async-upnp-client==0.36.2
+
+# homeassistant.components.keyboard_remote
+asyncinotify==4.0.2
+
+# homeassistant.components.supla
+asyncpysupla==0.0.5
+
+# homeassistant.components.sleepiq
+asyncsleepiq==1.3.7
+
+# homeassistant.components.aten_pe
+# atenpdu==0.3.2
+
+# homeassistant.components.aurora
+auroranoaa==0.0.3
+
+# homeassistant.components.aurora_abb_powerone
+aurorapy==0.2.7
+
+# homeassistant.components.avea
+# avea==1.5.1
+
+# homeassistant.components.avion
+# avion==0.10
+
+# homeassistant.components.axis
+axis==48
+
+# homeassistant.components.azure_event_hub
+azure-eventhub==5.11.1
+
+# homeassistant.components.azure_service_bus
+azure-servicebus==7.10.0
+
+# homeassistant.components.baidu
+baidu-aip==1.6.6
+
+# homeassistant.components.homekit
+base36==0.1.1
+
+# homeassistant.components.linux_battery
+batinfo==0.4.2
+
+# homeassistant.components.eddystone_temperature
+# beacontools[scan]==2.1.0
+
+# homeassistant.components.scrape
+beautifulsoup4==4.12.2
+
+# homeassistant.components.beewi_smartclim
+# beewi-smartclim==0.0.10
+
+# homeassistant.components.zha
+bellows==0.36.8
+
+# homeassistant.components.bmw_connected_drive
+bimmer-connected==0.14.2
+
+# homeassistant.components.bizkaibus
+bizkaibus==0.1.1
+
+# homeassistant.components.bluetooth
+bleak-retry-connector==3.3.0
+
+# homeassistant.components.bluetooth
+bleak==0.21.1
+
+# homeassistant.components.blebox
+blebox-uniapi==2.2.0
+
+# homeassistant.components.blink
+blinkpy==0.22.2
+
+# homeassistant.components.bitcoin
+blockchain==1.4.4
+
+# homeassistant.components.bluemaestro
+bluemaestro-ble==0.2.3
+
+# homeassistant.components.decora
+# homeassistant.components.zengge
+# bluepy==1.3.0
+
+# homeassistant.components.bluetooth
+bluetooth-adapters==0.16.1
+
+# homeassistant.components.bluetooth
+bluetooth-auto-recovery==1.2.3
+
+# homeassistant.components.bluetooth
+# homeassistant.components.esphome
+# homeassistant.components.ld2410_ble
+# homeassistant.components.led_ble
+# homeassistant.components.private_ble_device
+bluetooth-data-tools==1.13.0
+
+# homeassistant.components.bond
+bond-async==0.2.1
+
+# homeassistant.components.bosch_shc
+boschshcpy==0.2.57
+
+# homeassistant.components.amazon_polly
+# homeassistant.components.route53
+boto3==1.28.17
+
+# homeassistant.components.broadlink
+broadlink==0.18.3
+
+# homeassistant.components.brother
+brother==2.3.0
+
+# homeassistant.components.brottsplatskartan
+brottsplatskartan==0.0.1
+
+# homeassistant.components.brunt
+brunt==1.2.0
+
+# homeassistant.components.bluetooth_tracker
+bt-proximity==0.2.1
+
+# homeassistant.components.bthome
+bthome-ble==3.2.0
+
+# homeassistant.components.bt_home_hub_5
+bthomehub5-devicelist==0.1.1
+
+# homeassistant.components.bt_smarthub
+btsmarthub-devicelist==0.2.3
+
+# homeassistant.components.buienradar
+buienradar==1.0.5
+
+# homeassistant.components.caldav
+caldav==1.3.6
+
+# homeassistant.components.circuit
+circuit-webhook==1.0.1
+
+# homeassistant.components.cisco_mobility_express
+ciscomobilityexpress==0.3.9
+
+# homeassistant.components.cppm_tracker
+clearpasspy==1.0.2
+
+# homeassistant.components.sinch
+clx-sdk-xms==1.0.0
+
+# homeassistant.components.coinbase
+coinbase==2.1.0
+
+# homeassistant.scripts.check_config
+colorlog==6.7.0
+
+# homeassistant.components.color_extractor
+colorthief==0.2.1
+
+# homeassistant.components.concord232
+concord232==0.15
+
+# homeassistant.components.upc_connect
+connect-box==0.2.8
+
+# homeassistant.components.eq3btsmart
+# homeassistant.components.xiaomi_miio
+construct==2.10.68
+
+# homeassistant.components.utility_meter
+croniter==1.0.6
+
+# homeassistant.components.crownstone
+crownstone-cloud==1.4.9
+
+# homeassistant.components.crownstone
+crownstone-sse==2.0.4
+
+# homeassistant.components.crownstone
+crownstone-uart==2.1.0
+
+# homeassistant.components.datadog
+datadog==0.15.0
+
+# homeassistant.components.metoffice
+datapoint==0.9.8;python_version<'3.12'
+
+# homeassistant.components.bluetooth
+dbus-fast==2.12.0
+
+# homeassistant.components.debugpy
+debugpy==1.8.0
+
+# homeassistant.components.decora_wifi
+# decora-wifi==1.4
+
+# homeassistant.components.decora
+# decora==0.6
+
+# homeassistant.components.ihc
+# homeassistant.components.namecheapdns
+# homeassistant.components.ohmconnect
+defusedxml==0.7.1
+
+# homeassistant.components.deluge
+deluge-client==1.7.1
+
+# homeassistant.components.lametric
+demetriek==0.4.0
+
+# homeassistant.components.denonavr
+denonavr==0.11.4
+
+# homeassistant.components.devolo_home_control
+devolo-home-control-api==0.18.2
+
+# homeassistant.components.devolo_home_network
+devolo-plc-api==1.4.1
+
+# homeassistant.components.directv
+directv==0.4.0
+
+# homeassistant.components.discogs
+discogs-client==2.3.0
+
+# homeassistant.components.steamist
+discovery30303==0.2.1
+
+# homeassistant.components.dovado
+dovado==0.4.1
+
+# homeassistant.components.dremel_3d_printer
+dremel3dpy==2.1.1
+
+# homeassistant.components.dsmr
+dsmr-parser==1.3.0
+
+# homeassistant.components.dwd_weather_warnings
+dwdwfsapi==1.0.6
+
+# homeassistant.components.dweet
+dweepy==0.3.0
+
+# homeassistant.components.dynalite
+dynalite-devices==0.1.47
+
+# homeassistant.components.dynalite
+dynalite-panel==0.0.4
+
+# homeassistant.components.rainforest_eagle
+eagle100==0.1.1
+
+# homeassistant.components.easyenergy
+easyenergy==0.3.0
+
+# homeassistant.components.ebusd
+ebusdpy==0.0.17
+
+# homeassistant.components.ecoal_boiler
+ecoaliface==0.4.0
+
+# homeassistant.components.electric_kiwi
+electrickiwi-api==0.8.5
+
+# homeassistant.components.elgato
+elgato==5.0.0
+
+# homeassistant.components.eliqonline
+eliqonline==1.2.2
+
+# homeassistant.components.elkm1
+elkm1-lib==2.2.6
+
+# homeassistant.components.elmax
+elmax-api==0.0.4
+
+# homeassistant.components.emulated_roku
+emulated-roku==0.2.1
+
+# homeassistant.components.huisbaasje
+energyflip-client==0.2.2
+
+# homeassistant.components.energyzero
+energyzero==0.5.0
+
+# homeassistant.components.enocean
+enocean==0.50
+
+# homeassistant.components.entur_public_transport
+enturclient==0.2.4
+
+# homeassistant.components.environment_canada
+env-canada==0.6.0
+
+# homeassistant.components.season
+ephem==4.1.5
+
+# homeassistant.components.epson
+epson-projector==0.5.1
+
+# homeassistant.components.epsonworkforce
+epsonprinter==0.0.9
+
+# homeassistant.components.esphome
+esphome-dashboard-api==1.2.3
+
+# homeassistant.components.netgear_lte
+eternalegypt==0.0.16
+
+# homeassistant.components.eufylife_ble
+eufylife-ble-client==0.1.8
+
+# homeassistant.components.keyboard_remote
+# evdev==1.6.1
+
+# homeassistant.components.evohome
+evohome-async==0.3.15
+
+# homeassistant.components.faa_delays
+faadelays==2023.9.1
+
+# homeassistant.components.dlib_face_detect
+# homeassistant.components.dlib_face_identify
+# face-recognition==1.2.3
+
+# homeassistant.components.fastdotcom
+fastdotcom==0.0.3
+
+# homeassistant.components.feedreader
+feedparser==6.0.10
+
+# homeassistant.components.file
+file-read-backwards==2.0.0
+
+# homeassistant.components.fints
+fints==3.1.0
+
+# homeassistant.components.fitbit
+fitbit==0.3.1
+
+# homeassistant.components.fivem
+fivem-api==0.1.2
+
+# homeassistant.components.fixer
+fixerio==1.0.0a0
+
+# homeassistant.components.fjaraskupan
+fjaraskupan==2.2.0
+
+# homeassistant.components.flipr
+flipr-api==1.5.0
+
+# homeassistant.components.flux_led
+flux-led==1.0.4
+
+# homeassistant.components.homekit
+# homeassistant.components.recorder
+fnv-hash-fast==0.5.0
+
+# homeassistant.components.foobot
+foobot_async==1.0.0
+
+# homeassistant.components.forecast_solar
+forecast-solar==3.0.0
+
+# homeassistant.components.fortios
+fortiosapi==1.0.5
+
+# homeassistant.components.freebox
+freebox-api==1.1.0
+
+# homeassistant.components.free_mobile
+freesms==0.2.0
+
+# homeassistant.components.fritz
+# homeassistant.components.fritzbox_callmonitor
+fritzconnection[qr]==1.13.2
+
+# homeassistant.components.google_translate
+gTTS==2.2.4
+
+# homeassistant.components.gardena_bluetooth
+gardena-bluetooth==1.4.0
+
+# homeassistant.components.google_assistant_sdk
+gassist-text==0.0.10
+
+# homeassistant.components.google
+gcal-sync==5.0.0
+
+# homeassistant.components.geniushub
+geniushub-client==0.7.0
+
+# homeassistant.components.geocaching
+geocachingapi==0.2.1
+
+# homeassistant.components.aprs
+geopy==2.3.0
+
+# homeassistant.components.geo_rss_events
+georss-generic-client==0.6
+
+# homeassistant.components.ign_sismologia
+georss-ign-sismologia-client==0.6
+
+# homeassistant.components.qld_bushfire
+georss-qld-bushfire-alert-client==0.5
+
+# homeassistant.components.dlna_dmr
+# homeassistant.components.kef
+# homeassistant.components.nmap_tracker
+# homeassistant.components.samsungtv
+# homeassistant.components.upnp
+getmac==0.8.2
+
+# homeassistant.components.gios
+gios==3.2.0
+
+# homeassistant.components.gitter
+gitterpy==0.1.7
+
+# homeassistant.components.glances
+glances-api==0.4.3
+
+# homeassistant.components.goalzero
+goalzero==0.2.2
+
+# homeassistant.components.goodwe
+goodwe==0.2.31
+
+# homeassistant.components.google_mail
+# homeassistant.components.google_tasks
+google-api-python-client==2.71.0
+
+# homeassistant.components.google_pubsub
+google-cloud-pubsub==2.13.11
+
+# homeassistant.components.google_cloud
+google-cloud-texttospeech==2.12.3
+
+# homeassistant.components.google_generative_ai_conversation
+google-generativeai==0.1.0
+
+# homeassistant.components.nest
+google-nest-sdm==3.0.2
+
+# homeassistant.components.google_travel_time
+googlemaps==2.5.1
+
+# homeassistant.components.slide
+goslide-api==0.5.1
+
+# homeassistant.components.govee_ble
+govee-ble==0.24.0
+
+# homeassistant.components.remote_rpi_gpio
+gpiozero==1.6.2
+
+# homeassistant.components.gpsd
+gps3==0.33.3
+
+# homeassistant.components.gree
+greeclimate==1.4.1
+
+# homeassistant.components.greeneye_monitor
+greeneye_monitor==3.0.3
+
+# homeassistant.components.greenwave
+greenwavereality==0.5.1
+
+# homeassistant.components.pure_energie
+gridnet==4.2.0
+
+# homeassistant.components.growatt_server
+growattServer==1.3.0
+
+# homeassistant.components.google_sheets
+gspread==5.5.0
+
+# homeassistant.components.gstreamer
+gstreamer-player==1.1.2
+
+# homeassistant.components.profiler
+guppy3==3.1.4
+
+# homeassistant.components.iaqualink
+h2==4.1.0
+
+# homeassistant.components.generic
+# homeassistant.components.stream
+ha-av==10.1.1
+
+# homeassistant.components.ffmpeg
+ha-ffmpeg==3.1.0
+
+# homeassistant.components.iotawatt
+ha-iotawattpy==0.1.1
+
+# homeassistant.components.philips_js
+ha-philipsjs==3.1.1
+
+# homeassistant.components.habitica
+habitipy==0.2.0
+
+# homeassistant.components.cloud
+hass-nabucasa==0.74.0
+
+# homeassistant.components.splunk
+hass-splunk==0.1.1
+
+# homeassistant.components.conversation
+hassil==1.2.5
+
+# homeassistant.components.jewish_calendar
+hdate==0.10.4
+
+# homeassistant.components.heatmiser
+heatmiserV3==1.1.18
+
+# homeassistant.components.here_travel_time
+here-routing==0.2.0
+
+# homeassistant.components.here_travel_time
+here-transit==1.2.0
+
+# homeassistant.components.hikvisioncam
+hikvision==0.4
+
+# homeassistant.components.harman_kardon_avr
+hkavr==0.0.5
+
+# homeassistant.components.hlk_sw16
+hlk-sw16==0.0.9
+
+# homeassistant.components.pi_hole
+hole==0.8.0
+
+# homeassistant.components.workday
+holidays==0.28
+
+# homeassistant.components.frontend
+home-assistant-frontend==20231025.1
+
+# homeassistant.components.conversation
+home-assistant-intents==2023.10.16
+
+# homeassistant.components.home_connect
+homeconnect==0.7.2
+
+# homeassistant.components.homematicip_cloud
+homematicip==1.0.16
+
+# homeassistant.components.home_plus_control
+homepluscontrol==0.0.5
+
+# homeassistant.components.horizon
+horimote==0.4.1
+
+# homeassistant.components.remember_the_milk
+httplib2==0.20.4
+
+# homeassistant.components.huawei_lte
+huawei-lte-api==1.6.11
+
+# homeassistant.components.hyperion
+hyperion-py==0.7.5
+
+# homeassistant.components.iammeter
+iammeter==0.1.7
+
+# homeassistant.components.iaqualink
+iaqualink==0.5.0
+
+# homeassistant.components.ibeacon
+ibeacon-ble==1.0.1
+
+# homeassistant.components.watson_iot
+ibmiotf==0.3.4
+
+# homeassistant.components.local_calendar
+# homeassistant.components.local_todo
+ical==5.1.0
+
+# homeassistant.components.ping
+icmplib==3.0
+
+# homeassistant.components.idasen_desk
+idasen-ha==2.3
+
+# homeassistant.components.network
+ifaddr==0.2.0
+
+# homeassistant.components.iglo
+iglo==1.2.7
+
+# homeassistant.components.ihc
+ihcsdk==2.8.5
+
+# homeassistant.components.incomfort
+incomfort-client==0.5.0
+
+# homeassistant.components.influxdb
+influxdb-client==1.24.0
+
+# homeassistant.components.influxdb
+influxdb==5.3.1
+
+# homeassistant.components.inkbird
+inkbird-ble==0.5.6
+
+# homeassistant.components.insteon
+insteon-frontend-home-assistant==0.4.0
+
+# homeassistant.components.intellifire
+intellifire4py==2.2.2
+
+# homeassistant.components.iperf3
+iperf3==0.1.11
+
+# homeassistant.components.gogogate2
+ismartgate==5.0.1
+
+# homeassistant.components.file_upload
+janus==1.0.0
+
+# homeassistant.components.abode
+jaraco.abode==3.3.0
+
+# homeassistant.components.jellyfin
+jellyfin-apiclient-python==1.9.2
+
+# homeassistant.components.rest
+jsonpath==0.82.2
+
+# homeassistant.components.justnimbus
+justnimbus==0.6.0
+
+# homeassistant.components.kaiterra
+kaiterra-async-client==1.0.0
+
+# homeassistant.components.keba
+keba-kecontact==1.1.0
+
+# homeassistant.components.kegtron
+kegtron-ble==0.4.0
+
+# homeassistant.components.kiwi
+kiwiki-client==0.1.1
+
+# homeassistant.components.knx
+knx-frontend==2023.6.23.191712
+
+# homeassistant.components.konnected
+konnected==1.2.0
+
+# homeassistant.components.kraken
+krakenex==2.1.0
+
+# homeassistant.components.lacrosse_view
+lacrosse-view==1.0.1
+
+# homeassistant.components.eufy
+lakeside==0.13
+
+# homeassistant.components.laundrify
+laundrify-aio==1.1.2
+
+# homeassistant.components.ld2410_ble
+ld2410-ble==0.1.1
+
+# homeassistant.components.led_ble
+led-ble==1.0.1
+
+# homeassistant.components.foscam
+libpyfoscam==1.0
+
+# homeassistant.components.vivotek
+libpyvivotek==0.4.0
+
+# homeassistant.components.mikrotik
+librouteros==3.2.0
+
+# homeassistant.components.soundtouch
+libsoundtouch==0.8
+
+# homeassistant.components.life360
+life360==6.0.0
+
+# homeassistant.components.osramlightify
+lightify==1.0.7.3
+
+# homeassistant.components.lightwave
+lightwave==0.24
+
+# homeassistant.components.limitlessled
+limitlessled==1.1.3
+
+# homeassistant.components.linode
+linode-api==4.1.9b1
+
+# homeassistant.components.google_maps
+locationsharinglib==5.0.1
+
+# homeassistant.components.logi_circle
+logi-circle==0.2.3
+
+# homeassistant.components.london_underground
+london-tube-status==0.5
+
+# homeassistant.components.loqed
+loqedAPI==2.1.8
+
+# homeassistant.components.luftdaten
+luftdaten==0.7.4
+
+# homeassistant.components.lupusec
+lupupy==0.3.0
+
+# homeassistant.components.lw12wifi
+lw12==0.9.2
+
+# homeassistant.components.scrape
+lxml==4.9.3
+
+# homeassistant.components.nmap_tracker
+mac-vendor-lookup==0.1.12
+
+# homeassistant.components.matrix
+matrix-nio==0.22.1
+
+# homeassistant.components.maxcube
+maxcube-api==0.4.3
+
+# homeassistant.components.mythicbeastsdns
+mbddns==0.1.2
+
+# homeassistant.components.minecraft_server
+mcstatus==11.0.0
+
+# homeassistant.components.meater
+meater-python==0.0.8
+
+# homeassistant.components.medcom_ble
+medcom-ble==0.1.1
+
+# homeassistant.components.melnor
+melnor-bluetooth==0.0.25
+
+# homeassistant.components.message_bird
+messagebird==1.2.0
+
+# homeassistant.components.meteoalarm
+meteoalertapi==0.3.0
+
+# homeassistant.components.meteo_france
+meteofrance-api==1.2.0
+
+# homeassistant.components.mfi
+mficlient==0.3.0
+
+# homeassistant.components.xiaomi_miio
+micloud==0.5
+
+# homeassistant.components.mill
+mill-local==0.3.0
+
+# homeassistant.components.mill
+millheater==0.11.6
+
+# homeassistant.components.minio
+minio==7.1.12
+
+# homeassistant.components.moat
+moat-ble==0.1.1
+
+# homeassistant.components.moehlenhoff_alpha2
+moehlenhoff-alpha2==1.3.0
+
+# homeassistant.components.mopeka
+mopeka-iot-ble==0.4.1
+
+# homeassistant.components.motion_blinds
+motionblinds==0.6.18
+
+# homeassistant.components.motioneye
+motioneye-client==0.3.14
+
+# homeassistant.components.mullvad
+mullvad-api==1.0.0
+
+# homeassistant.components.tts
+mutagen==1.47.0
+
+# homeassistant.components.mutesync
+mutesync==0.0.1
+
+# homeassistant.components.nad
+nad-receiver==0.3.0
+
+# homeassistant.components.keenetic_ndms2
+ndms2-client==0.1.2
+
+# homeassistant.components.ness_alarm
+nessclient==1.0.0
+
+# homeassistant.components.netdata
+netdata==1.1.0
+
+# homeassistant.components.nmap_tracker
+netmap==0.7.0.2
+
+# homeassistant.components.nam
+nettigo-air-monitor==2.2.0
+
+# homeassistant.components.neurio_energy
+neurio==0.3.1
+
+# homeassistant.components.nexia
+nexia==2.0.7
+
+# homeassistant.components.nextcloud
+nextcloudmonitor==1.4.0
+
+# homeassistant.components.discord
+nextcord==2.0.0a8
+
+# homeassistant.components.nextdns
+nextdns==2.0.0
+
+# homeassistant.components.nibe_heatpump
+nibe==2.4.0
+
+# homeassistant.components.niko_home_control
+niko-home-control==0.2.1
+
+# homeassistant.components.nilu
+niluclient==0.1.2
+
+# homeassistant.components.noaa_tides
+noaa-coops==0.1.9
+
+# homeassistant.components.nfandroidtv
+notifications-android-tv==0.1.5
+
+# homeassistant.components.notify_events
+notify-events==1.0.4
+
+# homeassistant.components.nederlandse_spoorwegen
+nsapi==3.0.5
+
+# homeassistant.components.nsw_fuel_station
+nsw-fuel-api-client==1.1.0
+
+# homeassistant.components.nuheat
+nuheat==1.0.1
+
+# homeassistant.components.numato
+numato-gpio==0.10.0
+
+# homeassistant.components.compensation
+# homeassistant.components.iqvia
+# homeassistant.components.opencv
+# homeassistant.components.stream
+# homeassistant.components.tensorflow
+# homeassistant.components.trend
+numpy==1.26.0
+
+# homeassistant.components.oasa_telematics
+oasatelematics==0.3
+
+# homeassistant.components.google
+oauth2client==4.1.3
+
+# homeassistant.components.profiler
+objgraph==3.5.0
+
+# homeassistant.components.garages_amsterdam
+odp-amsterdam==5.3.1
+
+# homeassistant.components.oem
+oemthermostat==1.1.1
+
+# homeassistant.components.omnilogic
+omnilogic==0.4.5
+
+# homeassistant.components.ondilo_ico
+ondilo==0.2.0
+
+# homeassistant.components.onkyo
+onkyo-eiscp==1.2.7
+
+# homeassistant.components.onvif
+onvif-zeep-async==3.1.12
+
+# homeassistant.components.opengarage
+open-garage==0.2.0
+
+# homeassistant.components.open_meteo
+open-meteo==0.2.1
+
+# homeassistant.components.openai_conversation
+openai==0.27.2
+
+# homeassistant.components.opencv
+# opencv-python-headless==4.6.0.66
+
+# homeassistant.components.openerz
+openerz-api==0.2.0
+
+# homeassistant.components.openevse
+openevsewifi==1.1.2
+
+# homeassistant.components.openhome
+openhomedevice==2.2.0
+
+# homeassistant.components.opensensemap
+opensensemap-api==0.2.0
+
+# homeassistant.components.enigma2
+openwebifpy==3.2.7
+
+# homeassistant.components.luci
+openwrt-luci-rpc==1.1.16
+
+# homeassistant.components.ubus
+openwrt-ubus-rpc==0.0.2
+
+# homeassistant.components.opower
+opower==0.0.37
+
+# homeassistant.components.oralb
+oralb-ble==0.17.6
+
+# homeassistant.components.oru
+oru==0.1.11
+
+# homeassistant.components.orvibo
+orvibo==1.1.1
+
+# homeassistant.components.ovo_energy
+ovoenergy==1.2.0
+
+# homeassistant.components.p1_monitor
+p1monitor==2.1.1
+
+# homeassistant.components.mqtt
+paho-mqtt==1.6.1
+
+# homeassistant.components.panasonic_bluray
+panacotta==0.2
+
+# homeassistant.components.panasonic_viera
+panasonic-viera==0.3.6
+
+# homeassistant.components.dunehd
+pdunehd==1.3.2
+
+# homeassistant.components.peco
+peco==0.0.29
+
+# homeassistant.components.pencom
+pencompy==0.0.3
+
+# homeassistant.components.escea
+pescea==1.0.12
+
+# homeassistant.components.aruba
+# homeassistant.components.cisco_ios
+# homeassistant.components.pandora
+# homeassistant.components.unifi_direct
+pexpect==4.6.0
+
+# homeassistant.components.modem_callerid
+phone-modem==0.1.1
+
+# homeassistant.components.remote_rpi_gpio
+pigpio==1.78
+
+# homeassistant.components.pilight
+pilight==0.1.1
+
+# homeassistant.components.dominos
+pizzapi==0.0.3
+
+# homeassistant.components.plex
+plexauth==0.0.6
+
+# homeassistant.components.plex
+plexwebsocket==0.0.14
+
+# homeassistant.components.plugwise
+plugwise==0.33.2
+
+# homeassistant.components.plum_lightpad
+plumlightpad==0.0.11
+
+# homeassistant.components.serial_pm
+pmsensor==0.4
+
+# homeassistant.components.poolsense
+poolsense==0.0.8
+
+# homeassistant.components.reddit
+praw==7.5.0
+
+# homeassistant.components.islamic_prayer_times
+prayer-times-calculator==0.0.6
+
+# homeassistant.components.proliphix
+proliphix==0.4.1
+
+# homeassistant.components.prometheus
+prometheus-client==0.17.1
+
+# homeassistant.components.proxmoxve
+proxmoxer==2.0.1
+
+# homeassistant.components.hardware
+# homeassistant.components.recorder
+psutil-home-assistant==0.0.1
+
+# homeassistant.components.systemmonitor
+psutil==5.9.6
+
+# homeassistant.components.pulseaudio_loopback
+pulsectl==23.5.2
+
+# homeassistant.components.androidtv
+pure-python-adb[async]==0.3.0.dev0
+
+# homeassistant.components.pushbullet
+pushbullet.py==0.11.0
+
+# homeassistant.components.pushover
+pushover_complete==1.1.1
+
+# homeassistant.components.pvoutput
+pvo==2.0.0
+
+# homeassistant.components.canary
+py-canary==0.5.3
+
+# homeassistant.components.cpuspeed
+py-cpuinfo==9.0.0
+
+# homeassistant.components.dormakaba_dkey
+py-dormakaba-dkey==1.0.5
+
+# homeassistant.components.improv_ble
+py-improv-ble-client==1.0.3
+
+# homeassistant.components.melissa
+py-melissa-climate==2.1.4
+
+# homeassistant.components.nextbus
+py-nextbusnext==1.0.0
+
+# homeassistant.components.nightscout
+py-nightscout==1.2.2
+
+# homeassistant.components.schluter
+py-schluter==0.1.7
+
+# homeassistant.components.ecovacs
+py-sucks==0.9.8
+
+# homeassistant.components.synology_dsm
+py-synologydsm-api==2.1.4
+
+# homeassistant.components.zabbix
+py-zabbix==1.1.7
+
+# homeassistant.components.seventeentrack
+py17track==2021.12.2
+
+# homeassistant.components.atome
+pyAtome==0.1.1
+
+# homeassistant.components.hdmi_cec
+pyCEC==0.5.2
+
+# homeassistant.components.control4
+pyControl4==1.1.0
+
+# homeassistant.components.duotecno
+pyDuotecno==2023.10.1
+
+# homeassistant.components.electrasmart
+pyElectra==1.2.0
+
+# homeassistant.components.emby
+pyEmby==1.9
+
+# homeassistant.components.hikvision
+pyHik==0.3.2
+
+# homeassistant.components.rfxtrx
+pyRFXtrx==0.30.1
+
+# homeassistant.components.sony_projector
+pySDCP==1
+
+# homeassistant.components.tibber
+pyTibber==0.28.2
+
+# homeassistant.components.dlink
+pyW215==0.7.0
+
+# homeassistant.components.w800rf32
+pyW800rf32==0.4
+
+# homeassistant.components.ads
+pyads==3.2.2
+
+# homeassistant.components.hisense_aehw4a1
+pyaehw4a1==0.3.9
+
+# homeassistant.components.aftership
+pyaftership==21.11.0
+
+# homeassistant.components.airnow
+pyairnow==1.2.1
+
+# homeassistant.components.airvisual
+# homeassistant.components.airvisual_pro
+pyairvisual==2023.08.1
+
+# homeassistant.components.atag
+pyatag==0.3.5.3
+
+# homeassistant.components.netatmo
+pyatmo==7.5.0
+
+# homeassistant.components.apple_tv
+pyatv==0.14.3
+
+# homeassistant.components.aussie_broadband
+pyaussiebb==0.0.15
+
+# homeassistant.components.balboa
+pybalboa==1.0.1
+
+# homeassistant.components.bbox
+pybbox==0.0.5-alpha
+
+# homeassistant.components.blackbird
+pyblackbird==0.6
+
+# homeassistant.components.neato
+pybotvac==0.0.24
+
+# homeassistant.components.braviatv
+pybravia==0.3.3
+
+# homeassistant.components.nissan_leaf
+pycarwings2==2.14
+
+# homeassistant.components.cloudflare
+pycfdns==2.0.1
+
+# homeassistant.components.channels
+pychannels==1.2.3
+
+# homeassistant.components.pocketcasts
+pycketcasts==1.0.1
+
+# homeassistant.components.cmus
+pycmus==0.1.1
+
+# homeassistant.components.tensorflow
+# pycocotools==2.0.6
+
+# homeassistant.components.comfoconnect
+pycomfoconnect==0.5.1
+
+# homeassistant.components.coolmaster
+pycoolmasternet-async==0.1.5
+
+# homeassistant.components.microsoft
+pycsspeechtts==1.0.8
+
+# homeassistant.components.cups
+# pycups==1.9.73
+
+# homeassistant.components.daikin
+pydaikin==2.11.1
+
+# homeassistant.components.danfoss_air
+pydanfossair==0.1.0
+
+# homeassistant.components.deconz
+pydeconz==113
+
+# homeassistant.components.delijn
+pydelijn==1.1.0
+
+# homeassistant.components.dexcom
+pydexcom==0.2.3
+
+# homeassistant.components.discovergy
+pydiscovergy==2.0.5
+
+# homeassistant.components.doods
+pydoods==1.0.2
+
+# homeassistant.components.hydrawise
+pydrawise==2023.10.0
+
+# homeassistant.components.android_ip_webcam
+pydroid-ipcam==2.0.0
+
+# homeassistant.components.ebox
+pyebox==1.1.4
+
+# homeassistant.components.ecoforest
+pyecoforest==0.3.0
+
+# homeassistant.components.econet
+pyeconet==0.1.22
+
+# homeassistant.components.edimax
+pyedimax==0.2.1
+
+# homeassistant.components.efergy
+pyefergy==22.1.1
+
+# homeassistant.components.enphase_envoy
+pyenphase==1.13.1
+
+# homeassistant.components.envisalink
+pyenvisalink==4.6
+
+# homeassistant.components.ephember
+pyephember==0.3.1
+
+# homeassistant.components.everlights
+pyeverlights==0.1.0
+
+# homeassistant.components.evil_genius_labs
+pyevilgenius==2.0.0
+
+# homeassistant.components.ezviz
+pyezviz==0.2.1.2
+
+# homeassistant.components.fibaro
+pyfibaro==0.7.6
+
+# homeassistant.components.fido
+pyfido==2.1.2
+
+# homeassistant.components.fireservicerota
+pyfireservicerota==0.0.43
+
+# homeassistant.components.flic
+pyflic==2.0.3
+
+# homeassistant.components.futurenow
+pyfnip==0.2
+
+# homeassistant.components.forked_daapd
+pyforked-daapd==0.1.14
+
+# homeassistant.components.freedompro
+pyfreedompro==1.1.0
+
+# homeassistant.components.fritzbox
+pyfritzhome==0.6.9
+
+# homeassistant.components.ifttt
+pyfttt==0.3
+
+# homeassistant.components.skybeacon
+pygatt[GATTTOOL]==4.0.5
+
+# homeassistant.components.gtfs
+pygtfs==0.1.9
+
+# homeassistant.components.hvv_departures
+pygti==0.9.4
+
+# homeassistant.components.version
+pyhaversion==22.8.0
+
+# homeassistant.components.heos
+pyheos==0.7.2
+
+# homeassistant.components.hive
+pyhiveapi==0.5.14
+
+# homeassistant.components.homematic
+pyhomematic==0.1.77
+
+# homeassistant.components.homeworks
+pyhomeworks==0.0.6
+
+# homeassistant.components.ialarm
+pyialarm==2.2.0
+
+# homeassistant.components.icloud
+pyicloud==1.0.0
+
+# homeassistant.components.insteon
+pyinsteon==1.5.1
+
+# homeassistant.components.intesishome
+pyintesishome==1.8.0
+
+# homeassistant.components.ipma
+pyipma==3.0.7
+
+# homeassistant.components.ipp
+pyipp==0.14.4
+
+# homeassistant.components.iqvia
+pyiqvia==2022.04.0
+
+# homeassistant.components.irish_rail_transport
+pyirishrail==0.0.2
+
+# homeassistant.components.iss
+pyiss==1.0.1
+
+# homeassistant.components.isy994
+pyisy==3.1.14
+
+# homeassistant.components.itach
+pyitachip2ir==0.0.7
+
+# homeassistant.components.jvc_projector
+pyjvcprojector==1.0.6
+
+# homeassistant.components.kaleidescape
+pykaleidescape==1.0.1
+
+# homeassistant.components.kira
+pykira==0.1.1
+
+# homeassistant.components.kmtronic
+pykmtronic==0.3.0
+
+# homeassistant.components.kodi
+pykodi==0.2.7
+
+# homeassistant.components.kostal_plenticore
+pykoplenti==1.0.0
+
+# homeassistant.components.kraken
+pykrakenapi==0.1.8
+
+# homeassistant.components.kulersky
+pykulersky==0.5.2
+
+# homeassistant.components.kwb
+pykwb==0.0.8
+
+# homeassistant.components.lacrosse
+pylacrosse==0.4
+
+# homeassistant.components.lastfm
+pylast==5.1.0
+
+# homeassistant.components.launch_library
+pylaunches==1.4.0
+
+# homeassistant.components.lg_netcast
+pylgnetcast==0.3.7
+
+# homeassistant.components.forked_daapd
+pylibrespot-java==0.1.1
+
+# homeassistant.components.litejet
+pylitejet==0.5.0
+
+# homeassistant.components.litterrobot
+pylitterbot==2023.4.9
+
+# homeassistant.components.lutron_caseta
+pylutron-caseta==0.18.3
+
+# homeassistant.components.lutron
+pylutron==0.2.8
+
+# homeassistant.components.mailgun
+pymailgunner==1.4
+
+# homeassistant.components.firmata
+pymata-express==1.19
+
+# homeassistant.components.mediaroom
+pymediaroom==0.6.5.4
+
+# homeassistant.components.melcloud
+pymelcloud==2.5.8
+
+# homeassistant.components.meteoclimatic
+pymeteoclimatic==0.0.6
+
+# homeassistant.components.xiaomi_tv
+pymitv==1.4.3
+
+# homeassistant.components.mochad
+pymochad==0.2.0
+
+# homeassistant.components.modbus
+pymodbus==3.5.4
+
+# homeassistant.components.monoprice
+pymonoprice==0.4
+
+# homeassistant.components.msteams
+pymsteams==0.1.12
+
+# homeassistant.components.mysensors
+pymysensors==0.24.0
+
+# homeassistant.components.netgear
+pynetgear==0.10.10
+
+# homeassistant.components.netio
+pynetio==0.1.9.1
+
+# homeassistant.components.nobo_hub
+pynobo==1.6.0
+
+# homeassistant.components.nuki
+pynuki==1.6.2
+
+# homeassistant.components.nut
+pynut2==2.1.2
+
+# homeassistant.components.nws
+pynws==1.5.1
+
+# homeassistant.components.nx584
+pynx584==0.5
+
+# homeassistant.components.nzbget
+pynzbgetapi==0.2.0
+
+# homeassistant.components.obihai
+pyobihai==1.4.2
+
+# homeassistant.components.octoprint
+pyoctoprintapi==0.1.12
+
+# homeassistant.components.ombi
+pyombi==0.1.10
+
+# homeassistant.components.openuv
+pyopenuv==2023.02.0
+
+# homeassistant.components.opnsense
+pyopnsense==0.4.0
+
+# homeassistant.components.opple
+pyoppleio-legacy==1.0.8
+
+# homeassistant.components.opentherm_gw
+pyotgw==2.1.3
+
+# homeassistant.auth.mfa_modules.notify
+# homeassistant.auth.mfa_modules.totp
+# homeassistant.components.otp
+pyotp==2.8.0
+
+# homeassistant.components.overkiz
+pyoverkiz==1.12.1
+
+# homeassistant.components.openweathermap
+pyowm==3.2.0
+
+# homeassistant.components.onewire
+pyownet==0.10.0.post1
+
+# homeassistant.components.elv
+pypca==0.0.7
+
+# homeassistant.components.lcn
+pypck==0.7.17
+
+# homeassistant.components.pjlink
+pypjlink2==1.2.1
+
+# homeassistant.components.plaato
+pyplaato==0.0.18
+
+# homeassistant.components.point
+pypoint==2.3.2
+
+# homeassistant.components.profiler
+pyprof2calltree==1.4.5
+
+# homeassistant.components.prosegur
+pyprosegur==0.0.9
+
+# homeassistant.components.prusalink
+pyprusalink==1.1.0
+
+# homeassistant.components.ps4
+pyps4-2ndscreen==1.3.1
+
+# homeassistant.components.qvr_pro
+pyqvrpro==0.52
+
+# homeassistant.components.qwikswitch
+pyqwikswitch==0.93
+
+# homeassistant.components.nmbs
+pyrail==0.0.3
+
+# homeassistant.components.rainbird
+pyrainbird==4.0.0
+
+# homeassistant.components.recswitch
+pyrecswitch==1.0.2
+
+# homeassistant.components.repetier
+pyrepetierng==0.1.0
+
+# homeassistant.components.risco
+pyrisco==0.5.7
+
+# homeassistant.components.rituals_perfume_genie
+pyrituals==0.0.6
+
+# homeassistant.components.thread
+pyroute2==0.7.5
+
+# homeassistant.components.rympro
+pyrympro==0.0.7
+
+# homeassistant.components.sabnzbd
+pysabnzbd==1.1.1
+
+# homeassistant.components.saj
+pysaj==0.0.16
+
+# homeassistant.components.schlage
+pyschlage==2023.9.1
+
+# homeassistant.components.sensibo
+pysensibo==1.0.35
+
+# homeassistant.components.zha
+pyserial-asyncio-fast==0.11
+
+# homeassistant.components.serial
+# homeassistant.components.zha
+pyserial-asyncio==0.6
+
+# homeassistant.components.acer_projector
+# homeassistant.components.crownstone
+# homeassistant.components.usb
+# homeassistant.components.zha
+# homeassistant.components.zwave_js
+pyserial==3.5
+
+# homeassistant.components.sesame
+pysesame2==1.0.1
+
+# homeassistant.components.sia
+pysiaalarm==3.1.1
+
+# homeassistant.components.signal_messenger
+pysignalclirestapi==0.3.18
+
+# homeassistant.components.sky_hub
+pyskyqhub==0.1.4
+
+# homeassistant.components.sma
+pysma==0.7.3
+
+# homeassistant.components.smappee
+pysmappee==0.2.29
+
+# homeassistant.components.smartthings
+pysmartapp==0.3.5
+
+# homeassistant.components.smartthings
+pysmartthings==0.7.8
+
+# homeassistant.components.edl21
+pysml==0.0.12
+
+# homeassistant.components.snmp
+pysnmplib==5.0.21
+
+# homeassistant.components.snooz
+pysnooz==0.8.6
+
+# homeassistant.components.soma
+pysoma==0.0.12
+
+# homeassistant.components.spc
+pyspcwebgw==0.7.0
+
+# homeassistant.components.squeezebox
+pysqueezebox==0.6.3
+
+# homeassistant.components.stiebel_eltron
+pystiebeleltron==0.0.1.dev2
+
+# homeassistant.components.suez_water
+pysuez==0.1.19
+
+# homeassistant.components.switchbee
+pyswitchbee==1.8.0
+
+# homeassistant.components.tankerkoenig
+pytankerkoenig==0.0.6
+
+# homeassistant.components.tautulli
+pytautulli==23.1.1
+
+# homeassistant.components.tfiac
+pytfiac==0.4
+
+# homeassistant.components.thinkingcleaner
+pythinkingcleaner==0.0.3
+
+# homeassistant.components.awair
+python-awair==0.2.4
+
+# homeassistant.components.blockchain
+python-blockchain-api==0.0.2
+
+# homeassistant.components.bsblan
+python-bsblan==0.5.16
+
+# homeassistant.components.clementine
+python-clementine-remote==1.0.1
+
+# homeassistant.components.digital_ocean
+python-digitalocean==1.13.2
+
+# homeassistant.components.ecobee
+python-ecobee-api==0.2.14
+
+# homeassistant.components.eq3btsmart
+# python-eq3bt==0.2
+
+# homeassistant.components.etherscan
+python-etherscan-api==0.0.3
+
+# homeassistant.components.familyhub
+python-family-hub-local==0.0.2
+
+# homeassistant.components.fully_kiosk
+python-fullykiosk==0.0.12
+
+# homeassistant.components.sms
+# python-gammu==3.2.4
+
+# homeassistant.components.gc100
+python-gc100==1.0.3a0
+
+# homeassistant.components.gitlab_ci
+python-gitlab==1.6.0
+
+# homeassistant.components.homewizard
+python-homewizard-energy==2.1.2
+
+# homeassistant.components.hp_ilo
+python-hpilo==4.3
+
+# homeassistant.components.izone
+python-izone==1.2.9
+
+# homeassistant.components.joaoapps_join
+python-join-api==0.0.9
+
+# homeassistant.components.juicenet
+python-juicenet==1.1.0
+
+# homeassistant.components.tplink
+python-kasa[speedups]==0.5.3
+
+# homeassistant.components.lirc
+# python-lirc==1.2.3
+
+# homeassistant.components.matter
+python-matter-server==4.0.0
+
+# homeassistant.components.xiaomi_miio
+python-miio==0.5.12
+
+# homeassistant.components.mpd
+python-mpd2==3.0.5
+
+# homeassistant.components.myq
+python-myq==3.1.13
+
+# homeassistant.components.mystrom
+python-mystrom==2.2.0
+
+# homeassistant.components.swiss_public_transport
+python-opendata-transport==0.3.0
+
+# homeassistant.components.opensky
+python-opensky==0.2.1
+
+# homeassistant.components.otbr
+# homeassistant.components.thread
+python-otbr-api==2.5.0
+
+# homeassistant.components.picnic
+python-picnic-api==1.1.0
+
+# homeassistant.components.qbittorrent
+python-qbittorrent==0.4.3
+
+# homeassistant.components.ripple
+python-ripple-api==0.0.3
+
+# homeassistant.components.roborock
+python-roborock==0.35.0
+
+# homeassistant.components.smarttub
+python-smarttub==0.0.33
+
+# homeassistant.components.songpal
+python-songpal==0.15.2
+
+# homeassistant.components.tado
+python-tado==0.15.0
+
+# homeassistant.components.telegram_bot
+python-telegram-bot==13.1
+
+# homeassistant.components.vlc
+python-vlc==3.0.18122
+
+# homeassistant.components.egardia
+pythonegardia==1.0.52
+
+# homeassistant.components.tile
+pytile==2023.04.0
+
+# homeassistant.components.tomorrowio
+pytomorrowio==0.3.6
+
+# homeassistant.components.touchline
+pytouchline==0.7
+
+# homeassistant.components.traccar
+pytraccar==1.0.0
+
+# homeassistant.components.tradfri
+pytradfri[async]==9.0.1
+
+# homeassistant.components.trafikverket_camera
+# homeassistant.components.trafikverket_ferry
+# homeassistant.components.trafikverket_train
+# homeassistant.components.trafikverket_weatherstation
+pytrafikverket==0.3.7
+
+# homeassistant.components.usb
+pyudev==0.23.2
+
+# homeassistant.components.unifiprotect
+pyunifiprotect==4.20.0
+
+# homeassistant.components.uptimerobot
+pyuptimerobot==22.2.0
+
+# homeassistant.components.keyboard
+# pyuserinput==0.1.11
+
+# homeassistant.components.vera
+pyvera==0.3.13
+
+# homeassistant.components.versasense
+pyversasense==0.0.6
+
+# homeassistant.components.vesync
+pyvesync==2.1.10
+
+# homeassistant.components.vizio
+pyvizio==0.1.61
+
+# homeassistant.components.velux
+pyvlx==0.2.20
+
+# homeassistant.components.volumio
+pyvolumio==0.1.5
+
+# homeassistant.components.waze_travel_time
+pywaze==0.5.1
+
+# homeassistant.components.weatherflow
+pyweatherflowudp==1.4.5
+
+# homeassistant.components.html5
+pywebpush==1.9.2
+
+# homeassistant.components.wemo
+pywemo==1.3.0
+
+# homeassistant.components.wilight
+pywilight==0.0.74
+
+# homeassistant.components.wiz
+pywizlight==0.5.14
+
+# homeassistant.components.ws66i
+pyws66i==1.1
+
+# homeassistant.components.xeoma
+pyxeoma==1.4.1
+
+# homeassistant.components.yardian
+pyyardian==1.1.1
+
+# homeassistant.components.qrcode
+pyzbar==0.1.7
+
+# homeassistant.components.zerproc
+pyzerproc==0.4.8
+
+# homeassistant.components.qingping
+qingping-ble==0.8.2
+
+# homeassistant.components.qnap
+qnapstats==0.4.0
+
+# homeassistant.components.quantum_gateway
+quantum-gateway==0.0.8
+
+# homeassistant.components.radio_browser
+radios==0.1.1
+
+# homeassistant.components.radiotherm
+radiotherm==2.1.0
+
+# homeassistant.components.raincloud
+raincloudy==0.0.7
+
+# homeassistant.components.rapt_ble
+rapt-ble==0.1.2
+
+# homeassistant.components.raspyrfm
+raspyrfm-client==1.2.8
+
+# homeassistant.components.rainmachine
+regenmaschine==2023.06.0
+
+# homeassistant.components.renault
+renault-api==0.2.0
+
+# homeassistant.components.renson
+renson-endura-delta==1.6.0
+
+# homeassistant.components.reolink
+reolink-aio==0.7.11
+
+# homeassistant.components.idteck_prox
+rfk101py==0.0.1
+
+# homeassistant.components.rflink
+rflink==0.0.65
+
+# homeassistant.components.ring
+ring-doorbell==0.7.3
+
+# homeassistant.components.fleetgo
+ritassist==0.9.2
+
+# homeassistant.components.rejseplanen
+rjpl==0.3.6
+
+# homeassistant.components.rocketchat
+rocketchat-API==0.6.1
+
+# homeassistant.components.roku
+rokuecp==0.18.1
+
+# homeassistant.components.roomba
+roombapy==1.6.8
+
+# homeassistant.components.roon
+roonapi==0.1.4
+
+# homeassistant.components.rova
+rova==0.3.0
+
+# homeassistant.components.rpi_power
+rpi-bad-power==0.1.0
+
+# homeassistant.components.rtsp_to_webrtc
+rtsp-to-webrtc==0.5.1
+
+# homeassistant.components.russound_rio
+russound-rio==1.0.0
+
+# homeassistant.components.russound_rnet
+russound==0.1.9
+
+# homeassistant.components.ruuvitag_ble
+ruuvitag-ble==0.1.2
+
+# homeassistant.components.yamaha
+rxv==0.7.0
+
+# homeassistant.components.samsungtv
+samsungctl[websocket]==0.7.1
+
+# homeassistant.components.samsungtv
+samsungtvws[async,encrypted]==2.6.0
+
+# homeassistant.components.satel_integra
+satel-integra==0.3.7
+
+# homeassistant.components.dhcp
+scapy==2.5.0
+
+# homeassistant.components.screenlogic
+screenlogicpy==0.9.3
+
+# homeassistant.components.scsgate
+scsgate==0.1.0
+
+# homeassistant.components.backup
+securetar==2023.3.0
+
+# homeassistant.components.sendgrid
+sendgrid==6.8.2
+
+# homeassistant.components.emulated_kasa
+# homeassistant.components.sense
+sense-energy==0.12.2
+
+# homeassistant.components.sensirion_ble
+sensirion-ble==0.1.1
+
+# homeassistant.components.sensorpro
+sensorpro-ble==0.5.3
+
+# homeassistant.components.sensorpush
+sensorpush-ble==1.5.5
+
+# homeassistant.components.sentry
+sentry-sdk==1.31.0
+
+# homeassistant.components.sfr_box
+sfrbox-api==0.0.6
+
+# homeassistant.components.sharkiq
+sharkiq==1.0.2
+
+# homeassistant.components.aquostv
+sharp_aquos_rc==0.3.2
+
+# homeassistant.components.shodan
+shodan==1.28.0
+
+# homeassistant.components.sighthound
+simplehound==0.3
+
+# homeassistant.components.simplepush
+simplepush==2.2.3
+
+# homeassistant.components.simplisafe
+simplisafe-python==2023.08.0
+
+# homeassistant.components.sisyphus
+sisyphus-control==3.1.3
+
+# homeassistant.components.slack
+slackclient==2.5.0
+
+# homeassistant.components.xmpp
+slixmpp==1.8.4
+
+# homeassistant.components.smart_meter_texas
+smart-meter-texas==0.4.7
+
+# homeassistant.components.smhi
+smhi-pkg==1.0.16
+
+# homeassistant.components.snapcast
+snapcast==2.3.3
+
+# homeassistant.components.sonos
+soco==0.29.1
+
+# homeassistant.components.solaredge_local
+solaredge-local==0.2.3
+
+# homeassistant.components.solaredge
+solaredge==0.0.2
+
+# homeassistant.components.solax
+solax==0.3.2
+
+# homeassistant.components.somfy_mylink
+somfy-mylink-synergy==1.0.6
+
+# homeassistant.components.sonos
+sonos-websocket==0.1.2
+
+# homeassistant.components.marytts
+speak2mary==1.4.0
+
+# homeassistant.components.speedtestdotnet
+speedtest-cli==2.1.3
+
+# homeassistant.components.spider
+spiderpy==1.6.1
+
+# homeassistant.components.spotify
+spotipy==2.23.0
+
+# homeassistant.components.srp_energy
+srpenergy==1.3.6
+
+# homeassistant.components.starline
+starline==0.1.5
+
+# homeassistant.components.starlingbank
+starlingbank==3.2
+
+# homeassistant.components.starlink
+starlink-grpc-core==1.1.2
+
+# homeassistant.components.statsd
+statsd==3.2.1
+
+# homeassistant.components.steam_online
+steamodd==4.21
+
+# homeassistant.components.stookalert
+stookalert==0.1.4
+
+# homeassistant.components.stookwijzer
+stookwijzer==1.3.0
+
+# homeassistant.components.streamlabswater
+streamlabswater==1.0.1
+
+# homeassistant.components.huawei_lte
+# homeassistant.components.solaredge
+# homeassistant.components.thermoworks_smoke
+# homeassistant.components.traccar
+stringcase==1.2.0
+
+# homeassistant.components.subaru
+subarulink==0.7.6
+
+# homeassistant.components.solarlog
+sunwatcher==0.2.1
+
+# homeassistant.components.surepetcare
+surepy==0.8.0
+
+# homeassistant.components.swiss_hydrological_data
+swisshydrodata==0.1.0
+
+# homeassistant.components.switchbot_cloud
+switchbot-api==1.2.1
+
+# homeassistant.components.synology_srm
+synology-srm==0.2.0
+
+# homeassistant.components.system_bridge
+systembridgeconnector==3.8.4
+
+# homeassistant.components.tailscale
+tailscale==0.2.0
+
+# homeassistant.components.tank_utility
+tank-utility==1.5.0
+
+# homeassistant.components.tapsaff
+tapsaff==0.2.1
+
+# homeassistant.components.tellstick
+tellcore-net==0.4
+
+# homeassistant.components.tellstick
+tellcore-py==1.1.2
+
+# homeassistant.components.tellduslive
+tellduslive==0.10.11
+
+# homeassistant.components.lg_soundbar
+temescal==0.5
+
+# homeassistant.components.temper
+temperusb==1.6.0
+
+# homeassistant.components.tensorflow
+# tensorflow==2.5.0
+
+# homeassistant.components.powerwall
+tesla-powerwall==0.3.19
+
+# homeassistant.components.tesla_wall_connector
+tesla-wall-connector==1.0.2
+
+# homeassistant.components.tensorflow
+# tf-models-official==2.5.0
+
+# homeassistant.components.thermobeacon
+thermobeacon-ble==0.6.0
+
+# homeassistant.components.thermopro
+thermopro-ble==0.4.5
+
+# homeassistant.components.thermoworks_smoke
+thermoworks-smoke==0.1.8
+
+# homeassistant.components.thingspeak
+thingspeak==1.0.0
+
+# homeassistant.components.tikteck
+tikteck==0.4
+
+# homeassistant.components.tilt_ble
+tilt-ble==0.2.3
+
+# homeassistant.components.tmb
+tmb==0.0.4
+
+# homeassistant.components.todoist
+todoist-api-python==2.1.2
+
+# homeassistant.components.tolo
+tololib==0.1.0b4
+
+# homeassistant.components.toon
+toonapi==0.3.0
+
+# homeassistant.components.totalconnect
+total-connect-client==2023.2
+
+# homeassistant.components.tplink_lte
+tp-connected==0.0.4
+
+# homeassistant.components.tplink_omada
+tplink-omada-client==1.3.2
+
+# homeassistant.components.transmission
+transmission-rpc==4.1.5
+
+# homeassistant.components.twinkly
+ttls==1.5.1
+
+# homeassistant.components.tuya
+tuya-iot-py-sdk==0.6.6
+
+# homeassistant.components.twentemilieu
+twentemilieu==2.0.0
+
+# homeassistant.components.twilio
+twilio==6.32.0
+
+# homeassistant.components.twitch
+twitchAPI==4.0.0
+
+# homeassistant.components.ukraine_alarm
+uasiren==0.0.1
+
+# homeassistant.components.landisgyr_heat_meter
+ultraheat-api==0.5.7
+
+# homeassistant.components.unifiprotect
+unifi-discovery==1.1.7
+
+# homeassistant.components.unifiled
+unifiled==0.11
+
+# homeassistant.components.zha
+universal-silabs-flasher==0.0.14
+
+# homeassistant.components.upb
+upb-lib==0.5.4
+
+# homeassistant.components.upcloud
+upcloud-api==2.0.0
+
+# homeassistant.components.huawei_lte
+# homeassistant.components.syncthru
+# homeassistant.components.zwave_me
+url-normalize==1.4.3
+
+# homeassistant.components.uvc
+uvcclient==0.11.0
+
+# homeassistant.components.vallox
+vallox-websocket-api==3.3.0
+
+# homeassistant.components.rdw
+vehicle==2.0.0
+
+# homeassistant.components.velbus
+velbus-aio==2023.10.1
+
+# homeassistant.components.venstar
+venstarcolortouch==0.19
+
+# homeassistant.components.vilfo
+vilfo-api-client==0.4.1
+
+# homeassistant.components.voip
+voip-utils==0.1.0
+
+# homeassistant.components.volkszaehler
+volkszaehler==0.4.0
+
+# homeassistant.components.volvooncall
+volvooncall==0.10.3
+
+# homeassistant.components.verisure
+vsure==2.6.6
+
+# homeassistant.components.vasttrafik
+vtjp==0.1.14
+
+# homeassistant.components.vulcan
+vulcan-api==2.3.0
+
+# homeassistant.components.vultr
+vultr==0.1.2
+
+# homeassistant.components.samsungtv
+# homeassistant.components.wake_on_lan
+wakeonlan==2.1.0
+
+# homeassistant.components.wallbox
+wallbox==0.4.14
+
+# homeassistant.components.folder_watcher
+watchdog==2.3.1
+
+# homeassistant.components.waterfurnace
+waterfurnace==1.1.0
+
+# homeassistant.components.cisco_webex_teams
+webexteamssdk==1.1.1;python_version<'3.12'
+
+# homeassistant.components.assist_pipeline
+webrtc-noise-gain==1.2.3
+
+# homeassistant.components.whirlpool
+whirlpool-sixth-sense==0.18.4
+
+# homeassistant.components.whois
+whois==0.9.27
+
+# homeassistant.components.wiffi
+wiffi==1.1.2
+
+# homeassistant.components.wirelesstag
+wirelesstagpy==0.8.1
+
+# homeassistant.components.wled
+wled==0.17.0
+
+# homeassistant.components.wolflink
+wolf-smartset==0.1.11
+
+# homeassistant.components.wyoming
+wyoming==1.2.0
+
+# homeassistant.components.xbox
+xbox-webapi==2.0.11
+
+# homeassistant.components.xiaomi_ble
+xiaomi-ble==0.21.1
+
+# homeassistant.components.knx
+xknx==2.11.2
+
+# homeassistant.components.knx
+xknxproject==3.3.0
+
+# homeassistant.components.bluesound
+# homeassistant.components.fritz
+# homeassistant.components.rest
+# homeassistant.components.startca
+# homeassistant.components.ted5000
+# homeassistant.components.zestimate
+xmltodict==0.13.0
+
+# homeassistant.components.xs1
+xs1-api-client==3.0.0
+
+# homeassistant.components.yale_smart_alarm
+yalesmartalarmclient==0.3.9
+
+# homeassistant.components.august
+# homeassistant.components.yalexs_ble
+yalexs-ble==2.3.1
+
+# homeassistant.components.august
+yalexs==1.10.0
+
+# homeassistant.components.yeelight
+yeelight==0.7.13
+
+# homeassistant.components.yeelightsunflower
+yeelightsunflower==0.0.10
+
+# homeassistant.components.yolink
+yolink-api==0.3.1
+
+# homeassistant.components.youless
+youless-api==1.0.1
+
+# homeassistant.components.youtube
+youtubeaio==1.1.5
+
+# homeassistant.components.media_extractor
+yt-dlp==2023.9.24
+
+# homeassistant.components.zamg
+zamg==0.3.0
+
+# homeassistant.components.zengge
+zengge==0.2
+
+# homeassistant.components.zeroconf
+zeroconf==0.119.0
+
+# homeassistant.components.zeversolar
+zeversolar==0.3.1
+
+# homeassistant.components.zha
+zha-quirks==0.0.106
+
+# homeassistant.components.zhong_hong
+zhong-hong-hvac==1.0.9
+
+# homeassistant.components.ziggo_mediabox_xl
+ziggo-mediabox-xl==1.1.0
+
+# homeassistant.components.zha
+zigpy-deconz==0.21.1
+
+# homeassistant.components.zha
+zigpy-xbee==0.19.0
+
+# homeassistant.components.zha
+zigpy-zigate==0.11.0
+
+# homeassistant.components.zha
+zigpy-znp==0.11.6
+
+# homeassistant.components.zha
+zigpy==0.59.0
+
+# homeassistant.components.zoneminder
+zm-py==0.5.2
+
+# homeassistant.components.zwave_js
+zwave-js-server-python==0.53.1
+
+# homeassistant.components.zwave_me
+zwave-me-ws==0.4.3
