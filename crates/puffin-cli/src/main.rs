@@ -72,6 +72,10 @@ struct PipCompileArgs {
     #[clap(short, long)]
     constraint: Vec<PathBuf>,
 
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[clap(long)]
+    extra: Vec<ExtraName>,
+
     #[clap(long, value_enum)]
     resolution: Option<ResolutionMode>,
 
@@ -97,9 +101,6 @@ struct PipCompileArgs {
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[clap(long)]
     upgrade: bool,
-
-    #[clap(long)]
-    extra: Vec<ExtraName>,
 }
 
 #[derive(Args)]
