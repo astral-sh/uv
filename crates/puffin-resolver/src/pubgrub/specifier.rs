@@ -1,21 +1,18 @@
-use std::ops::Range;
-
 use anyhow::Result;
+use pubgrub::range::Range;
 
 use pep440_rs::{Operator, VersionSpecifier};
 
-use crate::pubgrub::version::{PubGrubVersion, MAX_VERSION, MIN_VERSION};
+use crate::pubgrub::version::PubGrubVersion;
 
 /// A range of versions that can be used to satisfy a requirement.
 #[derive(Debug)]
-pub(crate) struct PubGrubSpecifier(Vec<Range<PubGrubVersion>>);
+pub(crate) struct PubGrubSpecifier(Range<PubGrubVersion>);
 
-impl IntoIterator for PubGrubSpecifier {
-    type Item = Range<PubGrubVersion>;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+impl From<PubGrubSpecifier> for Range<PubGrubVersion> {
+    /// Convert a `PubGrub` specifier to a range of versions.
+    fn from(specifier: PubGrubSpecifier) -> Self {
+        specifier.0
     }
 }
 
@@ -27,18 +24,15 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = PubGrubVersion::from(specifier.version().clone());
-                vec![version.clone()..version.next()]
+                Range::singleton(version)
             }
             Operator::ExactEqual => {
                 let version = PubGrubVersion::from(specifier.version().clone());
-                vec![version.clone()..version.next()]
+                Range::singleton(version)
             }
             Operator::NotEqual => {
                 let version = PubGrubVersion::from(specifier.version().clone());
-                vec![
-                    MIN_VERSION.clone()..version.clone(),
-                    version.next()..MAX_VERSION.clone(),
-                ]
+                Range::singleton(version).complement()
             }
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = specifier.version().release.as_slice() else {
@@ -58,29 +52,16 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                         .copied()
                         .collect(),
                 });
-                let lower = PubGrubVersion::from(specifier.version().clone());
-                vec![lower..upper]
+                let version = PubGrubVersion::from(specifier.version().clone());
+                Range::from_range_bounds(version..upper)
             }
             Operator::LessThan => {
-                // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a pre-release of
-                // the specified version unless the specified version is itself a pre-release."
-                if specifier.version().any_prerelease() {
-                    let version = PubGrubVersion::from(specifier.version().clone());
-                    vec![MIN_VERSION.clone()..version.clone()]
-                } else {
-                    let max_version = pep440_rs::Version {
-                        post: None,
-                        dev: Some(0),
-                        local: None,
-                        ..specifier.version().clone()
-                    };
-                    let version = PubGrubVersion::from(max_version);
-                    vec![MIN_VERSION.clone()..version.clone()]
-                }
+                let version = PubGrubVersion::from(specifier.version().clone());
+                Range::strictly_lower_than(version)
             }
             Operator::LessThanEqual => {
                 let version = PubGrubVersion::from(specifier.version().clone());
-                vec![MIN_VERSION.clone()..version.next()]
+                Range::lower_than(version)
             }
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
@@ -93,20 +74,18 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 } else {
                     low.post = Some(usize::MAX);
                 }
-
-                let version = PubGrubVersion::from(low);
-                vec![version..MAX_VERSION.clone()]
+                let version = PubGrubVersion::from(specifier.version().clone());
+                Range::strictly_higher_than(version)
             }
             Operator::GreaterThanEqual => {
                 let version = PubGrubVersion::from(specifier.version().clone());
-                vec![version..MAX_VERSION.clone()]
+                Range::higher_than(version)
             }
             Operator::EqualStar => {
                 let low = pep440_rs::Version {
                     dev: Some(0),
                     ..specifier.version().clone()
                 };
-
                 let mut high = pep440_rs::Version {
                     dev: Some(0),
                     ..specifier.version().clone()
@@ -122,15 +101,13 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 } else {
                     *high.release.last_mut().unwrap() += 1;
                 }
-
-                vec![PubGrubVersion::from(low)..PubGrubVersion::from(high)]
+                Range::from_range_bounds(PubGrubVersion::from(low)..PubGrubVersion::from(high))
             }
             Operator::NotEqualStar => {
                 let low = pep440_rs::Version {
                     dev: Some(0),
                     ..specifier.version().clone()
                 };
-
                 let mut high = pep440_rs::Version {
                     dev: Some(0),
                     ..specifier.version().clone()
@@ -146,11 +123,8 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 } else {
                     *high.release.last_mut().unwrap() += 1;
                 }
-
-                vec![
-                    MIN_VERSION.clone()..PubGrubVersion::from(low),
-                    PubGrubVersion::from(high)..MAX_VERSION.clone(),
-                ]
+                Range::from_range_bounds(PubGrubVersion::from(low)..PubGrubVersion::from(high))
+                    .complement()
             }
         };
 
