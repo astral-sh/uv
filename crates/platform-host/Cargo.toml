@@ -11,12 +11,11 @@ license = { workspace = true }
 
 [dependencies]
 fs-err = { workspace = true }
-glibc_version = { workspace = true }
 goblin = { workspace = true }
 platform-info = { workspace = true }
 plist = { workspace = true }
 regex = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 target-lexicon = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

@@ -24,7 +24,7 @@ clap = { workspace = true }
 configparser = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
-reqwest = { workspace = true, optional = true, features = ["blocking"] }
+reqwest = { workspace = true, optional = true, default-features = false, features = ["blocking"] }
 rayon = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
