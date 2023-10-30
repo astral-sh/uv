@@ -1,5 +1,6 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
+use std::clone::Clone;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -83,10 +84,10 @@ impl RequirementsSpecification {
                             // Include any optional dependencies specified in `extras`
                             project.optional_dependencies.into_iter().flat_map(
                                 |optional_dependencies| {
-                                    extras.into_iter().flat_map(move |extra| {
+                                    extras.iter().flat_map(move |extra| {
                                         optional_dependencies
                                             .get(extra.as_ref())
-                                            .map(|requirement| requirement.to_owned())
+                                            .map(Clone::clone)
                                             // undefined extra requests are ignored silently
                                             .unwrap_or_default()
                                     })
