@@ -3,8 +3,7 @@ use thiserror::Error;
 
 use pep508_rs::Requirement;
 
-use crate::pubgrub::package::PubGrubPackage;
-use crate::pubgrub::version::PubGrubVersion;
+use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 
 #[derive(Error, Debug)]
 pub enum ResolveError {

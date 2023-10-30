@@ -12,9 +12,7 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_client::File;
 use puffin_package::package_name::PackageName;
 
-use crate::pubgrub::package::PubGrubPackage;
-use crate::pubgrub::priority::PubGrubPriority;
-use crate::pubgrub::version::PubGrubVersion;
+use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 
 /// A package pinned at a specific version.
 #[derive(Debug)]
