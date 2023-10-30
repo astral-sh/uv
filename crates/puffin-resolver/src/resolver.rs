@@ -427,7 +427,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             PubGrubPackage::Package(package_name, extra) => {
                 if let Some(extra) = extra.as_ref() {
                     debug!(
-                        "Fetching dependencies for {}[{:?}]@{}",
+                        "Fetching dependencies for {}[{}]@{}",
                         package_name, extra, version
                     );
                 } else {

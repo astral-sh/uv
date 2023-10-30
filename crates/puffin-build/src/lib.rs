@@ -74,9 +74,13 @@ pub struct PyProjectToml {
 struct Pep517Backend {
     /// The build backend string such as `setuptools.build_meta:__legacy__` or `maturin` from
     /// `build-backend.backend` in pyproject.toml
+    ///
+    /// <https://peps.python.org/pep-0517/#build-wheel>
     backend: String,
     /// `build-backend.requirements` in pyproject.toml
     requirements: Vec<Requirement>,
+    /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
+    backend_path: Option<Vec<String>>,
 }
 
 impl Pep517Backend {
@@ -126,55 +130,43 @@ impl SourceDistributionBuilder {
         let extracted = temp_dir.path().join("extracted");
         let source_tree = extract_archive(sdist, &extracted)?;
 
-        // Check if we have a PEP 517 build, otherwise we'll fall back to setup.py
-        let mut pep517 = None;
-        if source_tree.join("pyproject.toml").is_file() {
+        // Check if we have a PEP 517 build, a legacy setup.py, or an edge case
+        let build_system = if source_tree.join("pyproject.toml").is_file() {
             let pyproject_toml: PyProjectToml =
                 toml::from_str(&fs::read_to_string(source_tree.join("pyproject.toml"))?)
                     .map_err(Error::InvalidPyprojectToml)?;
-            // > If the pyproject.toml file is absent, or the build-backend key is missing, the
-            // > source tree is not using this specification, and tools should revert to the legacy
-            // > behaviour of running setup.py (either directly, or by implicitly invoking the
-            // > setuptools.build_meta:__legacy__ backend).
-            if let Some(build_system) = pyproject_toml.build_system {
-                if let Some(backend) = build_system.build_backend {
-                    pep517 = Some(Pep517Backend {
-                        backend,
-                        requirements: build_system.requires,
-                    });
-                };
-                if build_system.backend_path.is_some() {
-                    return Err(Error::InvalidSourceDistribution(
-                        "backend-path is not supported yet".to_string(),
-                    ));
-                }
-            }
-        }
-
-        let venv = if let Some(pep517_backend) = &pep517 {
-            create_pep517_build_environment(
-                temp_dir.path(),
-                &source_tree,
-                interpreter_info,
-                pep517_backend,
-                build_context,
-            )
-            .await?
+            pyproject_toml.build_system
         } else {
-            if !source_tree.join("setup.py").is_file() {
-                return Err(Error::InvalidSourceDistribution(
-                    "The archive contains neither a pyproject.toml or a setup.py at the top level"
-                        .to_string(),
-                ));
-            }
-            let venv = gourgeist::create_venv(
-                temp_dir.path().join("venv"),
-                build_context.base_python(),
-                interpreter_info,
-                true,
-            )?;
+            None
+        };
+
+        let venv = gourgeist::create_venv(
+            temp_dir.path().join(".venv"),
+            build_context.base_python(),
+            interpreter_info,
+            true,
+        )?;
+
+        // There are packages such as DTLSSocket 0.1.16 that say
+        // ```toml
+        // [build-system]
+        // requires = ["Cython<3", "setuptools", "wheel"]
+        // ```
+        // In this case we need to install requires PEP 517 style but then call setup.py in the
+        // legacy way
+        let requirements = if let Some(build_system) = &build_system {
+            let resolved_requirements = build_context
+                .resolve(&build_system.requires)
+                .await
+                .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+            build_context
+                .install(&resolved_requirements, &venv)
+                .await
+                .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+            build_system.requires.clone()
+        } else {
             // TODO(konstin): Resolve those once globally and cache per puffin invocation
-            let requirements = [
+            let requirements = vec![
                 Requirement::from_str("wheel").unwrap(),
                 Requirement::from_str("setuptools").unwrap(),
                 Requirement::from_str("pip").unwrap(),
@@ -187,13 +179,43 @@ impl SourceDistributionBuilder {
                 .install(&resolved_requirements, &venv)
                 .await
                 .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
-            venv
+            requirements
         };
+
+        // > If the pyproject.toml file is absent, or the build-backend key is missing, the
+        // > source tree is not using this specification, and tools should revert to the legacy
+        // > behaviour of running setup.py (either directly, or by implicitly invoking the
+        // > setuptools.build_meta:__legacy__ backend).
+        let pep517_backend = if let Some(build_system) = build_system {
+            if let Some(backend) = build_system.build_backend {
+                Some(Pep517Backend {
+                    backend,
+                    backend_path: build_system.backend_path,
+                    requirements,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(pep517_backend) = &pep517_backend {
+            create_pep517_build_environment(&source_tree, &venv, pep517_backend, build_context)
+                .await?;
+        } else {
+            if !source_tree.join("setup.py").is_file() {
+                return Err(Error::InvalidSourceDistribution(
+                    "The archive contains neither a pyproject.toml or a setup.py at the top level"
+                        .to_string(),
+                ));
+            }
+        }
 
         Ok(Self {
             temp_dir,
             source_tree,
-            pep517_backend: pep517,
+            pep517_backend,
             venv,
             metadata_directory: None,
         })
@@ -354,26 +376,20 @@ fn escape_path_for_python(path: &Path) -> String {
 
 /// Not a method because we call it before the builder is completely initialized
 async fn create_pep517_build_environment(
-    root: &Path,
     source_tree: &Path,
-    data: &InterpreterInfo,
+    venv: &Virtualenv,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
-) -> Result<Virtualenv, Error> {
-    let venv = gourgeist::create_venv(root.join(".venv"), build_context.base_python(), data, true)?;
-    let resolved_requirements = build_context
-        .resolve(&pep517_backend.requirements)
-        .await
-        .map_err(|err| Error::RequirementsInstall("get_requires_for_build_wheel", err))?;
-    build_context
-        .install(&resolved_requirements, &venv)
-        .await
-        .map_err(|err| Error::RequirementsInstall("get_requires_for_build_wheel", err))?;
-
+) -> Result<(), Error> {
     debug!(
         "Calling `{}.get_requires_for_build_wheel()`",
         pep517_backend.backend
     );
+    if pep517_backend.backend_path.is_some() {
+        return Err(Error::InvalidSourceDistribution(
+            "backend-path is not supported yet".to_string(),
+        ));
+    }
     let script = formatdoc! {
         r#"{} as backend
             import json
@@ -434,11 +450,11 @@ async fn create_pep517_build_environment(
             .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
 
         build_context
-            .install(&resolved_requirements, &venv)
+            .install(&resolved_requirements, venv)
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
     }
-    Ok(venv)
+    Ok(())
 }
 /// Returns the directory with the `pyproject.toml`/`setup.py`
 #[instrument(skip_all, fields(path))]
