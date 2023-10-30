@@ -361,6 +361,9 @@ fn hardlink_wheel_files(
 ) -> Result<usize, Error> {
     let mut count = 0usize;
 
+    // Avoid causing the same error for every file
+    let mut use_copy_fallback = false;
+
     // Walk over the directory.
     for entry in walkdir::WalkDir::new(&wheel) {
         let entry = entry?;
@@ -375,8 +378,15 @@ fn hardlink_wheel_files(
         // Hardlink the file, unless it's the `RECORD` file, which we modify during installation.
         if entry.path().ends_with("RECORD") {
             fs::copy(entry.path(), &out_path)?;
+        } else if use_copy_fallback {
+            fs::copy(entry.path(), &out_path)?;
         } else {
-            fs::hard_link(entry.path(), &out_path)?;
+            let hard_link_result = fs::hard_link(entry.path(), &out_path);
+            // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that
+            if hard_link_result.is_err() {
+                fs::copy(entry.path(), &out_path)?;
+                use_copy_fallback = true;
+            }
         }
 
         count += 1;

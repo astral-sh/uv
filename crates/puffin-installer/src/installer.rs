@@ -1,4 +1,4 @@
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use pep440_rs::Version;
@@ -47,7 +47,10 @@ impl<'a> Installer<'a> {
                     self.venv.interpreter_info().simple_version(),
                 );
 
-                install_wheel_rs::linker::install_wheel(&location, wheel.path(), self.link_mode)?;
+                install_wheel_rs::linker::install_wheel(&location, wheel.path(), self.link_mode)
+                    .with_context(|| {
+                        format!("Failed to install {} {}", wheel.name(), wheel.version())
+                    })?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_install_progress(wheel.name(), wheel.version());
