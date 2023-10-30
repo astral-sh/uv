@@ -1,4 +1,4 @@
-//! Taken from glibc_version (<https://github.com/delta-incubator/glibc-version-rs>),
+//! Taken from `glibc_version` (<https://github.com/delta-incubator/glibc-version-rs>),
 //! which used the Apache 2.0 license (but not the MIT license)
 
 use crate::{Os, PlatformError};
