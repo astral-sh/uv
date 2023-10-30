@@ -3,9 +3,9 @@ pub use manifest::Manifest;
 pub use prerelease_mode::PreReleaseMode;
 pub use resolution::{Graph, PinnedPackage};
 pub use resolution_mode::ResolutionMode;
-pub use resolver::Resolver;
+pub use resolver::{Reporter as ResolverReporter, Resolver};
 pub use source_distribution::BuiltSourceDistributionCache;
-pub use wheel_finder::{Reporter, WheelFinder};
+pub use wheel_finder::{Reporter as WheelFinderReporter, WheelFinder};
 
 mod candidate_selector;
 mod distribution;
