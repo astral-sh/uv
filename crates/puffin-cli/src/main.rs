@@ -205,6 +205,7 @@ async fn main() -> ExitCode {
             commands::pip_compile(
                 &requirements,
                 &constraints,
+                args.extra,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
                 args.prerelease.unwrap_or_default(),
@@ -212,7 +213,6 @@ async fn main() -> ExitCode {
                 index_urls,
                 cache_dir,
                 printer,
-                args.extra,
             )
             .await
         }

@@ -32,6 +32,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
+    extras: Vec<ExtraName>,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -39,7 +40,6 @@ pub(crate) async fn pip_compile(
     index_urls: Option<IndexUrls>,
     cache: Option<&Path>,
     mut printer: Printer,
-    extras: Vec<ExtraName>,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
