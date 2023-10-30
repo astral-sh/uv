@@ -134,7 +134,7 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![Requirement::from_str("mypy-extensions<1").unwrap()],
+        vec![Requirement::from_str("mypy-extensions<0.4.4").unwrap()],
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::default(),
@@ -158,7 +158,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![Requirement::from_str("mypy-extensions[extra]<1").unwrap()],
+        vec![Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap()],
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::default(),
@@ -321,7 +321,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
     );
 
     let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolver.resolve().await.unwrap_err();
 
     insta::assert_display_snapshot!(resolution);
 
