@@ -515,11 +515,10 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         if let Ok(name) = WheelFilename::from_str(file.filename.as_str()) {
                             if name.is_compatible(self.tags) {
                                 let version = PubGrubVersion::from(name.version);
-
                                 match version_map.entry(version) {
                                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                                        if let DistributionFile::Sdist(_) = entry.get() {
-                                            // Wheels get precedence over source distributions
+                                        if matches!(entry.get(), DistributionFile::Sdist(_)) {
+                                            // Wheels get precedence over source distributions.
                                             entry.insert(DistributionFile::from(WheelFile::from(
                                                 file,
                                             )));

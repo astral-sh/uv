@@ -156,96 +156,63 @@ impl CandidateSelector {
         range: &Range<PubGrubVersion>,
         allow_prerelease: AllowPreRelease,
     ) -> Option<Candidate> {
-        // We prefer a stable wheel, followed by a prerelease wheel, followed by a stable sdist,
-        // followed by a prerelease sdist.
-        let mut sdist = None;
-        let mut prerelease_sdist = None;
-        let mut prerelease_wheel = None;
+        #[derive(Debug)]
+        enum PreReleaseCandidate<'a> {
+            NotNecessary,
+            IfNecessary(&'a PubGrubVersion, &'a DistributionFile),
+        }
 
+        let mut prerelease = None;
         for (version, file) in versions {
-            if range.contains(version) {
-                match file {
-                    DistributionFile::Wheel(_) => {
-                        if version.any_prerelease() {
-                            match allow_prerelease {
-                                AllowPreRelease::Yes => {
-                                    // If prereleases are allowed, treat them equivalently
-                                    // to stable wheels.
-                                    return Some(Candidate {
-                                        package_name: package_name.clone(),
-                                        version: version.clone(),
-                                        file: file.clone(),
-                                    });
-                                }
-                                AllowPreRelease::IfNecessary => {
-                                    // If prereleases are allowed as a fallback, store the
-                                    // first-matching prerelease wheel.
-                                    if prerelease_wheel.is_none() {
-                                        prerelease_wheel = Some(Candidate {
-                                            package_name: package_name.clone(),
-                                            version: version.clone(),
-                                            file: file.clone(),
-                                        });
-                                    }
-                                }
-                                AllowPreRelease::No => {
-                                    continue;
-                                }
-                            }
-                        } else {
-                            // Always return the first-matching stable wheel.
+            if version.any_prerelease() {
+                if range.contains(version) {
+                    match allow_prerelease {
+                        AllowPreRelease::Yes => {
+                            // If pre-releases are allowed, treat them equivalently
+                            // to stable distributions.
                             return Some(Candidate {
                                 package_name: package_name.clone(),
                                 version: version.clone(),
                                 file: file.clone(),
                             });
                         }
-                    }
-                    DistributionFile::Sdist(_) => {
-                        if version.any_prerelease() {
-                            match allow_prerelease {
-                                AllowPreRelease::Yes => {
-                                    // If prereleases are allowed, treat them equivalently to
-                                    // stable sdists.
-                                    if sdist.is_none() {
-                                        sdist = Some(Candidate {
-                                            package_name: package_name.clone(),
-                                            version: version.clone(),
-                                            file: file.clone(),
-                                        });
-                                    }
-                                }
-                                AllowPreRelease::IfNecessary => {
-                                    // If prereleases are allowed as a fallback, store the
-                                    // first-matching prerelease sdist.
-                                    if prerelease_sdist.is_none() {
-                                        prerelease_sdist = Some(Candidate {
-                                            package_name: package_name.clone(),
-                                            version: version.clone(),
-                                            file: file.clone(),
-                                        });
-                                    }
-                                }
-                                AllowPreRelease::No => {
-                                    continue;
-                                }
+                        AllowPreRelease::IfNecessary => {
+                            // If pre-releases are allowed as a fallback, store the
+                            // first-matching prerelease.
+                            if prerelease.is_none() {
+                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, file));
                             }
-                        } else {
-                            // Store the first-matching stable sdist.
-                            if sdist.is_none() {
-                                sdist = Some(Candidate {
-                                    package_name: package_name.clone(),
-                                    version: version.clone(),
-                                    file: file.clone(),
-                                });
-                            }
+                        }
+                        AllowPreRelease::No => {
+                            continue;
                         }
                     }
                 }
+            } else {
+                // If we have at least one stable release, we shouldn't allow the "if-necessary"
+                // pre-release strategy, regardless of whether that stable release satisfies the
+                // current range.
+                prerelease = Some(PreReleaseCandidate::NotNecessary);
+
+                // Always return the first-matching stable distribution.
+                if range.contains(version) {
+                    return Some(Candidate {
+                        package_name: package_name.clone(),
+                        version: version.clone(),
+                        file: file.clone(),
+                    });
+                }
             }
         }
-
-        sdist.or(prerelease_wheel).or(prerelease_sdist)
+        match prerelease {
+            None => None,
+            Some(PreReleaseCandidate::NotNecessary) => None,
+            Some(PreReleaseCandidate::IfNecessary(version, file)) => Some(Candidate {
+                package_name: package_name.clone(),
+                version: version.clone(),
+                file: file.clone(),
+            }),
+        }
     }
 }
 
