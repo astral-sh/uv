@@ -48,7 +48,7 @@ impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
     pub(crate) fn try_from_source(
         source: &RequirementsSource,
-        extras: Vec<ExtraName>,
+        extras: &[ExtraName],
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Name(name) => {
@@ -105,7 +105,7 @@ impl RequirementsSpecification {
     pub(crate) fn try_from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
-        extras: Vec<ExtraName>,
+        extras: &[ExtraName],
     ) -> Result<Self> {
         let mut spec = Self::default();
 
