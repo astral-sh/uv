@@ -18,6 +18,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode};
 
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
@@ -110,7 +111,8 @@ pub(crate) async fn pip_compile(
         &tags,
         &client,
         &build_dispatch,
-    );
+    )
+    .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
             mut derivation_tree,

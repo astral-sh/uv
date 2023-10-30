@@ -50,6 +50,7 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     selector: CandidateSelector,
     index: Arc<Index>,
     build_context: &'a Context,
+    reporter: Option<Box<dyn Reporter>>,
 }
 
 #[derive(Debug, Default)]
@@ -92,6 +93,16 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             tags,
             client,
             build_context,
+            reporter: None,
+        }
+    }
+
+    /// Set the [`Reporter`] to use for this installer.
+    #[must_use]
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Box::new(reporter)),
+            ..self
         }
     }
 
@@ -120,6 +131,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 resolution?
             }
         };
+
+        self.on_complete();
 
         Ok(resolution)
     }
@@ -209,6 +222,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
                 Some(version) => version,
             };
+
+            self.on_progress(&next, &version);
 
             if added_dependencies
                 .entry(next.clone())
@@ -620,6 +635,28 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }),
         }
     }
+
+    fn on_progress(&self, package: &PubGrubPackage, version: &PubGrubVersion) {
+        if let Some(reporter) = self.reporter.as_ref() {
+            if let PubGrubPackage::Package(package_name, _) = package {
+                reporter.on_progress(package_name, version.into());
+            }
+        }
+    }
+
+    fn on_complete(&self) {
+        if let Some(reporter) = self.reporter.as_ref() {
+            reporter.on_complete();
+        }
+    }
+}
+
+pub trait Reporter: Send + Sync {
+    /// Callback to invoke when a dependency is resolved.
+    fn on_progress(&self, name: &PackageName, version: &pep440_rs::Version);
+
+    /// Callback to invoke when the resolution is complete.
+    fn on_complete(&self);
 }
 
 /// Fetch the metadata for an item
