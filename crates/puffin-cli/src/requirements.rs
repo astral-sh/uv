@@ -74,24 +74,27 @@ impl RequirementsSpecification {
                 let contents = fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to read `{}`", path.display()))?;
-                let mut requirements: Vec<Requirement> = pyproject_toml
+                let requirements: Vec<Requirement> = pyproject_toml
                     .project
+                    .clone()
                     .into_iter()
-                    .flat_map(|project| project.dependencies.into_iter().flatten())
-                    .collect();
-                for extra in extras {
-                    requirements.extend(pyproject_toml.project.into_iter().flat_map(|project| {
-                        project.optional_dependencies.into_iter().flat_map(
-                            |optional_dependencies| {
-                                optional_dependencies
-                                    .get(extra.as_ref())
-                                    .map(|requirement| requirement.to_owned())
-                                    // undefined extra requests are ignored silently
-                                    .unwrap_or_default()
-                            },
+                    .flat_map(|project| {
+                        project.dependencies.into_iter().flatten().chain(
+                            // Include any optional dependencies specified in `extras`
+                            project.optional_dependencies.into_iter().flat_map(
+                                |optional_dependencies| {
+                                    extras.into_iter().flat_map(move |extra| {
+                                        optional_dependencies
+                                            .get(extra.as_ref())
+                                            .map(|requirement| requirement.to_owned())
+                                            // undefined extra requests are ignored silently
+                                            .unwrap_or_default()
+                                    })
+                                },
+                            ),
                         )
-                    }))
-                }
+                    })
+                    .collect();
 
                 Self {
                     requirements,
