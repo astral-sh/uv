@@ -111,7 +111,7 @@ pub(crate) async fn sync_requirements(
         builder.build()
     };
 
-    // Resolve the dependencies.
+    // Resolve any registry-based requirements.
     let remote = if remote.is_empty() {
         Vec::new()
     } else {
@@ -262,7 +262,7 @@ pub(crate) async fn sync_requirements(
                     " {} {}{}",
                     "+".green(),
                     event.distribution.name().as_ref().white().bold(),
-                    format!("@{}", event.distribution.version()).dimmed()
+                    event.distribution.version_or_url().to_string().dimmed()
                 )?;
             }
             ChangeEventKind::Remove => {
@@ -271,7 +271,7 @@ pub(crate) async fn sync_requirements(
                     " {} {}{}",
                     "-".red(),
                     event.distribution.name().as_ref().white().bold(),
-                    format!("@{}", event.distribution.version()).dimmed()
+                    event.distribution.version_or_url().to_string().dimmed()
                 )?;
             }
         }

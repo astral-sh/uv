@@ -17,7 +17,7 @@ impl PubGrubPriorities {
     pub(crate) fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
         match package {
             PubGrubPackage::Root => Some(Reverse(0)),
-            PubGrubPackage::Package(name, _) => self
+            PubGrubPackage::Package(name, _, _) => self
                 .0
                 .get(name)
                 .copied()

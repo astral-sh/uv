@@ -1,0 +1,21 @@
+---
+source: crates/puffin-cli/tests/pip_compile.rs
+info:
+  program: puffin
+  args:
+    - pip-compile
+    - requirements.in
+    - "--cache-dir"
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpb7ldgy
+  env:
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp6FMPGr/.venv
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+  × No solution found when resolving dependencies:
+  ╰─▶ Because flask 3.0.0 depends on werkzeug >=3.0.0 and root 0a0.dev0
+      depends on flask 3.0.0, root 0a0.dev0 is forbidden.
+

@@ -6,7 +6,6 @@ use fs_err::tokio as fs;
 use tempfile::tempdir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
-use url::Url;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
@@ -17,6 +16,8 @@ use puffin_package::pypi_types::Metadata21;
 use puffin_traits::BuildContext;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
+
+const REMOTE_WHEELS_CACHE: &str = "remote-wheels-v0";
 
 /// Stores wheels built from source distributions. We need to keep those separate from the regular
 /// wheel cache since a wheel with the same name may be uploaded after we made our build and in that
@@ -47,36 +48,74 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
         distribution: &RemoteDistributionRef<'_>,
         client: &RegistryClient,
     ) -> Result<Metadata21> {
-        debug!("Building: {}", distribution.file().filename);
-        let url = Url::parse(&distribution.file().url)?;
+        debug!("Building: {distribution}");
+        let url = distribution.url()?;
         let reader = client.stream_external(&url).await?;
         let mut reader = tokio::io::BufReader::new(reader.compat());
         let temp_dir = tempdir()?;
 
-        let sdist_dir = temp_dir.path().join("sdist");
-        tokio::fs::create_dir(&sdist_dir).await?;
-        let sdist_file = sdist_dir.join(&distribution.file().filename);
+        // Download the source distribution.
+        let sdist_filename = distribution.filename()?;
+        let sdist_file = temp_dir.path().join(sdist_filename.as_ref());
         let mut writer = tokio::fs::File::create(&sdist_file).await?;
         tokio::io::copy(&mut reader, &mut writer).await?;
 
+        // Create a directory for the wheel.
         let wheel_dir = self.0.cache().map_or_else(
             || temp_dir.path().join(BUILT_WHEELS_CACHE),
             |cache| cache.join(BUILT_WHEELS_CACHE).join(distribution.id()),
         );
         fs::create_dir_all(&wheel_dir).await?;
 
+        // Build the wheel.
         let disk_filename = self
             .0
             .build_source_distribution(&sdist_file, &wheel_dir)
             .await?;
 
+        // Read the metadata from the wheel.
         let wheel = CachedWheel {
             path: wheel_dir.join(&disk_filename),
             filename: WheelFilename::from_str(&disk_filename)?,
         };
         let metadata21 = read_dist_info(&wheel)?;
 
-        debug!("Finished building: {}", distribution.file().filename);
+        debug!("Finished building: {distribution}");
+        Ok(metadata21)
+    }
+
+    pub(crate) async fn download_wheel(
+        &self,
+        distribution: &RemoteDistributionRef<'_>,
+        client: &RegistryClient,
+    ) -> Result<Metadata21> {
+        debug!("Downloading: {distribution}");
+        let url = distribution.url()?;
+        let reader = client.stream_external(&url).await?;
+        let mut reader = tokio::io::BufReader::new(reader.compat());
+        let temp_dir = tempdir()?;
+
+        // Create a directory for the wheel.
+        let wheel_dir = self.0.cache().map_or_else(
+            || temp_dir.path().join(REMOTE_WHEELS_CACHE),
+            |cache| cache.join(REMOTE_WHEELS_CACHE).join(distribution.id()),
+        );
+        fs::create_dir_all(&wheel_dir).await?;
+
+        // Download the wheel.
+        let wheel_filename = distribution.filename()?;
+        let wheel_file = wheel_dir.join(wheel_filename.as_ref());
+        let mut writer = tokio::fs::File::create(&wheel_file).await?;
+        tokio::io::copy(&mut reader, &mut writer).await?;
+
+        // Read the metadata from the wheel.
+        let wheel = CachedWheel {
+            path: wheel_file,
+            filename: WheelFilename::from_str(&wheel_filename)?,
+        };
+        let metadata21 = read_dist_info(&wheel)?;
+
+        debug!("Finished downloading: {distribution}");
         Ok(metadata21)
     }
 

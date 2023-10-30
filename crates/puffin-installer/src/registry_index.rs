@@ -6,19 +6,19 @@ use anyhow::Result;
 use puffin_distribution::CachedDistribution;
 use puffin_package::package_name::PackageName;
 
-use crate::cache::WheelCache;
+use crate::cache::{CacheShard, WheelCache};
 
-/// A local index of cached distributions.
+/// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug, Default)]
-pub struct LocalIndex(HashMap<PackageName, CachedDistribution>);
+pub struct RegistryIndex(HashMap<PackageName, CachedDistribution>);
 
-impl LocalIndex {
+impl RegistryIndex {
     /// Build an index of cached distributions from a directory.
     pub fn try_from_directory(path: &Path) -> Result<Self> {
         let mut index = HashMap::new();
 
         let cache = WheelCache::new(path);
-        let Ok(dir) = cache.read_dir() else {
+        let Ok(dir) = cache.read_dir(CacheShard::Registry) else {
             return Ok(Self(index));
         };
 

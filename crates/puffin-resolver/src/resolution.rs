@@ -66,19 +66,29 @@ impl Graph {
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         for (package, version) in selection {
-            let PubGrubPackage::Package(package_name, None) = package else {
-                continue;
-            };
-            let version = Version::from(version.clone());
-            let file = pins
-                .get(package_name)
-                .and_then(|versions| versions.get(&version))
-                .unwrap()
-                .clone();
-            let pinned_package = RemoteDistribution::new(package_name.clone(), version, file);
-            let index = graph.add_node(pinned_package);
+            match package {
+                PubGrubPackage::Package(package_name, None, None) => {
+                    let version = Version::from(version.clone());
+                    let file = pins
+                        .get(package_name)
+                        .and_then(|versions| versions.get(&version))
+                        .unwrap()
+                        .clone();
+                    let pinned_package =
+                        RemoteDistribution::from_registry(package_name.clone(), version, file);
 
-            inverse.insert(package_name, index);
+                    let index = graph.add_node(pinned_package);
+                    inverse.insert(package_name, index);
+                }
+                PubGrubPackage::Package(package_name, None, Some(url)) => {
+                    let pinned_package =
+                        RemoteDistribution::from_url(package_name.clone(), url.clone());
+
+                    let index = graph.add_node(pinned_package);
+                    inverse.insert(package_name, index);
+                }
+                _ => {}
+            };
         }
 
         // Add every edge to the graph.
@@ -87,17 +97,18 @@ impl Graph {
                 if let Kind::FromDependencyOf(self_package, self_version, dependency_package, _) =
                     &state.incompatibility_store[*id].kind
                 {
-                    let PubGrubPackage::Package(self_package, None) = self_package else {
+                    let PubGrubPackage::Package(self_package, None, _) = self_package else {
                         continue;
                     };
-                    let PubGrubPackage::Package(dependency_package, None) = dependency_package
+                    let PubGrubPackage::Package(dependency_package, None, _) = dependency_package
                     else {
                         continue;
                     };
+
                     if self_version.contains(version) {
                         let self_index = &inverse[self_package];
                         let dependency_index = &inverse[dependency_package];
-                        graph.add_edge(*dependency_index, *self_index, ());
+                        graph.update_edge(*dependency_index, *self_index, ());
                     }
                 }
             }
@@ -126,13 +137,21 @@ impl Graph {
         nodes.sort_unstable_by_key(|(_, package)| package.name());
         self.0
             .node_indices()
-            .map(|node| Requirement {
-                name: self.0[node].name().to_string(),
-                extras: None,
-                version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-                    VersionSpecifier::equals_version(self.0[node].version().clone()),
-                ))),
-                marker: None,
+            .map(|node| match &self.0[node] {
+                RemoteDistribution::Registry(name, version, _file) => Requirement {
+                    name: name.to_string(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+                        VersionSpecifier::equals_version(version.clone()),
+                    ))),
+                    marker: None,
+                },
+                RemoteDistribution::Url(name, url) => Requirement {
+                    name: name.to_string(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(url.clone())),
+                    marker: None,
+                },
             })
             .collect()
     }
@@ -151,7 +170,7 @@ impl std::fmt::Display for Graph {
 
         // Print out the dependency graph.
         for (index, package) in nodes {
-            writeln!(f, "{}=={}", package.name(), package.version())?;
+            writeln!(f, "{package}")?;
 
             let mut edges = self
                 .0

@@ -15,13 +15,14 @@ use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
 use tracing::{debug, error, trace};
+use url::Url;
 use waitmap::WaitMap;
 
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
-use puffin_distribution::RemoteDistributionRef;
+use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
@@ -118,18 +119,39 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         let root = PubGrubPackage::Root;
 
         // Keep track of the packages for which we've requested metadata.
-        let mut requested_packages = FxHashSet::default();
-        let mut requested_versions = FxHashSet::default();
+        let mut in_flight = InFlight::default();
         let mut pins = FxHashMap::default();
         let mut priorities = PubGrubPriorities::default();
 
         // Push all the requirements into the package sink.
         for requirement in &self.requirements {
-            debug!("Adding root dependency: {}", requirement);
+            debug!("Adding root dependency: {requirement}");
             let package_name = PackageName::normalize(&requirement.name);
-            if requested_packages.insert(package_name.clone()) {
-                priorities.add(package_name.clone());
-                request_sink.unbounded_send(Request::Package(package_name))?;
+            match &requirement.version_or_url {
+                // If this is a registry-based package, fetch the package metadata.
+                None | Some(pep508_rs::VersionOrUrl::VersionSpecifier(_)) => {
+                    if in_flight.insert_package(&package_name) {
+                        priorities.add(package_name.clone());
+                        request_sink.unbounded_send(Request::Package(package_name))?;
+                    }
+                }
+                // If this is a URL-based package, fetch the source.
+                Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                    if in_flight.insert_url(url) {
+                        priorities.add(package_name.clone());
+                        if WheelFilename::try_from(url).is_ok() {
+                            request_sink.unbounded_send(Request::WheelUrl(
+                                package_name.clone(),
+                                url.clone(),
+                            ))?;
+                        } else {
+                            request_sink.unbounded_send(Request::SdistUrl(
+                                package_name.clone(),
+                                url.clone(),
+                            ))?;
+                        }
+                    }
+                }
             }
         }
 
@@ -146,7 +168,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
             self.pre_visit(
                 state.partial_solution.prioritized_packages(),
-                &mut requested_versions,
+                &mut in_flight,
                 request_sink,
             )?;
 
@@ -174,7 +196,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     &next,
                     term_intersection.unwrap_positive(),
                     &mut pins,
-                    &mut requested_versions,
+                    &mut in_flight,
                     request_sink,
                 )
                 .await?;
@@ -211,7 +233,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         &version,
                         &mut pins,
                         &mut priorities,
-                        &mut requested_packages,
+                        &mut in_flight,
                         request_sink,
                     )
                     .await?
@@ -254,18 +276,54 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         }
     }
 
-    /// Visit the set of candidate packages prior to selection. This allows us to fetch metadata for
-    /// all of the packages in parallel.
+    /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
+    /// before it is selected, to allow metadata to be fetched in parallel.
+    fn visit_package(
+        package: &PubGrubPackage,
+        priorities: &mut PubGrubPriorities,
+        in_flight: &mut InFlight,
+        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+    ) -> Result<(), ResolveError> {
+        match package {
+            PubGrubPackage::Root => {}
+            PubGrubPackage::Package(package_name, _extra, None) => {
+                // Emit a request to fetch the metadata for this package.
+                if in_flight.insert_package(package_name) {
+                    priorities.add(package_name.clone());
+                    request_sink.unbounded_send(Request::Package(package_name.clone()))?;
+                }
+            }
+            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                // Emit a request to fetch the metadata for this package.
+                if in_flight.insert_url(url) {
+                    priorities.add(package_name.clone());
+                    if WheelFilename::try_from(url).is_ok() {
+                        // Kick off a request to download the wheel.
+                        request_sink
+                            .unbounded_send(Request::WheelUrl(package_name.clone(), url.clone()))?;
+                    } else {
+                        // Otherwise, assume this is a source distribution.
+                        request_sink
+                            .unbounded_send(Request::SdistUrl(package_name.clone(), url.clone()))?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
+    /// metadata for all of the packages in parallel.
     fn pre_visit(
         &self,
         packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
-        in_flight: &mut FxHashSet<String>,
+        in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, _) = package else {
+            let PubGrubPackage::Package(package_name, _extra, None) = package else {
                 continue;
             };
 
@@ -285,16 +343,16 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Emit a request to fetch the metadata for this version.
             match candidate.file {
                 DistributionFile::Wheel(file) => {
-                    if in_flight.insert(file.hashes.sha256.clone()) {
+                    if in_flight.insert_file(&file) {
                         request_sink.unbounded_send(Request::Wheel(file.clone()))?;
                     }
                 }
                 DistributionFile::Sdist(file) => {
-                    if in_flight.insert(file.hashes.sha256.clone()) {
+                    if in_flight.insert_file(&file) {
                         request_sink.unbounded_send(Request::Sdist(
-                            file.clone(),
                             candidate.package_name.clone(),
                             candidate.version.clone().into(),
+                            file.clone(),
                         ))?;
                     }
                 }
@@ -310,20 +368,42 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         package: &PubGrubPackage,
         range: &Range<PubGrubVersion>,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
-        in_flight: &mut FxHashSet<String>,
+        in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Option<PubGrubVersion>, ResolveError> {
         return match package {
             PubGrubPackage::Root => Ok(Some(MIN_VERSION.clone())),
-            PubGrubPackage::Package(package_name, _) => {
+
+            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                debug!("Searching for a compatible version of {package_name} @ {url} ({range})",);
+
+                if let Ok(wheel_filename) = WheelFilename::try_from(url) {
+                    // If the URL is that of a wheel, extract the version.
+                    let version = PubGrubVersion::from(wheel_filename.version);
+                    if range.contains(&version) {
+                        Ok(Some(version))
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    // Otherwise, assume this is a source distribution.
+                    let entry = self.index.versions.wait(url.as_str()).await.unwrap();
+                    let metadata = entry.value();
+                    let version = PubGrubVersion::from(metadata.version.clone());
+                    if range.contains(&version) {
+                        Ok(Some(version))
+                    } else {
+                        Ok(None)
+                    }
+                }
+            }
+
+            PubGrubPackage::Package(package_name, _extra, None) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await.unwrap();
                 let version_map = entry.value();
 
-                debug!(
-                    "Searching for a compatible version of {} ({})",
-                    package_name, range,
-                );
+                debug!("Searching for a compatible version of {package_name} ({range})");
 
                 // Find a compatible version.
                 let Some(candidate) = self.selector.select(package_name, range, version_map) else {
@@ -350,16 +430,16 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 // Emit a request to fetch the metadata for this version.
                 match candidate.file {
                     DistributionFile::Wheel(file) => {
-                        if in_flight.insert(file.hashes.sha256.clone()) {
+                        if in_flight.insert_file(&file) {
                             request_sink.unbounded_send(Request::Wheel(file.clone()))?;
                         }
                     }
                     DistributionFile::Sdist(file) => {
-                        if in_flight.insert(file.hashes.sha256.clone()) {
+                        if in_flight.insert_file(&file) {
                             request_sink.unbounded_send(Request::Sdist(
-                                file.clone(),
                                 candidate.package_name.clone(),
                                 candidate.version.clone().into(),
+                                file.clone(),
                             ))?;
                         }
                     }
@@ -378,7 +458,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         version: &PubGrubVersion,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
         priorities: &mut PubGrubPriorities,
-        requested_packages: &mut FxHashSet<PackageName>,
+        in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
@@ -391,12 +471,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     iter_requirements(self.requirements.iter(), None, None, self.markers)
                 {
                     // Emit a request to fetch the metadata for this package.
-                    if let PubGrubPackage::Package(package_name, None) = &package {
-                        if requested_packages.insert(package_name.clone()) {
-                            priorities.add(package_name.clone());
-                            request_sink.unbounded_send(Request::Package(package_name.clone()))?;
-                        }
-                    }
+                    Self::visit_package(&package, priorities, in_flight, request_sink)?;
 
                     // Add it to the constraints.
                     match constraints.entry(package) {
@@ -409,10 +484,15 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
 
+                debug!("Got constraints: {:#?}", constraints);
+
                 // If any requirements were further constrained by the user, add those constraints.
                 for constraint in &self.constraints {
-                    let package =
-                        PubGrubPackage::Package(PackageName::normalize(&constraint.name), None);
+                    let package = PubGrubPackage::Package(
+                        PackageName::normalize(&constraint.name),
+                        None,
+                        None,
+                    );
                     if let Some(range) = constraints.get_mut(&package) {
                         *range = range.intersection(
                             &version_range(constraint.version_or_url.as_ref()).unwrap(),
@@ -422,20 +502,17 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 Ok(Dependencies::Known(constraints))
             }
-            PubGrubPackage::Package(package_name, extra) => {
-                if let Some(extra) = extra.as_ref() {
-                    debug!(
-                        "Fetching dependencies for {}[{}]@{}",
-                        package_name, extra, version
-                    );
-                } else {
-                    debug!("Fetching dependencies for {}@{}", package_name, version);
-                }
 
+            PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
-                let versions = pins.get(package_name).unwrap();
-                let file = versions.get(version.into()).unwrap();
-                let entry = self.index.versions.wait(&file.hashes.sha256).await.unwrap();
+                let entry = match url {
+                    Some(url) => self.index.versions.wait(url.as_str()).await.unwrap(),
+                    None => {
+                        let versions = pins.get(package_name).unwrap();
+                        let file = versions.get(version.into()).unwrap();
+                        self.index.versions.wait(&file.hashes.sha256).await.unwrap()
+                    }
+                };
                 let metadata = entry.value();
 
                 let mut constraints =
@@ -450,12 +527,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     debug!("Adding transitive dependency: {package} {version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    if let PubGrubPackage::Package(package_name, None) = &package {
-                        if requested_packages.insert(package_name.clone()) {
-                            priorities.add(package_name.clone());
-                            request_sink.unbounded_send(Request::Package(package_name.clone()))?;
-                        }
-                    }
+                    Self::visit_package(&package, priorities, in_flight, request_sink)?;
 
                     // Add it to the constraints.
                     match constraints.entry(package) {
@@ -470,8 +542,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 // If any packages were further constrained by the user, add those constraints.
                 for constraint in &self.constraints {
-                    let package =
-                        PubGrubPackage::Package(PackageName::normalize(&constraint.name), None);
+                    let package = PubGrubPackage::Package(
+                        PackageName::normalize(&constraint.name),
+                        None,
+                        None,
+                    );
                     if let Some(range) = constraints.get_mut(&package) {
                         *range = range.intersection(
                             &version_range(constraint.version_or_url.as_ref()).unwrap(),
@@ -488,7 +563,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         return Ok(Dependencies::Unknown);
                     }
                     constraints.insert(
-                        PubGrubPackage::Package(package_name.clone(), None),
+                        PubGrubPackage::Package(package_name.clone(), None, None),
                         Range::singleton(version.clone()),
                     );
                 }
@@ -507,7 +582,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         while let Some(response) = response_stream.next().await {
             match response? {
                 Response::Package(package_name, metadata) => {
-                    trace!("Received package metadata for {}", package_name);
+                    trace!("Received package metadata for: {}", package_name);
 
                     // Group the distributions by version and kind, discarding any incompatible
                     // distributions.
@@ -547,16 +622,24 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .insert(package_name.clone(), version_map);
                 }
                 Response::Wheel(file, metadata) => {
-                    trace!("Received file metadata for {}", file.filename);
+                    trace!("Received wheel metadata for: {}", file.filename);
                     self.index
                         .versions
                         .insert(file.hashes.sha256.clone(), metadata);
                 }
                 Response::Sdist(file, metadata) => {
-                    trace!("Received sdist build metadata for {}", file.filename);
+                    trace!("Received sdist metadata for: {}", file.filename);
                     self.index
                         .versions
                         .insert(file.hashes.sha256.clone(), metadata);
+                }
+                Response::WheelUrl(url, metadata) => {
+                    trace!("Received remote wheel metadata for: {}", url);
+                    self.index.versions.insert(url.to_string(), metadata);
+                }
+                Response::SdistUrl(url, metadata) => {
+                    trace!("Received remote source distribution metadata for: {}", url);
+                    self.index.versions.insert(url.to_string(), metadata);
                 }
             }
         }
@@ -566,6 +649,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
     async fn process_request(&'a self, request: Request) -> Result<Response, ResolveError> {
         match request {
+            // Fetch package metadata from the registry.
             Request::Package(package_name) => {
                 self.client
                     .simple(package_name.clone())
@@ -573,6 +657,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .map_err(ResolveError::Client)
                     .await
             }
+            // Fetch wheel metadata from the registry.
             Request::Wheel(file) => {
                 self.client
                     .file(file.clone().into())
@@ -580,27 +665,28 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .map_err(ResolveError::Client)
                     .await
             }
-            Request::Sdist(file, package_name, version) => {
+            // Build a source distribution from the registry, returning its metadata.
+            Request::Sdist(package_name, version, file) => {
                 let build_tree = SourceDistributionBuildTree::new(self.build_context);
-                let distribution = RemoteDistributionRef::new(&package_name, &version, &file);
+                let distribution =
+                    RemoteDistributionRef::from_registry(&package_name, &version, &file);
                 let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => metadata,
                     Ok(None) => build_tree
                         .download_and_build_sdist(&distribution, self.client)
                         .await
-                        .map_err(|err| ResolveError::SourceDistribution {
+                        .map_err(|err| ResolveError::RegistryDistribution {
                             filename: file.filename.clone(),
                             err,
                         })?,
                     Err(err) => {
                         error!(
-                            "Failed to read source distribution {} from cache: {}",
-                            file.filename, err
+                            "Failed to read source distribution {distribution} from cache: {err}",
                         );
                         build_tree
                             .download_and_build_sdist(&distribution, self.client)
                             .await
-                            .map_err(|err| ResolveError::SourceDistribution {
+                            .map_err(|err| ResolveError::RegistryDistribution {
                                 filename: file.filename.clone(),
                                 err,
                             })?
@@ -608,13 +694,79 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 };
                 Ok(Response::Sdist(file, metadata))
             }
+            // Build a source distribution from a remote URL, returning its metadata.
+            Request::SdistUrl(package_name, url) => {
+                let build_tree = SourceDistributionBuildTree::new(self.build_context);
+                let distribution = RemoteDistributionRef::from_url(&package_name, &url);
+                let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
+                    Ok(Some(metadata)) => metadata,
+                    Ok(None) => build_tree
+                        .download_and_build_sdist(&distribution, self.client)
+                        .await
+                        .map_err(|err| ResolveError::UrlDistribution {
+                            url: url.clone(),
+                            err,
+                        })?,
+                    Err(err) => {
+                        error!(
+                            "Failed to read source distribution {distribution} from cache: {err}",
+                        );
+                        build_tree
+                            .download_and_build_sdist(&distribution, self.client)
+                            .await
+                            .map_err(|err| ResolveError::UrlDistribution {
+                                url: url.clone(),
+                                err,
+                            })?
+                    }
+                };
+                Ok(Response::SdistUrl(url, metadata))
+            }
+            // Fetch wheel metadata from a remote URL.
+            Request::WheelUrl(package_name, url) => {
+                let build_tree = SourceDistributionBuildTree::new(self.build_context);
+                let distribution = RemoteDistributionRef::from_url(&package_name, &url);
+                let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
+                    Ok(Some(metadata)) => metadata,
+                    Ok(None) => build_tree
+                        .download_wheel(&distribution, self.client)
+                        .await
+                        .map_err(|err| ResolveError::UrlDistribution {
+                            url: url.clone(),
+                            err,
+                        })?,
+                    Err(err) => {
+                        error!(
+                            "Failed to read built distribution {distribution} from cache: {err}",
+                        );
+                        build_tree
+                            .download_wheel(&distribution, self.client)
+                            .await
+                            .map_err(|err| ResolveError::UrlDistribution {
+                                url: url.clone(),
+                                err,
+                            })?
+                    }
+                };
+                Ok(Response::WheelUrl(url, metadata))
+            }
         }
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &PubGrubVersion) {
         if let Some(reporter) = self.reporter.as_ref() {
-            if let PubGrubPackage::Package(package_name, extra) = package {
-                reporter.on_progress(package_name, extra.as_ref(), version.into());
+            match package {
+                PubGrubPackage::Root => {}
+                PubGrubPackage::Package(package_name, extra, Some(url)) => {
+                    reporter.on_progress(package_name, extra.as_ref(), VersionOrUrl::Url(url));
+                }
+                PubGrubPackage::Package(package_name, extra, None) => {
+                    reporter.on_progress(
+                        package_name,
+                        extra.as_ref(),
+                        VersionOrUrl::Version(version.into()),
+                    );
+                }
             }
         }
     }
@@ -628,12 +780,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_progress(
-        &self,
-        name: &PackageName,
-        extra: Option<&DistInfoName>,
-        version: &pep440_rs::Version,
-    );
+    fn on_progress(&self, name: &PackageName, extra: Option<&DistInfoName>, version: VersionOrUrl);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
@@ -644,30 +791,64 @@ pub trait Reporter: Send + Sync {
 enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
-    /// A request to fetch and build the source distribution for a specific package version
-    Sdist(SdistFile, PackageName, pep440_rs::Version),
-    /// A request to fetch the metadata for a specific version of a package.
+    /// A request to fetch wheel metadata from a registry.
     Wheel(WheelFile),
+    /// A request to fetch source distribution metadata from a registry.
+    Sdist(PackageName, pep440_rs::Version, SdistFile),
+    /// A request to fetch wheel metadata from a remote URL.
+    WheelUrl(PackageName, Url),
+    /// A request to fetch source distribution metadata from a remote URL.
+    SdistUrl(PackageName, Url),
 }
 
 #[derive(Debug)]
 enum Response {
-    /// The returned metadata for a package.
+    /// The returned metadata for a package hosted on a registry.
     Package(PackageName, SimpleJson),
-    /// The returned metadata for a specific version of a package.
+    /// The returned metadata for a wheel hosted on a registry.
     Wheel(WheelFile, Metadata21),
-    /// The returned metadata for an sdist build.
+    /// The returned metadata for a source distribution hosted on a registry.
     Sdist(SdistFile, Metadata21),
+    /// The returned metadata for a wheel hosted on a remote URL.
+    WheelUrl(Url, Metadata21),
+    /// The returned metadata for a source distribution hosted on a remote URL.
+    SdistUrl(Url, Metadata21),
 }
 
 pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistributionFile>;
+
+/// In-memory index of in-flight network requests. Any request in an [`InFlight`] state will be
+/// eventually be inserted into an [`Index`].
+#[derive(Debug, Default)]
+struct InFlight {
+    /// The set of requested [`PackageName`]s.
+    packages: FxHashSet<PackageName>,
+    /// The set of requested registry-based files, represented by their SHAs.
+    files: FxHashSet<String>,
+    /// The set of requested URLs.
+    urls: FxHashSet<Url>,
+}
+
+impl InFlight {
+    fn insert_package(&mut self, package_name: &PackageName) -> bool {
+        self.packages.insert(package_name.clone())
+    }
+
+    fn insert_file(&mut self, file: &File) -> bool {
+        self.files.insert(file.hashes.sha256.clone())
+    }
+
+    fn insert_url(&mut self, url: &Url) -> bool {
+        self.urls.insert(url.clone())
+    }
+}
 
 /// In-memory index of package metadata.
 struct Index {
     /// A map from package name to the metadata for that package.
     packages: WaitMap<PackageName, VersionMap>,
 
-    /// A map from wheel SHA to the metadata for that wheel.
+    /// A map from wheel SHA or URL to the metadata for that wheel.
     versions: WaitMap<String, Metadata21>,
 }
 

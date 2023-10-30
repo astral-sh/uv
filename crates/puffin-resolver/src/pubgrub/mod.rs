@@ -3,7 +3,7 @@ use itertools::Itertools;
 use pubgrub::range::Range;
 use tracing::warn;
 
-use pep508_rs::{MarkerEnvironment, Requirement};
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 
@@ -28,8 +28,8 @@ pub(crate) fn iter_requirements<'a>(
         .filter(move |requirement| {
             let normalized = PackageName::normalize(&requirement.name);
             if source.is_some_and(|source| source == &normalized) {
-                // TODO: Warn only once here
-                warn!("{} depends on itself", normalized);
+                // TODO(konstin): Warn only once here
+                warn!("{normalized} depends on itself");
                 false
             } else {
                 true
@@ -45,38 +45,26 @@ pub(crate) fn iter_requirements<'a>(
             requirement.evaluate_markers(env, &extra)
         })
         .flat_map(|requirement| {
-            let normalized_name = PackageName::normalize(&requirement.name);
-
-            let package = PubGrubPackage::Package(normalized_name.clone(), None);
-            let versions = version_range(requirement.version_or_url.as_ref()).unwrap();
-
-            std::iter::once((package, versions)).chain(
+            std::iter::once(pubgrub_package(requirement, None).unwrap()).chain(
                 requirement
                     .extras
                     .clone()
                     .into_iter()
                     .flatten()
-                    .map(move |extra| {
-                        let package = PubGrubPackage::Package(
-                            normalized_name.clone(),
-                            Some(DistInfoName::normalize(extra)),
-                        );
-                        let versions = version_range(requirement.version_or_url.as_ref()).unwrap();
-                        (package, versions)
+                    .map(|extra| {
+                        pubgrub_package(requirement, Some(DistInfoName::normalize(extra))).unwrap()
                     }),
             )
         })
 }
 
 /// Convert a PEP 508 specifier to a `PubGrub` range.
-pub(crate) fn version_range(
-    specifiers: Option<&pep508_rs::VersionOrUrl>,
-) -> Result<Range<PubGrubVersion>> {
+pub(crate) fn version_range(specifiers: Option<&VersionOrUrl>) -> Result<Range<PubGrubVersion>> {
     let Some(specifiers) = specifiers else {
         return Ok(Range::full());
     };
 
-    let pep508_rs::VersionOrUrl::VersionSpecifier(specifiers) = specifiers else {
+    let VersionOrUrl::VersionSpecifier(specifiers) = specifiers else {
         return Ok(Range::full());
     };
 
@@ -86,4 +74,40 @@ pub(crate) fn version_range(
         .fold_ok(Range::full(), |range, specifier| {
             range.intersection(&specifier.into())
         })
+}
+
+/// Convert a [`Requirement`] to a `PubGrub`-compatible package and range.
+fn pubgrub_package(
+    requirement: &Requirement,
+    extra: Option<DistInfoName>,
+) -> Result<(PubGrubPackage, Range<PubGrubVersion>)> {
+    match requirement.version_or_url.as_ref() {
+        // The requirement has no specifier (e.g., `flask`).
+        None => Ok((
+            PubGrubPackage::Package(PackageName::normalize(&requirement.name), extra, None),
+            Range::full(),
+        )),
+        // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
+        Some(VersionOrUrl::Url(url)) => Ok((
+            PubGrubPackage::Package(
+                PackageName::normalize(&requirement.name),
+                extra,
+                Some(url.clone()),
+            ),
+            Range::full(),
+        )),
+        // The requirement has a specifier (e.g., `flask>=1.0`).
+        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+            let version = specifiers
+                .iter()
+                .map(PubGrubSpecifier::try_from)
+                .fold_ok(Range::full(), |range, specifier| {
+                    range.intersection(&specifier.into())
+                })?;
+            Ok((
+                PubGrubPackage::Package(PackageName::normalize(&requirement.name), extra, None),
+                version,
+            ))
+        }
+    }
 }

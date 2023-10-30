@@ -22,6 +22,7 @@ distribution-filename = { path = "../distribution-filename" }
 anyhow = { workspace = true }
 cacache = { workspace = true }
 fs-err = { workspace = true }
+fxhash = { workspace = true }
 rayon = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

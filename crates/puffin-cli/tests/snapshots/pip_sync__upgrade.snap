@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpVgm17b
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpwvC4H8
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpDIXrmg/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp582sCg/.venv
 ---
 success: true
 exit_code: 0
@@ -20,6 +20,6 @@ Downloaded 1 package in [TIME]
 Unzipped 1 package in [TIME]
 Uninstalled 1 package in [TIME]
 Installed 1 package in [TIME]
- - tomli@2.0.0
- + tomli@2.0.1
+ - tomli==2.0.0
+ + tomli==2.0.1
 

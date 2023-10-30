@@ -27,9 +27,9 @@ impl SitePackages {
         Ok(Self(index))
     }
 
-    /// Returns an iterator over the installed packages.
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &InstalledDistribution)> {
-        self.0.iter()
+    /// Returns an iterator over the installed distributions.
+    pub fn distributions(&self) -> impl Iterator<Item = &InstalledDistribution> {
+        self.0.values()
     }
 
     /// Returns the version of the given package, if it is installed.

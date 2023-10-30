@@ -3,12 +3,13 @@ use std::path::Path;
 use anyhow::Result;
 use tracing::debug;
 
-use pep508_rs::Requirement;
+use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_distribution::{CachedDistribution, InstalledDistribution};
 use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
-use crate::{LocalIndex, SitePackages};
+use crate::url_index::UrlIndex;
+use crate::{RegistryIndex, SitePackages};
 
 #[derive(Debug, Default)]
 pub struct PartitionedRequirements {
@@ -37,10 +38,16 @@ impl PartitionedRequirements {
         let mut site_packages = SitePackages::try_from_executable(venv)?;
 
         // Index all the already-downloaded wheels in the cache.
-        let local_index = if let Some(cache) = cache {
-            LocalIndex::try_from_directory(cache)?
+        let registry_index = if let Some(cache) = cache {
+            RegistryIndex::try_from_directory(cache)?
         } else {
-            LocalIndex::default()
+            RegistryIndex::default()
+        };
+
+        let url_index = if let Some(cache) = cache {
+            UrlIndex::try_from_directory(cache)?
+        } else {
+            UrlIndex::default()
         };
 
         let mut local = vec![];
@@ -51,38 +58,44 @@ impl PartitionedRequirements {
             let package = PackageName::normalize(&requirement.name);
 
             // Filter out already-installed packages.
-            if let Some(dist) = site_packages.remove(&package) {
-                if requirement.is_satisfied_by(dist.version()) {
-                    debug!(
-                        "Requirement already satisfied: {} ({})",
-                        package,
-                        dist.version()
-                    );
+            if let Some(distribution) = site_packages.remove(&package) {
+                if requirement.is_satisfied_by(distribution.version()) {
+                    debug!("Requirement already satisfied: {distribution}",);
                     continue;
                 }
-                extraneous.push(dist);
+                extraneous.push(distribution);
             }
 
             // Identify any locally-available distributions that satisfy the requirement.
-            if let Some(distribution) = local_index
-                .get(&package)
-                .filter(|dist| requirement.is_satisfied_by(dist.version()))
-            {
-                debug!(
-                    "Requirement already cached: {} ({})",
-                    distribution.name(),
-                    distribution.version()
-                );
-                local.push(distribution.clone());
-            } else {
-                debug!("Identified uncached requirement: {}", requirement);
-                remote.push(requirement.clone());
+            match requirement.version_or_url.as_ref() {
+                None | Some(VersionOrUrl::VersionSpecifier(_)) => {
+                    if let Some(distribution) = registry_index.get(&package).filter(|dist| {
+                        let CachedDistribution::Registry(_name, version, _path) = dist else {
+                            return false;
+                        };
+                        requirement.is_satisfied_by(version)
+                    }) {
+                        debug!("Requirement already cached: {distribution}");
+                        local.push(distribution.clone());
+                        continue;
+                    }
+                }
+                Some(VersionOrUrl::Url(url)) => {
+                    if let Some(distribution) = url_index.get(&package, url) {
+                        debug!("Requirement already cached: {distribution}");
+                        local.push(distribution.clone());
+                        continue;
+                    }
+                }
             }
+
+            debug!("Identified uncached requirement: {requirement}");
+            remote.push(requirement.clone());
         }
 
         // Remove any unnecessary packages.
-        for (package, dist_info) in site_packages {
-            debug!("Unnecessary package: {} ({})", package, dist_info.version());
+        for (_package, dist_info) in site_packages {
+            debug!("Unnecessary package: {dist_info}");
             extraneous.push(dist_info);
         }
 

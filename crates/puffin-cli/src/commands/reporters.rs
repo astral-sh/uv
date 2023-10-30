@@ -1,8 +1,8 @@
-use indicatif::{ProgressBar, ProgressStyle};
-use pep440_rs::Version;
 use std::time::Duration;
 
-use puffin_distribution::{CachedDistribution, RemoteDistribution};
+use indicatif::{ProgressBar, ProgressStyle};
+
+use puffin_distribution::{CachedDistribution, RemoteDistribution, VersionOrUrl};
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 
@@ -168,12 +168,27 @@ impl From<Printer> for ResolverReporter {
 }
 
 impl puffin_resolver::ResolverReporter for ResolverReporter {
-    fn on_progress(&self, name: &PackageName, extra: Option<&DistInfoName>, version: &Version) {
-        if let Some(extra) = extra {
-            self.progress
-                .set_message(format!("{name}[{extra}]=={version}"));
-        } else {
-            self.progress.set_message(format!("{name}=={version}"));
+    fn on_progress(
+        &self,
+        name: &PackageName,
+        extra: Option<&DistInfoName>,
+        version_or_url: VersionOrUrl,
+    ) {
+        match (extra, version_or_url) {
+            (None, VersionOrUrl::Version(version)) => {
+                self.progress.set_message(format!("{name}=={version}"));
+            }
+            (None, VersionOrUrl::Url(url)) => {
+                self.progress.set_message(format!("{name} @ {url}"));
+            }
+            (Some(extra), VersionOrUrl::Version(version)) => {
+                self.progress
+                    .set_message(format!("{name}[{extra}]=={version}"));
+            }
+            (Some(extra), VersionOrUrl::Url(url)) => {
+                self.progress
+                    .set_message(format!("{name}[{extra}] @ {url}"));
+            }
         }
     }
 

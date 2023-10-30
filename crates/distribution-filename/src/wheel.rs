@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use pep440_rs::Version;
 use thiserror::Error;
+use url::Url;
 
 use platform_tags::Tags;
 
@@ -131,6 +132,29 @@ impl WheelFilename {
             self.abi_tag.join("."),
             self.platform_tag.join(".")
         )
+    }
+}
+
+impl TryFrom<&Url> for WheelFilename {
+    type Error = WheelFilenameError;
+
+    fn try_from(url: &Url) -> Result<Self, Self::Error> {
+        let filename = url
+            .path_segments()
+            .ok_or_else(|| {
+                WheelFilenameError::InvalidWheelFileName(
+                    url.to_string(),
+                    "URL must have a path".to_string(),
+                )
+            })?
+            .last()
+            .ok_or_else(|| {
+                WheelFilenameError::InvalidWheelFileName(
+                    url.to_string(),
+                    "URL must contain a filename".to_string(),
+                )
+            })?;
+        Self::from_str(filename)
     }
 }
 

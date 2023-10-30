@@ -12,7 +12,7 @@ use fxhash::FxHashMap;
 use tracing::debug;
 
 use distribution_filename::WheelFilename;
-use pep508_rs::Requirement;
+use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistribution;
@@ -62,13 +62,11 @@ impl<'a> WheelFinder<'a> {
             .map(|request: Request| match request {
                 Request::Package(requirement) => Either::Left(
                     self.client
-                        // TODO(charlie): Remove this clone.
                         .simple(requirement.name.clone())
                         .map_ok(move |metadata| Response::Package(requirement, metadata)),
                 ),
                 Request::Version(requirement, file) => Either::Right(
                     self.client
-                        // TODO(charlie): Remove this clone.
                         .file(file.clone())
                         .map_ok(move |metadata| Response::Version(requirement, file, metadata)),
                 ),
@@ -76,15 +74,33 @@ impl<'a> WheelFinder<'a> {
             .buffer_unordered(32)
             .ready_chunks(32);
 
-        // Push all the requirements into the package sink.
-        for requirement in requirements {
-            package_sink.unbounded_send(Request::Package(requirement.clone()))?;
-        }
-
         // Resolve the requirements.
         let mut resolution: FxHashMap<PackageName, RemoteDistribution> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
+        // Push all the requirements into the package sink.
+        for requirement in requirements {
+            match requirement.version_or_url.as_ref() {
+                None | Some(VersionOrUrl::VersionSpecifier(_)) => {
+                    package_sink.unbounded_send(Request::Package(requirement.clone()))?;
+                }
+                Some(VersionOrUrl::Url(url)) => {
+                    let package_name = PackageName::normalize(&requirement.name);
+                    let package = RemoteDistribution::from_url(package_name.clone(), url.clone());
+                    resolution.insert(package_name, package);
+                }
+            }
+        }
+
+        // If all the dependencies were already resolved, we're done.
+        if resolution.len() == requirements.len() {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_complete();
+            }
+            return Ok(Resolution::new(resolution));
+        }
+
+        // Otherwise, wait for the package stream to complete.
         while let Some(chunk) = package_stream.next().await {
             for result in chunk {
                 let result: Response = result?;
@@ -114,7 +130,7 @@ impl<'a> WheelFinder<'a> {
                             metadata.name, metadata.version, file.filename
                         );
 
-                        let package = RemoteDistribution::new(
+                        let package = RemoteDistribution::from_registry(
                             PackageName::normalize(&metadata.name),
                             metadata.version,
                             file,
