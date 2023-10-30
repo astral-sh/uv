@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 
 use pep508_rs::Requirement;
+use puffin_package::extra_name::ExtraName;
 use puffin_package::requirements_txt::RequirementsTxt;
 
 #[derive(Debug)]
@@ -45,7 +46,10 @@ pub(crate) struct RequirementsSpecification {
 
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
-    pub(crate) fn try_from_source(source: &RequirementsSource) -> Result<Self> {
+    pub(crate) fn try_from_source(
+        source: &RequirementsSource,
+        extras: Vec<ExtraName>,
+    ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Name(name) => {
                 let requirement = Requirement::from_str(name)
@@ -70,11 +74,25 @@ impl RequirementsSpecification {
                 let contents = fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to read `{}`", path.display()))?;
-                let requirements = pyproject_toml
+                let mut requirements: Vec<Requirement> = pyproject_toml
                     .project
                     .into_iter()
                     .flat_map(|project| project.dependencies.into_iter().flatten())
                     .collect();
+                for extra in extras {
+                    requirements.extend(pyproject_toml.project.into_iter().flat_map(|project| {
+                        project.optional_dependencies.into_iter().flat_map(
+                            |optional_dependencies| {
+                                optional_dependencies
+                                    .get(extra.as_ref())
+                                    .map(|requirement| requirement.to_owned())
+                                    // undefined extra requests are ignored silently
+                                    .unwrap_or_default()
+                            },
+                        )
+                    }))
+                }
+
                 Self {
                     requirements,
                     constraints: vec![],
@@ -87,6 +105,7 @@ impl RequirementsSpecification {
     pub(crate) fn try_from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
+        extras: Vec<ExtraName>,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
@@ -94,14 +113,14 @@ impl RequirementsSpecification {
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
         for source in requirements {
-            let source = Self::try_from_source(source)?;
+            let source = Self::try_from_source(source, extras)?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.
         for source in constraints {
-            let source = Self::try_from_source(source)?;
+            let source = Self::try_from_source(source, extras)?;
             spec.constraints.extend(source.requirements);
             spec.constraints.extend(source.constraints);
         }
