@@ -52,6 +52,28 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     build_context: &'a Context,
 }
 
+#[derive(Debug, Default)]
+struct Priorities(FxHashMap<PackageName, usize>);
+
+impl Priorities {
+    fn add(&mut self, package: PackageName) {
+        let priority = self.0.len();
+        self.0.entry(package).or_insert(priority);
+    }
+
+    fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
+        match package {
+            PubGrubPackage::Root => Some(Reverse(0)),
+            PubGrubPackage::Package(name, _) => self
+                .0
+                .get(name)
+                .copied()
+                .map(|priority| priority + 1)
+                .map(Reverse),
+        }
+    }
+}
+
 impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
@@ -78,13 +100,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
-
-        // Push all the requirements into the package sink.
-        for requirement in &self.requirements {
-            debug!("Adding root dependency: {}", requirement);
-            let package_name = PackageName::normalize(&requirement.name);
-            request_sink.unbounded_send(Request::Package(package_name))?;
-        }
 
         // Run the fetcher.
         let requests_fut = self.fetch(request_stream);
@@ -120,6 +135,17 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         let mut requested_packages = FxHashSet::default();
         let mut requested_versions = FxHashSet::default();
         let mut pins = FxHashMap::default();
+        let mut priorities = Priorities::default();
+
+        // Push all the requirements into the package sink.
+        for requirement in &self.requirements {
+            debug!("Adding root dependency: {}", requirement);
+            let package_name = PackageName::normalize(&requirement.name);
+            if requested_packages.insert(package_name.clone()) {
+                priorities.add(package_name.clone());
+                request_sink.unbounded_send(Request::Package(package_name))?;
+            }
+        }
 
         // Start the solve.
         let mut state = State::init(root.clone(), MIN_VERSION.clone());
@@ -139,9 +165,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             )?;
 
             // Choose a package version.
-            let Some(highest_priority_pkg) = state
-                .partial_solution
-                .pick_highest_priority_pkg(|package, range| self.prioritize(package, range))
+            let Some(highest_priority_pkg) =
+                state
+                    .partial_solution
+                    .pick_highest_priority_pkg(|package, _range| {
+                        priorities.get(package).unwrap_or_default()
+                    })
             else {
                 let selection = state.partial_solution.extract_solution();
                 return Ok(Graph::from_state(&selection, &pins, &state));
@@ -193,6 +222,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         package,
                         &version,
                         &mut pins,
+                        &mut priorities,
                         &mut requested_packages,
                         request_sink,
                     )
@@ -234,16 +264,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 state.partial_solution.add_decision(next.clone(), version);
             }
         }
-    }
-
-    #[allow(clippy::unused_self)]
-    fn prioritize(
-        &self,
-        _package: &PubGrubPackage,
-        _range: &Range<PubGrubVersion>,
-    ) -> PubGrubPriority {
-        // TODO(charlie): Define a priority function.
-        Reverse(0)
     }
 
     /// Visit the set of candidate packages prior to selection. This allows us to fetch metadata for
@@ -369,6 +389,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         package: &PubGrubPackage,
         version: &PubGrubVersion,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        priorities: &mut Priorities,
         requested_packages: &mut FxHashSet<PackageName>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
@@ -381,6 +402,15 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 for (package, version) in
                     iter_requirements(self.requirements.iter(), None, self.markers)
                 {
+                    // Emit a request to fetch the metadata for this package.
+                    if let PubGrubPackage::Package(package_name, None) = &package {
+                        if requested_packages.insert(package_name.clone()) {
+                            priorities.add(package_name.clone());
+                            request_sink.unbounded_send(Request::Package(package_name.clone()))?;
+                        }
+                    }
+
+                    // Add it to the constraints.
                     match constraints.entry(package) {
                         Entry::Occupied(mut entry) => {
                             entry.insert(entry.get().intersection(&version));
@@ -431,6 +461,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     // Emit a request to fetch the metadata for this package.
                     if let PubGrubPackage::Package(package_name, None) = &package {
                         if requested_packages.insert(package_name.clone()) {
+                            priorities.add(package_name.clone());
                             request_sink.unbounded_send(Request::Package(package_name.clone()))?;
                         }
                     }
