@@ -14,10 +14,10 @@ pub(crate) struct WheelFinderReporter {
 impl From<Printer> for WheelFinderReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_message("Resolving dependencies...");
         progress.set_style(
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
+        progress.set_message("Resolving dependencies...");
         Self { progress }
     }
 }
@@ -50,10 +50,10 @@ pub(crate) struct UnzipReporter {
 impl From<Printer> for UnzipReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_message("Unzipping wheels...");
         progress.set_style(
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
+        progress.set_message("Unzipping wheels...");
         Self { progress }
     }
 }
@@ -85,10 +85,10 @@ pub(crate) struct DownloadReporter {
 impl From<Printer> for DownloadReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_message("Downloading wheels...");
         progress.set_style(
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
+        progress.set_message("Downloading wheels...");
         Self { progress }
     }
 }
@@ -120,10 +120,10 @@ pub(crate) struct InstallReporter {
 impl From<Printer> for InstallReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_message("Installing wheels...");
         progress.set_style(
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
+        progress.set_message("Installing wheels...");
         Self { progress }
     }
 }
@@ -155,13 +155,13 @@ pub(crate) struct ResolverReporter {
 impl From<Printer> for ResolverReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_message("Resolving dependencies...");
         progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
             ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
+        progress.set_message("Resolving dependencies...");
         Self { progress }
     }
 }
