@@ -1,6 +1,5 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
-use std::clone::Clone;
 use std::path::PathBuf;
 use std::str::FromStr;
 
