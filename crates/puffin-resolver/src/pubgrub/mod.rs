@@ -1,4 +1,5 @@
 use anyhow::Result;
+use itertools::Itertools;
 use pubgrub::range::Range;
 
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -8,7 +9,7 @@ use puffin_package::package_name::PackageName;
 pub(crate) use crate::pubgrub::package::PubGrubPackage;
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};
 pub(crate) use crate::pubgrub::specifier::PubGrubSpecifier;
-pub(crate) use crate::pubgrub::version::{PubGrubVersion, MAX_VERSION, MIN_VERSION};
+pub(crate) use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 
 mod package;
 mod priority;
@@ -67,19 +68,10 @@ pub(crate) fn version_range(
         return Ok(Range::full());
     };
 
-    let mut final_range = Range::full();
-    for spec in specifiers.iter() {
-        let spec_range =
-            PubGrubSpecifier::try_from(spec)?
-                .into_iter()
-                .fold(Range::empty(), |accum, range| {
-                    accum.union(&if range.end < *MAX_VERSION {
-                        Range::between(range.start, range.end)
-                    } else {
-                        Range::higher_than(range.start)
-                    })
-                });
-        final_range = final_range.intersection(&spec_range);
-    }
-    Ok(final_range)
+    specifiers
+        .iter()
+        .map(PubGrubSpecifier::try_from)
+        .fold_ok(Range::full(), |range, specifier| {
+            range.intersection(&specifier.into())
+        })
 }

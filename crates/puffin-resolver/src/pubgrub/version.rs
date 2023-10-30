@@ -62,14 +62,3 @@ impl From<PubGrubVersion> for pep440_rs::Version {
 
 pub(crate) static MIN_VERSION: Lazy<PubGrubVersion> =
     Lazy::new(|| PubGrubVersion::from(pep440_rs::Version::from_str("0a0.dev0").unwrap()));
-
-pub(crate) static MAX_VERSION: Lazy<PubGrubVersion> = Lazy::new(|| {
-    PubGrubVersion(pep440_rs::Version {
-        epoch: usize::MAX,
-        release: vec![usize::MAX, usize::MAX, usize::MAX],
-        pre: None,
-        post: Some(usize::MAX),
-        dev: None,
-        local: None,
-    })
-});
