@@ -22,6 +22,9 @@ impl Display for ExtraName {
 static NAME_NORMALIZE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-_.]+").unwrap());
 
 impl ExtraName {
+    /// Collapses any run of the characters `-`, `_` and `.` down to a single `-`.
+    /// Ex) "---", ".", and "__" all get converted to just "."
+    ///
     /// See: <https://peps.python.org/pep-0685/#specification/>
     ///      <https://packaging.python.org/en/latest/specifications/name-normalization/>
     pub fn normalize(name: impl AsRef<str>) -> Self {
