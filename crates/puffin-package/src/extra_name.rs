@@ -7,12 +7,6 @@ use regex::Regex;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExtraName(String);
 
-impl From<&ExtraName> for ExtraName {
-    fn from(extra_name: &ExtraName) -> Self {
-        extra_name.clone()
-    }
-}
-
 impl Display for ExtraName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
