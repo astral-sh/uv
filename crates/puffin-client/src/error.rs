@@ -1,7 +1,7 @@
 use thiserror::Error;
 use url::Url;
 
-use puffin_package::metadata;
+use puffin_package::pypi_types;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -18,7 +18,7 @@ pub enum Error {
 
     /// The metadata file could not be parsed.
     #[error(transparent)]
-    MetadataParseError(#[from] metadata::Error),
+    MetadataParseError(#[from] pypi_types::Error),
 
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry.")]

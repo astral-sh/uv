@@ -13,9 +13,9 @@ use zip::ZipArchive;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_client::{File, RegistryClient};
-use puffin_package::metadata::Metadata21;
+use puffin_client::RegistryClient;
 use puffin_package::package_name::PackageName;
+use puffin_package::pypi_types::{File, Metadata21};
 use puffin_traits::BuildContext;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";

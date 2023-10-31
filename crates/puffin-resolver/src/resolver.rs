@@ -20,10 +20,10 @@ use waitmap::WaitMap;
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_client::{File, RegistryClient, SimpleJson};
+use puffin_client::RegistryClient;
 use puffin_package::dist_info_name::DistInfoName;
-use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
+use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 use puffin_traits::BuildContext;
 
 use crate::candidate_selector::CandidateSelector;

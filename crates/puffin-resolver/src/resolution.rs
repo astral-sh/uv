@@ -9,8 +9,8 @@ use pubgrub::type_aliases::SelectedDependencies;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_client::File;
 use puffin_package::package_name::PackageName;
+use puffin_package::pypi_types::File;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 

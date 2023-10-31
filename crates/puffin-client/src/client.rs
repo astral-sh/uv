@@ -11,11 +11,10 @@ use reqwest_retry::RetryTransientMiddleware;
 use tracing::trace;
 use url::Url;
 
-use puffin_package::metadata::Metadata21;
 use puffin_package::package_name::PackageName;
+use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::Error;
-use crate::types::{File, SimpleJson};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]

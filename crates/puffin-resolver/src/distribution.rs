@@ -1,5 +1,6 @@
-use puffin_client::File;
 use std::ops::Deref;
+
+use puffin_package::pypi_types::File;
 
 /// A distribution can either be a wheel or a source distribution.
 #[derive(Debug, Clone)]
