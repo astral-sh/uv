@@ -53,16 +53,18 @@ fn venv_impl(
     mut printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
-    // TODO(charlie): Look at how Maturin discovers and ranks all the available Python interpreters.
     let base_python = if let Some(base_python) = base_python {
-        base_python.to_path_buf()
+        fs::canonicalize(base_python).into_diagnostic()?
     } else {
-        which::which("python3")
-            .or_else(|_| which::which("python"))
-            .map_err(|_| VenvError::PythonNotFound)?
+        fs::canonicalize(
+            which::which_global("python3")
+                .or_else(|_| which::which_global("python"))
+                .map_err(|_| VenvError::PythonNotFound)?,
+        )
+        .into_diagnostic()?
     };
+
     let platform = Platform::current().into_diagnostic()?;
-    // TODO(konstin): Add caching
     let interpreter_info = InterpreterInfo::query_cached(&base_python, platform, None)
         .map_err(VenvError::InterpreterError)?;
 
