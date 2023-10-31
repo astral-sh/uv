@@ -27,8 +27,8 @@ static NAME_VALIDATE: Lazy<Regex> =
 impl ExtraName {
     /// Create a normalized extra name without validation.
     ///
-    /// Collapses any run of the characters `-`, `_` and `.` down to a single `-`.
-    /// Ex) "---", ".", and "__" all get converted to just "."
+    /// Converts the name to lowercase and collapses any run of the characters `-`, `_` and `.`
+    /// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
     pub fn normalize(name: impl AsRef<str>) -> Self {
         // TODO(charlie): Avoid allocating in the common case (when no normalization is required).
         let mut normalized = NAME_NORMALIZE.replace_all(name.as_ref(), "-").to_string();
