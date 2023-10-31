@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -36,6 +36,7 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
         self.find_wheel(distribution, tags)
+            .as_ref()
             .map(read_dist_info)
             .transpose()
     }
@@ -69,14 +70,22 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
             .build_source_distribution(&sdist_file, &wheel_dir)
             .await?;
 
-        let metadata21 = read_dist_info(wheel_dir.join(disk_filename))?;
+        let wheel = CachedWheel {
+            path: wheel_dir.join(&disk_filename),
+            filename: WheelFilename::from_str(&disk_filename)?,
+        };
+        let metadata21 = read_dist_info(&wheel)?;
 
         debug!("Finished building: {}", distribution.file().filename);
         Ok(metadata21)
     }
 
     /// Search for a wheel matching the tags that was built from the given source distribution.
-    fn find_wheel(&self, distribution: &RemoteDistributionRef<'_>, tags: &Tags) -> Option<PathBuf> {
+    fn find_wheel(
+        &self,
+        distribution: &RemoteDistributionRef<'_>,
+        tags: &Tags,
+    ) -> Option<CachedWheel> {
         let wheel_dir = self
             .0
             .cache()?
@@ -89,33 +98,30 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
             let Ok(entry) = entry else {
                 continue;
             };
-            let Ok(wheel) = WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
+            let Ok(filename) =
+                WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
             else {
                 continue;
             };
-
-            if wheel.is_compatible(tags) {
-                return Some(entry.path().clone());
+            if filename.is_compatible(tags) {
+                let path = entry.path().clone();
+                return Some(CachedWheel { path, filename });
             }
         }
         None
     }
 }
 
+#[derive(Debug)]
+struct CachedWheel {
+    path: PathBuf,
+    filename: WheelFilename,
+}
+
 /// Read the [`Metadata21`] from a wheel.
-fn read_dist_info(wheel: impl AsRef<Path>) -> Result<Metadata21> {
-    let mut archive = ZipArchive::new(std::fs::File::open(&wheel)?)?;
-    let dist_info_prefix = install_wheel_rs::find_dist_info(
-        &WheelFilename::from_str(
-            wheel
-                .as_ref()
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .as_ref(),
-        )?,
-        &mut archive,
-    )?;
+fn read_dist_info(wheel: &CachedWheel) -> Result<Metadata21> {
+    let mut archive = ZipArchive::new(fs_err::File::open(&wheel.path)?)?;
+    let dist_info_prefix = install_wheel_rs::find_dist_info(&wheel.filename, &mut archive)?;
     let dist_info = std::io::read_to_string(
         archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?,
     )?;
