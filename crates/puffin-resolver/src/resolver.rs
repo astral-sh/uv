@@ -14,13 +14,14 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 use waitmap::WaitMap;
 
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
+use puffin_distribution::RemoteDistributionRef;
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
@@ -33,8 +34,7 @@ use crate::manifest::Manifest;
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::pubgrub::{PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION};
 use crate::resolution::Graph;
-use crate::source_distribution::{download_and_build_sdist, read_dist_info};
-use crate::BuiltSourceDistributionCache;
+use crate::source_distribution::SourceDistributionBuildTree;
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
     requirements: Vec<Requirement>,
@@ -581,30 +581,32 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .await
             }
             Request::Sdist(file, package_name, version) => {
-                let cached_wheel = self.build_context.cache().and_then(|cache| {
-                    BuiltSourceDistributionCache::new(cache).find_wheel(
-                        &package_name,
-                        &version,
-                        self.tags,
-                    )
-                });
-                let metadata21 = if let Some(cached_wheel) = cached_wheel {
-                    read_dist_info(cached_wheel).await
-                } else {
-                    download_and_build_sdist(
-                        &file,
-                        &package_name,
-                        &version,
-                        self.client,
-                        self.build_context,
-                    )
-                    .await
-                }
-                .map_err(|err| ResolveError::SourceDistribution {
-                    filename: file.filename.clone(),
-                    err,
-                })?;
-                Ok(Response::Sdist(file, metadata21))
+                let build_tree = SourceDistributionBuildTree::new(self.build_context);
+                let distribution = RemoteDistributionRef::new(&package_name, &version, &file);
+                let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
+                    Ok(Some(metadata)) => metadata,
+                    Ok(None) => build_tree
+                        .download_and_build_sdist(&distribution, self.client)
+                        .await
+                        .map_err(|err| ResolveError::SourceDistribution {
+                            filename: file.filename.clone(),
+                            err,
+                        })?,
+                    Err(err) => {
+                        error!(
+                            "Failed to read source distribution {} from cache: {}",
+                            file.filename, err
+                        );
+                        build_tree
+                            .download_and_build_sdist(&distribution, self.client)
+                            .await
+                            .map_err(|err| ResolveError::SourceDistribution {
+                                filename: file.filename.clone(),
+                                err,
+                            })?
+                    }
+                };
+                Ok(Response::Sdist(file, metadata))
             }
         }
     }
