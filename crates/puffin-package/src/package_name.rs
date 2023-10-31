@@ -24,6 +24,11 @@ impl Display for PackageName {
 static NAME_NORMALIZE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-_.]+").unwrap());
 
 impl PackageName {
+    /// Create a normalized representation of a package name.
+    ///
+    /// Converts the name to lowercase and collapses any run of the characters `-`, `_` and `.`
+    /// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
+    ///
     /// See: <https://packaging.python.org/en/latest/specifications/name-normalization/>
     pub fn normalize(name: impl AsRef<str>) -> Self {
         // TODO(charlie): Avoid allocating in the common case (when no normalization is required).
