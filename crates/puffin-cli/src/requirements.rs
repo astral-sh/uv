@@ -82,13 +82,16 @@ impl RequirementsSpecification {
                             // Include any optional dependencies specified in `extras`
                             project.optional_dependencies.into_iter().flat_map(
                                 |optional_dependencies| {
-                                    extras.iter().flat_map(move |extra| {
-                                        optional_dependencies
-                                            .get(extra.as_ref())
-                                            .cloned()
-                                            // undefined extra requests are ignored silently
-                                            .unwrap_or_default()
-                                    })
+                                    optional_dependencies
+                                        .iter()
+                                        .flat_map(|(name, requirements)| {
+                                            if extras.contains(&ExtraName::normalize(name)) {
+                                                requirements.clone()
+                                            } else {
+                                                vec![]
+                                            }
+                                        })
+                                        .collect::<Vec<Requirement>>()
                                 },
                             ),
                         )
