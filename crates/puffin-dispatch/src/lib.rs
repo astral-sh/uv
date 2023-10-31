@@ -138,7 +138,6 @@ impl BuildContext for BuildDispatch {
             };
 
             // Download any missing distributions.
-            let staging = tempfile::tempdir()?;
             let downloads = if remote.is_empty() {
                 vec![]
             } else {
@@ -148,12 +147,13 @@ impl BuildContext for BuildDispatch {
                     remote.iter().map(ToString::to_string).join(", ")
                 );
                 Downloader::new(&self.client, self.cache.as_deref())
-                    .download(remote, self.cache.as_deref().unwrap_or(staging.path()))
+                    .download(remote)
                     .await
                     .context("Failed to download build dependencies")?
             };
 
             // Unzip any downloaded distributions.
+            let staging = tempfile::tempdir()?;
             let unzips = if downloads.is_empty() {
                 vec![]
             } else {

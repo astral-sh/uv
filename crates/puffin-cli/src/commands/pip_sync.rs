@@ -138,7 +138,6 @@ pub(crate) async fn sync_requirements(
     };
 
     // Download any missing distributions.
-    let staging = tempfile::tempdir()?;
     let downloads = if remote.is_empty() {
         vec![]
     } else {
@@ -147,9 +146,7 @@ pub(crate) async fn sync_requirements(
         let downloader = puffin_installer::Downloader::new(&client, cache)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
-        let downloads = downloader
-            .download(remote, cache.unwrap_or(staging.path()))
-            .await?;
+        let downloads = downloader.download(remote).await?;
 
         let s = if downloads.len() == 1 { "" } else { "s" };
         writeln!(
@@ -167,6 +164,7 @@ pub(crate) async fn sync_requirements(
     };
 
     // Unzip any downloaded distributions.
+    let staging = tempfile::tempdir()?;
     let unzips = if downloads.is_empty() {
         vec![]
     } else {
