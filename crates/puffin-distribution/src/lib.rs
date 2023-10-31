@@ -251,3 +251,43 @@ impl std::fmt::Display for InstalledDistribution {
         write!(f, "{}@{}", self.name(), self.version())
     }
 }
+
+/// Unowned reference to a [`RemoteDistribution`].
+#[derive(Debug, Clone)]
+pub struct RemoteDistributionRef<'a> {
+    name: &'a PackageName,
+    version: &'a Version,
+    file: &'a File,
+}
+
+impl<'a> RemoteDistributionRef<'a> {
+    pub fn new(name: &'a PackageName, version: &'a Version, file: &'a File) -> Self {
+        Self {
+            name,
+            version,
+            file,
+        }
+    }
+
+    pub fn name(&self) -> &PackageName {
+        self.name
+    }
+
+    pub fn version(&self) -> &Version {
+        self.version
+    }
+
+    pub fn file(&self) -> &File {
+        self.file
+    }
+
+    pub fn id(&self) -> String {
+        format!("{}-{}", DistInfoName::from(self.name()), self.version())
+    }
+}
+
+impl std::fmt::Display for RemoteDistributionRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.name(), self.version())
+    }
+}
