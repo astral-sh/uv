@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt::Write;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
@@ -52,13 +51,17 @@ pub(crate) async fn pip_compile(
     } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
 
     // Check that all provided extras are used
-    let given_extras = HashSet::from_iter(extras.clone());
-    let unused_extras = given_extras.difference(&used_extras).collect_vec();
+    let mut unused_extras = extras
+        .iter()
+        .filter(|extra| !used_extras.contains(extra))
+        .collect::<Vec<_>>();
     if !unused_extras.is_empty() {
+        unused_extras.sort_unstable();
+        unused_extras.dedup();
         let s = if unused_extras.len() == 1 { "" } else { "s" };
         return Err(anyhow!(
-            "requested extra{s} not found: {}",
-            unused_extras.iter().sorted().join(", ")
+            "Requested extra{s} not found: {}",
+            unused_extras.iter().join(", ")
         ));
     }
 
