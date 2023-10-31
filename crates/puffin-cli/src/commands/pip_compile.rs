@@ -58,7 +58,7 @@ pub(crate) async fn pip_compile(
         let s = if unused_extras.len() == 1 { "" } else { "s" };
         return Err(anyhow!(
             "requested extra{s} not found: {}",
-            unused_extras.iter().join(", ")
+            unused_extras.iter().sorted().join(", ")
         ));
     }
 
