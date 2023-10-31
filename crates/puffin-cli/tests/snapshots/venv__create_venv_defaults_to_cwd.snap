@@ -1,0 +1,15 @@
+---
+source: crates/puffin-cli/tests/venv.rs
+info:
+  program: puffin
+  args:
+    - venv
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Using Python interpreter: /usr/bin/python3
+Creating virtual environment at: .venv
+

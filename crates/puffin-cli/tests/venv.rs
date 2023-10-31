@@ -30,3 +30,24 @@ fn create_venv() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn create_venv_defaults_to_cwd() -> Result<()> {
+    let tempdir = assert_fs::TempDir::new()?;
+    let venv = tempdir.child(".venv");
+
+    insta::with_settings!({
+        filters => vec![
+            (r"Using Python interpreter: .+", "Using Python interpreter: /usr/bin/python3"),
+            (tempdir.to_str().unwrap(), "/home/ferris/project"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("venv")
+            .current_dir(&tempdir));
+    });
+
+    venv.assert(predicates::path::is_dir());
+
+    Ok(())
+}

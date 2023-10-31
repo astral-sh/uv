@@ -147,6 +147,7 @@ struct VenvArgs {
     python: Option<PathBuf>,
 
     /// The path to the virtual environment to create.
+    #[clap(default_value = ".venv")]
     name: PathBuf,
 }
 
