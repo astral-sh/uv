@@ -10,6 +10,7 @@ use crate::dist_info_name::DistInfoName;
 pub struct PackageName(String);
 
 impl From<&PackageName> for PackageName {
+    /// Required for `WaitMap::wait`
     fn from(package_name: &PackageName) -> Self {
         package_name.clone()
     }
