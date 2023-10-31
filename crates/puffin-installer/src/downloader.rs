@@ -10,9 +10,8 @@ use url::Url;
 
 use pep440_rs::Version;
 use puffin_client::RegistryClient;
+use puffin_distribution::RemoteDistribution;
 use puffin_package::package_name::PackageName;
-
-use crate::distribution::RemoteDistribution;
 
 pub struct Downloader<'a> {
     client: &'a RegistryClient,

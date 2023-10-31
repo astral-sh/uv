@@ -2,10 +2,9 @@ use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use pep440_rs::Version;
+use puffin_distribution::CachedDistribution;
 use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
-
-use crate::CachedDistribution;
 
 pub struct Installer<'a> {
     venv: &'a Virtualenv,

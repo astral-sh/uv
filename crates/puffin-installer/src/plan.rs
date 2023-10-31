@@ -4,10 +4,11 @@ use anyhow::Result;
 use tracing::debug;
 
 use pep508_rs::Requirement;
+use puffin_distribution::{CachedDistribution, InstalledDistribution};
 use puffin_interpreter::Virtualenv;
 use puffin_package::package_name::PackageName;
 
-use crate::{CachedDistribution, InstalledDistribution, LocalIndex, SitePackages};
+use crate::{LocalIndex, SitePackages};
 
 #[derive(Debug, Default)]
 pub struct PartitionedRequirements {

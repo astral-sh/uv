@@ -11,7 +11,8 @@ use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
-use puffin_installer::{Distribution, PartitionedRequirements, RemoteDistribution};
+use puffin_distribution::Distribution;
+use puffin_installer::PartitionedRequirements;
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::reporters::{
@@ -132,10 +133,7 @@ pub(crate) async fn sync_requirements(
             .dimmed()
         )?;
 
-        resolution
-            .into_files()
-            .map(RemoteDistribution::from_file)
-            .collect::<Result<Vec<_>>>()?
+        resolution.into_distributions().collect::<Vec<_>>()
     };
 
     // Download any missing distributions.

@@ -8,12 +8,12 @@ use tracing::debug;
 use zip::ZipArchive;
 
 use pep440_rs::Version;
+use puffin_distribution::CachedDistribution;
 use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
 use crate::downloader::InMemoryDistribution;
 use crate::vendor::CloneableSeekableReader;
-use crate::CachedDistribution;
 
 #[derive(Default)]
 pub struct Unzipper {

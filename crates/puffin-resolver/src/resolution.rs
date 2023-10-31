@@ -9,71 +9,33 @@ use pubgrub::type_aliases::SelectedDependencies;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
+use puffin_distribution::RemoteDistribution;
 use puffin_package::package_name::PackageName;
 use puffin_package::pypi_types::File;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 
-/// A package pinned at a specific version.
-#[derive(Debug)]
-pub struct PinnedPackage {
-    name: PackageName,
-    version: Version,
-    file: File,
-}
-
-impl PinnedPackage {
-    /// Initialize a new pinned package.
-    pub fn new(name: PackageName, version: Version, file: File) -> Self {
-        Self {
-            name,
-            version,
-            file,
-        }
-    }
-
-    /// Return the name of the pinned package.
-    pub fn name(&self) -> &PackageName {
-        &self.name
-    }
-
-    /// Return the version of the pinned package.
-    pub fn version(&self) -> &Version {
-        &self.version
-    }
-
-    /// Return the file of the pinned package.
-    pub fn file(&self) -> &File {
-        &self.file
-    }
-}
-
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default)]
-pub struct Resolution(FxHashMap<PackageName, PinnedPackage>);
+pub struct Resolution(FxHashMap<PackageName, RemoteDistribution>);
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub(crate) fn new(packages: FxHashMap<PackageName, PinnedPackage>) -> Self {
+    pub(crate) fn new(packages: FxHashMap<PackageName, RemoteDistribution>) -> Self {
         Self(packages)
     }
 
-    /// Iterate over the pinned packages in this resolution.
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &PinnedPackage)> {
-        self.0.iter()
-    }
-
-    /// Iterate over the wheels in this resolution.
-    pub fn into_files(self) -> impl Iterator<Item = File> {
-        self.0.into_values().map(|package| package.file)
-    }
-
-    /// Return the pinned package for the given package name, if it exists.
-    pub fn get(&self, package_name: &PackageName) -> Option<&PinnedPackage> {
+    /// Return the distribution for the given package name, if it exists.
+    pub fn get(&self, package_name: &PackageName) -> Option<&RemoteDistribution> {
         self.0.get(package_name)
     }
 
-    /// Return the number of pinned packages in this resolution.
+    /// Iterate over the [`RemoteDistribution`] entities in this resolution.
+    pub fn into_distributions(self) -> impl Iterator<Item = RemoteDistribution> {
+        self.0.into_values()
+    }
+
+    /// Return the number of distributions in this resolution.
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -87,7 +49,7 @@ impl Resolution {
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct Graph(petgraph::graph::Graph<PinnedPackage, (), petgraph::Directed>);
+pub struct Graph(petgraph::graph::Graph<RemoteDistribution, (), petgraph::Directed>);
 
 impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
@@ -113,7 +75,7 @@ impl Graph {
                 .and_then(|versions| versions.get(&version))
                 .unwrap()
                 .clone();
-            let pinned_package = PinnedPackage::new(package_name.clone(), version, file);
+            let pinned_package = RemoteDistribution::new(package_name.clone(), version, file);
             let index = graph.add_node(pinned_package);
 
             inverse.insert(package_name, index);
@@ -165,10 +127,10 @@ impl Graph {
         self.0
             .node_indices()
             .map(|node| Requirement {
-                name: self.0[node].name.to_string(),
+                name: self.0[node].name().to_string(),
                 extras: None,
                 version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-                    VersionSpecifier::equals_version(self.0[node].version.clone()),
+                    VersionSpecifier::equals_version(self.0[node].version().clone()),
                 ))),
                 marker: None,
             })

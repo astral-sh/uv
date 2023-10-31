@@ -15,9 +15,7 @@ use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClient;
-use puffin_installer::{
-    Downloader, Installer, PartitionedRequirements, RemoteDistribution, Unzipper,
-};
+use puffin_installer::{Downloader, Installer, PartitionedRequirements, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver, WheelFinder};
 use puffin_traits::BuildContext;
@@ -131,10 +129,7 @@ impl BuildContext for BuildDispatch {
                     .resolve(&remote)
                     .await
                     .context("Failed to resolve build dependencies")?;
-                resolution
-                    .into_files()
-                    .map(RemoteDistribution::from_file)
-                    .collect::<Result<Vec<_>>>()?
+                resolution.into_distributions().collect::<Vec<_>>()
             };
 
             // Download any missing distributions.

@@ -2,11 +2,10 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use fs_err as fs;
+
+use puffin_distribution::InstalledDistribution;
 use puffin_interpreter::Virtualenv;
-
 use puffin_package::package_name::PackageName;
-
-use crate::InstalledDistribution;
 
 #[derive(Debug, Default)]
 pub struct SitePackages(BTreeMap<PackageName, InstalledDistribution>);

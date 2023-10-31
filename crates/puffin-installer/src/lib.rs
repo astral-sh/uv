@@ -1,6 +1,3 @@
-pub use distribution::{
-    CachedDistribution, Distribution, InstalledDistribution, RemoteDistribution,
-};
 pub use downloader::{Downloader, Reporter as DownloadReporter};
 pub use installer::{Installer, Reporter as InstallReporter};
 pub use local_index::LocalIndex;
@@ -10,7 +7,6 @@ pub use uninstall::uninstall;
 pub use unzipper::{Reporter as UnzipReporter, Unzipper};
 
 mod cache;
-mod distribution;
 mod downloader;
 mod installer;
 mod local_index;

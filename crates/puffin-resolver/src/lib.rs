@@ -1,7 +1,7 @@
 pub use error::ResolveError;
 pub use manifest::Manifest;
 pub use prerelease_mode::PreReleaseMode;
-pub use resolution::{Graph, PinnedPackage};
+pub use resolution::Graph;
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{Reporter as ResolverReporter, Resolver};
 pub use source_distribution::BuiltSourceDistributionCache;

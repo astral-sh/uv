@@ -2,6 +2,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
 
 use pep440_rs::Version;
+use puffin_distribution::RemoteDistribution;
 use puffin_package::package_name::PackageName;
 
 use crate::printer::Printer;
@@ -31,7 +32,7 @@ impl WheelFinderReporter {
 }
 
 impl puffin_resolver::WheelFinderReporter for WheelFinderReporter {
-    fn on_progress(&self, package: &puffin_resolver::PinnedPackage) {
+    fn on_progress(&self, package: &RemoteDistribution) {
         self.progress
             .set_message(format!("{}=={}", package.name(), package.version()));
         self.progress.inc(1);

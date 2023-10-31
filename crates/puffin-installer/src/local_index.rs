@@ -3,10 +3,10 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use puffin_distribution::CachedDistribution;
 use puffin_package::package_name::PackageName;
 
 use crate::cache::WheelCache;
-use crate::distribution::CachedDistribution;
 
 /// A local index of cached distributions.
 #[derive(Debug, Default)]
