@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
+use puffin_package::extra_name::ExtraName;
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use url::Url;
 
@@ -70,6 +71,10 @@ struct PipCompileArgs {
     /// Constrain versions using the given constraints files.
     #[clap(short, long)]
     constraint: Vec<PathBuf>,
+
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[clap(long)]
+    extra: Vec<ExtraName>,
 
     #[clap(long, value_enum)]
     resolution: Option<ResolutionMode>,
@@ -201,6 +206,7 @@ async fn main() -> ExitCode {
             commands::pip_compile(
                 &requirements,
                 &constraints,
+                args.extra,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
                 args.prerelease.unwrap_or_default(),

@@ -8,6 +8,7 @@ use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
 use pubgrub::report::Reporter;
+use puffin_package::extra_name::ExtraName;
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -31,6 +32,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
+    extras: Vec<ExtraName>,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -45,14 +47,14 @@ pub(crate) async fn pip_compile(
     let RequirementsSpecification {
         requirements,
         constraints,
-    } = RequirementsSpecification::try_from_sources(requirements, constraints)?;
+    } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
     let preferences: Vec<Requirement> = output_file
         .filter(|_| upgrade_mode.is_prefer_pinned())
         .filter(|output_file| output_file.exists())
         .map(Path::to_path_buf)
         .map(RequirementsSource::from)
         .as_ref()
-        .map(RequirementsSpecification::try_from_source)
+        .map(|source| RequirementsSpecification::try_from_source(source, &extras))
         .transpose()?
         .map(|spec| spec.requirements)
         .unwrap_or_default();
