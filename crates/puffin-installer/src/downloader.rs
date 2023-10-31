@@ -12,7 +12,6 @@ use pep440_rs::Version;
 use puffin_client::RegistryClient;
 use puffin_package::package_name::PackageName;
 
-use crate::cache::WheelCache;
 use crate::distribution::RemoteDistribution;
 
 pub struct Downloader<'a> {
@@ -44,12 +43,7 @@ impl<'a> Downloader<'a> {
     pub async fn download(
         &'a self,
         wheels: Vec<RemoteDistribution>,
-        target: &'a Path,
     ) -> Result<Vec<InMemoryDistribution>> {
-        // Create the wheel cache subdirectory, if necessary.
-        let wheel_cache = WheelCache::new(target);
-        wheel_cache.init()?;
-
         // Sort the wheels by size.
         let mut wheels = wheels;
         wheels.sort_unstable_by_key(|wheel| Reverse(wheel.file().size));
