@@ -163,7 +163,7 @@ impl BuildContext for BuildDispatch {
                     downloads.iter().map(ToString::to_string).join(", ")
                 );
                 Unzipper::default()
-                    .download(downloads, self.cache.as_deref().unwrap_or(staging.path()))
+                    .unzip(downloads, self.cache.as_deref().unwrap_or(staging.path()))
                     .await
                     .context("Failed to unpack build dependencies")?
             };
