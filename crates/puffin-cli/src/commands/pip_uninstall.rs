@@ -11,7 +11,7 @@ use puffin_package::package_name::PackageName;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
+use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
@@ -26,7 +26,7 @@ pub(crate) async fn pip_uninstall(
         requirements,
         constraints: _,
         extras: _,
-    } = RequirementsSpecification::try_from_sources(sources, &[], &[])?;
+    } = RequirementsSpecification::try_from_sources(sources, &[], &ExtrasSpecification::None)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;

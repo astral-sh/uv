@@ -6,6 +6,7 @@ use colored::Colorize;
 use directories::ProjectDirs;
 use puffin_package::extra_name::ExtraName;
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
+use requirements::ExtrasSpecification;
 use url::Url;
 
 use crate::commands::ExitStatus;
@@ -73,8 +74,12 @@ struct PipCompileArgs {
     constraint: Vec<PathBuf>,
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
-    #[clap(long)]
+    #[clap(long, conflicts_with = "all_extras")]
     extra: Vec<ExtraName>,
+
+    /// Include all optional dependencies.
+    #[clap(long)]
+    all_extras: bool,
 
     #[clap(long, value_enum)]
     resolution: Option<ResolutionMode>,
@@ -203,10 +208,20 @@ async fn main() -> ExitCode {
                 .collect::<Vec<_>>();
             let index_urls =
                 IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+
+            let extras = if args.all_extras {
+                ExtrasSpecification::All
+            } else {
+                if args.extra.is_empty() {
+                    ExtrasSpecification::None
+                } else {
+                    ExtrasSpecification::Some(&args.extra)
+                }
+            };
             commands::pip_compile(
                 &requirements,
                 &constraints,
-                args.extra,
+                extras,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
                 args.prerelease.unwrap_or_default(),

@@ -8,7 +8,6 @@ use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
 use pubgrub::report::Reporter;
-use puffin_package::extra_name::ExtraName;
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -23,7 +22,7 @@ use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
+use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -32,7 +31,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
-    extras: Vec<ExtraName>,
+    extras: ExtrasSpecification<'_>,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -51,18 +50,20 @@ pub(crate) async fn pip_compile(
     } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
 
     // Check that all provided extras are used
-    let mut unused_extras = extras
-        .iter()
-        .filter(|extra| !used_extras.contains(extra))
-        .collect::<Vec<_>>();
-    if !unused_extras.is_empty() {
-        unused_extras.sort_unstable();
-        unused_extras.dedup();
-        let s = if unused_extras.len() == 1 { "" } else { "s" };
-        return Err(anyhow!(
-            "Requested extra{s} not found: {}",
-            unused_extras.iter().join(", ")
-        ));
+    if let ExtrasSpecification::Some(extras) = extras {
+        let mut unused_extras = extras
+            .iter()
+            .filter(|extra| !used_extras.contains(extra))
+            .collect::<Vec<_>>();
+        if !unused_extras.is_empty() {
+            unused_extras.sort_unstable();
+            unused_extras.dedup();
+            let s = if unused_extras.len() == 1 { "" } else { "s" };
+            return Err(anyhow!(
+                "Requested extra{s} not found: {}",
+                unused_extras.iter().join(", ")
+            ));
+        }
     }
 
     let preferences: Vec<Requirement> = output_file
