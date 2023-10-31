@@ -3,7 +3,7 @@ use std::io::{stdout, BufWriter};
 use std::path::Path;
 use std::{env, fs};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
@@ -47,7 +47,24 @@ pub(crate) async fn pip_compile(
     let RequirementsSpecification {
         requirements,
         constraints,
+        extras: used_extras,
     } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
+
+    // Check that all provided extras are used
+    let mut unused_extras = extras
+        .iter()
+        .filter(|extra| !used_extras.contains(extra))
+        .collect::<Vec<_>>();
+    if !unused_extras.is_empty() {
+        unused_extras.sort_unstable();
+        unused_extras.dedup();
+        let s = if unused_extras.len() == 1 { "" } else { "s" };
+        return Err(anyhow!(
+            "Requested extra{s} not found: {}",
+            unused_extras.iter().join(", ")
+        ));
+    }
+
     let preferences: Vec<Requirement> = output_file
         .filter(|_| upgrade_mode.is_prefer_pinned())
         .filter(|output_file| output_file.exists())

@@ -228,7 +228,7 @@ fn compile_constraints_inline() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package from an extra in a `pyproject.toml` file.
+/// Resolve a package from an optional dependency group in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extra() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -325,6 +325,116 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("FRiENDlY-...-_-BARd")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request an extra that does not exist as a dependency group in a `pyproject.toml` file.
+#[test]
+fn compile_pyproject_toml_extra_missing() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "project"
+dependencies = []
+optional-dependencies.foo = [
+    "django==5.0b1",
+]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--extra")
+            .arg("bar")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request multple extras that do not exist as a dependency group in a `pyproject.toml` file.
+#[test]
+fn compile_pyproject_toml_extras_missing() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "project"
+dependencies = []
+optional-dependencies.foo = [
+    "django==5.0b1",
+]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--extra")
+            .arg("foo")
+            .arg("--extra")
+            .arg("bar")
+            .arg("--extra")
+            .arg("foobar")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
