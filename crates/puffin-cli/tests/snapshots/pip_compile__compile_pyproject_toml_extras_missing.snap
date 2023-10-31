@@ -1,6 +1,5 @@
 ---
 source: crates/puffin-cli/tests/pip_compile.rs
-assertion_line: 376
 info:
   program: puffin
   args:
@@ -13,9 +12,9 @@ info:
     - "--extra"
     - foobar
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpzErT5d
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpZFzskw
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpu6WUxn/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpF2Ag94/.venv
 ---
 success: false
 exit_code: 2
