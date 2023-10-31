@@ -119,7 +119,7 @@ impl RequirementsSpecification {
             let source = Self::try_from_source(source, extras)?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
-            spec.extras.extend(source.extras)
+            spec.extras.extend(source.extras);
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.

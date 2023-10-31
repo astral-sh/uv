@@ -52,10 +52,10 @@ pub(crate) async fn pip_compile(
     } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
 
     // Check that all provided extras are used
-    let given_extras = HashSet::from_iter(extras.clone().into_iter());
+    let given_extras = HashSet::from_iter(extras.clone());
     let unused_extras = given_extras.difference(&used_extras).collect_vec();
     if !unused_extras.is_empty() {
-        let s = if unused_extras.len() != 1 { "s" } else { "" };
+        let s = if unused_extras.len() == 1 { "" } else { "s" };
         return Err(anyhow!(
             "requested extra{s} not found: {}",
             unused_extras.iter().join(", ")
