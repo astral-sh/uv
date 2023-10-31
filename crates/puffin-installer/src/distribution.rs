@@ -5,9 +5,9 @@ use anyhow::{anyhow, Result};
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use puffin_client::File;
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
+use puffin_package::pypi_types::File;
 
 /// A built distribution (wheel), which either exists remotely or locally.
 #[derive(Debug, Clone)]

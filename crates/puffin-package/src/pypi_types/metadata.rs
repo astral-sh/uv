@@ -302,7 +302,7 @@ mod tests {
 
     use pep508_rs::Requirement;
 
-    use crate::metadata::LenientRequirement;
+    use super::LenientRequirement;
 
     #[test]
     fn missing_comma() {

@@ -14,9 +14,9 @@ use tracing::debug;
 use distribution_filename::WheelFilename;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
-use puffin_client::{File, RegistryClient, SimpleJson};
-use puffin_package::metadata::Metadata21;
+use puffin_client::RegistryClient;
 use puffin_package::package_name::PackageName;
+use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::ResolveError;
 use crate::resolution::{PinnedPackage, Resolution};
