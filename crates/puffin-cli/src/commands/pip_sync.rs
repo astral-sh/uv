@@ -176,7 +176,7 @@ pub(crate) async fn sync_requirements(
             .with_reporter(UnzipReporter::from(printer).with_length(downloads.len() as u64));
 
         let unzips = unzipper
-            .download(downloads, cache.unwrap_or(staging.path()))
+            .unzip(downloads, cache.unwrap_or(staging.path()))
             .await
             .context("Failed to download and unpack wheels")?;
 

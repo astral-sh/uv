@@ -29,8 +29,8 @@ impl Unzipper {
         }
     }
 
-    /// Install a set of wheels into a Python virtual environment.
-    pub async fn download(
+    /// Unzip a set of downloaded wheels.
+    pub async fn unzip(
         &self,
         downloads: Vec<InMemoryDistribution>,
         target: &Path,
@@ -93,7 +93,7 @@ impl Unzipper {
     }
 }
 
-/// Write a wheel into the target directory.
+/// Unzip a wheel into the target directory.
 fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
     // Read the wheel into a buffer.
     let reader = std::io::Cursor::new(wheel.buffer);
