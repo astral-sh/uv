@@ -29,7 +29,6 @@ fs-err = { version = "2.9.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.28" }
 fxhash = { version = "0.2.1" }
-glibc_version = { version = "0.1.2" }
 goblin = { version = "0.7.1" }
 http-cache-reqwest = { version = "0.11.3" }
 indicatif = { version = "0.17.7" }
