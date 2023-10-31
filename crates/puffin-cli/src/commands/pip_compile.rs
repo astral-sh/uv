@@ -1,9 +1,10 @@
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
 use std::{env, fs};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
@@ -47,7 +48,20 @@ pub(crate) async fn pip_compile(
     let RequirementsSpecification {
         requirements,
         constraints,
+        extras: used_extras,
     } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
+
+    // Check that all provided extras are used
+    let given_extras = HashSet::from_iter(extras.clone().into_iter());
+    let unused_extras = given_extras.difference(&used_extras).collect_vec();
+    if !unused_extras.is_empty() {
+        let s = if unused_extras.len() != 1 { "s" } else { "" };
+        return Err(anyhow!(
+            "requested extra{s} not found: {}",
+            unused_extras.iter().join(", ")
+        ));
+    }
+
     let preferences: Vec<Requirement> = output_file
         .filter(|_| upgrade_mode.is_prefer_pinned())
         .filter(|output_file| output_file.exists())

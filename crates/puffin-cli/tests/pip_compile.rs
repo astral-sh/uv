@@ -228,7 +228,7 @@ fn compile_constraints_inline() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package from an extra in a `pyproject.toml` file.
+/// Resolve a package from an optional dependency group in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extra() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;

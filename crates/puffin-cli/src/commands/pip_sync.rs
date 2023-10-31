@@ -34,6 +34,7 @@ pub(crate) async fn pip_sync(
     let RequirementsSpecification {
         requirements,
         constraints: _,
+        extras: _,
     } = RequirementsSpecification::try_from_sources(sources, &[], &[])?;
 
     if requirements.is_empty() {

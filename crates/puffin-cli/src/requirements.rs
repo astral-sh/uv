@@ -1,5 +1,6 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -42,6 +43,8 @@ pub(crate) struct RequirementsSpecification {
     pub(crate) requirements: Vec<Requirement>,
     /// The constraints for the project.
     pub(crate) constraints: Vec<Requirement>,
+    /// The extras used to collect requirements.
+    pub(crate) extras: HashSet<ExtraName>,
 }
 
 impl RequirementsSpecification {
@@ -57,6 +60,7 @@ impl RequirementsSpecification {
                 Self {
                     requirements: vec![requirement],
                     constraints: vec![],
+                    extras: HashSet::new(),
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
@@ -68,39 +72,33 @@ impl RequirementsSpecification {
                         .map(|entry| entry.requirement)
                         .collect(),
                     constraints: requirements_txt.constraints.into_iter().collect(),
+                    extras: HashSet::new(),
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
                 let contents = fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to read `{}`", path.display()))?;
-                let requirements: Vec<Requirement> = pyproject_toml
-                    .project
-                    .into_iter()
-                    .flat_map(|project| {
-                        project.dependencies.into_iter().flatten().chain(
-                            // Include any optional dependencies specified in `extras`
-                            project.optional_dependencies.into_iter().flat_map(
-                                |optional_dependencies| {
-                                    optional_dependencies
-                                        .iter()
-                                        .flat_map(|(name, requirements)| {
-                                            if extras.contains(&ExtraName::normalize(name)) {
-                                                requirements.clone()
-                                            } else {
-                                                vec![]
-                                            }
-                                        })
-                                        .collect::<Vec<Requirement>>()
-                                },
-                            ),
-                        )
-                    })
-                    .collect();
+                let mut used_extras = HashSet::new();
+                let mut requirements = Vec::new();
+                if let Some(project) = pyproject_toml.project {
+                    requirements.extend(project.dependencies.unwrap_or_default());
+                    // Include any optional dependencies specified in `extras`
+                    for (name, optional_requirements) in
+                        project.optional_dependencies.unwrap_or_default()
+                    {
+                        let normalized_name = ExtraName::normalize(name);
+                        if extras.contains(&normalized_name) {
+                            used_extras.insert(normalized_name);
+                            requirements.extend(optional_requirements);
+                        }
+                    }
+                }
 
                 Self {
                     requirements,
                     constraints: vec![],
+                    extras: used_extras,
                 }
             }
         })
@@ -121,6 +119,7 @@ impl RequirementsSpecification {
             let source = Self::try_from_source(source, extras)?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
+            spec.extras.extend(source.extras)
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.
