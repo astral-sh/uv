@@ -17,6 +17,7 @@ platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 puffin-build = { path = "../puffin-build" }
 puffin-client = { path = "../puffin-client" }
+puffin-distribution = { path = "../puffin-distribution" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-package = { path = "../puffin-package" }

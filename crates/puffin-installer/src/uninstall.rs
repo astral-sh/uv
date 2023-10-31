@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::InstalledDistribution;
+use puffin_distribution::InstalledDistribution;
 
 /// Uninstall a package from the specified Python environment.
 pub async fn uninstall(

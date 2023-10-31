@@ -1986,6 +1986,7 @@ dependencies = [
  "pubgrub",
  "puffin-client",
  "puffin-dispatch",
+ "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-package",
@@ -2063,6 +2064,7 @@ dependencies = [
  "platform-tags",
  "puffin-build",
  "puffin-client",
+ "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-package",
@@ -2070,6 +2072,16 @@ dependencies = [
  "puffin-traits",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "puffin-distribution"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "distribution-filename",
+ "pep440_rs 0.3.12",
+ "puffin-package",
 ]
 
 [[package]]
@@ -2084,6 +2096,7 @@ dependencies = [
  "pep440_rs 0.3.12",
  "pep508_rs",
  "puffin-client",
+ "puffin-distribution",
  "puffin-interpreter",
  "puffin-package",
  "rayon",
@@ -2160,6 +2173,7 @@ dependencies = [
  "platform-tags",
  "pubgrub",
  "puffin-client",
+ "puffin-distribution",
  "puffin-interpreter",
  "puffin-package",
  "puffin-traits",

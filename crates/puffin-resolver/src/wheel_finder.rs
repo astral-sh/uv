@@ -15,11 +15,12 @@ use distribution_filename::WheelFilename;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
+use puffin_distribution::RemoteDistribution;
 use puffin_package::package_name::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::ResolveError;
-use crate::resolution::{PinnedPackage, Resolution};
+use crate::resolution::Resolution;
 
 pub struct WheelFinder<'a> {
     tags: &'a Tags,
@@ -81,7 +82,7 @@ impl<'a> WheelFinder<'a> {
         }
 
         // Resolve the requirements.
-        let mut resolution: FxHashMap<PackageName, PinnedPackage> =
+        let mut resolution: FxHashMap<PackageName, RemoteDistribution> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         while let Some(chunk) = package_stream.next().await {
@@ -113,7 +114,7 @@ impl<'a> WheelFinder<'a> {
                             metadata.name, metadata.version, file.filename
                         );
 
-                        let package = PinnedPackage::new(
+                        let package = RemoteDistribution::new(
                             PackageName::normalize(&metadata.name),
                             metadata.version,
                             file,
@@ -161,7 +162,7 @@ enum Response {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a package is resolved to a wheel.
-    fn on_progress(&self, package: &PinnedPackage);
+    fn on_progress(&self, package: &RemoteDistribution);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

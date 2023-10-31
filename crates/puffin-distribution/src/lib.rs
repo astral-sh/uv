@@ -75,6 +75,15 @@ pub struct RemoteDistribution {
 }
 
 impl RemoteDistribution {
+    /// Initialize a new [`RemoteDistribution`].
+    pub fn new(name: PackageName, version: Version, file: File) -> Self {
+        Self {
+            name,
+            version,
+            file,
+        }
+    }
+
     /// Try to parse a remote distribution from a remote file (like `django-5.0a1-py3-none-any.whl`).
     pub fn from_file(file: File) -> Result<Self> {
         let filename = WheelFilename::from_str(&file.filename)?;
@@ -128,7 +137,7 @@ impl CachedDistribution {
     }
 
     /// Try to parse a distribution from a cached directory name (like `django-5.0a1`).
-    pub(crate) fn try_from_path(path: &Path) -> Result<Option<Self>> {
+    pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
         let Some(file_name) = path.file_name() else {
             return Ok(None);
         };
@@ -194,7 +203,7 @@ impl InstalledDistribution {
     /// Try to parse a distribution from a `.dist-info` directory name (like `django-5.0a1.dist-info`).
     ///
     /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
-    pub(crate) fn try_from_path(path: &Path) -> Result<Option<Self>> {
+    pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
         if path.extension().is_some_and(|ext| ext == "dist-info") {
             let Some(file_stem) = path.file_stem() else {
                 return Ok(None);
