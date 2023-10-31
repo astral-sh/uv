@@ -103,13 +103,15 @@ impl RequirementsSpecification {
                 if let Some(project) = pyproject_toml.project {
                     requirements.extend(project.dependencies.unwrap_or_default());
                     // Include any optional dependencies specified in `extras`
-                    for (name, optional_requirements) in
-                        project.optional_dependencies.unwrap_or_default()
-                    {
-                        let normalized_name = ExtraName::normalize(name);
-                        if extras.contains(&normalized_name) {
-                            used_extras.insert(normalized_name);
-                            requirements.extend(optional_requirements);
+                    if !matches!(extras, ExtrasSpecification::None) {
+                        for (name, optional_requirements) in
+                            project.optional_dependencies.unwrap_or_default()
+                        {
+                            let normalized_name = ExtraName::normalize(name);
+                            if extras.contains(&normalized_name) {
+                                used_extras.insert(normalized_name);
+                                requirements.extend(optional_requirements);
+                            }
                         }
                     }
                 }
