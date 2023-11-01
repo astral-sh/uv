@@ -1,7 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-mod common;
-
 use std::process::Command;
 
 use anyhow::Result;
@@ -11,6 +9,8 @@ use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
 use common::{BIN_NAME, INSTA_FILTERS};
+
+mod common;
 
 #[test]
 fn missing_requirements_in() -> Result<()> {
