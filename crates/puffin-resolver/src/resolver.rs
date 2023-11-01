@@ -23,8 +23,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
-use puffin_package::dist_info_name::DistInfoName;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::{ExtraName, PackageName};
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 use puffin_traits::BuildContext;
 
@@ -126,7 +125,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         // Push all the requirements into the package sink.
         for requirement in &self.requirements {
             debug!("Adding root dependency: {requirement}");
-            let package_name = PackageName::normalize(&requirement.name);
+            let package_name = requirement.name.clone();
             match &requirement.version_or_url {
                 // If this is a registry-based package, fetch the package metadata.
                 None | Some(pep508_rs::VersionOrUrl::VersionSpecifier(_)) => {
@@ -535,11 +534,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 // If any packages were further constrained by the user, add those constraints.
                 for constraint in &self.constraints {
-                    let package = PubGrubPackage::Package(
-                        PackageName::normalize(&constraint.name),
-                        None,
-                        None,
-                    );
+                    let package = PubGrubPackage::Package(constraint.name.clone(), None, None);
                     if let Some(range) = constraints.get_mut(&package) {
                         *range = range.intersection(
                             &version_range(constraint.version_or_url.as_ref()).unwrap(),
@@ -551,7 +546,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     if !metadata
                         .provides_extras
                         .iter()
-                        .any(|provided_extra| DistInfoName::normalize(provided_extra) == *extra)
+                        .any(|provided_extra| ExtraName::new(provided_extra) == *extra)
                     {
                         return Ok(Dependencies::Unknown);
                     }
@@ -773,7 +768,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_progress(&self, name: &PackageName, extra: Option<&DistInfoName>, version: VersionOrUrl);
+    fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

@@ -7,8 +7,7 @@ use url::Url;
 
 use pep440_rs::Version;
 use puffin_cache::CanonicalUrl;
-use puffin_package::dist_info_name::DistInfoName;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 use puffin_package::pypi_types::File;
 
 /// A built distribution (wheel), which either exists remotely or locally.
@@ -117,7 +116,9 @@ impl RemoteDistribution {
     pub fn id(&self) -> String {
         match self {
             Self::Registry(name, version, _) => {
-                format!("{}-{}", DistInfoName::from(name), version)
+                // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
+                // `version` is normalized by its `ToString` impl
+                format!("{}-{}", PackageName::from(name), version)
             }
             Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }
@@ -169,7 +170,7 @@ impl CachedDistribution {
             return Ok(None);
         };
 
-        let name = PackageName::normalize(name);
+        let name = PackageName::new(name);
         let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
         let path = path.to_path_buf();
 
@@ -248,7 +249,7 @@ impl InstalledDistribution {
                 return Ok(None);
             };
 
-            let name = PackageName::normalize(name);
+            let name = PackageName::new(name);
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
             let path = path.to_path_buf();
 
@@ -355,7 +356,9 @@ impl<'a> RemoteDistributionRef<'a> {
     pub fn id(&self) -> String {
         match self {
             Self::Registry(name, version, _) => {
-                format!("{}-{}", DistInfoName::from(*name), version)
+                // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
+                // `version` is normalized by its `ToString` impl
+                format!("{}-{}", PackageName::from(*name), version)
             }
             Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }

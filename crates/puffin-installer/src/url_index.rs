@@ -4,9 +4,10 @@ use anyhow::Result;
 use fxhash::FxHashMap;
 use url::Url;
 
-use crate::cache::{CacheShard, WheelCache};
 use puffin_distribution::{CachedDistribution, RemoteDistributionRef};
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
+
+use crate::cache::{CacheShard, WheelCache};
 
 /// A local index of distributions that originate from arbitrary URLs (as opposed to being
 /// downloaded from a registry, like `PyPI`).

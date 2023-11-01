@@ -12,7 +12,7 @@ license = { workspace = true }
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
 platform-tags = { path = "../platform-tags" }
-puffin-package = { path = "../puffin-package" }
+puffin-normalize = { path = "../puffin-normalize" }
 
 thiserror = { workspace = true }
 url = { workspace = true }

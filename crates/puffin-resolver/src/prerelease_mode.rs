@@ -1,7 +1,7 @@
 use fxhash::FxHashSet;
 
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -70,7 +70,7 @@ impl PreReleaseStrategy {
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })
-                    .map(|requirement| PackageName::normalize(&requirement.name))
+                    .map(|requirement| requirement.name.clone())
                     .collect(),
             ),
             PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
@@ -90,7 +90,7 @@ impl PreReleaseStrategy {
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })
-                    .map(|requirement| PackageName::normalize(&requirement.name))
+                    .map(|requirement| requirement.name.clone())
                     .collect(),
             ),
         }

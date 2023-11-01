@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "django-debug-toolbar",
+                name: PackageName(
+                    "django-debug-toolbar",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -38,7 +40,9 @@ RequirementsTxt {
     ],
     constraints: [
         Requirement {
-            name: "django",
+            name: PackageName(
+                "django",
+            ),
             extras: None,
             version_or_url: Some(
                 VersionSpecifier(
@@ -66,7 +70,9 @@ RequirementsTxt {
             marker: None,
         },
         Requirement {
-            name: "pytz",
+            name: PackageName(
+                "pytz",
+            ),
             extras: None,
             version_or_url: Some(
                 VersionSpecifier(

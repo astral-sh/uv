@@ -2,7 +2,7 @@ use fxhash::FxHashMap;
 use pubgrub::range::Range;
 
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 
 use crate::file::DistributionFile;
 use crate::prerelease_mode::PreReleaseStrategy;
@@ -59,9 +59,8 @@ impl From<&[Requirement]> for Preferences {
                     let [version_specifier] = &**version_specifiers else {
                         return None;
                     };
-                    let package_name = PackageName::normalize(&requirement.name);
                     let version = PubGrubVersion::from(version_specifier.version().clone());
-                    Some((package_name, version))
+                    Some((requirement.name.clone(), version))
                 })
                 .collect(),
         )

@@ -6,31 +6,16 @@
 //! ```
 //! use std::str::FromStr;
 //! use pep508_rs::Requirement;
+//! use puffin_normalize::ExtraName;
 //!
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::from_str(marker).unwrap();
-//! assert_eq!(dependency_specification.name, "requests");
-//! assert_eq!(dependency_specification.extras, Some(vec!["security".to_string(), "tests".to_string()]));
+//! assert_eq!(dependency_specification.name.as_ref(), "requests");
+//! assert_eq!(dependency_specification.extras, Some(vec![ExtraName::new("security"), ExtraName::new("tests")]));
 //! ```
 
 #![deny(missing_docs)]
 
-mod marker;
-
-pub use marker::{
-    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
-    MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
-};
-#[cfg(feature = "pyo3")]
-use pep440_rs::PyVersion;
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-#[cfg(feature = "pyo3")]
-use pyo3::{
-    basic::CompareOp, create_exception, exceptions::PyNotImplementedError, pyclass, pymethods,
-    pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
-};
-#[cfg(feature = "serde")]
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -38,9 +23,28 @@ use std::fmt::{Display, Formatter};
 #[cfg(feature = "pyo3")]
 use std::hash::{Hash, Hasher};
 use std::str::{Chars, FromStr};
+
+#[cfg(feature = "pyo3")]
+use pep440_rs::PyVersion;
+#[cfg(feature = "pyo3")]
+use pyo3::{
+    create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
+    pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
+};
+#[cfg(feature = "serde")]
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use url::Url;
+
+pub use marker::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
+    MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
+};
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use puffin_normalize::{ExtraName, PackageName};
+
+mod marker;
 
 /// Error with a span attached. Not that those aren't `String` but `Vec<char>` indices.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -128,10 +132,10 @@ create_exception!(
 pub struct Requirement {
     /// The distribution name such as `numpy` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
-    pub name: String,
+    pub name: PackageName,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
-    pub extras: Option<Vec<String>>,
+    pub extras: Option<Vec<ExtraName>>,
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     /// or a url
@@ -146,7 +150,15 @@ impl Display for Requirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(extras) = &self.extras {
-            write!(f, "[{}]", extras.join(","))?;
+            write!(
+                f,
+                "[{}]",
+                extras
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )?;
         }
         if let Some(version_or_url) = &self.version_or_url {
             match version_or_url {
@@ -198,14 +210,16 @@ impl Requirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
     pub fn name(&self) -> String {
-        self.name.clone()
+        self.name.to_string()
     }
 
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
     pub fn extras(&self) -> Option<Vec<String>> {
-        self.extras.clone()
+        self.extras
+            .as_ref()
+            .map(|extras| extras.iter().map(ToString::to_string).collect())
     }
 
     /// The marker expression such as  `python_version > "3.8"` in
@@ -511,7 +525,7 @@ impl<'a> CharIter<'a> {
     }
 }
 
-fn parse_name(chars: &mut CharIter) -> Result<String, Pep508Error> {
+fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
     // https://peps.python.org/pep-0508/#names
     // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
     let mut name = String::new();
@@ -554,13 +568,13 @@ fn parse_name(chars: &mut CharIter) -> Result<String, Pep508Error> {
                     });
                 }
             }
-            Some(_) | None => return Ok(name),
+            Some(_) | None => return Ok(PackageName::new(name)),
         }
     }
 }
 
 /// parses extras in the `[extra1,extra2] format`
-fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error> {
+fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Error> {
     let Some(bracket_pos) = chars.eat('[') else {
         return Ok(None);
     };
@@ -627,10 +641,10 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<String>>, Pep508Error
         // end or next identifier?
         match chars.next() {
             Some((_, ',')) => {
-                extras.push(buffer);
+                extras.push(ExtraName::new(buffer));
             }
             Some((_, ']')) => {
-                extras.push(buffer);
+                extras.push(ExtraName::new(buffer));
                 break;
             }
             Some((pos, other)) => {
@@ -870,15 +884,19 @@ pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 /// Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use indoc::indoc;
+    use url::Url;
+
+    use pep440_rs::{Operator, Version, VersionSpecifier};
+    use puffin_normalize::{ExtraName, PackageName};
+
     use crate::marker::{
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
     use crate::{CharIter, Requirement, VersionOrUrl};
-    use indoc::indoc;
-    use pep440_rs::{Operator, Version, VersionSpecifier};
-    use std::str::FromStr;
-    use url::Url;
 
     fn assert_err(input: &str, error: &str) {
         assert_eq!(Requirement::from_str(input).unwrap_err().to_string(), error);
@@ -926,8 +944,8 @@ mod tests {
         let requests = Requirement::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
-            name: "requests".to_string(),
-            extras: Some(vec!["security".to_string(), "tests".to_string()]),
+            name: PackageName::new("requests"),
+            extras: Some(vec![ExtraName::new("security"), ExtraName::new("tests")]),
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::new(
@@ -972,25 +990,25 @@ mod tests {
     #[test]
     fn parenthesized_single() {
         let numpy = Requirement::from_str("numpy ( >=1.19 )").unwrap();
-        assert_eq!(numpy.name, "numpy");
+        assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn parenthesized_double() {
         let numpy = Requirement::from_str("numpy ( >=1.19, <2.0 )").unwrap();
-        assert_eq!(numpy.name, "numpy");
+        assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn versions_single() {
         let numpy = Requirement::from_str("numpy >=1.19 ").unwrap();
-        assert_eq!(numpy.name, "numpy");
+        assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn versions_double() {
         let numpy = Requirement::from_str("numpy >=1.19, <2.0 ").unwrap();
-        assert_eq!(numpy.name, "numpy");
+        assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
@@ -1068,7 +1086,7 @@ mod tests {
     #[test]
     fn error_extras1() {
         let numpy = Requirement::from_str("black[d]").unwrap();
-        assert_eq!(numpy.extras, Some(vec!["d".to_string()]));
+        assert_eq!(numpy.extras, Some(vec![ExtraName::new("d")]));
     }
 
     #[test]
@@ -1076,7 +1094,7 @@ mod tests {
         let numpy = Requirement::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
             numpy.extras,
-            Some(vec!["d".to_string(), "jupyter".to_string()])
+            Some(vec![ExtraName::new("d"), ExtraName::new("jupyter")])
         );
     }
 
@@ -1123,7 +1141,7 @@ mod tests {
                 .unwrap();
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
-            name: "pip".to_string(),
+            name: PackageName::new("pip"),
             extras: None,
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),

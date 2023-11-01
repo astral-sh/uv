@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "tqdm",
+                name: PackageName(
+                    "tqdm",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -38,7 +40,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "tomli-w",
+                name: PackageName(
+                    "tomli-w",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(

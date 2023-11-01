@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "numpy",
+                name: PackageName(
+                    "numpy",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -38,7 +40,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "pandas",
+                name: PackageName(
+                    "pandas",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -70,7 +74,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "python-dateutil",
+                name: PackageName(
+                    "python-dateutil",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -102,7 +108,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "pytz",
+                name: PackageName(
+                    "pytz",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -133,7 +141,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "six",
+                name: PackageName(
+                    "six",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -165,7 +175,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "tzdata",
+                name: PackageName(
+                    "tzdata",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(

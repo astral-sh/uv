@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "werkzeug",
+                name: PackageName(
+                    "werkzeug",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -67,7 +69,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "urllib3",
+                name: PackageName(
+                    "urllib3",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -128,7 +132,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "ansicon",
+                name: PackageName(
+                    "ansicon",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -200,7 +206,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "requests-oauthlib",
+                name: PackageName(
+                    "requests-oauthlib",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -262,7 +270,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "psycopg2",
+                name: PackageName(
+                    "psycopg2",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(

@@ -6,6 +6,14 @@ use anyhow::{anyhow, Error, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
+/// The normalized name of an extra dependency group.
+///
+/// Converts the name to lowercase and collapses any run of the characters `-`, `_` and `.`
+/// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
+///
+/// See:
+/// - <https://peps.python.org/pep-0685/#specification/>
+/// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExtraName(String);
 
@@ -19,17 +27,8 @@ static NAME_NORMALIZE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-_.]+").unwrap()
 static NAME_VALIDATE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$").unwrap());
 
-/// An extra dependency group name.
-///
-/// See:
-/// - <https://peps.python.org/pep-0685/#specification/>
-/// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
 impl ExtraName {
-    /// Create a normalized extra name without validation.
-    ///
-    /// Converts the name to lowercase and collapses any run of the characters `-`, `_` and `.`
-    /// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
-    pub fn normalize(name: impl AsRef<str>) -> Self {
+    pub fn new(name: impl AsRef<str>) -> Self {
         // TODO(charlie): Avoid allocating in the common case (when no normalization is required).
         let mut normalized = NAME_NORMALIZE.replace_all(name.as_ref(), "-").to_string();
         normalized.make_ascii_lowercase();
@@ -39,7 +38,7 @@ impl ExtraName {
     /// Create a validated, normalized extra name.
     pub fn validate(name: impl AsRef<str>) -> Result<Self> {
         if NAME_VALIDATE.is_match(name.as_ref()) {
-            Ok(Self::normalize(name))
+            Ok(Self::new(name))
         } else {
             Err(anyhow!(
                 "Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters"
@@ -68,32 +67,14 @@ mod tests {
 
     #[test]
     fn normalize() {
+        assert_eq!(ExtraName::new("friendly-bard").as_ref(), "friendly-bard");
+        assert_eq!(ExtraName::new("Friendly-Bard").as_ref(), "friendly-bard");
+        assert_eq!(ExtraName::new("FRIENDLY-BARD").as_ref(), "friendly-bard");
+        assert_eq!(ExtraName::new("friendly.bard").as_ref(), "friendly-bard");
+        assert_eq!(ExtraName::new("friendly_bard").as_ref(), "friendly-bard");
+        assert_eq!(ExtraName::new("friendly--bard").as_ref(), "friendly-bard");
         assert_eq!(
-            ExtraName::normalize("friendly-bard").as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(
-            ExtraName::normalize("Friendly-Bard").as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(
-            ExtraName::normalize("FRIENDLY-BARD").as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(
-            ExtraName::normalize("friendly.bard").as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(
-            ExtraName::normalize("friendly_bard").as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(
-            ExtraName::normalize("friendly--bard").as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(
-            ExtraName::normalize("FrIeNdLy-._.-bArD").as_ref(),
+            ExtraName::new("FrIeNdLy-._.-bArD").as_ref(),
             "friendly-bard"
         );
     }

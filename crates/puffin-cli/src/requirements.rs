@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 
 use pep508_rs::Requirement;
-use puffin_package::extra_name::ExtraName;
+use puffin_normalize::ExtraName;
 use puffin_package::requirements_txt::RequirementsTxt;
 
 #[derive(Debug)]
@@ -107,7 +107,7 @@ impl RequirementsSpecification {
                         for (name, optional_requirements) in
                             project.optional_dependencies.unwrap_or_default()
                         {
-                            let normalized_name = ExtraName::normalize(name);
+                            let normalized_name = ExtraName::new(name);
                             if extras.contains(&normalized_name) {
                                 used_extras.insert(normalized_name);
                                 requirements.extend(optional_requirements);

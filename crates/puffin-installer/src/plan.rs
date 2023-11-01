@@ -6,7 +6,6 @@ use tracing::debug;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_distribution::{CachedDistribution, InstalledDistribution};
 use puffin_interpreter::Virtualenv;
-use puffin_package::package_name::PackageName;
 
 use crate::url_index::UrlIndex;
 use crate::{RegistryIndex, SitePackages};
@@ -55,10 +54,8 @@ impl PartitionedRequirements {
         let mut extraneous = vec![];
 
         for requirement in requirements {
-            let package = PackageName::normalize(&requirement.name);
-
             // Filter out already-installed packages.
-            if let Some(distribution) = site_packages.remove(&package) {
+            if let Some(distribution) = site_packages.remove(&requirement.name) {
                 if requirement.is_satisfied_by(distribution.version()) {
                     debug!("Requirement already satisfied: {distribution}",);
                     continue;
@@ -69,19 +66,21 @@ impl PartitionedRequirements {
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                    if let Some(distribution) = registry_index.get(&package).filter(|dist| {
-                        let CachedDistribution::Registry(_name, version, _path) = dist else {
-                            return false;
-                        };
-                        requirement.is_satisfied_by(version)
-                    }) {
+                    if let Some(distribution) =
+                        registry_index.get(&requirement.name).filter(|dist| {
+                            let CachedDistribution::Registry(_name, version, _path) = dist else {
+                                return false;
+                            };
+                            requirement.is_satisfied_by(version)
+                        })
+                    {
                         debug!("Requirement already cached: {distribution}");
                         local.push(distribution.clone());
                         continue;
                     }
                 }
                 Some(VersionOrUrl::Url(url)) => {
-                    if let Some(distribution) = url_index.get(&package, url) {
+                    if let Some(distribution) = url_index.get(&requirement.name, url) {
                         debug!("Requirement already cached: {distribution}");
                         local.push(distribution.clone());
                         continue;

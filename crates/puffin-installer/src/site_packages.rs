@@ -5,7 +5,7 @@ use fs_err as fs;
 
 use puffin_distribution::InstalledDistribution;
 use puffin_interpreter::Virtualenv;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 
 #[derive(Debug, Default)]
 pub struct SitePackages(BTreeMap<PackageName, InstalledDistribution>);

@@ -13,6 +13,7 @@ use tracing::warn;
 
 use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
+use puffin_normalize::PackageName;
 
 /// Python Package Metadata 2.1 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>
@@ -24,7 +25,7 @@ use pep508_rs::{Pep508Error, Requirement};
 pub struct Metadata21 {
     // Mandatory fields
     pub metadata_version: String,
-    pub name: String,
+    pub name: PackageName,
     pub version: Version,
     // Optional fields
     pub platforms: Vec<String>,
@@ -42,7 +43,7 @@ pub struct Metadata21 {
     pub license: Option<String>,
     pub classifiers: Vec<String>,
     pub requires_dist: Vec<Requirement>,
-    pub provides_dist: Vec<String>,
+    pub provides_dist: Vec<PackageName>,
     pub obsoletes_dist: Vec<String>,
     pub requires_python: Option<VersionSpecifiers>,
     pub requires_external: Vec<String>,
@@ -122,9 +123,11 @@ impl Metadata21 {
         let metadata_version = headers
             .get_first_value("Metadata-Version")
             .ok_or(Error::FieldNotFound("Metadata-Version"))?;
-        let name = headers
-            .get_first_value("Name")
-            .ok_or(Error::FieldNotFound("Name"))?;
+        let name = PackageName::new(
+            headers
+                .get_first_value("Name")
+                .ok_or(Error::FieldNotFound("Name"))?,
+        );
         let version = Version::from_str(
             &headers
                 .get_first_value("Version")
@@ -151,7 +154,10 @@ impl Metadata21 {
             .iter()
             .map(|requires_dist| LenientRequirement::from_str(requires_dist).map(Requirement::from))
             .collect::<Result<Vec<_>, _>>()?;
-        let provides_dist = get_all_values("Provides-Dist");
+        let provides_dist = get_all_values("Provides-Dist")
+            .iter()
+            .map(PackageName::new)
+            .collect();
         let obsoletes_dist = get_all_values("Obsoletes-Dist");
         let maintainer = get_first_value("Maintainer");
         let maintainer_email = get_first_value("Maintainer-email");

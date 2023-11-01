@@ -11,7 +11,7 @@ use reqwest_retry::RetryTransientMiddleware;
 use tracing::trace;
 use url::Url;
 
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::Error;
@@ -135,7 +135,7 @@ pub struct RegistryClient {
 
 impl RegistryClient {
     /// Fetch a package from the `PyPI` simple API.
-    pub async fn simple(&self, package_name: impl AsRef<str>) -> Result<SimpleJson, Error> {
+    pub async fn simple(&self, package_name: PackageName) -> Result<SimpleJson, Error> {
         if self.no_index {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
@@ -143,9 +143,7 @@ impl RegistryClient {
         for index in std::iter::once(&self.index).chain(self.extra_index.iter()) {
             // Format the URL for PyPI.
             let mut url = index.clone();
-            url.path_segments_mut()
-                .unwrap()
-                .push(PackageName::normalize(&package_name).as_ref());
+            url.path_segments_mut().unwrap().push(package_name.as_ref());
             url.path_segments_mut().unwrap().push("");
             url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 

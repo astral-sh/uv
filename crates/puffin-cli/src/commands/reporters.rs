@@ -3,8 +3,8 @@ use std::time::Duration;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use puffin_distribution::{CachedDistribution, RemoteDistribution, VersionOrUrl};
-use puffin_package::dist_info_name::DistInfoName;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::ExtraName;
+use puffin_normalize::PackageName;
 
 use crate::printer::Printer;
 
@@ -171,7 +171,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
     fn on_progress(
         &self,
         name: &PackageName,
-        extra: Option<&DistInfoName>,
+        extra: Option<&ExtraName>,
         version_or_url: VersionOrUrl,
     ) {
         match (extra, version_or_url) {

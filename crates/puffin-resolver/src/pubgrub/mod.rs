@@ -4,8 +4,7 @@ use pubgrub::range::Range;
 use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
-use puffin_package::dist_info_name::DistInfoName;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::{ExtraName, PackageName};
 
 pub(crate) use crate::pubgrub::package::PubGrubPackage;
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};
@@ -20,16 +19,15 @@ mod version;
 /// Convert a set of requirements to a set of `PubGrub` packages and ranges.
 pub(crate) fn iter_requirements<'a>(
     requirements: impl Iterator<Item = &'a Requirement> + 'a,
-    extra: Option<&'a DistInfoName>,
+    extra: Option<&'a ExtraName>,
     source: Option<&'a PackageName>,
     env: &'a MarkerEnvironment,
 ) -> impl Iterator<Item = (PubGrubPackage, Range<PubGrubVersion>)> + 'a {
     requirements
         .filter(move |requirement| {
-            let normalized = PackageName::normalize(&requirement.name);
-            if source.is_some_and(|source| source == &normalized) {
+            if source.is_some_and(|source| source == &requirement.name) {
                 // TODO(konstin): Warn only once here
-                warn!("{normalized} depends on itself");
+                warn!("{} depends on itself", requirement.name);
                 false
             } else {
                 true
@@ -52,7 +50,7 @@ pub(crate) fn iter_requirements<'a>(
                     .into_iter()
                     .flatten()
                     .map(|extra| {
-                        pubgrub_package(requirement, Some(DistInfoName::normalize(extra))).unwrap()
+                        pubgrub_package(requirement, Some(ExtraName::new(extra))).unwrap()
                     }),
             )
         })
@@ -79,21 +77,17 @@ pub(crate) fn version_range(specifiers: Option<&VersionOrUrl>) -> Result<Range<P
 /// Convert a [`Requirement`] to a `PubGrub`-compatible package and range.
 fn pubgrub_package(
     requirement: &Requirement,
-    extra: Option<DistInfoName>,
+    extra: Option<ExtraName>,
 ) -> Result<(PubGrubPackage, Range<PubGrubVersion>)> {
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::Package(PackageName::normalize(&requirement.name), extra, None),
+            PubGrubPackage::Package(requirement.name.clone(), extra, None),
             Range::full(),
         )),
         // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
         Some(VersionOrUrl::Url(url)) => Ok((
-            PubGrubPackage::Package(
-                PackageName::normalize(&requirement.name),
-                extra,
-                Some(url.clone()),
-            ),
+            PubGrubPackage::Package(requirement.name.clone(), extra, Some(url.clone())),
             Range::full(),
         )),
         // The requirement has a specifier (e.g., `flask>=1.0`).
@@ -105,7 +99,7 @@ fn pubgrub_package(
                     range.intersection(&specifier.into())
                 })?;
             Ok((
-                PubGrubPackage::Package(PackageName::normalize(&requirement.name), extra, None),
+                PubGrubPackage::Package(requirement.name.clone(), extra, None),
                 version,
             ))
         }
