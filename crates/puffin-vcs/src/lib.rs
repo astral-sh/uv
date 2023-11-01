@@ -1,11 +1,7 @@
 //! Home of the [`GitSource`].
 //!
 //! Apparently, the most important type in this module is [`GitSource`].
-//! [`git`] provides libgit2 utilities like fetch and checkout, whereas
-//! [`oxide`] is the counterpart for gitoxide integration. [`known_hosts`]
-//! is the mitigation of [CVE-2022-46176].
-//!
-//! [CVE-2022-46176]: https://blog.rust-lang.org/2023/01/10/cve-2022-46176.html
+//! [`git`] provides libgit2 utilities like fetch and checkout.
 
 use std::str::FromStr;
 
@@ -13,55 +9,55 @@ use anyhow::Context;
 use url::Url;
 
 pub use self::git::{fetch, GitCheckout, GitDatabase, GitRemote};
+pub use self::source::GitSource;
 
 mod config;
 mod git;
 mod source;
 mod util;
-mod utils;
 
+/// A reference to a Git repository.
 #[derive(Debug, Clone)]
-pub struct GitDependencyReference {
+pub struct Git {
+    /// The URL of the Git repository, with any query parameters and fragments removed.
     url: Url,
+    /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
+    /// The precise commit to use, if known.
     precise: Option<git2::Oid>,
 }
 
-impl FromStr for GitDependencyReference {
-    type Err = anyhow::Error;
+impl TryFrom<Url> for Git {
+    type Error = anyhow::Error;
 
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let (kind, url) = string
-            .split_once('+')
-            .ok_or_else(|| anyhow::format_err!("Invalid source: `{string}`"))?;
+    /// Initialize a [`Git`] source from a URL.
+    fn try_from(mut url: Url) -> Result<Self, Self::Error> {
+        let mut reference = GitReference::DefaultBranch;
+        for (k, v) in url.query_pairs() {
+            match &k[..] {
+                // Map older 'ref' to branch.
+                "branch" | "ref" => reference = GitReference::Branch(v.into_owned()),
 
-        match kind {
-            "git" => {
-                let mut url = Url::parse(url)
-                    .with_context(|| format!("Failed to parse Git source: {url}"))?;
-                let mut reference = GitReference::DefaultBranch;
-                for (k, v) in url.query_pairs() {
-                    match &k[..] {
-                        // Map older 'ref' to branch.
-                        "branch" | "ref" => reference = GitReference::Branch(v.into_owned()),
-
-                        "rev" => reference = GitReference::Rev(v.into_owned()),
-                        "tag" => reference = GitReference::Tag(v.into_owned()),
-                        _ => {}
-                    }
-                }
-                let precise = url.fragment().map(|s| git2::Oid::from_str(s)).transpose()?;
-                url.set_fragment(None);
-                url.set_query(None);
-
-                Ok(Self {
-                    url,
-                    reference,
-                    precise,
-                })
+                "rev" => reference = GitReference::Rev(v.into_owned()),
+                "tag" => reference = GitReference::Tag(v.into_owned()),
+                _ => {}
             }
-            kind => Err(anyhow::format_err!("unsupported source protocol: {}", kind)),
         }
+        let precise = url.fragment().map(|s| git2::Oid::from_str(s)).transpose()?;
+        url.set_fragment(None);
+        url.set_query(None);
+
+        Ok(Self {
+            url,
+            reference,
+            precise,
+        })
+    }
+}
+
+impl std::fmt::Display for Git {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)
     }
 }
 
@@ -77,36 +73,4 @@ pub enum GitReference {
     Rev(String),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
-}
-
-#[cfg(test)]
-mod test {
-    use std::path::Path;
-    use std::str::FromStr;
-
-    use crate::config::Config;
-    use crate::util::CargoResult;
-    use crate::{GitDependencyReference, GitReference, GitRemote};
-
-    #[test]
-    fn run() -> CargoResult<()> {
-        let source = GitDependencyReference::from_str("ssh://git@github.com/pallets/flask.git")?;
-
-        let remote = GitRemote::new(&source.url);
-
-        let db_path = Path::new("db");
-
-        // let db = remote.db_at(&db_path)?;
-
-        let checkout_path = Path::new("checkout");
-        remote.checkout(
-            checkout_path,
-            None,
-            &GitReference::Branch("main".to_string()),
-            source.precise,
-            &Config::new(),
-        )?;
-
-        Ok(())
-    }
 }

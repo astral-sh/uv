@@ -126,9 +126,13 @@ impl SourceDistributionBuilder {
         let temp_dir = tempdir()?;
 
         // TODO(konstin): Parse and verify filenames
-        debug!("Unpacking for build {}", sdist.display());
-        let extracted = temp_dir.path().join("extracted");
-        let source_tree = extract_archive(sdist, &extracted)?;
+        debug!("Unpacking for build: {}", sdist.display());
+        let source_tree = if fs::metadata(sdist)?.is_dir() {
+            sdist.to_path_buf()
+        } else {
+            let extracted = temp_dir.path().join("extracted");
+            extract_archive(sdist, &extracted)?
+        };
 
         // Check if we have a PEP 517 build, a legacy setup.py, or an edge case
         let build_system = if source_tree.join("pyproject.toml").is_file() {

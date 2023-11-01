@@ -4,7 +4,7 @@ use tracing::debug;
 
 use crate::config::Config;
 use crate::util::{short_hash, CanonicalUrl, CargoResult};
-use crate::{GitDependencyReference, GitReference, GitRemote};
+use crate::{Git, GitReference, GitRemote};
 
 pub struct GitSource {
     /// The configuration for Cargo.
@@ -22,11 +22,11 @@ pub struct GitSource {
     /// The path to the Git source database.
     git: PathBuf,
     /// The path to which the Git source has been checked out.
-    source: Option<PathBuf>,
+    db_path: Option<PathBuf>,
 }
 
 impl GitSource {
-    pub fn new(reference: GitDependencyReference, git: PathBuf) -> CargoResult<Self> {
+    pub fn new(reference: Git, git: PathBuf) -> CargoResult<Self> {
         Ok(Self {
             config: Config::new(),
             remote: GitRemote::new(&reference.url),
@@ -34,15 +34,15 @@ impl GitSource {
             locked_rev: reference.precise,
             ident: short_hash(&CanonicalUrl::new(&reference.url)?),
             git,
-            source: None,
+            db_path: None,
         })
     }
 
     pub fn fetch(self) -> CargoResult<PathBuf> {
-        let source = self.git.join("db").join(&self.ident);
+        // The path to the repo, within the Git database.
+        let db_path = self.git.join("db").join(&self.ident);
 
-        let db = self.remote.db_at(&self.git).ok();
-        let (db, actual_rev) = match (self.locked_rev, db) {
+        let (db, actual_rev) = match (self.locked_rev, self.remote.db_at(&db_path).ok()) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
             (Some(rev), Some(db)) if db.contains(rev) => (db, rev),
@@ -52,10 +52,10 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!("Updating git source: `{:?}`", self.remote);
+                debug!("Updating Git source: `{:?}`", self.remote);
 
                 self.remote.checkout(
-                    &source,
+                    &db_path,
                     db,
                     &self.manifest_reference,
                     locked_rev,

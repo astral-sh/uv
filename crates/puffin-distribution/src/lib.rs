@@ -297,6 +297,8 @@ pub enum RemoteDistributionRef<'a> {
     Registry(&'a PackageName, &'a Version, &'a File),
     /// The distribution exists at an arbitrary URL.
     Url(&'a PackageName, &'a Url),
+    // /// The distribution exists in a Git repository.
+    // Git(&'a PackageName, &'a Git),
 }
 
 impl<'a> RemoteDistributionRef<'a> {

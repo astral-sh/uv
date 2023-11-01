@@ -880,6 +880,8 @@ pub fn fetch(
         }
     };
 
+    println!("fetching: {oid_to_fetch:?}");
+
     maybe_gc_repo(repo)?;
 
     clean_repo_temp_files(repo);
@@ -1199,6 +1201,8 @@ fn github_fast_path(
     }
 
     let local_object = reference.resolve(repo).ok();
+
+    println!("local_object: {:?}", local_object);
 
     let github_branch_name = match reference {
         GitReference::Branch(branch) => branch,
