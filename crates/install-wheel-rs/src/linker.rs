@@ -387,9 +387,13 @@ fn hardlink_wheel_files(
         } else {
             let hard_link_result = fs::hard_link(entry.path(), &out_path);
             // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that
-            if first_try_hard_linking && hard_link_result.is_err() {
-                fs::copy(entry.path(), &out_path)?;
-                use_copy_fallback = true;
+            if let Err(err) = hard_link_result {
+                if first_try_hard_linking {
+                    fs::copy(entry.path(), &out_path)?;
+                    use_copy_fallback = true;
+                } else {
+                    return Err(err.into());
+                }
             }
             first_try_hard_linking = false;
         }
