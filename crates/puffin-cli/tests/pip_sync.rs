@@ -71,7 +71,7 @@ fn install() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -116,7 +116,7 @@ fn install_copy() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+ms", "[TIME]"),
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
