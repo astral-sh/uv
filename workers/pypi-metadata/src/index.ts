@@ -74,7 +74,14 @@ async function readMetadata(
 ) {
   const entries = await reader.getEntriesGenerator();
   for await (const entry of entries) {
-    if (entry.filename == `${name}-${version}.dist-info/METADATA`) {
+    // The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
+    // the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
+    // Either way, we just search the wheel for the name. See `find_dist_info`:
+    // https://github.com/astral-sh/puffin/blob/2652caa3e31282afc2f1e1ca581ac4f553af710d/crates/install-wheel-rs/src/wheel.rs#L1024-L1057
+    if (
+      entry.filename.toLowerCase() ==
+      `${name}-${version}.dist-info/METADATA`.toLowerCase()
+    ) {
       return await entry.getData!(new zip.TextWriter());
     }
   }
