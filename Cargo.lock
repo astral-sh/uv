@@ -1970,6 +1970,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "puffin-cache"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "seahash",
+ "url",
+]
+
+[[package]]
 name = "puffin-cli"
 version = "0.0.1"
 dependencies = [
@@ -2091,9 +2100,9 @@ name = "puffin-distribution"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "distribution-filename",
  "hex",
  "pep440_rs 0.3.12",
+ "puffin-cache",
  "puffin-package",
  "sha2",
  "url",
@@ -2712,6 +2721,12 @@ dependencies = [
  "ring",
  "untrusted",
 ]
+
+[[package]]
+name = "seahash"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "serde"
