@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use directories::ProjectDirs;
+use itertools::Itertools;
 
 use pep508_rs::Requirement;
 use platform_host::Platform;
@@ -34,7 +35,10 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
         fs::canonicalize(venv.python_executable())?,
     );
 
-    build_dispatch.resolve(&args.requirements).await?;
+    let mut resolution = build_dispatch.resolve(&args.requirements).await?;
+    resolution.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    // Concise format for dev
+    println!("{}", resolution.iter().map(ToString::to_string).join(" "));
 
     Ok(())
 }
