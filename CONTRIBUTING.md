@@ -2,7 +2,7 @@
 
 ## Running inside a docker container
 
-Source distributions can run arbitrary code on build and can make unwanted modifications to your system (https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html, https://pypi.org/project/nvidia-pyindex/), which even occur when you just try to resolve. To prevent there's a docker container you can run commands in:
+Source distributions can run arbitrary code on build and can make unwanted modifications to your system (https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html, https://pypi.org/project/nvidia-pyindex/), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```bash
 docker buildx build -t puffin-builder -f builder.dockerfile .
