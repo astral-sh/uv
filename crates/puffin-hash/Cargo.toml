@@ -1,6 +1,7 @@
 [package]
-name = "puffin-distribution"
-version = "0.1.0"
+name = "puffin-hash"
+version = "0.0.1"
+description = "Generate stable hash digests across versions and platforms."
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -10,11 +11,6 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-pep440_rs = { path = "../pep440-rs" }
-puffin-hash = { path = "../puffin-hash" }
-puffin-package = { path = "../puffin-package" }
-
-anyhow = { workspace = true }
 hex = { workspace = true }
-sha2 = { workspace = true }
+seahash = { workspace = true }
 url = { workspace = true }
