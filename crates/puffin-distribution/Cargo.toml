@@ -11,7 +11,7 @@ license = { workspace = true }
 
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
-puffin-hash = { path = "../puffin-hash" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-package = { path = "../puffin-package" }
 
 anyhow = { workspace = true }

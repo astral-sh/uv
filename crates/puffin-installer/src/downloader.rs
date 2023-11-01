@@ -79,7 +79,7 @@ impl<'a> Downloader<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InMemoryDistribution {
     /// The remote file from which this wheel was downloaded.
     pub(crate) remote: RemoteDistribution,

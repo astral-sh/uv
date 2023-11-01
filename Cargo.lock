@@ -1970,6 +1970,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "puffin-cache"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "seahash",
+ "url",
+]
+
+[[package]]
 name = "puffin-cli"
 version = "0.0.1"
 dependencies = [
@@ -2093,18 +2102,9 @@ dependencies = [
  "anyhow",
  "hex",
  "pep440_rs 0.3.12",
- "puffin-hash",
+ "puffin-cache",
  "puffin-package",
  "sha2",
- "url",
-]
-
-[[package]]
-name = "puffin-hash"
-version = "0.0.1"
-dependencies = [
- "hex",
- "seahash",
  "url",
 ]
 

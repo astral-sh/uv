@@ -1,5 +1,5 @@
 [package]
-name = "puffin-hash"
+name = "puffin-cache"
 version = "0.0.1"
 description = "Generate stable hash digests across versions and platforms."
 edition = { workspace = true }

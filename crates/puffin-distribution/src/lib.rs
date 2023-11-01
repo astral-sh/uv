@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use pep440_rs::Version;
-use puffin_hash::CanonicalUrl;
+use puffin_cache::CanonicalUrl;
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 use puffin_package::pypi_types::File;
@@ -120,7 +120,7 @@ impl RemoteDistribution {
             Self::Registry(name, version, _) => {
                 format!("{}-{}", DistInfoName::from(name), version)
             }
-            Self::Url(_name, url) => puffin_hash::short_hash(&CanonicalUrl::new(url)),
+            Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }
     }
 }

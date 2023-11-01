@@ -1,8 +1,8 @@
-use std::hash::{self, Hash};
-
 use url::Url;
 
-/// A newtype wrapper around `Url` which represents a "canonical" version of an
+use crate::cache_key::{CacheKey, CacheKeyHasher};
+
+/// A wrapper around `Url` which represents a "canonical" version of an
 /// original URL.
 ///
 /// A "canonical" url is only intended for internal comparison purposes. It's
@@ -52,10 +52,10 @@ impl CanonicalUrl {
     }
 }
 
-impl Hash for CanonicalUrl {
-    fn hash<S: hash::Hasher>(&self, into: &mut S) {
-        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against possible
-        // changes in how the URL crate does hashing.
-        self.0.as_str().hash(into);
+impl CacheKey for CanonicalUrl {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.0.as_str().cache_key(state);
     }
 }

@@ -478,7 +478,7 @@ optional-dependencies.foo = [
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+(ms|s)", "[TIME]"),
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
             (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
             (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
         ]
@@ -739,7 +739,7 @@ optional-dependencies.bar = [
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+(ms|s)", "[TIME]"),
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
             (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
             (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
         ]
@@ -794,7 +794,7 @@ optional-dependencies.bar = [
 
     insta::with_settings!({
         filters => vec![
-            (r"\d+(ms|s)", "[TIME]"),
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
             (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
             (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
         ]
