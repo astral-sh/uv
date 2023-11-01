@@ -48,7 +48,7 @@ impl Unzipper {
         for download in downloads {
             let remote = download.remote.clone();
 
-            debug!("Unpacking wheel: {}", remote.file().filename);
+            debug!("Unpacking wheel: {remote}");
 
             // Unzip the wheel.
             tokio::task::spawn_blocking({
@@ -58,29 +58,26 @@ impl Unzipper {
             .await??;
 
             // Write the unzipped wheel to the target directory.
-            let result = fs_err::tokio::rename(
-                staging.path().join(remote.id()),
-                wheel_cache.entry(&remote.id()),
-            )
-            .await;
+            let target = wheel_cache.entry(&remote);
+            if let Some(parent) = target.parent() {
+                fs_err::create_dir_all(parent)?;
+            }
+            let result = fs_err::tokio::rename(staging.path().join(remote.id()), target).await;
 
             if let Err(err) = result {
                 // If the renaming failed because another instance was faster, that's fine
                 // (`DirectoryNotEmpty` is not stable so we can't match on it)
-                if !wheel_cache.entry(&remote.id()).is_dir() {
+                if !wheel_cache.entry(&remote).is_dir() {
                     return Err(err.into());
                 }
             }
 
-            wheels.push(CachedDistribution::new(
-                remote.name().clone(),
-                remote.version().clone(),
-                wheel_cache.entry(&remote.id()),
-            ));
-
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_unzip_progress(&remote);
             }
+
+            let path = wheel_cache.entry(&remote);
+            wheels.push(CachedDistribution::from_remote(remote, path));
         }
 
         if let Some(reporter) = self.reporter.as_ref() {

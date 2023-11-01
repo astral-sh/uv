@@ -114,7 +114,7 @@ pub(crate) async fn pip_uninstall(
             " {} {}{}",
             "-".red(),
             distribution.name().as_ref().white().bold(),
-            format!("@{}", distribution.version()).dimmed()
+            distribution.version_or_url().to_string().dimmed()
         )?;
     }
 

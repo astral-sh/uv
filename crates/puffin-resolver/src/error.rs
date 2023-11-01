@@ -1,5 +1,6 @@
 use pubgrub::range::Range;
 use thiserror::Error;
+use url::Url;
 
 use pep508_rs::Requirement;
 
@@ -25,9 +26,17 @@ pub enum ResolveError {
     #[error(transparent)]
     PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>),
 
-    #[error("Failed to build source distribution {filename}")]
-    SourceDistribution {
+    #[error("Failed to build distribution: {filename}")]
+    RegistryDistribution {
         filename: String,
+        // TODO(konstin): Gives this a proper error type
+        #[source]
+        err: anyhow::Error,
+    },
+
+    #[error("Failed to build distribution: {url}")]
+    UrlDistribution {
+        url: Url,
         // TODO(konstin): Gives this a proper error type
         #[source]
         err: anyhow::Error,

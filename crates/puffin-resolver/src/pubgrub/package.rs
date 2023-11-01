@@ -1,3 +1,6 @@
+use derivative::Derivative;
+use url::Url;
+
 use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 
@@ -8,18 +11,26 @@ use puffin_package::package_name::PackageName;
 /// 2. Uses the same strategy as pip and posy to handle extras: for each extra, we create a virtual
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Eq, Derivative)]
+#[derivative(PartialEq, Hash)]
 pub enum PubGrubPackage {
     Root,
-    Package(PackageName, Option<DistInfoName>),
+    Package(
+        PackageName,
+        Option<DistInfoName>,
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(PartialOrd = "ignore")]
+        #[derivative(Hash = "ignore")]
+        Option<Url>,
+    ),
 }
 
 impl std::fmt::Display for PubGrubPackage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PubGrubPackage::Root => write!(f, "root"),
-            PubGrubPackage::Package(name, None) => write!(f, "{name}"),
-            PubGrubPackage::Package(name, Some(extra)) => {
+            PubGrubPackage::Package(name, None, ..) => write!(f, "{name}"),
+            PubGrubPackage::Package(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")
             }
         }

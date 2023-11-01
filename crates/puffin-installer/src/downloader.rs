@@ -43,13 +43,16 @@ impl<'a> Downloader<'a> {
     ) -> Result<Vec<InMemoryDistribution>> {
         // Sort the wheels by size.
         let mut wheels = wheels;
-        wheels.sort_unstable_by_key(|wheel| Reverse(wheel.file().size));
+        wheels.sort_unstable_by_key(|wheel| match wheel {
+            RemoteDistribution::Registry(_package, _version, file) => Reverse(file.size),
+            RemoteDistribution::Url(_, _) => Reverse(usize::MIN),
+        });
 
         // Phase 1: Fetch the wheels in parallel.
         let mut fetches = JoinSet::new();
         let mut downloads = Vec::with_capacity(wheels.len());
         for remote in wheels {
-            debug!("Downloading wheel: {}", remote.file().filename);
+            debug!("Downloading wheel: {remote}");
 
             fetches.spawn(fetch_wheel(
                 remote.clone(),
@@ -96,31 +99,47 @@ async fn fetch_wheel(
     client: RegistryClient,
     cache: Option<impl AsRef<Path>>,
 ) -> Result<InMemoryDistribution> {
-    // Parse the wheel's SRI.
-    let sri = Integrity::from_hex(&remote.file().hashes.sha256, Algorithm::Sha256)?;
+    match &remote {
+        RemoteDistribution::Registry(_package, _version, file) => {
+            // Parse the wheel's SRI.
+            let sri = Integrity::from_hex(&file.hashes.sha256, Algorithm::Sha256)?;
 
-    // Read from the cache, if possible.
-    if let Some(cache) = cache.as_ref() {
-        if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
-            debug!("Extracted wheel from cache: {}", remote.file().filename);
-            return Ok(InMemoryDistribution { remote, buffer });
+            // Read from the cache, if possible.
+            if let Some(cache) = cache.as_ref() {
+                if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
+                    debug!("Extracted wheel from cache: {remote}");
+                    return Ok(InMemoryDistribution { remote, buffer });
+                }
+            }
+
+            // Fetch the wheel.
+            let url = Url::parse(&file.url)?;
+            let reader = client.stream_external(&url).await?;
+
+            // Read into a buffer.
+            let mut buffer = Vec::with_capacity(file.size);
+            let mut reader = tokio::io::BufReader::new(reader.compat());
+            tokio::io::copy(&mut reader, &mut buffer).await?;
+
+            // Write the buffer to the cache, if possible.
+            if let Some(cache) = cache.as_ref() {
+                cacache::write_hash(&cache, &buffer).await?;
+            }
+
+            Ok(InMemoryDistribution { remote, buffer })
+        }
+        RemoteDistribution::Url(_package, url) => {
+            // Fetch the wheel.
+            let reader = client.stream_external(url).await?;
+
+            // Read into a buffer.
+            let mut buffer = Vec::with_capacity(1024 * 1024);
+            let mut reader = tokio::io::BufReader::new(reader.compat());
+            tokio::io::copy(&mut reader, &mut buffer).await?;
+
+            Ok(InMemoryDistribution { remote, buffer })
         }
     }
-
-    let url = Url::parse(&remote.file().url)?;
-    let reader = client.stream_external(&url).await?;
-
-    // Read into a buffer.
-    let mut buffer = Vec::with_capacity(remote.file().size);
-    let mut reader = tokio::io::BufReader::new(reader.compat());
-    tokio::io::copy(&mut reader, &mut buffer).await?;
-
-    // Write the buffer to the cache, if possible.
-    if let Some(cache) = cache.as_ref() {
-        cacache::write_hash(&cache, &buffer).await?;
-    }
-
-    Ok(InMemoryDistribution { remote, buffer })
 }
 
 pub trait Reporter: Send + Sync {

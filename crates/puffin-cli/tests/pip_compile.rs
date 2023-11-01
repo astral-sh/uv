@@ -387,7 +387,7 @@ optional-dependencies.foo = [
     Ok(())
 }
 
-/// Request multple extras that do not exist as a dependency group in a `pyproject.toml` file.
+/// Request multiple extras that do not exist as a dependency group in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extras_missing() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -435,6 +435,211 @@ optional-dependencies.foo = [
             .arg("bar")
             .arg("--extra")
             .arg("foobar")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Resolve a specific Flask wheel via a URL dependency.
+#[test]
+fn compile_wheel_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Resolve a specific Flask source distribution via a URL dependency.
+#[test]
+fn compile_sdist_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request Flask, but include a URL dependency for Werkzeug, which should avoid adding a
+/// duplicate dependency from `PyPI`.
+#[test]
+fn mixed_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request Flask, but include a URL dependency for a conflicting version of Werkzeug.
+///
+/// TODO(charlie): This test _should_ fail, but sometimes passes due to inadequacies in our
+/// URL dependency model.
+#[test]
+#[ignore]
+fn conflicting_direct_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request Flask, but include a URL dependency for a conflicting version of Werkzeug.
+#[test]
+fn conflicting_transitive_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())

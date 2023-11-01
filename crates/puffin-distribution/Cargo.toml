@@ -15,3 +15,6 @@ pep440_rs = { path = "../pep440-rs" }
 puffin-package = { path = "../puffin-package" }
 
 anyhow = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }
