@@ -1,10 +1,8 @@
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use pep440_rs::Version;
 use puffin_distribution::CachedDistribution;
 use puffin_interpreter::Virtualenv;
-use puffin_package::package_name::PackageName;
 
 pub struct Installer<'a> {
     venv: &'a Virtualenv,
@@ -52,7 +50,7 @@ impl<'a> Installer<'a> {
                     })?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_install_progress(wheel.name(), wheel.version());
+                    reporter.on_install_progress(wheel);
                 }
 
                 Ok::<(), Error>(())
@@ -63,7 +61,7 @@ impl<'a> Installer<'a> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_install_progress(&self, name: &PackageName, version: &Version);
+    fn on_install_progress(&self, wheel: &CachedDistribution);
 
     /// Callback to invoke when the resolution is complete.
     fn on_install_complete(&self);

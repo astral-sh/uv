@@ -1,8 +1,9 @@
 use indicatif::{ProgressBar, ProgressStyle};
+use pep440_rs::Version;
 use std::time::Duration;
 
-use pep440_rs::Version;
-use puffin_distribution::RemoteDistribution;
+use puffin_distribution::{CachedDistribution, RemoteDistribution};
+use puffin_package::dist_info_name::DistInfoName;
 use puffin_package::package_name::PackageName;
 
 use crate::printer::Printer;
@@ -32,9 +33,8 @@ impl WheelFinderReporter {
 }
 
 impl puffin_resolver::WheelFinderReporter for WheelFinderReporter {
-    fn on_progress(&self, package: &RemoteDistribution) {
-        self.progress
-            .set_message(format!("{}=={}", package.name(), package.version()));
+    fn on_progress(&self, wheel: &RemoteDistribution) {
+        self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
 
@@ -68,8 +68,8 @@ impl UnzipReporter {
 }
 
 impl puffin_installer::UnzipReporter for UnzipReporter {
-    fn on_unzip_progress(&self, name: &PackageName, version: &Version) {
-        self.progress.set_message(format!("{name}=={version}"));
+    fn on_unzip_progress(&self, wheel: &RemoteDistribution) {
+        self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
 
@@ -103,8 +103,8 @@ impl DownloadReporter {
 }
 
 impl puffin_installer::DownloadReporter for DownloadReporter {
-    fn on_download_progress(&self, name: &PackageName, version: &Version) {
-        self.progress.set_message(format!("{name}=={version}"));
+    fn on_download_progress(&self, wheel: &RemoteDistribution) {
+        self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
 
@@ -138,8 +138,8 @@ impl InstallReporter {
 }
 
 impl puffin_installer::InstallReporter for InstallReporter {
-    fn on_install_progress(&self, name: &PackageName, version: &Version) {
-        self.progress.set_message(format!("{name}=={version}"));
+    fn on_install_progress(&self, wheel: &CachedDistribution) {
+        self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
 
@@ -168,8 +168,13 @@ impl From<Printer> for ResolverReporter {
 }
 
 impl puffin_resolver::ResolverReporter for ResolverReporter {
-    fn on_progress(&self, name: &PackageName, version: &Version) {
-        self.progress.set_message(format!("{name}=={version}"));
+    fn on_progress(&self, name: &PackageName, extra: Option<&DistInfoName>, version: &Version) {
+        if let Some(extra) = extra {
+            self.progress
+                .set_message(format!("{name}[{extra}]=={version}"));
+        } else {
+            self.progress.set_message(format!("{name}=={version}"));
+        }
     }
 
     fn on_complete(&self) {

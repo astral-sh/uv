@@ -613,8 +613,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
     fn on_progress(&self, package: &PubGrubPackage, version: &PubGrubVersion) {
         if let Some(reporter) = self.reporter.as_ref() {
-            if let PubGrubPackage::Package(package_name, _) = package {
-                reporter.on_progress(package_name, version.into());
+            if let PubGrubPackage::Package(package_name, extra) = package {
+                reporter.on_progress(package_name, extra.as_ref(), version.into());
             }
         }
     }
@@ -628,7 +628,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_progress(&self, name: &PackageName, version: &pep440_rs::Version);
+    fn on_progress(
+        &self,
+        name: &PackageName,
+        extra: Option<&DistInfoName>,
+        version: &pep440_rs::Version,
+    );
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

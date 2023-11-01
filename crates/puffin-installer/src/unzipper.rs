@@ -7,9 +7,7 @@ use rayon::iter::ParallelIterator;
 use tracing::debug;
 use zip::ZipArchive;
 
-use pep440_rs::Version;
-use puffin_distribution::CachedDistribution;
-use puffin_package::package_name::PackageName;
+use puffin_distribution::{CachedDistribution, RemoteDistribution};
 
 use crate::cache::WheelCache;
 use crate::downloader::InMemoryDistribution;
@@ -81,7 +79,7 @@ impl Unzipper {
             ));
 
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_unzip_progress(remote.name(), remote.version());
+                reporter.on_unzip_progress(&remote);
             }
         }
 
@@ -144,7 +142,7 @@ fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is unzipped.
-    fn on_unzip_progress(&self, name: &PackageName, version: &Version);
+    fn on_unzip_progress(&self, wheel: &RemoteDistribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_unzip_complete(&self);

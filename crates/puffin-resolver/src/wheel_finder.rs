@@ -162,7 +162,7 @@ enum Response {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a package is resolved to a wheel.
-    fn on_progress(&self, package: &RemoteDistribution);
+    fn on_progress(&self, wheel: &RemoteDistribution);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
