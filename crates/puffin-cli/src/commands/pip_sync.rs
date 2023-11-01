@@ -21,7 +21,7 @@ use crate::commands::reporters::{
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
+use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn pip_sync(
@@ -36,7 +36,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints: _,
         extras: _,
-    } = RequirementsSpecification::try_from_sources(sources, &[], &[])?;
+    } = RequirementsSpecification::try_from_sources(sources, &[], &ExtrasSpecification::None)?;
 
     if requirements.is_empty() {
         writeln!(printer, "No requirements found")?;

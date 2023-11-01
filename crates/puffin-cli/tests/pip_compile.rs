@@ -701,3 +701,127 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
     Ok(())
 }
+
+/// Resolve packages from all optional dependency groups in a `pyproject.toml` file.
+#[test]
+fn compile_pyproject_toml_all_extras() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "project"
+dependencies = ["django==5.0b1"]
+optional-dependencies.foo = [
+    "anyio==4.0.0",
+]
+optional-dependencies.bar = [
+    "httpcore==0.18.0",
+]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--all-extras")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Resolve packages from all optional dependency groups in a `pyproject.toml` file.
+#[test]
+fn compile_does_not_allow_both_extra_and_all_extras() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "project"
+dependencies = ["django==5.0b1"]
+optional-dependencies.foo = [
+    "anyio==4.0.0",
+]
+optional-dependencies.bar = [
+    "httpcore==0.18.0",
+]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--all-extras")
+            .arg("--extra")
+            .arg("foo")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir),
+            @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: the argument '--all-extras' cannot be used with '--extra <EXTRA>'
+
+        Usage: puffin pip-compile --all-extras --cache-dir [CACHE_DIR]
+
+        For more information, try '--help'.
+        "###);
+    });
+
+    Ok(())
+}

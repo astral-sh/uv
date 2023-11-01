@@ -38,6 +38,25 @@ impl From<PathBuf> for RequirementsSource {
 }
 
 #[derive(Debug, Default)]
+pub(crate) enum ExtrasSpecification<'a> {
+    #[default]
+    None,
+    All,
+    Some(&'a [ExtraName]),
+}
+
+impl ExtrasSpecification<'_> {
+    /// Returns true if a name is included in the extra specification.
+    fn contains(&self, name: &ExtraName) -> bool {
+        match self {
+            ExtrasSpecification::All => true,
+            ExtrasSpecification::None => false,
+            ExtrasSpecification::Some(extras) => extras.contains(name),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 pub(crate) struct RequirementsSpecification {
     /// The requirements for the project.
     pub(crate) requirements: Vec<Requirement>,
@@ -51,7 +70,7 @@ impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
     pub(crate) fn try_from_source(
         source: &RequirementsSource,
-        extras: &[ExtraName],
+        extras: &ExtrasSpecification,
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Name(name) => {
@@ -84,13 +103,15 @@ impl RequirementsSpecification {
                 if let Some(project) = pyproject_toml.project {
                     requirements.extend(project.dependencies.unwrap_or_default());
                     // Include any optional dependencies specified in `extras`
-                    for (name, optional_requirements) in
-                        project.optional_dependencies.unwrap_or_default()
-                    {
-                        let normalized_name = ExtraName::normalize(name);
-                        if extras.contains(&normalized_name) {
-                            used_extras.insert(normalized_name);
-                            requirements.extend(optional_requirements);
+                    if !matches!(extras, ExtrasSpecification::None) {
+                        for (name, optional_requirements) in
+                            project.optional_dependencies.unwrap_or_default()
+                        {
+                            let normalized_name = ExtraName::normalize(name);
+                            if extras.contains(&normalized_name) {
+                                used_extras.insert(normalized_name);
+                                requirements.extend(optional_requirements);
+                            }
                         }
                     }
                 }
@@ -108,7 +129,7 @@ impl RequirementsSpecification {
     pub(crate) fn try_from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
-        extras: &[ExtraName],
+        extras: &ExtrasSpecification,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
