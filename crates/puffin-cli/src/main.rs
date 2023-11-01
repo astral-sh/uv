@@ -211,13 +211,12 @@ async fn main() -> ExitCode {
 
             let extras = if args.all_extras {
                 ExtrasSpecification::All
+            } else if args.extra.is_empty() {
+                ExtrasSpecification::None
             } else {
-                if args.extra.is_empty() {
-                    ExtrasSpecification::None
-                } else {
-                    ExtrasSpecification::Some(&args.extra)
-                }
+                ExtrasSpecification::Some(&args.extra)
             };
+
             commands::pip_compile(
                 &requirements,
                 &constraints,
