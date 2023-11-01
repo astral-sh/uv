@@ -550,7 +550,19 @@ optional-dependencies.bar = [
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir),
+            @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: the argument '--all-extras' cannot be used with '--extra <EXTRA>'
+
+        Usage: puffin pip-compile --all-extras --cache-dir [CACHE_DIR]
+
+        For more information, try '--help'.
+        "###);
     });
 
     Ok(())
