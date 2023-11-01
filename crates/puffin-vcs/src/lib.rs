@@ -3,15 +3,10 @@
 //! Apparently, the most important type in this module is [`GitSource`].
 //! [`git`] provides libgit2 utilities like fetch and checkout.
 
-use std::str::FromStr;
-
-use anyhow::Context;
 use url::Url;
 
-pub use self::git::{fetch, GitCheckout, GitDatabase, GitRemote};
 pub use self::source::GitSource;
 
-mod config;
 mod git;
 mod source;
 mod util;
@@ -37,13 +32,12 @@ impl TryFrom<Url> for Git {
             match &k[..] {
                 // Map older 'ref' to branch.
                 "branch" | "ref" => reference = GitReference::Branch(v.into_owned()),
-
                 "rev" => reference = GitReference::Rev(v.into_owned()),
                 "tag" => reference = GitReference::Tag(v.into_owned()),
                 _ => {}
             }
         }
-        let precise = url.fragment().map(|s| git2::Oid::from_str(s)).transpose()?;
+        let precise = url.fragment().map(git2::Oid::from_str).transpose()?;
         url.set_fragment(None);
         url.set_query(None);
 
@@ -73,4 +67,12 @@ pub enum GitReference {
     Rev(String),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FetchStrategy {
+    /// Fetch Git repositories using libgit2.
+    Libgit2,
+    /// Fetch Git repositories using the `git` CLI.
+    Cli,
 }

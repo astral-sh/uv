@@ -1,14 +1,20 @@
+/// Git support is derived from Cargo's implementation.
+/// Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
+/// Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/source.rs>
+
 use std::path::PathBuf;
 
+use anyhow::Result;
+use reqwest::blocking::Client;
 use tracing::debug;
 
-use crate::config::Config;
-use crate::util::{short_hash, CanonicalUrl, CargoResult};
-use crate::{Git, GitReference, GitRemote};
+use puffin_cache::{CanonicalUrl, digest};
 
+use crate::{FetchStrategy, Git, GitReference};
+use crate::git::GitRemote;
+
+/// A remote Git source that can be checked out locally.
 pub struct GitSource {
-    /// The configuration for Cargo.
-    config: Config,
     /// The git remote which we're going to fetch from.
     remote: GitRemote,
     /// The Git reference from the manifest file.
@@ -19,26 +25,28 @@ pub struct GitSource {
     /// The identifier of this source for Cargo's Git cache directory.
     /// See [`ident`] for more.
     ident: String,
+    /// The HTTP client to use for fetching.
+    client: Client,
+    /// The fetch strategy to use when cloning.
+    strategy: FetchStrategy,
     /// The path to the Git source database.
     git: PathBuf,
-    /// The path to which the Git source has been checked out.
-    db_path: Option<PathBuf>,
 }
 
 impl GitSource {
-    pub fn new(reference: Git, git: PathBuf) -> CargoResult<Self> {
-        Ok(Self {
-            config: Config::new(),
+    pub fn new(reference: Git, git: PathBuf) -> Self {
+        Self {
             remote: GitRemote::new(&reference.url),
             manifest_reference: reference.reference,
             locked_rev: reference.precise,
-            ident: short_hash(&CanonicalUrl::new(&reference.url)?),
+            ident: digest(&CanonicalUrl::new(&reference.url)),
+            client: Client::new(),
+            strategy: FetchStrategy::Libgit2,
             git,
-            db_path: None,
-        })
+        }
     }
 
-    pub fn fetch(self) -> CargoResult<PathBuf> {
+    pub fn fetch(self) -> Result<PathBuf> {
         // The path to the repo, within the Git database.
         let db_path = self.git.join("db").join(&self.ident);
 
@@ -59,14 +67,14 @@ impl GitSource {
                     db,
                     &self.manifest_reference,
                     locked_rev,
-                    &self.config,
+                    self.strategy,
+                    &self.client,
                 )?
             }
         };
 
         // Don’t use the full hash, in order to contribute less to reaching the
-        // path length limit on Windows. See
-        // <https://github.com/servo/servo/pull/14397>.
+        // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
         // Check out `actual_rev` from the database to a scoped location on the
@@ -77,7 +85,7 @@ impl GitSource {
             .join("checkouts")
             .join(&self.ident)
             .join(short_id.as_str());
-        db.copy_to(actual_rev, &checkout_path, &self.config)?;
+        db.copy_to(actual_rev, &checkout_path, self.strategy, &self.client)?;
 
         Ok(checkout_path)
     }

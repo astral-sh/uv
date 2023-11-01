@@ -80,8 +80,8 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
                     || temp_dir.path().join(GIT_CACHE),
                     |cache| cache.join(GIT_CACHE),
                 );
-                let source = GitSource::new(git, git_dir)?;
-                source.fetch()?
+                let source = GitSource::new(git, git_dir);
+                tokio::task::spawn_blocking(move || source.fetch()).await??
             }
         };
 

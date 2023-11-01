@@ -29,6 +29,7 @@ fs-err = { version = "2.9.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.28" }
 fxhash = { version = "0.2.1" }
+glob = { version = "0.3.1" }
 goblin = { version = "0.7.1" }
 hex = { version = "0.4.3" }
 http-cache-reqwest = { version = "0.11.3" }
@@ -42,6 +43,7 @@ petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.5.0" }
 pyproject-toml = { version = "0.7.0" }
+rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.10" }
 regex = { version = "1.9.6" }

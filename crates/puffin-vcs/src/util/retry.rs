@@ -7,8 +7,8 @@
 //! operation with a delay if it detects one of these possibly transient
 //! errors.
 //!
-//! This supports errors from [`git2`], [`gix`], [`curl`], and
-//! [`HttpNotSuccessful`] 5xx HTTP errors.
+//! This supports errors from [`git2`], [`reqwest`], and [`HttpNotSuccessful`]
+//! 5xx HTTP errors.
 //!
 //! The number of retries can be configured by the user via the `net.retry`
 //! config option. This indicates the number of times to retry the operation
@@ -41,19 +41,21 @@
 //! - <https://en.wikipedia.org/wiki/Exponential_backoff>
 //! - <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After>
 
+/// Git support is derived from Cargo's implementation.
+/// Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
+/// Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/util/network/retry.rs>
+
 use std::cmp::min;
-use std::env;
 use std::time::Duration;
 
-use anyhow::Error;
+use anyhow::{Error, Result};
 use rand::Rng;
 use tracing::warn;
 
 use crate::util::errors::HttpNotSuccessful;
-use crate::util::CargoResult;
 
 /// State for managing retrying a network operation.
-pub struct Retry {
+pub(crate) struct Retry {
     /// The number of failed attempts that have been done so far.
     ///
     /// Starts at 0, and increases by one each time an attempt fails.
@@ -65,13 +67,13 @@ pub struct Retry {
 }
 
 /// The result of attempting some operation via [`Retry::try`].
-pub enum RetryResult<T> {
+pub(crate) enum RetryResult<T> {
     /// The operation was successful.
     ///
     /// The wrapped value is the return value of the callback function.
     Success(T),
     /// The operation was an error, and it should not be tried again.
-    Err(anyhow::Error),
+    Err(Error),
     /// The operation failed, and should be tried again in the future.
     ///
     /// The wrapped value is the number of milliseconds to wait before trying
@@ -93,23 +95,23 @@ const INITIAL_RETRY_SLEEP_BASE_MS: u64 = 500;
 const INITIAL_RETRY_JITTER_MS: u64 = 1000;
 
 impl Retry {
-    pub fn new() -> CargoResult<Retry> {
-        Ok(Retry {
+    pub(crate) fn new() -> Retry {
+        Retry {
             retries: 0,
             max_retries: 3,
-        })
+        }
     }
 
     /// Calls the given callback, and returns a [`RetryResult`] which
     /// indicates whether or not this needs to be called again at some point
     /// in the future to retry the operation if it failed.
-    pub fn r#try<T>(&mut self, f: impl FnOnce() -> CargoResult<T>) -> RetryResult<T> {
+    pub(crate) fn r#try<T>(&mut self, f: impl FnOnce() -> Result<T>) -> RetryResult<T> {
         match f() {
-            Err(ref e) if maybe_spurious(e) && self.retries < self.max_retries => {
-                let err_msg = e
-                    .downcast_ref::<HttpNotSuccessful>()
-                    .map(|http_err| http_err.display_short())
-                    .unwrap_or_else(|| e.root_cause().to_string());
+            Err(ref err) if maybe_spurious(err) && self.retries < self.max_retries => {
+                let err_msg = err.downcast_ref::<HttpNotSuccessful>().map_or_else(
+                    || err.root_cause().to_string(),
+                    HttpNotSuccessful::to_string,
+                );
                 warn!(
                     "Spurious network error ({} tries remaining): {err_msg}",
                     self.max_retries - self.retries,
@@ -124,10 +126,6 @@ impl Retry {
 
     /// Gets the next sleep duration in milliseconds.
     fn next_sleep_ms(&self) -> u64 {
-        if let Ok(sleep) = env::var("__CARGO_TEST_FIXED_RETRY_SLEEP_MS") {
-            return sleep.parse().expect("a u64");
-        }
-
         if self.retries == 1 {
             let mut rng = rand::thread_rng();
             INITIAL_RETRY_SLEEP_BASE_MS + rng.gen_range(0..INITIAL_RETRY_JITTER_MS)
@@ -150,17 +148,12 @@ fn maybe_spurious(err: &Error) -> bool {
             _ => (),
         }
     }
-    if let Some(curl_err) = err.downcast_ref::<curl::Error>() {
-        if curl_err.is_couldnt_connect()
-            || curl_err.is_couldnt_resolve_proxy()
-            || curl_err.is_couldnt_resolve_host()
-            || curl_err.is_operation_timedout()
-            || curl_err.is_recv_error()
-            || curl_err.is_send_error()
-            || curl_err.is_http2_error()
-            || curl_err.is_http2_stream_error()
-            || curl_err.is_ssl_connect_error()
-            || curl_err.is_partial_file()
+    if let Some(reqwest_err) = err.downcast_ref::<reqwest::Error>() {
+        if reqwest_err.is_timeout()
+            || reqwest_err.is_connect()
+            || reqwest_err
+                .status()
+                .map_or(false, |status| status.is_server_error())
         {
             return true;
         }
@@ -179,12 +172,12 @@ fn maybe_spurious(err: &Error) -> bool {
 /// Retry counts provided by Config object `net.retry`. Config shell outputs
 /// a warning on per retry.
 ///
-/// Closure must return a `CargoResult`.
-pub fn with_retry<T, F>(mut callback: F) -> CargoResult<T>
+/// Closure must return a `Result`.
+pub(crate) fn with_retry<T, F>(mut callback: F) -> Result<T>
 where
-    F: FnMut() -> CargoResult<T>,
+    F: FnMut() -> Result<T>,
 {
-    let mut retry = Retry::new()?;
+    let mut retry = Retry::new();
     loop {
         match retry.r#try(&mut callback) {
             RetryResult::Success(r) => return Ok(r),
