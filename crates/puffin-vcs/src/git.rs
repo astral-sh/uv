@@ -1,36 +1,26 @@
 //! Utilities for handling git repositories, mainly around
 //! authentication/cloning.
 
-use std::{fmt, str};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
+use std::{env, fmt, str};
 
 use anyhow::{anyhow, Context as _};
 use cargo_util::{paths, ProcessBuilder};
 use curl::easy::List;
 use git2::{self, ErrorClass, ObjectType};
-use serde::ser;
-use serde::Serialize;
 use tracing::{debug, info};
 use url::Url;
 
 use crate::config::Config;
+use crate::util::{human_readable_bytes, network, CargoResult, IntoUrl, MetricsCounter};
 use crate::GitReference;
-use crate::util::{CargoResult, human_readable_bytes, IntoUrl, MetricsCounter, network};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".cargo-ok";
-
-fn serialize_str<T, S>(t: &T, s: S) -> Result<S::Ok, S::Error>
-    where
-        T: fmt::Display,
-        S: ser::Serializer,
-{
-    s.collect_str(t)
-}
 
 /// A short abbreviated OID.
 ///
@@ -45,10 +35,9 @@ impl GitShortID {
 }
 
 /// A remote repository. It gets cloned into a local [`GitDatabase`].
-#[derive(PartialEq, Clone, Debug, Serialize)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct GitRemote {
     /// URL to a remote repository.
-    #[serde(serialize_with = "serialize_str")]
     url: Url,
 }
 
@@ -109,12 +98,7 @@ impl GitRemote {
         let locked_ref = locked_rev.map(|oid| GitReference::Rev(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
-            fetch(
-                &mut db.repo,
-                self.url.as_str(),
-                reference,
-                cargo_config,
-                )
+            fetch(&mut db.repo, self.url.as_str(), reference, cargo_config)
                 .with_context(|| format!("failed to fetch into: {}", into.display()))?;
 
             let resolved_commit_hash = match locked_rev {
@@ -134,12 +118,7 @@ impl GitRemote {
         }
         paths::create_dir_all(into)?;
         let mut repo = init(into, true)?;
-        fetch(
-            &mut repo,
-            self.url.as_str(),
-            reference,
-            cargo_config,
-        )
+        fetch(&mut repo, self.url.as_str(), reference, cargo_config)
             .with_context(|| format!("failed to clone into: {}", into.display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
@@ -185,7 +164,7 @@ impl GitDatabase {
             .filter(|co| co.is_fresh())
         {
             Some(co) => co,
-            None => GitCheckout::clone_into(dest, self, rev, cargo_config)?,
+            None => GitCheckout::clone_into(dest, self, rev)?,
         };
         checkout.update_submodules(cargo_config)?;
         Ok(checkout)
@@ -221,7 +200,7 @@ impl GitReference {
                 let obj = obj.peel(ObjectType::Commit)?;
                 Ok(obj.id())
             })()
-                .with_context(|| format!("failed to find tag `{}`", s))?,
+            .with_context(|| format!("failed to find tag `{}`", s))?,
 
             // Resolve the remote name since that's all we're configuring in
             // `fetch` below.
@@ -285,7 +264,6 @@ impl<'a> GitCheckout<'a> {
         into: &Path,
         database: &'a GitDatabase,
         revision: git2::Oid,
-        config: &Config,
     ) -> CargoResult<GitCheckout<'a>> {
         let dirname = into.parent().unwrap();
         paths::create_dir_all(&dirname)?;
@@ -306,7 +284,7 @@ impl<'a> GitCheckout<'a> {
         // need authentication information we may want progress bars and such.
         let url = database.path.into_url()?;
         let mut repo = None;
-        with_fetch_options(&git_config, url.as_str(), config, &mut |fopts| {
+        with_fetch_options(&git_config, url.as_str(), &mut |fopts| {
             let mut checkout = git2::build::CheckoutBuilder::new();
             checkout.dry_run(); // we'll do this below during a `reset`
 
@@ -335,7 +313,7 @@ impl<'a> GitCheckout<'a> {
         let repo = repo.unwrap();
 
         let checkout = GitCheckout::new(database, revision, repo);
-        checkout.reset(config)?;
+        checkout.reset()?;
         Ok(checkout)
     }
 
@@ -364,7 +342,7 @@ impl<'a> GitCheckout<'a> {
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.cargo-ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self, config: &Config) -> CargoResult<()> {
+    fn reset(&self) -> CargoResult<()> {
         let ok_file = self.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
         info!("reset {} to {}", self.repo.path().display(), self.revision);
@@ -375,7 +353,7 @@ impl<'a> GitCheckout<'a> {
         }
 
         let object = self.repo.find_object(self.revision, None)?;
-        reset(&self.repo, &object, config)?;
+        reset(&self.repo, &object)?;
         paths::create(ok_file)?;
         Ok(())
     }
@@ -469,19 +447,13 @@ impl<'a> GitCheckout<'a> {
             // cargo_config
             //     .shell()
             //     .status("Updating", format!("git submodule `{child_remote_url}`"))?;
-            fetch(
-                &mut repo,
-                &child_remote_url,
-                &reference,
-                cargo_config,
-                )
-                .with_context(|| {
-                    let name = child.name().unwrap_or("");
-                    format!("failed to fetch submodule `{name}` from {child_remote_url}", )
-                })?;
+            fetch(&mut repo, &child_remote_url, &reference, cargo_config).with_context(|| {
+                let name = child.name().unwrap_or("");
+                format!("failed to fetch submodule `{name}` from {child_remote_url}",)
+            })?;
 
             let obj = repo.find_object(head, None)?;
-            reset(&repo, &obj, cargo_config)?;
+            reset(&repo, &obj)?;
             update_submodules(&repo, cargo_config, &child_remote_url)
         }
     }
@@ -566,14 +538,9 @@ fn absolute_submodule_url<'s>(base_url: &str, submodule_url: &'s str) -> CargoRe
 /// credentials until we give it a reason to not do so. To ensure we don't
 /// just sit here looping forever we keep track of authentications we've
 /// attempted and we don't try the same ones again.
-fn with_authentication<T, F>(
-    cargo_config: &Config,
-    url: &str,
-    cfg: &git2::Config,
-    mut f: F,
-) -> CargoResult<T>
-    where
-        F: FnMut(&mut git2::Credentials<'_>) -> CargoResult<T>,
+fn with_authentication<T, F>(url: &str, cfg: &git2::Config, mut f: F) -> CargoResult<T>
+where
+    F: FnMut(&mut git2::Credentials<'_>) -> CargoResult<T>,
 {
     let mut cred_helper = git2::CredentialHelper::new(url);
     cred_helper.config(cfg);
@@ -676,10 +643,7 @@ fn with_authentication<T, F>(
     if ssh_username_requested {
         debug_assert!(res.is_err());
         let mut attempts = vec![String::from("git")];
-        if let Ok(s) = cargo_config
-            .get_env("USER")
-            .or_else(|_| cargo_config.get_env("USERNAME"))
-        {
+        if let Ok(s) = env::var("USER").or_else(|_| env::var("USERNAME")) {
             attempts.push(s);
         }
         if let Some(ref s) = cred_helper.username {
@@ -812,7 +776,7 @@ fn with_authentication<T, F>(
 /// `git reset --hard` to the given `obj` for the `repo`.
 ///
 /// The `obj` is a commit-ish to which the head should be moved.
-fn reset(repo: &git2::Repository, obj: &git2::Object<'_>, config: &Config) -> CargoResult<()> {
+fn reset(repo: &git2::Repository, obj: &git2::Object<'_>) -> CargoResult<()> {
     // let mut pb = Progress::new("Checkout", config);
     let mut opts = git2::build::CheckoutBuilder::new();
     // opts.progress(|_, cur, max| {
@@ -835,32 +799,17 @@ fn reset(repo: &git2::Repository, obj: &git2::Object<'_>, config: &Config) -> Ca
 pub fn with_fetch_options(
     git_config: &git2::Config,
     url: &str,
-    config: &Config,
     cb: &mut dyn FnMut(git2::FetchOptions<'_>) -> CargoResult<()>,
 ) -> CargoResult<()> {
     // let mut progress = Progress::new("Fetch", config);
-    let ssh_config = config.net_config()?.ssh.as_ref();
-    let config_known_hosts = ssh_config.and_then(|ssh| ssh.known_hosts.as_ref());
-    let diagnostic_home_config = config.diagnostic_home_config();
-    network::retry::with_retry(config, || {
-        with_authentication(config, url, git_config, |f| {
-            let port = Url::parse(url).ok().and_then(|url| url.port());
+    network::retry::with_retry(|| {
+        with_authentication(url, git_config, |f| {
             let mut last_update = Instant::now();
             let mut rcb = git2::RemoteCallbacks::new();
             // We choose `N=10` here to make a `300ms * 10slots ~= 3000ms`
             // sliding window for tracking the data transfer rate (in bytes/s).
             let mut counter = MetricsCounter::<10>::new(0, last_update);
             rcb.credentials(f);
-            rcb.certificate_check(|cert, host| {
-                super::known_hosts::certificate_check(
-                    config,
-                    cert,
-                    host,
-                    port,
-                    config_known_hosts,
-                    &diagnostic_home_config,
-                )
-            });
             rcb.transfer_progress(|stats| {
                 let indexed_deltas = stats.indexed_deltas();
                 let msg = if indexed_deltas > 0 {
@@ -921,16 +870,6 @@ pub fn fetch(
     reference: &GitReference,
     config: &Config,
 ) -> CargoResult<()> {
-    // if config.frozen() {
-    //     anyhow::bail!(
-    //         "attempting to update a git repository, but --frozen \
-    //          was specified"
-    //     )
-    // }
-    // if !config.network_allowed() {
-    //     anyhow::bail!("can't update a git repository in the offline mode")
-    // }
-
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, config) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
         Ok(FastPathRev::NeedsFetch(rev)) => Some(rev),
@@ -941,7 +880,7 @@ pub fn fetch(
         }
     };
 
-    maybe_gc_repo(repo, config)?;
+    maybe_gc_repo(repo)?;
 
     clean_repo_temp_files(repo);
 
@@ -972,8 +911,7 @@ pub fn fetch(
                 refspecs.push(format!("+{0}:{0}", rev));
             } else if let Some(oid_to_fetch) = oid_to_fetch {
                 refspecs.push(format!("+{0}:refs/commit/{0}", oid_to_fetch));
-            } else if rev.parse::<git2::Oid>().is_ok()
-            {
+            } else if rev.parse::<git2::Oid>().is_ok() {
                 // There is a specific commit to fetch and we will do so in shallow-mode only
                 // to not disturb the previous logic.
                 // Note that with typical settings for shallowing, we will just fetch a single `rev`
@@ -992,14 +930,13 @@ pub fn fetch(
         }
     }
 
-    if let Some(true) = config.net_config()?.git_fetch_with_cli {
+    if config.git_fetch_with_cli() {
         return fetch_with_cli(repo, remote_url, &refspecs, tags);
     }
 
-
     debug!("doing a fetch for {remote_url}");
     let git_config = git2::Config::open_default()?;
-    with_fetch_options(&git_config, remote_url, config, &mut |mut opts| {
+    with_fetch_options(&git_config, remote_url, &mut |mut opts| {
         if tags {
             opts.download_tags(git2::AutotagOption::All);
         }
@@ -1016,23 +953,22 @@ pub fn fetch(
         let mut repo_reinitialized = false;
         loop {
             debug!("initiating fetch of {refspecs:?} from {remote_url}");
-            let res =
-                repo.remote_anonymous(remote_url)?
-                    .fetch(&refspecs, Some(&mut opts), None);
+            let res = repo
+                .remote_anonymous(remote_url)?
+                .fetch(&refspecs, Some(&mut opts), None);
             let err = match res {
                 Ok(()) => break,
                 Err(e) => e,
             };
             debug!("fetch failed: {}", err);
 
-            if !repo_reinitialized
-                && matches!(err.class(), ErrorClass::Reference | ErrorClass::Odb)
+            if !repo_reinitialized && matches!(err.class(), ErrorClass::Reference | ErrorClass::Odb)
             {
                 repo_reinitialized = true;
                 debug!(
-                        "looks like this is a corrupt repository, reinitializing \
-                     and trying again"
-                    );
+                    "looks like this is a corrupt repository, reinitializing \
+                         and trying again"
+                );
                 if reinitialize(repo).is_ok() {
                     continue;
                 }
@@ -1106,7 +1042,7 @@ fn fetch_with_cli(
 /// we're about to issue.
 ///
 /// [#4403]: https://github.com/rust-lang/cargo/issues/4403
-fn maybe_gc_repo(repo: &mut git2::Repository, config: &Config) -> CargoResult<()> {
+fn maybe_gc_repo(repo: &mut git2::Repository) -> CargoResult<()> {
     // Here we arbitrarily declare that if you have more than 100 files in your
     // `pack` folder that we need to do a gc.
     let entries = match repo.path().join("objects/pack").read_dir() {
@@ -1116,8 +1052,7 @@ fn maybe_gc_repo(repo: &mut git2::Repository, config: &Config) -> CargoResult<()
             return Ok(());
         }
     };
-    let max = config
-        .get_env("__CARGO_PACKFILE_LIMIT")
+    let max = env::var("__CARGO_PACKFILE_LIMIT")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(100);

@@ -139,9 +139,9 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
             };
             let Ok(filename) =
                 WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
-                else {
-                    continue;
-                };
+            else {
+                continue;
+            };
             if filename.is_compatible(tags) {
                 let path = entry.path().clone();
                 return Some(CachedWheel { path, filename });

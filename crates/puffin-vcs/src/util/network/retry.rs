@@ -42,18 +42,18 @@
 //! - <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After>
 
 use std::cmp::min;
+use std::env;
 use std::time::Duration;
 
 use anyhow::Error;
 use rand::Rng;
+use tracing::warn;
 
-use crate::config::Config;
-use crate::util::CargoResult;
 use crate::util::errors::HttpNotSuccessful;
+use crate::util::CargoResult;
 
 /// State for managing retrying a network operation.
-pub struct Retry<'a> {
-    config: &'a Config,
+pub struct Retry {
     /// The number of failed attempts that have been done so far.
     ///
     /// Starts at 0, and increases by one each time an attempt fails.
@@ -92,12 +92,11 @@ const INITIAL_RETRY_SLEEP_BASE_MS: u64 = 500;
 /// from 0 to this value.
 const INITIAL_RETRY_JITTER_MS: u64 = 1000;
 
-impl<'a> Retry<'a> {
-    pub fn new(config: &'a Config) -> CargoResult<Retry<'a>> {
+impl Retry {
+    pub fn new() -> CargoResult<Retry> {
         Ok(Retry {
-            config,
             retries: 0,
-            max_retries: config.net_config()?.retry.unwrap_or(3) as u64,
+            max_retries: 3,
         })
     }
 
@@ -111,13 +110,10 @@ impl<'a> Retry<'a> {
                     .downcast_ref::<HttpNotSuccessful>()
                     .map(|http_err| http_err.display_short())
                     .unwrap_or_else(|| e.root_cause().to_string());
-                let msg = format!(
-                    "spurious network error ({} tries remaining): {err_msg}",
+                warn!(
+                    "Spurious network error ({} tries remaining): {err_msg}",
                     self.max_retries - self.retries,
                 );
-                if let Err(e) = self.config.shell().warn(msg) {
-                    return RetryResult::Err(e);
-                }
                 self.retries += 1;
                 RetryResult::Retry(self.next_sleep_ms())
             }
@@ -128,7 +124,7 @@ impl<'a> Retry<'a> {
 
     /// Gets the next sleep duration in milliseconds.
     fn next_sleep_ms(&self) -> u64 {
-        if let Ok(sleep) = self.config.get_env("__CARGO_TEST_FIXED_RETRY_SLEEP_MS") {
+        if let Ok(sleep) = env::var("__CARGO_TEST_FIXED_RETRY_SLEEP_MS") {
             return sleep.parse().expect("a u64");
         }
 
@@ -184,11 +180,11 @@ fn maybe_spurious(err: &Error) -> bool {
 /// a warning on per retry.
 ///
 /// Closure must return a `CargoResult`.
-pub fn with_retry<T, F>(config: &Config, mut callback: F) -> CargoResult<T>
+pub fn with_retry<T, F>(mut callback: F) -> CargoResult<T>
 where
     F: FnMut() -> CargoResult<T>,
 {
-    let mut retry = Retry::new(config)?;
+    let mut retry = Retry::new()?;
     loop {
         match retry.r#try(&mut callback) {
             RetryResult::Success(r) => return Ok(r),

@@ -1,11 +1,17 @@
+pub(crate) use self::canonical_url::CanonicalUrl;
 pub(crate) use self::counter::MetricsCounter;
-pub(crate)use self::errors::CargoResult;
+pub(crate) use self::errors::CargoResult;
+pub(crate) use self::hasher::StableHasher;
+pub(crate) use self::hex::short_hash;
 pub(crate) use self::into_url::IntoUrl;
 
-pub(crate) mod network;
+mod canonical_url;
 mod counter;
+pub(crate) mod errors;
+mod hasher;
+mod hex;
 mod into_url;
-pub(crate)mod errors;
+pub(crate) mod network;
 
 /// Formats a number of bytes into a human readable SI-prefixed size.
 /// Returns a tuple of `(quantity, units)`.
