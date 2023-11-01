@@ -22,16 +22,17 @@
 //! added (it just adds a little complexity). For example, hostname patterns,
 //! and revoked markers. See "FIXME" comments littered in this file.
 
-use crate::util::config::{Config, Definition, Value};
+use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use base64::engine::general_purpose::STANDARD_NO_PAD;
-use base64::Engine as _;
 use git2::cert::{Cert, SshHostKeyType};
 use git2::CertificateCheckStatus;
 use hmac::Mac;
 use std::collections::HashSet;
 use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
+
+use crate::util::config::{Config, Definition, Value};
 
 /// These are host keys that are hard-coded in cargo to provide convenience.
 ///

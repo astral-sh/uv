@@ -10,5 +10,16 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-gix = { version = "0.38.0", default-features = false, features = ["blocking-http-transport-curl", "progress-tree"] }
-gix-features-for-configuration-only = { version = "0.27.0", package = "gix-features", features = [ "parallel" ] }
+anyhow.workspace = true
+base64 = "0.21.5"
+cargo-util = "0.2.6"
+curl = "0.4.44"
+git2 = "0.18.1"
+glob = "0.3.1"
+hmac = "0.12.1"
+home = "0.5.5"
+rand = "0.8.5"
+serde.workspace = true
+sha1 = "0.10.6"
+tracing.workspace = true
+url.workspace = true
