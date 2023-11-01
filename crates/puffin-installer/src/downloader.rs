@@ -8,10 +8,8 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 use url::Url;
 
-use pep440_rs::Version;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistribution;
-use puffin_package::package_name::PackageName;
 
 pub struct Downloader<'a> {
     client: &'a RegistryClient,
@@ -64,7 +62,7 @@ impl<'a> Downloader<'a> {
             let result = result?;
 
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_download_progress(result.remote.name(), result.remote.version());
+                reporter.on_download_progress(&result.remote);
             }
 
             downloads.push(result);
@@ -127,7 +125,7 @@ async fn fetch_wheel(
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is downloaded.
-    fn on_download_progress(&self, name: &PackageName, version: &Version);
+    fn on_download_progress(&self, wheel: &RemoteDistribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_download_complete(&self);
