@@ -78,7 +78,7 @@ struct PipCompileArgs {
     extra: Vec<ExtraName>,
 
     /// Include all optional dependencies.
-    #[clap(long)]
+    #[clap(long, conflicts_with = "extra")]
     all_extras: bool,
 
     #[clap(long, value_enum)]
