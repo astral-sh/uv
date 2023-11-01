@@ -1,0 +1,14 @@
+[package]
+name = "puffin-vcs"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+gix = { version = "0.38.0", default-features = false, features = ["blocking-http-transport-curl", "progress-tree"] }
+gix-features-for-configuration-only = { version = "0.27.0", package = "gix-features", features = [ "parallel" ] }

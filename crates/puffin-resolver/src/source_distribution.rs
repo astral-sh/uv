@@ -54,6 +54,15 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
         let mut reader = tokio::io::BufReader::new(reader.compat());
         let temp_dir = tempdir()?;
 
+        gix::open_opts("git@github.com:pallets/flask.git", {
+            let mut opts = gix::open::Options::default();
+            // opts.permissions.config = gix::permissions::Config::all();
+            // opts.permissions.config.git_binary = purpose.needs_git_binary_config();
+            // opts.with(gix::sec::Trust::Full)
+            //     .config_overrides(config_overrides)
+            opts
+        })?;
+
         // Download the source distribution.
         let sdist_filename = distribution.filename()?;
         let sdist_file = temp_dir.path().join(sdist_filename.as_ref());
@@ -139,9 +148,9 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
             };
             let Ok(filename) =
                 WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
-            else {
-                continue;
-            };
+                else {
+                    continue;
+                };
             if filename.is_compatible(tags) {
                 let path = entry.path().clone();
                 return Some(CachedWheel { path, filename });
