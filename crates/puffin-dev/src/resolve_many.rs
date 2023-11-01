@@ -1,21 +1,23 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::Arc;
+
 use clap::Parser;
 use directories::ProjectDirs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
+use tokio::sync::Semaphore;
+use tracing::{info, info_span, Level, span, Span};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
+
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_traits::BuildContext;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::Arc;
-use tokio::sync::Semaphore;
-use tracing::{info, info_span, span, Level, Span};
-use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
