@@ -16,7 +16,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV HOME="/root"
-WORKDIR "$HOME"
+WORKDIR /app
 RUN python3 -m venv $HOME/venv-docker
 ENV VIRTUAL_ENV="$HOME/venv-docker"
 ENV PATH="$HOME/.cargo/bin:$HOME/venv-docker/bin:$PATH"
