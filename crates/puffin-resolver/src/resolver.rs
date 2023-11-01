@@ -484,8 +484,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
 
-                debug!("Got constraints: {:#?}", constraints);
-
                 // If any requirements were further constrained by the user, add those constraints.
                 for (package, version) in
                     iter_requirements(self.constraints.iter(), None, None, self.markers)
