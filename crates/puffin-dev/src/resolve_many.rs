@@ -9,7 +9,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
 use tokio::sync::Semaphore;
-use tracing::{info, info_span, Level, span, Span};
+use tracing::{info, info_span, span, Level, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use pep508_rs::Requirement;

@@ -8,9 +8,9 @@ use clap::Parser;
 use colored::Colorize;
 use tracing::debug;
 use tracing_indicatif::IndicatifLayer;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use resolve_many::ResolveManyArgs;
 
