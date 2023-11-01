@@ -361,7 +361,11 @@ fn hardlink_wheel_files(
 ) -> Result<usize, Error> {
     let mut count = 0usize;
 
-    // Avoid causing the same error for every file
+    // Hard linking might not be supported but we (afaik) can't detect this ahead of time, so we'll
+    // try hard linking the first file, if this succeeds we'll know later hard linking errors are
+    // not due to lack of os/fs support, if it fails we'll switch to copying for the rest of the
+    // install
+    let mut first_try_hard_linking = true;
     let mut use_copy_fallback = false;
 
     // Walk over the directory.
@@ -383,10 +387,11 @@ fn hardlink_wheel_files(
         } else {
             let hard_link_result = fs::hard_link(entry.path(), &out_path);
             // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that
-            if hard_link_result.is_err() {
+            if first_try_hard_linking && hard_link_result.is_err() {
                 fs::copy(entry.path(), &out_path)?;
                 use_copy_fallback = true;
             }
+            first_try_hard_linking = false;
         }
 
         count += 1;
