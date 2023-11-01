@@ -6,7 +6,7 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    ctx: ExecutionContext,
+    ctx: ExecutionContext
   ): Promise<Response> {
     const cacheUrl = new URL(request.url);
 
@@ -20,7 +20,7 @@ export default {
 
     if (!response) {
       console.log(
-        `Response for request url: ${request.url} not present in cache. Fetching and caching request.`,
+        `Response for request url: ${request.url} not present in cache. Fetching and caching request.`
       );
 
       // Take the path from the request. The path will be like:
@@ -36,7 +36,7 @@ export default {
 
         // Read the metadata.
         const reader = new zip.ZipReader(
-          new zip.HttpRangeReader(`https://files.pythonhosted.org${path}`),
+          new zip.HttpRangeReader(`https://files.pythonhosted.org${path}`)
         );
         const file = await readMetadata(reader, name, version);
         if (!file) {
@@ -70,18 +70,17 @@ export default {
 async function readMetadata(
   reader: zip.ZipReader<any>,
   name: string,
-  version: string,
+  version: string
 ) {
   const entries = await reader.getEntriesGenerator();
+  const target = `${name}-${version}.dist-info/METADATA`.toLowerCase();
+
   for await (const entry of entries) {
     // The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
     // the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
     // Either way, we just search the wheel for the name. See `find_dist_info`:
     // https://github.com/astral-sh/puffin/blob/2652caa3e31282afc2f1e1ca581ac4f553af710d/crates/install-wheel-rs/src/wheel.rs#L1024-L1057
-    if (
-      entry.filename.toLowerCase() ==
-      `${name}-${version}.dist-info/METADATA`.toLowerCase()
-    ) {
+    if (entry.filename.toLowerCase() == target) {
       return await entry.getData!(new zip.TextWriter());
     }
   }
