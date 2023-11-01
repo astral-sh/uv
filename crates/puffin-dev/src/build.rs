@@ -1,17 +1,19 @@
+use std::env;
+use std::path::PathBuf;
+
 use anyhow::Context;
 use clap::Parser;
 use directories::ProjectDirs;
 use fs_err as fs;
+
 use platform_host::Platform;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use std::env;
-use std::path::PathBuf;
 
 #[derive(Parser)]
-pub struct BuildArgs {
+pub(crate) struct BuildArgs {
     /// Base python in a way that can be found with `which`
     /// TODO(konstin): Also use proper python parsing here
     #[clap(short, long)]
@@ -23,7 +25,7 @@ pub struct BuildArgs {
 }
 
 /// Build a source distribution to a wheel
-pub async fn build(args: BuildArgs) -> anyhow::Result<PathBuf> {
+pub(crate) async fn build(args: BuildArgs) -> anyhow::Result<PathBuf> {
     let wheel_dir = if let Some(wheel_dir) = args.wheels {
         fs::create_dir_all(&wheel_dir).context("Invalid wheel directory")?;
         wheel_dir

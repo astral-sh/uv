@@ -12,9 +12,13 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-use puffin_dev::{build, BuildArgs};
 use resolve_many::ResolveManyArgs;
 
+use crate::build::{build, BuildArgs};
+use crate::resolve_cli::ResolveCliArgs;
+
+mod build;
+mod resolve_cli;
 mod resolve_many;
 
 #[derive(Parser)]
@@ -28,6 +32,8 @@ enum Cli {
     /// cargo run --bin puffin-dev -- resolve-many scripts/resolve/pypi_top_8k_flat.txt
     /// ```
     ResolveMany(ResolveManyArgs),
+    /// Resolve requirements passed on the CLI
+    ResolveCli(ResolveCliArgs),
 }
 
 async fn run() -> Result<()> {
@@ -39,6 +45,9 @@ async fn run() -> Result<()> {
         }
         Cli::ResolveMany(args) => {
             resolve_many::resolve_many(args).await?;
+        }
+        Cli::ResolveCli(args) => {
+            resolve_cli::resolve_cli(args).await?;
         }
     }
     Ok(())
