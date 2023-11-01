@@ -126,6 +126,7 @@ impl RegistryClientBuilder {
 pub struct RegistryClient {
     pub(crate) index: Url,
     pub(crate) extra_index: Vec<Url>,
+    /// Ignore the package index, instead relying on local archives and caches.
     pub(crate) no_index: bool,
     pub(crate) proxy: Url,
     pub(crate) client: ClientWithMiddleware,
@@ -136,7 +137,7 @@ impl RegistryClient {
     /// Fetch a package from the `PyPI` simple API.
     pub async fn simple(&self, package_name: impl AsRef<str>) -> Result<SimpleJson, Error> {
         if self.no_index {
-            return Err(Error::PackageNotFound(package_name.as_ref().to_string()));
+            return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
         for index in std::iter::once(&self.index).chain(self.extra_index.iter()) {
@@ -187,7 +188,7 @@ impl RegistryClient {
     /// Fetch the metadata from a wheel file.
     pub async fn file(&self, file: File) -> Result<Metadata21, Error> {
         if self.no_index {
-            return Err(Error::FileNotFound(file.filename));
+            return Err(Error::NoIndex(file.filename));
         }
 
         // Per PEP 658, if `data-dist-info-metadata` is available, we can request it directly;
@@ -203,7 +204,7 @@ impl RegistryClient {
         // Fetch from the index.
         let text = self.file_impl(&url).await.map_err(|err| {
             if err.status() == Some(StatusCode::NOT_FOUND) {
-                Error::FileNotFound(file.filename.to_string())
+                Error::FileNotFound(file.filename, err)
             } else {
                 err.into()
             }
@@ -228,7 +229,7 @@ impl RegistryClient {
         url: &Url,
     ) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, Error> {
         if self.no_index {
-            return Err(Error::ResourceNotFound(url.clone()));
+            return Err(Error::NoIndex(url.to_string()));
         }
 
         Ok(Box::new(
