@@ -1,5 +1,4 @@
 use std::fmt;
-use std::ops::Deref;
 
 use pubgrub::package::Package;
 use pubgrub::range::Range;
@@ -43,7 +42,7 @@ impl ResolutionFailureReporter {
     }
 
     fn build_recursive_helper<P: Package, VS: VersionSet>(&mut self, current: &Derived<P, VS>) {
-        match (current.cause1.deref(), current.cause2.deref()) {
+        match (&*current.cause1, &*current.cause2) {
             (DerivationTree::External(external1), DerivationTree::External(external2)) => {
                 // Simplest case, we just combine two external incompatibilities.
                 self.lines.push(Self::explain_both_external(
@@ -99,12 +98,12 @@ impl ResolutionFailureReporter {
                     (None, None) => {
                         self.build_recursive(derived1);
                         if derived1.shared_id.is_some() {
-                            self.lines.push("".into());
+                            self.lines.push(String::new());
                             self.build_recursive(current);
                         } else {
                             self.add_line_ref();
                             let ref1 = self.ref_count;
-                            self.lines.push("".into());
+                            self.lines.push(String::new());
                             self.build_recursive(derived2);
                             self.lines
                                 .push(Self::and_explain_ref(ref1, derived1, &current.terms));
@@ -143,7 +142,7 @@ impl ResolutionFailureReporter {
         external: &External<P, VS>,
         current_terms: &Map<P, Term<VS>>,
     ) {
-        match (derived.cause1.deref(), derived.cause2.deref()) {
+        match (&*derived.cause1, &*derived.cause2) {
             // If the derived cause has itself one external prior cause,
             // we can chain the external explanations.
             (DerivationTree::Derived(prior_derived), DerivationTree::External(prior_external)) => {
@@ -273,8 +272,8 @@ impl ResolutionFailureReporter {
         match terms_vec.as_slice() {
             [] => "version solving failed".into(),
             // TODO: special case when that unique package is root.
-            [(package, Term::Positive(range))] => format!("{} {} is forbidden", package, range),
-            [(package, Term::Negative(range))] => format!("{} {} is mandatory", package, range),
+            [(package, Term::Positive(range))] => format!("{package} {range} is forbidden"),
+            [(package, Term::Negative(range))] => format!("{package} {range} is mandatory"),
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => {
                 External::FromDependencyOf(p1, r1.clone(), p2, r2.clone()).to_string()
             }
@@ -282,7 +281,7 @@ impl ResolutionFailureReporter {
                 External::FromDependencyOf(p2, r2.clone(), p1, r1.clone()).to_string()
             }
             slice => {
-                let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{} {}", p, t)).collect();
+                let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{p} {t}")).collect();
                 str_terms.join(", ") + " are incompatible"
             }
         }
@@ -294,12 +293,12 @@ impl ResolutionFailureReporter {
         let new_count = self.ref_count + 1;
         self.ref_count = new_count;
         if let Some(line) = self.lines.last_mut() {
-            *line = format!("{} ({})", line, new_count);
+            *line = format!("{line} ({new_count})");
         }
     }
 
     fn line_ref_of(&self, shared_id: Option<usize>) -> Option<usize> {
-        shared_id.and_then(|id| self.shared_with_ref.get(&id).cloned())
+        shared_id.and_then(|id| self.shared_with_ref.get(&id).copied())
     }
 }
 
@@ -311,7 +310,7 @@ impl Reporter<PubGrubPackage, Range<PubGrubVersion>> for ResolutionFailureReport
     ) -> Self::Output {
         match derivation_tree {
             DerivationTree::External(external) => {
-                PuffinExternal::from_pubgrub(external.to_owned()).to_string()
+                PuffinExternal::from_pubgrub(external.clone()).to_string()
             }
             DerivationTree::Derived(derived) => {
                 let mut reporter = Self::new();
@@ -324,6 +323,7 @@ impl Reporter<PubGrubPackage, Range<PubGrubVersion>> for ResolutionFailureReport
 
 /// Puffin derivative of [`pubgrub::report::External`] for customized display
 /// for Puffin internal [`PubGrubPackage`].
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 enum PuffinExternal {
     /// Initial incompatibility aiming at picking the root package for the first decision.
@@ -360,55 +360,45 @@ impl fmt::Display for PuffinExternal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotRoot(package, version) => {
-                write!(f, "we are solving dependencies of {} {}", package, version)
+                write!(f, "we are solving dependencies of {package} {version}")
             }
             Self::NoVersions(package, set) => {
                 if set == &Range::full() {
-                    write!(f, "there is no available version for {}", package)
+                    write!(f, "there is no available version for {package}")
                 } else {
-                    write!(f, "there is no version of {} in {}", package, set)
+                    write!(f, "there is no version of {package} in {set}")
                 }
             }
             Self::UnavailableDependencies(package, set) => {
                 if set == &Range::full() {
-                    write!(f, "dependencies of {} are unavailable", package)
+                    write!(f, "dependencies of {package} are unavailable")
                 } else {
                     write!(
                         f,
-                        "dependencies of {} at version {} are unavailable",
-                        package, set
+                        "dependencies of {package} at version {set} are unavailable"
                     )
                 }
             }
             Self::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 if package_set == &Range::full() && dependency_set == &Range::full() {
-                    write!(f, "{} depends on {}", package, dependency)
+                    write!(f, "{package} depends on {dependency}")
                 } else if package_set == &Range::full() {
-                    write!(
-                        f,
-                        "{} depends on {} {}",
-                        package, dependency, dependency_set
-                    )
+                    write!(f, "{package} depends on {dependency} {dependency_set}")
                 } else if dependency_set == &Range::full() {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
-                        write!(f, "{} depends on {}", package, dependency)
+                        write!(f, "{package} depends on {dependency}")
                     } else {
-                        write!(f, "{} {} depends on {}", package, package_set, dependency)
+                        write!(f, "{package} {package_set} depends on {dependency}")
                     }
                 } else {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
-                        write!(
-                            f,
-                            "{} depends on {} {}",
-                            package, dependency, dependency_set
-                        )
+                        write!(f, "{package} depends on {dependency} {dependency_set}")
                     } else {
                         write!(
                             f,
-                            "{} {} depends on {} {}",
-                            package, package_set, dependency, dependency_set
+                            "{package} {package_set} depends on {dependency} {dependency_set}"
                         )
                     }
                 }
