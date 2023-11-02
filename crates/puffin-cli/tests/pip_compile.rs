@@ -228,6 +228,56 @@ fn compile_constraints_inline() -> Result<()> {
     Ok(())
 }
 
+/// Resolve a package from a `requirements.in` file, with a `constraints.txt` file that
+/// uses markers.
+#[test]
+fn compile_constraints_markers() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("anyio")?;
+
+    // Constrain a transitive dependency based on the Python version
+    let constraints_txt = temp_dir.child("constraints.txt");
+    constraints_txt.touch()?;
+    // If constraints are ignored, these will conflict
+    constraints_txt.write_str("sniffio==1.2.0;python_version<='3.7'")?;
+    constraints_txt.write_str("sniffio==1.3.0;python_version>'3.7'")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
 /// Resolve a package from an optional dependency group in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extra() -> Result<()> {
