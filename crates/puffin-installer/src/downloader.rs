@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use cacache::{Algorithm, Integrity};
@@ -13,13 +13,13 @@ use puffin_distribution::RemoteDistribution;
 
 pub struct Downloader<'a> {
     client: &'a RegistryClient,
-    cache: Option<&'a Path>,
+    cache: &'a Path,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> Downloader<'a> {
     /// Initialize a new downloader.
-    pub fn new(client: &'a RegistryClient, cache: Option<&'a Path>) -> Self {
+    pub fn new(client: &'a RegistryClient, cache: &'a Path) -> Self {
         Self {
             client,
             cache,
@@ -57,7 +57,7 @@ impl<'a> Downloader<'a> {
             fetches.spawn(fetch_wheel(
                 remote.clone(),
                 self.client.clone(),
-                self.cache.map(Path::to_path_buf),
+                self.cache.to_path_buf(),
             ));
         }
 
@@ -97,19 +97,17 @@ impl std::fmt::Display for InMemoryDistribution {
 async fn fetch_wheel(
     remote: RemoteDistribution,
     client: RegistryClient,
-    cache: Option<impl AsRef<Path>>,
+    cache: PathBuf,
 ) -> Result<InMemoryDistribution> {
     match &remote {
-        RemoteDistribution::Registry(_package, _version, file) => {
+        RemoteDistribution::Registry(.., file) => {
             // Parse the wheel's SRI.
             let sri = Integrity::from_hex(&file.hashes.sha256, Algorithm::Sha256)?;
 
             // Read from the cache, if possible.
-            if let Some(cache) = cache.as_ref() {
-                if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
-                    debug!("Extracted wheel from cache: {remote}");
-                    return Ok(InMemoryDistribution { remote, buffer });
-                }
+            if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
+                debug!("Extracted wheel from cache: {remote}");
+                return Ok(InMemoryDistribution { remote, buffer });
             }
 
             // Fetch the wheel.
@@ -122,13 +120,11 @@ async fn fetch_wheel(
             tokio::io::copy(&mut reader, &mut buffer).await?;
 
             // Write the buffer to the cache, if possible.
-            if let Some(cache) = cache.as_ref() {
-                cacache::write_hash(&cache, &buffer).await?;
-            }
+            cacache::write_hash(&cache, &buffer).await?;
 
             Ok(InMemoryDistribution { remote, buffer })
         }
-        RemoteDistribution::Url(_package, url) => {
+        RemoteDistribution::Url(.., url) => {
             // Fetch the wheel.
             let reader = client.stream_external(url).await?;
 

@@ -1,9 +1,12 @@
-use std::path::PathBuf;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
+use tempfile::tempdir;
 use url::Url;
 
 use puffin_normalize::ExtraName;
@@ -169,8 +172,7 @@ struct RemoveArgs {
     name: String,
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+async fn inner() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
     logging::setup_logging(if cli.verbose {
@@ -187,16 +189,23 @@ async fn main() -> ExitCode {
         printer::Printer::Default
     };
 
+    // Prefer, in order:
+    // 1. A temporary cache directory, if the user requested `--no-cache`.
+    // 2. The specific cache directory specified by the user via `--cache-dir` or `PUFFIN_CACHE_DIR`.
+    // 3. The system-appropriate cache directory.
+    // 4. A `.puffin_cache` directory in the current working directory.
     let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache_dir = (!cli.no_cache)
-        .then(|| {
-            cli.cache_dir
-                .as_deref()
-                .or_else(|| project_dirs.as_ref().map(ProjectDirs::cache_dir))
-        })
-        .flatten();
+    let cache_dir = if cli.no_cache {
+        Cow::Owned(tempdir()?.into_path())
+    } else if let Some(cache_dir) = cli.cache_dir {
+        Cow::Owned(cache_dir)
+    } else if let Some(project_dirs) = project_dirs.as_ref() {
+        Cow::Borrowed(project_dirs.cache_dir())
+    } else {
+        Cow::Borrowed(Path::new(".puffin_cache"))
+    };
 
-    let result = match cli.command {
+    match cli.command {
         Commands::PipCompile(args) => {
             let requirements = args
                 .src_file
@@ -228,7 +237,7 @@ async fn main() -> ExitCode {
                 args.prerelease.unwrap_or_default(),
                 args.upgrade.into(),
                 index_urls,
-                cache_dir,
+                &cache_dir,
                 printer,
             )
             .await
@@ -245,7 +254,7 @@ async fn main() -> ExitCode {
                 &sources,
                 args.link_mode.unwrap_or_default(),
                 index_urls,
-                cache_dir,
+                &cache_dir,
                 printer,
             )
             .await
@@ -257,16 +266,19 @@ async fn main() -> ExitCode {
                 .map(RequirementsSource::from)
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, cache_dir, printer).await
+            commands::pip_uninstall(&sources, &cache_dir, printer).await
         }
-        Commands::Clean => commands::clean(cache_dir, printer),
-        Commands::Freeze => commands::freeze(cache_dir, printer),
+        Commands::Clean => commands::clean(&cache_dir, printer),
+        Commands::Freeze => commands::freeze(&cache_dir, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer),
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),
-    };
+    }
+}
 
-    match result {
+#[tokio::main]
+async fn main() -> ExitCode {
+    match inner().await {
         Ok(code) => code.into(),
         Err(err) => {
             #[allow(clippy::print_stderr)]

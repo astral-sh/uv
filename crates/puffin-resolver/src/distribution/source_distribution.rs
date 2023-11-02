@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
-use tempfile::tempdir;
+use tempfile::tempdir_in;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 
@@ -36,10 +36,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         distribution: &RemoteDistributionRef<'_>,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
-        let Some(cache) = self.0.cache() else {
-            return Ok(None);
-        };
-        CachedWheel::find_in_cache(distribution, tags, &cache.join(BUILT_WHEELS_CACHE))
+        CachedWheel::find_in_cache(distribution, tags, self.0.cache().join(BUILT_WHEELS_CACHE))
             .as_ref()
             .map(CachedWheel::read_dist_info)
             .transpose()
@@ -53,8 +50,6 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
 
-        let temp_dir = tempdir()?;
-
         let source = Source::try_from(distribution)?;
         let sdist_file = match source {
             Source::Url(url) => {
@@ -64,8 +59,9 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 let mut reader = tokio::io::BufReader::new(reader.compat());
 
                 // Download the source distribution.
+                let temp_dir = tempdir_in(self.0.cache())?.into_path();
                 let sdist_filename = distribution.filename()?;
-                let sdist_file = temp_dir.path().join(sdist_filename.as_ref());
+                let sdist_file = temp_dir.join(sdist_filename.as_ref());
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
                 tokio::io::copy(&mut reader, &mut writer).await?;
 
@@ -74,20 +70,18 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             Source::Git(git) => {
                 debug!("Fetching source distribution from: {git}");
 
-                let git_dir = self.0.cache().map_or_else(
-                    || temp_dir.path().join(GIT_CACHE),
-                    |cache| cache.join(GIT_CACHE),
-                );
+                let git_dir = self.0.cache().join(GIT_CACHE);
                 let source = GitSource::new(git, git_dir);
                 tokio::task::spawn_blocking(move || source.fetch()).await??
             }
         };
 
         // Create a directory for the wheel.
-        let wheel_dir = self.0.cache().map_or_else(
-            || temp_dir.path().join(BUILT_WHEELS_CACHE),
-            |cache| cache.join(BUILT_WHEELS_CACHE).join(distribution.id()),
-        );
+        let wheel_dir = self
+            .0
+            .cache()
+            .join(BUILT_WHEELS_CACHE)
+            .join(distribution.id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Build the wheel.

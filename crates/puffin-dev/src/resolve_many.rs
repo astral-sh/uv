@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -30,6 +30,13 @@ pub(crate) struct ResolveManyArgs {
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
+    let project_dirs = ProjectDirs::from("", "", "puffin");
+    let cache = project_dirs
+        .as_ref()
+        .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
+        .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
+        .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
+
     let data = fs::read_to_string(&args.list)?;
     let lines = data.lines().map(Requirement::from_str);
     let requirements: Vec<Requirement> = if let Some(limit) = args.limit {
@@ -38,17 +45,11 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
         lines.collect::<anyhow::Result<_, _>>()?
     };
 
-    let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = args
-        .cache_dir
-        .as_deref()
-        .or_else(|| project_dirs.as_ref().map(ProjectDirs::cache_dir));
-
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, Some(&cache))?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::default().cache(cache).build(),
-        cache.map(Path::to_path_buf),
+        RegistryClientBuilder::default().cache(Some(&cache)).build(),
+        cache.clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
     );

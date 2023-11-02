@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
-use tempfile::tempdir;
+
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 
@@ -18,11 +18,11 @@ use crate::distribution::cached_wheel::CachedWheel;
 const REMOTE_WHEELS_CACHE: &str = "remote-wheels-v0";
 
 /// Fetch a built distribution from a remote source, or from a local cache.
-pub(crate) struct WheelFetcher<'a>(Option<&'a Path>);
+pub(crate) struct WheelFetcher<'a>(&'a Path);
 
 impl<'a> WheelFetcher<'a> {
     /// Initialize a [`WheelFetcher`] from a [`BuildContext`].
-    pub(crate) fn new(cache: Option<&'a Path>) -> Self {
+    pub(crate) fn new(cache: &'a Path) -> Self {
         Self(cache)
     }
 
@@ -32,10 +32,7 @@ impl<'a> WheelFetcher<'a> {
         distribution: &RemoteDistributionRef<'_>,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
-        let Some(cache) = self.0 else {
-            return Ok(None);
-        };
-        CachedWheel::find_in_cache(distribution, tags, &cache.join(REMOTE_WHEELS_CACHE))
+        CachedWheel::find_in_cache(distribution, tags, self.0.join(REMOTE_WHEELS_CACHE))
             .as_ref()
             .map(CachedWheel::read_dist_info)
             .transpose()
@@ -51,13 +48,9 @@ impl<'a> WheelFetcher<'a> {
         let url = distribution.url()?;
         let reader = client.stream_external(&url).await?;
         let mut reader = tokio::io::BufReader::new(reader.compat());
-        let temp_dir = tempdir()?;
 
         // Create a directory for the wheel.
-        let wheel_dir = self.0.map_or_else(
-            || temp_dir.path().join(REMOTE_WHEELS_CACHE),
-            |cache| cache.join(REMOTE_WHEELS_CACHE).join(distribution.id()),
-        );
+        let wheel_dir = self.0.join(REMOTE_WHEELS_CACHE).join(distribution.id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Download the wheel.

@@ -26,7 +26,7 @@ fn run() -> Result<(), gourgeist::Error> {
     let location = cli.path.unwrap_or(Utf8PathBuf::from(".venv"));
     let python = parse_python_cli(cli.python)?;
     let platform = Platform::current()?;
-    let info = InterpreterInfo::query_cached(python.as_std_path(), platform, None).unwrap();
+    let info = InterpreterInfo::query(python.as_std_path(), platform, None).unwrap();
     create_venv(location, &python, &info, cli.bare)?;
 
     Ok(())
