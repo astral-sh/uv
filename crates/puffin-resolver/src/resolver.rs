@@ -484,19 +484,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
 
-                debug!("Got constraints: {:#?}", constraints);
-
                 // If any requirements were further constrained by the user, add those constraints.
-                for constraint in &self.constraints {
-                    let package = PubGrubPackage::Package(
-                        PackageName::normalize(&constraint.name),
-                        None,
-                        None,
-                    );
+                for (package, version) in
+                    iter_requirements(self.constraints.iter(), None, None, self.markers)
+                {
                     if let Some(range) = constraints.get_mut(&package) {
-                        *range = range.intersection(
-                            &version_range(constraint.version_or_url.as_ref()).unwrap(),
-                        );
+                        *range = range.intersection(&version);
                     }
                 }
 
