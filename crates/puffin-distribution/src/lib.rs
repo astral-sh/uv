@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use sha2::{Digest, Sha256};
 use url::Url;
 
 use pep440_rs::Version;
@@ -358,12 +357,7 @@ impl<'a> RemoteDistributionRef<'a> {
             Self::Registry(name, version, _) => {
                 format!("{}-{}", DistInfoName::from(*name), version)
             }
-            Self::Url(_name, url) => {
-                let mut hasher = Sha256::new();
-                hasher.update(url.as_str().as_bytes());
-                let result = hasher.finalize();
-                hex::encode(result)
-            }
+            Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }
     }
 }
