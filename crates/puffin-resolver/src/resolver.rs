@@ -28,13 +28,13 @@ use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 use puffin_traits::BuildContext;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::distribution::{SourceDistributionFetcher, WheelFetcher};
 use crate::error::ResolveError;
 use crate::file::{DistributionFile, SdistFile, WheelFile};
 use crate::manifest::Manifest;
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::pubgrub::{PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION};
 use crate::resolution::Graph;
-use crate::source_distribution::SourceDistributionBuildTree;
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
     requirements: Vec<Requirement>,
@@ -655,12 +655,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // Build a source distribution from the registry, returning its metadata.
             Request::Sdist(package_name, version, file) => {
-                let build_tree = SourceDistributionBuildTree::new(self.build_context);
+                let builder = SourceDistributionFetcher::new(self.build_context);
                 let distribution =
                     RemoteDistributionRef::from_registry(&package_name, &version, &file);
-                let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
+                let metadata = match builder.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => metadata,
-                    Ok(None) => build_tree
+                    Ok(None) => builder
                         .download_and_build_sdist(&distribution, self.client)
                         .await
                         .map_err(|err| ResolveError::RegistryDistribution {
@@ -671,7 +671,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         error!(
                             "Failed to read source distribution {distribution} from cache: {err}",
                         );
-                        build_tree
+                        builder
                             .download_and_build_sdist(&distribution, self.client)
                             .await
                             .map_err(|err| ResolveError::RegistryDistribution {
@@ -684,16 +684,16 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // Build a source distribution from a remote URL, returning its metadata.
             Request::SdistUrl(package_name, url) => {
-                let build_tree = SourceDistributionBuildTree::new(self.build_context);
+                let fetcher = SourceDistributionFetcher::new(self.build_context);
                 let distribution = RemoteDistributionRef::from_url(&package_name, &url);
-                let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
+                let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => {
                         debug!("Found source distribution metadata in cache: {url}");
                         metadata
                     }
                     Ok(None) => {
                         debug!("Downloading source distribution from: {url}");
-                        build_tree
+                        fetcher
                             .download_and_build_sdist(&distribution, self.client)
                             .await
                             .map_err(|err| ResolveError::UrlDistribution {
@@ -705,7 +705,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         error!(
                             "Failed to read source distribution {distribution} from cache: {err}",
                         );
-                        build_tree
+                        fetcher
                             .download_and_build_sdist(&distribution, self.client)
                             .await
                             .map_err(|err| ResolveError::UrlDistribution {
@@ -718,16 +718,16 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // Fetch wheel metadata from a remote URL.
             Request::WheelUrl(package_name, url) => {
-                let build_tree = SourceDistributionBuildTree::new(self.build_context);
+                let fetcher = WheelFetcher::new(self.build_context.cache());
                 let distribution = RemoteDistributionRef::from_url(&package_name, &url);
-                let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
+                let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => {
                         debug!("Found wheel metadata in cache: {url}");
                         metadata
                     }
                     Ok(None) => {
                         debug!("Downloading wheel from: {url}");
-                        build_tree
+                        fetcher
                             .download_wheel(&distribution, self.client)
                             .await
                             .map_err(|err| ResolveError::UrlDistribution {
@@ -737,7 +737,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                     Err(err) => {
                         error!("Failed to read wheel {distribution} from cache: {err}",);
-                        build_tree
+                        fetcher
                             .download_wheel(&distribution, self.client)
                             .await
                             .map_err(|err| ResolveError::UrlDistribution {
