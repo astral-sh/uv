@@ -65,7 +65,7 @@ fn venv_impl(
     };
 
     let platform = Platform::current().into_diagnostic()?;
-    let interpreter_info = InterpreterInfo::query_cached(&base_python, platform, None)
+    let interpreter_info = InterpreterInfo::query(&base_python, platform, None)
         .map_err(VenvError::InterpreterError)?;
 
     writeln!(

@@ -25,9 +25,9 @@ impl CachedWheel {
     pub(super) fn find_in_cache(
         distribution: &RemoteDistributionRef<'_>,
         tags: &Tags,
-        cache: &Path,
+        cache: impl AsRef<Path>,
     ) -> Option<Self> {
-        let wheel_dir = cache.join(distribution.id());
+        let wheel_dir = cache.as_ref().join(distribution.id());
         let Ok(read_dir) = fs_err::read_dir(wheel_dir) else {
             return None;
         };

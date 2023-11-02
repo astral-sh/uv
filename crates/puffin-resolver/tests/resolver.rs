@@ -22,7 +22,7 @@ use puffin_traits::BuildContext;
 struct DummyContext;
 
 impl BuildContext for DummyContext {
-    fn cache(&self) -> Option<&Path> {
+    fn cache(&self) -> &Path {
         panic!("The test should not need to build source distributions")
     }
 

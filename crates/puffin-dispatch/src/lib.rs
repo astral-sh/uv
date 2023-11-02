@@ -24,7 +24,7 @@ use puffin_traits::BuildContext;
 /// documentation.
 pub struct BuildDispatch {
     client: RegistryClient,
-    cache: Option<PathBuf>,
+    cache: PathBuf,
     interpreter_info: InterpreterInfo,
     base_python: PathBuf,
 }
@@ -32,7 +32,7 @@ pub struct BuildDispatch {
 impl BuildDispatch {
     pub fn new(
         client: RegistryClient,
-        cache: Option<PathBuf>,
+        cache: PathBuf,
         interpreter_info: InterpreterInfo,
         base_python: PathBuf,
     ) -> Self {
@@ -46,8 +46,8 @@ impl BuildDispatch {
 }
 
 impl BuildContext for BuildDispatch {
-    fn cache(&self) -> Option<&Path> {
-        self.cache.as_deref()
+    fn cache(&self) -> &Path {
+        self.cache.as_path()
     }
 
     fn interpreter_info(&self) -> &InterpreterInfo {
@@ -105,11 +105,7 @@ impl BuildContext for BuildDispatch {
                 local,
                 remote,
                 extraneous,
-            } = PartitionedRequirements::try_from_requirements(
-                requirements,
-                self.cache.as_deref(),
-                venv,
-            )?;
+            } = PartitionedRequirements::try_from_requirements(requirements, &self.cache, venv)?;
 
             let tags = Tags::from_env(
                 self.interpreter_info.platform(),
@@ -141,14 +137,13 @@ impl BuildContext for BuildDispatch {
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
-                Downloader::new(&self.client, self.cache.as_deref())
+                Downloader::new(&self.client, &self.cache)
                     .download(remote)
                     .await
                     .context("Failed to download build dependencies")?
             };
 
             // Unzip any downloaded distributions.
-            let staging = tempfile::tempdir()?;
             let unzips = if downloads.is_empty() {
                 vec![]
             } else {
@@ -158,7 +153,7 @@ impl BuildContext for BuildDispatch {
                     downloads.iter().map(ToString::to_string).join(", ")
                 );
                 Unzipper::default()
-                    .unzip(downloads, self.cache.as_deref().unwrap_or(staging.path()))
+                    .unzip(downloads, &self.cache)
                     .await
                     .context("Failed to unpack build dependencies")?
             };

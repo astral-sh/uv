@@ -21,7 +21,7 @@ impl Virtualenv {
         let platform = PythonPlatform::from(platform);
         let venv = detect_virtual_env(&platform)?;
         let executable = platform.venv_python(&venv);
-        let interpreter_info = InterpreterInfo::query_cached(&executable, platform.0, cache)?;
+        let interpreter_info = InterpreterInfo::query(&executable, platform.0, cache)?;
 
         Ok(Self {
             root: venv,
@@ -32,7 +32,7 @@ impl Virtualenv {
     pub fn from_virtualenv(platform: Platform, root: &Path, cache: Option<&Path>) -> Result<Self> {
         let platform = PythonPlatform::from(platform);
         let executable = platform.venv_python(root);
-        let interpreter_info = InterpreterInfo::query_cached(&executable, platform.0, cache)?;
+        let interpreter_info = InterpreterInfo::query(&executable, platform.0, cache)?;
 
         Ok(Self {
             root: root.to_path_buf(),

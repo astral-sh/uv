@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clap::Parser;
 use directories::ProjectDirs;
@@ -24,13 +24,17 @@ pub(crate) struct ResolveCliArgs {
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
     let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = project_dirs.as_ref().map(ProjectDirs::cache_dir);
+    let cache = project_dirs
+        .as_ref()
+        .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
+        .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
+        .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, Some(&cache))?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::default().cache(cache).build(),
-        cache.map(Path::to_path_buf),
+        RegistryClientBuilder::default().cache(Some(&cache)).build(),
+        cache.clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
     );

@@ -15,7 +15,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
-    cache: Option<&Path>,
+    cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -29,7 +29,7 @@ pub(crate) async fn pip_uninstall(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, Some(cache))?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()

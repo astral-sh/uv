@@ -37,7 +37,7 @@ pub(crate) async fn pip_compile(
     prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
-    cache: Option<&Path>,
+    cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -88,7 +88,7 @@ pub(crate) async fn pip_compile(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, Some(cache))?;
 
     debug!(
         "Using Python {} at {}",
@@ -105,7 +105,7 @@ pub(crate) async fn pip_compile(
     // Instantiate a client.
     let client = {
         let mut builder = RegistryClientBuilder::default();
-        builder = builder.cache(cache);
+        builder = builder.cache(Some(cache));
         if let Some(IndexUrls { index, extra_index }) = index_urls {
             if let Some(index) = index {
                 builder = builder.index(index);
@@ -119,7 +119,7 @@ pub(crate) async fn pip_compile(
 
     let build_dispatch = BuildDispatch::new(
         RegistryClientBuilder::default().build(),
-        cache.map(Path::to_path_buf),
+        cache.to_path_buf(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
     );

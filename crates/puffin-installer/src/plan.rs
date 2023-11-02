@@ -30,24 +30,15 @@ impl PartitionedRequirements {
     /// need to be downloaded, and those that should be removed.
     pub fn try_from_requirements(
         requirements: &[Requirement],
-        cache: Option<&Path>,
+        cache: &Path,
         venv: &Virtualenv,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
         let mut site_packages = SitePackages::try_from_executable(venv)?;
 
         // Index all the already-downloaded wheels in the cache.
-        let registry_index = if let Some(cache) = cache {
-            RegistryIndex::try_from_directory(cache)?
-        } else {
-            RegistryIndex::default()
-        };
-
-        let url_index = if let Some(cache) = cache {
-            UrlIndex::try_from_directory(cache)?
-        } else {
-            UrlIndex::default()
-        };
+        let registry_index = RegistryIndex::try_from_directory(cache)?;
+        let url_index = UrlIndex::try_from_directory(cache)?;
 
         let mut local = vec![];
         let mut remote = vec![];

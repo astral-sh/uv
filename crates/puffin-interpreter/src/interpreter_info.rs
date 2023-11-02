@@ -2,14 +2,16 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use pep440_rs::Version;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
-use crate::python_platform::PythonPlatform;
+use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
+
+use crate::python_platform::PythonPlatform;
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -21,12 +23,13 @@ pub struct InterpreterInfo {
 }
 
 impl InterpreterInfo {
-    pub fn query_cached(
-        executable: &Path,
-        platform: Platform,
-        cache: Option<&Path>,
-    ) -> anyhow::Result<Self> {
-        let info = InterpreterQueryResult::query_cached(executable, cache)?;
+    /// Detect the interpreter info for the given Python executable.
+    pub fn query(executable: &Path, platform: Platform, cache: Option<&Path>) -> Result<Self> {
+        let info = if let Some(cache) = cache {
+            InterpreterQueryResult::query_cached(executable, cache)?
+        } else {
+            InterpreterQueryResult::query(executable)?
+        };
         debug_assert!(
             info.base_prefix == info.base_exec_prefix,
             "Not a venv python: {}, prefix: {}",
@@ -119,7 +122,7 @@ impl InterpreterQueryResult {
                         String::from_utf8_lossy(&output.stdout).trim(),
                         String::from_utf8_lossy(&output.stderr).trim()
                     ),
-                )
+                ),
             });
         }
         let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err|
@@ -133,8 +136,8 @@ impl InterpreterQueryResult {
                         err,
                         String::from_utf8_lossy(&output.stdout).trim(),
                         String::from_utf8_lossy(&output.stderr).trim()
-                    )
-                )
+                    ),
+                ),
             }
         )?;
 
@@ -146,20 +149,16 @@ impl InterpreterQueryResult {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: Option<&Path>) -> anyhow::Result<Self> {
+    pub(crate) fn query_cached(executable: &Path, cache: &Path) -> Result<Self> {
         // Read from the cache.
-        let key = if let Some(cache) = cache {
-            if let Ok(key) = cache_key(executable) {
-                if let Ok(data) = cacache::read_sync(cache, &key) {
-                    if let Ok(info) = serde_json::from_slice::<Self>(&data) {
-                        debug!("Using cached markers for {}", executable.display());
-                        return Ok(info);
-                    }
+        let key = if let Ok(key) = cache_key(executable) {
+            if let Ok(data) = cacache::read_sync(cache, &key) {
+                if let Ok(info) = serde_json::from_slice::<Self>(&data) {
+                    debug!("Using cached markers for {}", executable.display());
+                    return Ok(info);
                 }
-                Some(key)
-            } else {
-                None
             }
+            Some(key)
         } else {
             None
         };
@@ -169,10 +168,8 @@ impl InterpreterQueryResult {
         let info = Self::query(executable)?;
 
         // Write to the cache.
-        if let Some(cache) = cache {
-            if let Some(key) = key {
-                cacache::write_sync(cache, key, serde_json::to_vec(&info)?)?;
-            }
+        if let Some(key) = key {
+            cacache::write_sync(cache, key, serde_json::to_vec(&info)?)?;
         }
 
         Ok(info)
@@ -181,7 +178,7 @@ impl InterpreterQueryResult {
 
 /// Create a cache key for the Python executable, consisting of the executable's
 /// last modified time and the executable's path.
-fn cache_key(executable: &Path) -> anyhow::Result<String> {
+fn cache_key(executable: &Path) -> Result<String> {
     let modified = executable
         .metadata()?
         .modified()?

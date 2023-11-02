@@ -9,11 +9,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Clear the cache.
-pub(crate) fn clean(cache: Option<&Path>, mut printer: Printer) -> Result<ExitStatus> {
-    let Some(cache) = cache else {
-        return Err(anyhow::anyhow!("No cache found"));
-    };
-
+pub(crate) fn clean(cache: &Path, mut printer: Printer) -> Result<ExitStatus> {
     if !cache.exists() {
         writeln!(printer, "No cache found at: {}", cache.display())?;
         return Ok(ExitStatus::Success);

@@ -48,7 +48,7 @@ use puffin_interpreter::{InterpreterInfo, Virtualenv};
 // TODO(konstin): Proper error types
 pub trait BuildContext {
     // TODO(konstin): Add a cache abstraction
-    fn cache(&self) -> Option<&Path>;
+    fn cache(&self) -> &Path;
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).

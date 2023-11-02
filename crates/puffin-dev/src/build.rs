@@ -1,7 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use clap::Parser;
 use directories::ProjectDirs;
 use fs_err as fs;
@@ -25,7 +25,7 @@ pub(crate) struct BuildArgs {
 }
 
 /// Build a source distribution to a wheel
-pub(crate) async fn build(args: BuildArgs) -> anyhow::Result<PathBuf> {
+pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let wheel_dir = if let Some(wheel_dir) = args.wheels {
         fs::create_dir_all(&wheel_dir).context("Invalid wheel directory")?;
         wheel_dir
@@ -33,13 +33,15 @@ pub(crate) async fn build(args: BuildArgs) -> anyhow::Result<PathBuf> {
         env::current_dir()?
     };
 
-    let dirs = ProjectDirs::from("", "", "puffin");
-    let cache = dirs
+    let project_dirs = ProjectDirs::from("", "", "puffin");
+    let cache = project_dirs
         .as_ref()
-        .map(|dir| ProjectDirs::cache_dir(dir).to_path_buf());
+        .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
+        .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
+        .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache.as_deref())?;
+    let venv = Virtualenv::from_env(platform, Some(&cache))?;
 
     let build_dispatch = BuildDispatch::new(
         RegistryClientBuilder::default().build(),

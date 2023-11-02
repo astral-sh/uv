@@ -28,7 +28,7 @@ pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     link_mode: LinkMode,
     index_urls: Option<IndexUrls>,
-    cache: Option<&Path>,
+    cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Read all requirements from the provided sources.
@@ -51,7 +51,7 @@ pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     link_mode: LinkMode,
     index_urls: Option<IndexUrls>,
-    cache: Option<&Path>,
+    cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Audit the requirements.
@@ -59,7 +59,7 @@ pub(crate) async fn sync_requirements(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, Some(cache))?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()
@@ -99,7 +99,7 @@ pub(crate) async fn sync_requirements(
     // Instantiate a client.
     let client = {
         let mut builder = RegistryClientBuilder::default();
-        builder = builder.cache(cache);
+        builder = builder.cache(Some(cache));
         if let Some(IndexUrls { index, extra_index }) = index_urls {
             if let Some(index) = index {
                 builder = builder.index(index);
@@ -163,7 +163,6 @@ pub(crate) async fn sync_requirements(
     };
 
     // Unzip any downloaded distributions.
-    let staging = tempfile::tempdir()?;
     let unzips = if downloads.is_empty() {
         vec![]
     } else {
@@ -173,7 +172,7 @@ pub(crate) async fn sync_requirements(
             .with_reporter(UnzipReporter::from(printer).with_length(downloads.len() as u64));
 
         let unzips = unzipper
-            .unzip(downloads, cache.unwrap_or(staging.path()))
+            .unzip(downloads, cache)
             .await
             .context("Failed to download and unpack wheels")?;
 
