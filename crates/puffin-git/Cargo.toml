@@ -1,5 +1,5 @@
 [package]
-name = "puffin-vcs"
+name = "puffin-git"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -23,6 +23,7 @@ serde = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
+tokio.workspace = true
 
 [features]
 vendored-libgit2 = ["git2/vendored-libgit2"]

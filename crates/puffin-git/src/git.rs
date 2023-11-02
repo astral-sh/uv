@@ -1,23 +1,21 @@
-/// Git support is derived from Cargo's implementation.
-/// Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
-/// Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
-
-use std::{env, str};
+//! Git support is derived from Cargo's implementation.
+//! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
+//! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{env, str};
 
-use anyhow::{anyhow, Context as _};
-use anyhow::Result;
+use anyhow::{anyhow, Context as _, Result};
 use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
-use reqwest::blocking::Client;
+use reqwest::Client;
 use reqwest::StatusCode;
 use tracing::{debug, info, warn};
 use url::Url;
 
-use crate::{FetchStrategy, GitReference};
 use crate::util::retry;
+use crate::{FetchStrategy, GitReference};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -280,9 +278,8 @@ impl<'a> GitCheckout<'a> {
         //
         // Note that we still use the same fetch options because while we don't
         // need authentication information we may want progress bars and such.
-        let url = Url::from_file_path(&database.path).map_err(|()| {
-            anyhow::format_err!("Invalid path URL: {}", database.path.display())
-        })?;
+        let url = Url::from_file_path(&database.path)
+            .map_err(|()| anyhow::format_err!("Invalid path URL: {}", database.path.display()))?;
         let mut repo = None;
         with_fetch_options(&git_config, url.as_str(), &mut |fopts| {
             let mut checkout = git2::build::CheckoutBuilder::new();
@@ -365,92 +362,103 @@ impl<'a> GitCheckout<'a> {
     ///
     /// [^1]: <https://git-scm.com/docs/git-submodule#Documentation/git-submodule.txt-none>
     fn update_submodules(&self, strategy: FetchStrategy, client: &Client) -> Result<()> {
-        /// Recursive helper for [`GitCheckout::update_submodules`].
-        fn update_submodules(
-            repo: &git2::Repository,
-            parent_remote_url: &str,
-            strategy: FetchStrategy,
-            client: &Client,
-        ) -> Result<()> {
-            debug!("update submodules for: {:?}", repo.workdir().unwrap());
-
-            for mut child in repo.submodules()? {
-                update_submodule(repo, &mut child, parent_remote_url, strategy, client)
-                    .with_context(|| {
-                        format!(
-                            "failed to update submodule `{}`",
-                            child.name().unwrap_or("")
-                        )
-                    })?;
-            }
-            Ok(())
+        /// Like `Cow`, but without a requirement on `Clone`.
+        enum Repo<'a> {
+            Borrowed(&'a git2::Repository),
+            Owned(git2::Repository),
         }
 
-        /// Update a single Git submodule, and recurse into its submodules.
-        fn update_submodule(
-            parent: &git2::Repository,
-            child: &mut git2::Submodule<'_>,
-            parent_remote_url: &str,
-            strategy: FetchStrategy,
-            client: &Client,
-        ) -> Result<()> {
-            child.init(false)?;
+        impl std::ops::Deref for Repo<'_> {
+            type Target = git2::Repository;
 
-            let child_url_str = child.url().ok_or_else(|| {
-                anyhow::format_err!("non-utf8 url for submodule {:?}?", child.path())
-            })?;
-
-            // Skip the submodule if the config says not to update it.
-            if child.update_strategy() == git2::SubmoduleUpdate::None {
-                debug!(
-                        "Skipping git submodule `{child_url_str}` due to update strategy in .gitmodules",
-                );
-                return Ok(());
-            }
-
-            let child_remote_url = absolute_submodule_url(parent_remote_url, child_url_str)?;
-
-            // A submodule which is listed in .gitmodules but not actually
-            // checked out will not have a head id, so we should ignore it.
-            let Some(head) = child.head_id() else {
-                return Ok(());
-            };
-
-            // If the submodule hasn't been checked out yet, we need to
-            // clone it. If it has been checked out and the head is the same
-            // as the submodule's head, then we can skip an update and keep
-            // recursing.
-            let head_and_repo = child.open().and_then(|repo| {
-                let target = repo.head()?.target();
-                Ok((target, repo))
-            });
-            let mut repo = if let Ok((head, repo)) = head_and_repo {
-                if child.head_id() == head {
-                    return update_submodules(&repo, &child_remote_url, strategy, client);
+            fn deref(&self) -> &Self::Target {
+                match self {
+                    Repo::Borrowed(repo) => repo,
+                    Repo::Owned(repo) => repo,
                 }
-                repo
-            } else {
-                let path = parent.workdir().unwrap().join(child.path());
-                let _ = paths::remove_dir_all(&path);
-                init(&path, false)?
-            };
-
-            // Fetch data from origin and reset to the head commit
-            debug!("Updating Git submodule: {child_remote_url}");
-            let reference = GitReference::Rev(head.to_string());
-            fetch(&mut repo, &child_remote_url, &reference, strategy, client).with_context(
-                || {
-                    let name = child.name().unwrap_or("");
-                    format!("failed to fetch submodule `{name}` from {child_remote_url}",)
-                },
-            )?;
-
-            let obj = repo.find_object(head, None)?;
-            reset(&repo, &obj)?;
-            update_submodules(&repo, &child_remote_url, strategy, client)
+            }
         }
 
-        return update_submodules(&self.repo, self.remote_url().as_str(), strategy, client);
+        debug!(
+            "Update submodules for: {}",
+            self.repo.workdir().unwrap().display()
+        );
+
+        // Initialize a stack with the root repository.
+        let mut stack = vec![(
+            Repo::Borrowed(&self.repo),
+            Cow::Borrowed(self.remote_url().as_str()),
+        )];
+
+        while let Some((repo, parent_remote_url)) = stack.pop() {
+            for mut child in repo.submodules()? {
+                child.init(false)?;
+
+                let child_url_str = child.url().ok_or_else(|| {
+                    anyhow::format_err!("non-utf8 url for submodule {:?}?", child.path())
+                })?;
+
+                // Skip the submodule if the config says not to update it.
+                if child.update_strategy() == git2::SubmoduleUpdate::None {
+                    debug!(
+                        "Skipping git submodule `{}` due to update strategy in .gitmodules",
+                        child_url_str
+                    );
+                    continue;
+                }
+
+                let child_remote_url =
+                    absolute_submodule_url(&parent_remote_url, child_url_str)?.to_string();
+
+                // A submodule which is listed in .gitmodules but not actually
+                // checked out will not have a head id, so we should ignore it.
+                let Some(head) = child.head_id() else {
+                    continue;
+                };
+
+                // If the submodule hasn't been checked out yet, we need to
+                // clone it. If it has been checked out and the head is the same
+                // as the submodule's head, then we can skip an update and keep
+                // recursing.
+                let head_and_repo = child.open().and_then(|repo| {
+                    let target = repo.head()?.target();
+                    Ok((target, repo))
+                });
+                let mut repo = if let Ok((head, repo)) = head_and_repo {
+                    if child.head_id() == head {
+                        stack.push((Repo::Owned(repo), Cow::Owned(child_remote_url)));
+                        continue;
+                    }
+                    repo
+                } else {
+                    let path = repo.workdir().unwrap().join(child.path());
+                    let _ = paths::remove_dir_all(&path);
+                    init(&path, false)?
+                };
+
+                // Fetch data from origin and reset to the head commit
+                debug!("Updating Git submodule: {}", child_remote_url);
+                let reference = GitReference::Rev(head.to_string());
+                fetch(&mut repo, &child_remote_url, &reference, strategy, client).with_context(
+                    || {
+                        format!(
+                            "failed to fetch submodule `{}` from {}",
+                            child.name().unwrap_or(""),
+                            child_remote_url
+                        )
+                    },
+                )?;
+
+                let obj = repo.find_object(head, None)?;
+                reset(&repo, &obj)?;
+                drop(obj);
+
+                // Push the current submodule onto the stack.
+                stack.push((Repo::Owned(repo), Cow::Owned(child_remote_url)));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -688,9 +696,7 @@ where
     // we try to give a more helpful error message about precisely what we
     // tried.
     if any_attempts {
-        let mut msg = "failed to authenticate when downloading \
-                       repository"
-            .to_string();
+        let mut msg = "failed to authenticate when downloading repository".to_string();
 
         if let Some(attempt) = &url_attempt {
             if url != attempt {
@@ -1210,28 +1216,34 @@ fn github_fast_path(
         "https://api.github.com/repos/{username}/{repository}/commits/{github_branch_name}"
     );
 
-    debug!("Attempting GitHub fast path for: {url}");
-    let mut request = client.get(&url);
-    request = request.header("Accept", "application/vnd.github.3.sha");
-    request = request.header("User-Agent", "puffin");
-    if let Some(local_object) = local_object {
-        request = request.header("If-None-Match", local_object.to_string());
-    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
-    let response = request.send()?;
-    response.error_for_status_ref()?;
-    let response_code = response.status();
-    if response_code == StatusCode::NOT_MODIFIED {
-        Ok(FastPathRev::UpToDate)
-    } else if response_code == StatusCode::OK {
-        let oid_to_fetch = response.text()?.parse::<git2::Oid>()?;
-        Ok(FastPathRev::NeedsFetch(oid_to_fetch))
-    } else {
-        // Usually response_code == 404 if the repository does not exist, and
-        // response_code == 422 if exists but GitHub is unable to resolve the
-        // requested rev.
-        Ok(FastPathRev::Indeterminate)
-    }
+    runtime.block_on(async move {
+        debug!("Attempting GitHub fast path for: {url}");
+        let mut request = client.get(&url);
+        request = request.header("Accept", "application/vnd.github.3.sha");
+        request = request.header("User-Agent", "puffin");
+        if let Some(local_object) = local_object {
+            request = request.header("If-None-Match", local_object.to_string());
+        }
+
+        let response = request.send().await?;
+        response.error_for_status_ref()?;
+        let response_code = response.status();
+        if response_code == StatusCode::NOT_MODIFIED {
+            Ok(FastPathRev::UpToDate)
+        } else if response_code == StatusCode::OK {
+            let oid_to_fetch = response.text().await?.parse::<git2::Oid>()?;
+            Ok(FastPathRev::NeedsFetch(oid_to_fetch))
+        } else {
+            // Usually response_code == 404 if the repository does not exist, and
+            // response_code == 422 if exists but GitHub is unable to resolve the
+            // requested rev.
+            Ok(FastPathRev::Indeterminate)
+        }
+    })
 }
 
 /// Whether a `url` is one from GitHub.

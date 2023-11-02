@@ -1,8 +1,3 @@
-//! Home of the [`GitSource`].
-//!
-//! Apparently, the most important type in this module is [`GitSource`].
-//! [`git`] provides libgit2 utilities like fetch and checkout.
-
 use url::Url;
 
 pub use self::source::GitSource;

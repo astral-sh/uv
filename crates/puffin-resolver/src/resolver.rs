@@ -655,8 +655,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // Build a source distribution from the registry, returning its metadata.
             Request::Sdist(package_name, version, file) => {
-                debug!("Fetching source distribution from: {}", file.filename);
-
                 let build_tree = SourceDistributionBuildTree::new(self.build_context);
                 let distribution =
                     RemoteDistributionRef::from_registry(&package_name, &version, &file);

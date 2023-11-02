@@ -1,7 +1,6 @@
-/// Git support is derived from Cargo's implementation.
-/// Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
-/// Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/util/mod.rs>
-
+//! Git support is derived from Cargo's implementation.
+//! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
+//! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/util/mod.rs>
 pub(crate) mod errors;
 pub(crate) mod retry;
 

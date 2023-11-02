@@ -2247,6 +2247,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "puffin-git"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "cargo-util",
+ "git2",
+ "glob",
+ "hex",
+ "once_cell",
+ "puffin-cache",
+ "rand",
+ "reqwest",
+ "serde",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "puffin-installer"
 version = "0.0.1"
 dependencies = [
@@ -2354,11 +2373,11 @@ dependencies = [
  "pubgrub",
  "puffin-client",
  "puffin-distribution",
+ "puffin-git",
  "puffin-interpreter",
  "puffin-normalize",
  "puffin-package",
  "puffin-traits",
- "puffin-vcs",
  "sha2",
  "tempfile",
  "thiserror",
@@ -2377,24 +2396,6 @@ dependencies = [
  "anyhow",
  "pep508_rs",
  "puffin-interpreter",
-]
-
-[[package]]
-name = "puffin-vcs"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cargo-util",
- "git2",
- "glob",
- "hex",
- "once_cell",
- "puffin-cache",
- "rand",
- "reqwest",
- "serde",
- "tracing",
- "url",
 ]
 
 [[package]]

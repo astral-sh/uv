@@ -117,7 +117,8 @@ pub struct SourceDistributionBuilder {
 }
 
 impl SourceDistributionBuilder {
-    /// Extract the source distribution and create a venv with the required packages
+    /// Create a virtual environment in which to build a source distribution, extracting the
+    /// contents from an archive if necessary.
     pub async fn setup(
         sdist: &Path,
         interpreter_info: &InterpreterInfo,
@@ -126,10 +127,10 @@ impl SourceDistributionBuilder {
         let temp_dir = tempdir()?;
 
         // TODO(konstin): Parse and verify filenames
-        debug!("Unpacking for build: {}", sdist.display());
         let source_tree = if fs::metadata(sdist)?.is_dir() {
             sdist.to_path_buf()
         } else {
+            debug!("Unpacking for build: {}", sdist.display());
             let extracted = temp_dir.path().join("extracted");
             extract_archive(sdist, &extracted)?
         };

@@ -1,17 +1,16 @@
-/// Git support is derived from Cargo's implementation.
-/// Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
-/// Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/source.rs>
-
+//! Git support is derived from Cargo's implementation.
+//! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
+//! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/source.rs>
 use std::path::PathBuf;
 
 use anyhow::Result;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use tracing::debug;
 
-use puffin_cache::{CanonicalUrl, digest};
+use puffin_cache::{digest, CanonicalUrl};
 
-use crate::{FetchStrategy, Git, GitReference};
 use crate::git::GitRemote;
+use crate::{FetchStrategy, Git, GitReference};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {

@@ -41,10 +41,9 @@
 //! - <https://en.wikipedia.org/wiki/Exponential_backoff>
 //! - <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After>
 
-/// Git support is derived from Cargo's implementation.
-/// Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
-/// Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/util/network/retry.rs>
-
+//! Git support is derived from Cargo's implementation.
+//! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
+//! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/util/network/retry.rs>
 use std::cmp::min;
 use std::time::Duration;
 

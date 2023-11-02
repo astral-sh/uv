@@ -21,7 +21,7 @@ puffin-distribution = { path = "../puffin-distribution" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-package = { path = "../puffin-package" }
 puffin-traits = { path = "../puffin-traits" }
-puffin-vcs = { path = "../puffin-vcs" }
+puffin-git = { path = "../puffin-git" }
 distribution-filename = { path = "../distribution-filename" }
 
 anyhow = { workspace = true }
