@@ -2100,11 +2100,9 @@ name = "puffin-distribution"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "hex",
  "pep440_rs 0.3.12",
  "puffin-cache",
  "puffin-package",
- "sha2",
  "url",
 ]
 
