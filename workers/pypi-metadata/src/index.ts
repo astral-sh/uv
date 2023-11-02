@@ -6,7 +6,7 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    ctx: ExecutionContext
+    ctx: ExecutionContext,
   ): Promise<Response> {
     const cacheUrl = new URL(request.url);
 
@@ -20,7 +20,7 @@ export default {
 
     if (!response) {
       console.log(
-        `Response for request url: ${request.url} not present in cache. Fetching and caching request.`
+        `Response for request url: ${request.url} not present in cache. Fetching and caching request.`,
       );
 
       // Take the path from the request. The path will be like:
@@ -36,7 +36,7 @@ export default {
 
         // Read the metadata.
         const reader = new zip.ZipReader(
-          new zip.HttpRangeReader(`https://files.pythonhosted.org${path}`)
+          new zip.HttpRangeReader(`https://files.pythonhosted.org${path}`),
         );
         const file = await readMetadata(reader, name, version);
         if (!file) {
@@ -70,7 +70,7 @@ export default {
 async function readMetadata(
   reader: zip.ZipReader<any>,
   name: string,
-  version: string
+  version: string,
 ) {
   const entries = await reader.getEntriesGenerator();
   const target = `${name}-${version}.dist-info/METADATA`.toLowerCase();
