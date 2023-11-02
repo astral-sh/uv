@@ -899,7 +899,7 @@ pub fn install_wheel(
     sys_executable: impl AsRef<Path>,
 ) -> Result<String, Error> {
     let name = &filename.distribution;
-    let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_str());
+    let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_ref());
 
     let base_location = location.venv_root();
 
@@ -918,12 +918,12 @@ pub fn install_wheel(
             .join("site-packages")
     };
 
-    debug!(name = name.as_str(), "Opening zip");
+    debug!(name = name.as_ref(), "Opening zip");
     // No BufReader: https://github.com/zip-rs/zip/issues/381
     let mut archive =
         ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
 
-    debug!(name = name.as_str(), "Getting wheel metadata");
+    debug!(name = name.as_ref(), "Getting wheel metadata");
     let dist_info_prefix = find_dist_info(filename, &mut archive)?;
     let (name, _version) = read_metadata(&dist_info_prefix, &mut archive)?;
     // TODO: Check that name and version match

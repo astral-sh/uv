@@ -12,7 +12,7 @@ license = { workspace = true }
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
-puffin-package = { path = "../puffin-package" }
+puffin-normalize = { path = "../puffin-normalize" }
 
 fs-err = { workspace = true }
 pyproject-toml = { workspace = true }

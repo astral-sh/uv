@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "tomli",
+                name: PackageName(
+                    "tomli",
+                ),
                 extras: None,
                 version_or_url: None,
                 marker: None,

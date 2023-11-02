@@ -16,6 +16,7 @@ pep508_rs = { path = "../pep508-rs" }
 puffin-client = { path = "../puffin-client" }
 puffin-distribution = { path = "../puffin-distribution" }
 puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-normalize = { path = "../puffin-normalize" }
 puffin-package = { path = "../puffin-package" }
 distribution-filename = { path = "../distribution-filename" }
 

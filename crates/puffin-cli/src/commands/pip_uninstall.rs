@@ -7,7 +7,6 @@ use tracing::debug;
 
 use platform_host::Platform;
 use puffin_interpreter::Virtualenv;
-use puffin_package::package_name::PackageName;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -43,7 +42,7 @@ pub(crate) async fn pip_uninstall(
     let packages = {
         let mut packages = requirements
             .into_iter()
-            .map(|requirement| PackageName::normalize(requirement.name))
+            .map(|requirement| requirement.name)
             .collect::<Vec<_>>();
         packages.sort_unstable();
         packages.dedup();

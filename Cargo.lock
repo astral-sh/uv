@@ -704,7 +704,7 @@ version = "0.0.1"
 dependencies = [
  "pep440_rs 0.3.12",
  "platform-tags",
- "puffin-package",
+ "puffin-normalize",
  "thiserror",
  "url",
 ]
@@ -1737,6 +1737,7 @@ dependencies = [
  "log",
  "once_cell",
  "pep440_rs 0.3.12",
+ "puffin-normalize",
  "pyo3",
  "pyo3-log",
  "regex",
@@ -2010,6 +2011,7 @@ dependencies = [
  "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
+ "puffin-normalize",
  "puffin-package",
  "puffin-resolver",
  "puffin-workspace",
@@ -2031,6 +2033,7 @@ version = "0.0.1"
 dependencies = [
  "futures",
  "http-cache-reqwest",
+ "puffin-normalize",
  "puffin-package",
  "reqwest",
  "reqwest-middleware",
@@ -2102,6 +2105,7 @@ dependencies = [
  "anyhow",
  "pep440_rs 0.3.12",
  "puffin-cache",
+ "puffin-normalize",
  "puffin-package",
  "url",
 ]
@@ -2121,6 +2125,7 @@ dependencies = [
  "puffin-client",
  "puffin-distribution",
  "puffin-interpreter",
+ "puffin-normalize",
  "puffin-package",
  "rayon",
  "tempfile",
@@ -2149,6 +2154,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "puffin-normalize"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "indoc 2.0.4",
+ "insta",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "test-case",
+]
+
+[[package]]
 name = "puffin-package"
 version = "0.0.1"
 dependencies = [
@@ -2157,10 +2177,10 @@ dependencies = [
  "indoc 2.0.4",
  "insta",
  "mailparse",
- "memchr",
  "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
+ "puffin-normalize",
  "regex",
  "rfc2047-decoder",
  "serde",
@@ -2199,6 +2219,7 @@ dependencies = [
  "puffin-client",
  "puffin-distribution",
  "puffin-interpreter",
+ "puffin-normalize",
  "puffin-package",
  "puffin-traits",
  "sha2",
@@ -2228,7 +2249,7 @@ dependencies = [
  "fs-err",
  "pep440_rs 0.3.12",
  "pep508_rs",
- "puffin-package",
+ "puffin-normalize",
  "pyproject-toml",
  "serde",
  "thiserror",

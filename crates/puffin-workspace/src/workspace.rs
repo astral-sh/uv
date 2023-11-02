@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use toml_edit::Document;
 
 use pep508_rs::Requirement;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 
 use crate::toml::format_multiline_array;
 use crate::verbatim::VerbatimRequirement;
@@ -85,8 +85,7 @@ impl Workspace {
                 return false;
             };
 
-            PackageName::normalize(&requirement.requirement.name)
-                == PackageName::normalize(existing.name)
+            requirement.requirement.name == existing.name
         });
 
         if let Some(index) = index {
@@ -124,7 +123,7 @@ impl Workspace {
                 return false;
             };
 
-            PackageName::normalize(name) == PackageName::normalize(existing.name)
+            PackageName::new(name) == existing.name
         });
 
         let Some(index) = index else {

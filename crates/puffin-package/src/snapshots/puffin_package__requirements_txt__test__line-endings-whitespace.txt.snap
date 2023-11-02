@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "numpy",
+                name: PackageName(
+                    "numpy",
+                ),
                 extras: None,
                 version_or_url: None,
                 marker: None,
@@ -16,10 +18,14 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "pandas",
+                name: PackageName(
+                    "pandas",
+                ),
                 extras: Some(
                     [
-                        "tabulate",
+                        ExtraName(
+                            "tabulate",
+                        ),
                     ],
                 ),
                 version_or_url: Some(

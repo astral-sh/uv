@@ -18,6 +18,7 @@ platform-tags = { path = "../platform-tags" }
 pubgrub = { path = "../../vendor/pubgrub" }
 puffin-client = { path = "../puffin-client" }
 puffin-distribution = { path = "../puffin-distribution" }
+puffin-normalize = { path = "../puffin-normalize" }
 puffin-package = { path = "../puffin-package" }
 puffin-traits = { path = "../puffin-traits" }
 distribution-filename = { path = "../distribution-filename" }

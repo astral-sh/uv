@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use puffin_distribution::CachedDistribution;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
 

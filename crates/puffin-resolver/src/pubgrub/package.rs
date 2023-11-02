@@ -1,8 +1,7 @@
 use derivative::Derivative;
 use url::Url;
 
-use puffin_package::dist_info_name::DistInfoName;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::{ExtraName, PackageName};
 
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
 ///
@@ -17,7 +16,7 @@ pub enum PubGrubPackage {
     Root,
     Package(
         PackageName,
-        Option<DistInfoName>,
+        Option<ExtraName>,
         #[derivative(PartialEq = "ignore")]
         #[derivative(PartialOrd = "ignore")]
         #[derivative(Hash = "ignore")]

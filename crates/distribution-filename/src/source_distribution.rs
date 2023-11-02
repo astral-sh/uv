@@ -1,8 +1,10 @@
-use pep440_rs::Version;
-use puffin_package::package_name::PackageName;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+
 use thiserror::Error;
+
+use pep440_rs::Version;
+use puffin_normalize::PackageName;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceDistributionExtension {
@@ -70,7 +72,7 @@ impl SourceDistributionFilename {
         };
 
         if stem.len() <= package_name.as_ref().len() + "-".len()
-            || &PackageName::normalize(&stem[..package_name.as_ref().len()]) != package_name
+            || &PackageName::new(&stem[..package_name.as_ref().len()]) != package_name
         {
             return Err(SourceDistributionFilenameError::InvalidFilename {
                 filename: filename.to_string(),
@@ -111,8 +113,9 @@ pub enum SourceDistributionFilenameError {
 
 #[cfg(test)]
 mod tests {
+    use puffin_normalize::PackageName;
+
     use crate::SourceDistributionFilename;
-    use puffin_package::package_name::PackageName;
 
     /// Only test already normalized names since the parsing is lossy
     #[test]
@@ -123,7 +126,7 @@ mod tests {
             "foo-lib-1.2.3.tar.gz",
         ] {
             assert_eq!(
-                SourceDistributionFilename::parse(normalized, &PackageName::normalize("foo_lib"))
+                SourceDistributionFilename::parse(normalized, &PackageName::new("foo_lib"))
                     .unwrap()
                     .to_string(),
                 normalized
@@ -134,9 +137,7 @@ mod tests {
     #[test]
     fn errors() {
         for invalid in ["b-1.2.3.zip", "a-1.2.3-gamma.3.zip", "a-1.2.3.tar.zstd"] {
-            assert!(
-                SourceDistributionFilename::parse(invalid, &PackageName::normalize("a")).is_err()
-            );
+            assert!(SourceDistributionFilename::parse(invalid, &PackageName::new("a")).is_err());
         }
     }
 }

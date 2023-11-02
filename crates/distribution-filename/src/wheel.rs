@@ -1,15 +1,16 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use pep440_rs::Version;
 use thiserror::Error;
 use url::Url;
 
+use pep440_rs::Version;
 use platform_tags::Tags;
+use puffin_normalize::PackageName;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct WheelFilename {
-    pub distribution: String,
+    pub distribution: PackageName,
     pub version: Version,
     pub python_tag: Vec<String>,
     pub abi_tag: Vec<String>,
@@ -89,7 +90,7 @@ impl FromStr for WheelFilename {
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
         Ok(WheelFilename {
-            distribution: distribution.to_string(),
+            distribution: PackageName::new(distribution),
             version,
             python_tag: python_tag.split('.').map(String::from).collect(),
             abi_tag: abi_tag.split('.').map(String::from).collect(),

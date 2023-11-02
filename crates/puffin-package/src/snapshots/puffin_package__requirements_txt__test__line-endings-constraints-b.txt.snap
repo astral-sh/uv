@@ -6,7 +6,9 @@ RequirementsTxt {
     requirements: [
         RequirementEntry {
             requirement: Requirement {
-                name: "django",
+                name: PackageName(
+                    "django",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(
@@ -38,7 +40,9 @@ RequirementsTxt {
         },
         RequirementEntry {
             requirement: Requirement {
-                name: "pytz",
+                name: PackageName(
+                    "pytz",
+                ),
                 extras: None,
                 version_or_url: Some(
                     VersionSpecifier(

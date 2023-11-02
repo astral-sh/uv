@@ -1,7 +1,10 @@
-use crate::pubgrub::package::PubGrubPackage;
-use fxhash::FxHashMap;
-use puffin_package::package_name::PackageName;
 use std::cmp::Reverse;
+
+use fxhash::FxHashMap;
+
+use puffin_normalize::PackageName;
+
+use crate::pubgrub::package::PubGrubPackage;
 
 #[derive(Debug, Default)]
 pub(crate) struct PubGrubPriorities(FxHashMap<PackageName, usize>);

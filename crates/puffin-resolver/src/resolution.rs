@@ -10,7 +10,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_distribution::RemoteDistribution;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 use puffin_package::pypi_types::File;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
@@ -139,7 +139,7 @@ impl Graph {
             .node_indices()
             .map(|node| match &self.0[node] {
                 RemoteDistribution::Registry(name, version, _file) => Requirement {
-                    name: name.to_string(),
+                    name: name.clone(),
                     extras: None,
                     version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
                         VersionSpecifier::equals_version(version.clone()),
@@ -147,7 +147,7 @@ impl Graph {
                     marker: None,
                 },
                 RemoteDistribution::Url(name, url) => Requirement {
-                    name: name.to_string(),
+                    name: name.clone(),
                     extras: None,
                     version_or_url: Some(VersionOrUrl::Url(url.clone())),
                     marker: None,

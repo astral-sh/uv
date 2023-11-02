@@ -6,11 +6,11 @@ edition = "2021"
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
+puffin-normalize = { path = "../puffin-normalize" }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
 mailparse = { workspace = true }
-memchr = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
 rfc2047-decoder = { workspace = true }

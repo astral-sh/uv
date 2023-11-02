@@ -4,10 +4,11 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
-use puffin_package::extra_name::ExtraName;
+use url::Url;
+
+use puffin_normalize::ExtraName;
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use requirements::ExtrasSpecification;
-use url::Url;
 
 use crate::commands::ExitStatus;
 use crate::index_urls::IndexUrls;

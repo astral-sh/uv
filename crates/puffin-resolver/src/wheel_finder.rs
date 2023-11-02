@@ -16,7 +16,7 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistribution;
-use puffin_package::package_name::PackageName;
+use puffin_normalize::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::ResolveError;
@@ -85,7 +85,7 @@ impl<'a> WheelFinder<'a> {
                     package_sink.unbounded_send(Request::Package(requirement.clone()))?;
                 }
                 Some(VersionOrUrl::Url(url)) => {
-                    let package_name = PackageName::normalize(&requirement.name);
+                    let package_name = requirement.name.clone();
                     let package = RemoteDistribution::from_url(package_name.clone(), url.clone());
                     resolution.insert(package_name, package);
                 }
@@ -131,7 +131,7 @@ impl<'a> WheelFinder<'a> {
                         );
 
                         let package = RemoteDistribution::from_registry(
-                            PackageName::normalize(&metadata.name),
+                            metadata.name,
                             metadata.version,
                             file,
                         );
@@ -141,7 +141,7 @@ impl<'a> WheelFinder<'a> {
                         }
 
                         // Add to the resolved set.
-                        let normalized_name = PackageName::normalize(&requirement.name);
+                        let normalized_name = requirement.name.clone();
                         resolution.insert(normalized_name, package);
                     }
                 }

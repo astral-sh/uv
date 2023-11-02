@@ -18,6 +18,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
+puffin-normalize = { path = "../puffin-normalize" }
 
 once_cell = { workspace = true }
 regex = { workspace = true }
