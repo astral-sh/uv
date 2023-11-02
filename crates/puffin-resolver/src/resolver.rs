@@ -29,8 +29,8 @@ use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 use puffin_traits::BuildContext;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{DistributionFile, SdistFile, WheelFile};
 use crate::error::ResolveError;
+use crate::file::{DistributionFile, SdistFile, WheelFile};
 use crate::manifest::Manifest;
 use crate::pubgrub::{iter_requirements, version_range};
 use crate::pubgrub::{PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION};

@@ -4,7 +4,7 @@ use pubgrub::range::Range;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_package::package_name::PackageName;
 
-use crate::distribution::DistributionFile;
+use crate::file::DistributionFile;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;

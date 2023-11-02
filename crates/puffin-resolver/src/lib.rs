@@ -7,8 +7,8 @@ pub use resolver::{Reporter as ResolverReporter, Resolver};
 pub use wheel_finder::{Reporter as WheelFinderReporter, WheelFinder};
 
 mod candidate_selector;
-mod distribution;
 mod error;
+mod file;
 mod manifest;
 mod prerelease_mode;
 mod pubgrub;
