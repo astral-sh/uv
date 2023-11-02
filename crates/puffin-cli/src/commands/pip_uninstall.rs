@@ -22,6 +22,7 @@ pub(crate) async fn pip_uninstall(
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
+        project: _,
         requirements,
         constraints: _,
         extras: _,

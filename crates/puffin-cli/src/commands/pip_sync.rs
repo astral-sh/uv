@@ -33,6 +33,7 @@ pub(crate) async fn pip_sync(
 ) -> Result<ExitStatus> {
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
+        project: _,
         requirements,
         constraints: _,
         extras: _,

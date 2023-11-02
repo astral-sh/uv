@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 
 use pep508_rs::Requirement;
-use puffin_normalize::ExtraName;
+use puffin_normalize::{ExtraName, PackageName};
 use puffin_package::requirements_txt::RequirementsTxt;
 
 #[derive(Debug)]
@@ -58,6 +58,8 @@ impl ExtrasSpecification<'_> {
 
 #[derive(Debug, Default)]
 pub(crate) struct RequirementsSpecification {
+    /// The name of the project specifying requirements.
+    pub(crate) project: Option<PackageName>,
     /// The requirements for the project.
     pub(crate) requirements: Vec<Requirement>,
     /// The constraints for the project.
@@ -77,6 +79,7 @@ impl RequirementsSpecification {
                 let requirement = Requirement::from_str(name)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
+                    project: None,
                     requirements: vec![requirement],
                     constraints: vec![],
                     extras: HashSet::new(),
@@ -85,6 +88,7 @@ impl RequirementsSpecification {
             RequirementsSource::RequirementsTxt(path) => {
                 let requirements_txt = RequirementsTxt::parse(path, std::env::current_dir()?)?;
                 Self {
+                    project: None,
                     requirements: requirements_txt
                         .requirements
                         .into_iter()
@@ -100,6 +104,7 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to read `{}`", path.display()))?;
                 let mut used_extras = HashSet::new();
                 let mut requirements = Vec::new();
+                let mut project_name = None;
                 if let Some(project) = pyproject_toml.project {
                     requirements.extend(project.dependencies.unwrap_or_default());
                     // Include any optional dependencies specified in `extras`
@@ -114,9 +119,12 @@ impl RequirementsSpecification {
                             }
                         }
                     }
+                    // Parse the project name
+                    project_name = Some(PackageName::new(project.name));
                 }
 
                 Self {
+                    project: project_name,
                     requirements,
                     constraints: vec![],
                     extras: used_extras,
@@ -141,6 +149,11 @@ impl RequirementsSpecification {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.extras.extend(source.extras);
+
+            // Use the first project name discovered
+            if spec.project.is_none() {
+                spec.project = source.project;
+            }
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.

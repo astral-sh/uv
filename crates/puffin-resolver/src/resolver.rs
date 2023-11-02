@@ -37,6 +37,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERS
 use crate::resolution::Graph;
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
+    project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     markers: &'a MarkerEnvironment,
@@ -60,6 +61,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         Self {
             selector: CandidateSelector::from(&manifest),
             index: Arc::new(Index::default()),
+            project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             markers,
@@ -115,7 +117,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         &self,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Graph, ResolveError> {
-        let root = PubGrubPackage::Root(None);
+        let root = PubGrubPackage::Root(self.project.clone());
 
         // Keep track of the packages for which we've requested metadata.
         let mut in_flight = InFlight::default();

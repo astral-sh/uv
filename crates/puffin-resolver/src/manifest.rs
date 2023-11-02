@@ -1,4 +1,5 @@
 use pep508_rs::Requirement;
+use puffin_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseMode;
 use crate::resolution_mode::ResolutionMode;
@@ -11,6 +12,7 @@ pub struct Manifest {
     pub(crate) preferences: Vec<Requirement>,
     pub(crate) resolution_mode: ResolutionMode,
     pub(crate) prerelease_mode: PreReleaseMode,
+    pub(crate) project: Option<PackageName>,
 }
 
 impl Manifest {
@@ -20,6 +22,7 @@ impl Manifest {
         preferences: Vec<Requirement>,
         resolution_mode: ResolutionMode,
         prerelease_mode: PreReleaseMode,
+        project: Option<PackageName>,
     ) -> Self {
         Self {
             requirements,
@@ -27,6 +30,7 @@ impl Manifest {
             preferences,
             resolution_mode,
             prerelease_mode,
+            project,
         }
     }
 }
