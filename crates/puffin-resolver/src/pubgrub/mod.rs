@@ -6,15 +6,15 @@ use tracing::warn;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
 
-pub use crate::pubgrub::failure::ResolutionFailureReporter;
 pub(crate) use crate::pubgrub::package::PubGrubPackage;
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};
+pub use crate::pubgrub::report::ResolutionFailureReporter;
 pub(crate) use crate::pubgrub::specifier::PubGrubSpecifier;
 pub(crate) use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 
-mod failure;
 mod package;
 mod priority;
+mod report;
 mod specifier;
 mod version;
 

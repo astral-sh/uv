@@ -1,12 +1,17 @@
+use std::fmt;
 use std::ops::Deref;
 
 use pubgrub::package::Package;
+use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, Reporter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use pubgrub::version_set::VersionSet;
 
-/// Default reporter able to generate an explanation as a [String].
+use super::{PubGrubPackage, PubGrubVersion};
+
+/// Puffin derivative of [`pubgrub::report::DefaultStringReporter`] for customized display
+/// of package resolution errors.
 pub struct ResolutionFailureReporter {
     /// Number of explanations already with a line reference.
     ref_count: usize,
@@ -298,16 +303,115 @@ impl ResolutionFailureReporter {
     }
 }
 
-impl<P: Package, VS: VersionSet> Reporter<P, VS> for ResolutionFailureReporter {
+impl Reporter<PubGrubPackage, Range<PubGrubVersion>> for ResolutionFailureReporter {
     type Output = String;
 
-    fn report(derivation_tree: &DerivationTree<P, VS>) -> Self::Output {
+    fn report(
+        derivation_tree: &DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
+    ) -> Self::Output {
         match derivation_tree {
-            DerivationTree::External(external) => external.to_string(),
+            DerivationTree::External(external) => {
+                PuffinExternal::from_pubgrub(external.to_owned()).to_string()
+            }
             DerivationTree::Derived(derived) => {
                 let mut reporter = Self::new();
                 reporter.build_recursive(derived);
                 reporter.lines.join("\n")
+            }
+        }
+    }
+}
+
+/// Puffin derivative of [`pubgrub::report::External`] for customized display
+/// for Puffin internal [`PubGrubPackage`].
+#[derive(Debug, Clone)]
+enum PuffinExternal {
+    /// Initial incompatibility aiming at picking the root package for the first decision.
+    NotRoot(PubGrubPackage, PubGrubVersion),
+    /// There are no versions in the given set for this package.
+    NoVersions(PubGrubPackage, Range<PubGrubVersion>),
+    /// Dependencies of the package are unavailable for versions in that set.
+    UnavailableDependencies(PubGrubPackage, Range<PubGrubVersion>),
+    /// Incompatibility coming from the dependencies of a given package.
+    FromDependencyOf(
+        PubGrubPackage,
+        Range<PubGrubVersion>,
+        PubGrubPackage,
+        Range<PubGrubVersion>,
+    ),
+}
+
+impl PuffinExternal {
+    fn from_pubgrub(external: External<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+        match external {
+            External::NotRoot(p, v) => PuffinExternal::NotRoot(p, v),
+            External::NoVersions(p, vs) => PuffinExternal::NoVersions(p, vs),
+            External::UnavailableDependencies(p, vs) => {
+                PuffinExternal::UnavailableDependencies(p, vs)
+            }
+            External::FromDependencyOf(p, vs, p_dep, vs_dep) => {
+                PuffinExternal::FromDependencyOf(p, vs, p_dep, vs_dep)
+            }
+        }
+    }
+}
+
+impl fmt::Display for PuffinExternal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotRoot(package, version) => {
+                write!(f, "we are solving dependencies of {} {}", package, version)
+            }
+            Self::NoVersions(package, set) => {
+                if set == &Range::full() {
+                    write!(f, "there is no available version for {}", package)
+                } else {
+                    write!(f, "there is no version of {} in {}", package, set)
+                }
+            }
+            Self::UnavailableDependencies(package, set) => {
+                if set == &Range::full() {
+                    write!(f, "dependencies of {} are unavailable", package)
+                } else {
+                    write!(
+                        f,
+                        "dependencies of {} at version {} are unavailable",
+                        package, set
+                    )
+                }
+            }
+            Self::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                if package_set == &Range::full() && dependency_set == &Range::full() {
+                    write!(f, "{} depends on {}", package, dependency)
+                } else if package_set == &Range::full() {
+                    write!(
+                        f,
+                        "{} depends on {} {}",
+                        package, dependency, dependency_set
+                    )
+                } else if dependency_set == &Range::full() {
+                    if matches!(package, PubGrubPackage::Root(_)) {
+                        // Exclude the dummy version for root packages
+                        write!(f, "{} depends on {}", package, dependency)
+                    } else {
+                        write!(f, "{} {} depends on {}", package, package_set, dependency)
+                    }
+                } else {
+                    if matches!(package, PubGrubPackage::Root(_)) {
+                        // Exclude the dummy version for root packages
+                        write!(
+                            f,
+                            "{} depends on {} {}",
+                            package, dependency, dependency_set
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{} {} depends on {} {}",
+                            package, package_set, dependency, dependency_set
+                        )
+                    }
+                }
             }
         }
     }
