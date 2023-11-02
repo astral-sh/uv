@@ -888,55 +888,7 @@ pub(crate) fn fetch(
     }
 
     debug!("Performing a Git fetch for: {remote_url}");
-    match strategy {
-        FetchStrategy::Cli => fetch_with_cli(repo, remote_url, &refspecs, tags),
-        FetchStrategy::Libgit2 => {
-            let git_config = git2::Config::open_default()?;
-            with_fetch_options(&git_config, remote_url, &mut |mut opts| {
-                if tags {
-                    opts.download_tags(git2::AutotagOption::All);
-                }
-                // The `fetch` operation here may fail spuriously due to a corrupt
-                // repository. It could also fail, however, for a whole slew of other
-                // reasons (aka network related reasons). We want Cargo to automatically
-                // recover from corrupt repositories, but we don't want Cargo to stomp
-                // over other legitimate errors.
-                //
-                // Consequently we save off the error of the `fetch` operation and if it
-                // looks like a "corrupt repo" error then we blow away the repo and try
-                // again. If it looks like any other kind of error, or if we've already
-                // blown away the repository, then we want to return the error as-is.
-                let mut repo_reinitialized = false;
-                loop {
-                    debug!("initiating fetch of {refspecs:?} from {remote_url}");
-                    let res =
-                        repo.remote_anonymous(remote_url)?
-                            .fetch(&refspecs, Some(&mut opts), None);
-                    let err = match res {
-                        Ok(()) => break,
-                        Err(e) => e,
-                    };
-                    debug!("fetch failed: {}", err);
-
-                    if !repo_reinitialized
-                        && matches!(err.class(), ErrorClass::Reference | ErrorClass::Odb)
-                    {
-                        repo_reinitialized = true;
-                        debug!(
-                            "looks like this is a corrupt repository, reinitializing \
-                         and trying again"
-                        );
-                        if reinitialize(repo).is_ok() {
-                            continue;
-                        }
-                    }
-
-                    return Err(err.into());
-                }
-                Ok(())
-            })
-        }
-    }
+    fetch_with_cli(repo, remote_url, &refspecs, tags)
 }
 
 /// Attempts to use `git` CLI installed on the system to fetch a repository,

@@ -59,6 +59,9 @@ jobs:
         with:
           tool: cargo-insta
       - uses: Swatinem/rust-cache@v2
+      - uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo insta test --all --all-features --unreferenced reject
