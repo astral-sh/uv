@@ -13,7 +13,7 @@ use puffin_normalize::{ExtraName, PackageName};
 #[derive(Debug, Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash)]
 pub enum PubGrubPackage {
-    Root,
+    Root(Option<PackageName>),
     Package(
         PackageName,
         Option<ExtraName>,
@@ -27,7 +27,13 @@ pub enum PubGrubPackage {
 impl std::fmt::Display for PubGrubPackage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PubGrubPackage::Root => write!(f, "root"),
+            PubGrubPackage::Root(name) => {
+                if let Some(name) = name {
+                    write!(f, "{}", name.as_ref())
+                } else {
+                    write!(f, "root")
+                }
+            }
             PubGrubPackage::Package(name, None, ..) => write!(f, "{name}"),
             PubGrubPackage::Package(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")

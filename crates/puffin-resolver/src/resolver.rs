@@ -115,7 +115,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         &self,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Graph, ResolveError> {
-        let root = PubGrubPackage::Root;
+        let root = PubGrubPackage::Root(None);
 
         // Keep track of the packages for which we've requested metadata.
         let mut in_flight = InFlight::default();
@@ -284,7 +284,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
-            PubGrubPackage::Root => {}
+            PubGrubPackage::Root(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
                 if in_flight.insert_package(package_name) {
@@ -371,7 +371,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Option<PubGrubVersion>, ResolveError> {
         return match package {
-            PubGrubPackage::Root => Ok(Some(MIN_VERSION.clone())),
+            PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 debug!("Searching for a compatible version of {package_name} @ {url} ({range})",);
@@ -461,7 +461,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
-            PubGrubPackage::Root => {
+            PubGrubPackage::Root(_) => {
                 let mut constraints =
                     DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
 
@@ -754,7 +754,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     fn on_progress(&self, package: &PubGrubPackage, version: &PubGrubVersion) {
         if let Some(reporter) = self.reporter.as_ref() {
             match package {
-                PubGrubPackage::Root => {}
+                PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Package(package_name, extra, Some(url)) => {
                     reporter.on_progress(package_name, extra.as_ref(), VersionOrUrl::Url(url));
                 }
