@@ -572,7 +572,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         while let Some(response) = response_stream.next().await {
             match response? {
                 Response::Package(package_name, metadata) => {
-                    trace!("Received package metadata for: {}", package_name);
+                    trace!("Received package metadata for: {package_name}");
 
                     // Group the distributions by version and kind, discarding any incompatible
                     // distributions.
@@ -624,11 +624,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .insert(file.hashes.sha256.clone(), metadata);
                 }
                 Response::WheelUrl(url, metadata) => {
-                    trace!("Received remote wheel metadata for: {}", url);
+                    trace!("Received remote wheel metadata for: {url}");
                     self.index.versions.insert(url.to_string(), metadata);
                 }
                 Response::SdistUrl(url, metadata) => {
-                    trace!("Received remote source distribution metadata for: {}", url);
+                    trace!("Received remote source distribution metadata for: {url}");
                     self.index.versions.insert(url.to_string(), metadata);
                 }
             }
@@ -688,6 +688,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             Request::SdistUrl(package_name, url) => {
                 let fetcher = SourceDistributionFetcher::new(self.build_context);
                 let distribution = RemoteDistributionRef::from_url(&package_name, &url);
+
                 let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => {
                         debug!("Found source distribution metadata in cache: {url}");
