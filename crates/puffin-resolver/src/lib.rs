@@ -7,6 +7,7 @@ pub use resolver::{Reporter as ResolverReporter, Resolver};
 pub use wheel_finder::{Reporter as WheelFinderReporter, WheelFinder};
 
 mod candidate_selector;
+mod distribution;
 mod error;
 mod file;
 mod manifest;
@@ -15,5 +16,4 @@ mod pubgrub;
 mod resolution;
 mod resolution_mode;
 mod resolver;
-mod source_distribution;
 mod wheel_finder;
