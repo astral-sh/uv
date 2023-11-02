@@ -16,7 +16,7 @@ use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionFailureReporter, ResolutionMode};
 
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
@@ -142,10 +142,9 @@ pub(crate) async fn pip_compile(
             derivation_tree.collapse_no_versions();
             #[allow(clippy::print_stderr)]
             {
-                let report = miette::Report::msg(pubgrub::report::DefaultStringReporter::report(
-                    &derivation_tree,
-                ))
-                .context("No solution found when resolving dependencies:");
+                let report =
+                    miette::Report::msg(ResolutionFailureReporter::report(&derivation_tree))
+                        .context("No solution found when resolving dependencies:");
                 eprint!("{report:?}");
             }
             return Ok(ExitStatus::Failure);
