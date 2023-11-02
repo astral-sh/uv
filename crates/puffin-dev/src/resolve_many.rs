@@ -1,10 +1,10 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
 use clap::Parser;
 use directories::ProjectDirs;
+use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
@@ -24,6 +24,9 @@ pub(crate) struct ResolveManyArgs {
     list: PathBuf,
     #[clap(long)]
     limit: Option<usize>,
+    /// Path to the cache directory.
+    #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
+    cache_dir: Option<PathBuf>,
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
@@ -36,7 +39,10 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
     };
 
     let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = project_dirs.as_ref().map(ProjectDirs::cache_dir);
+    let cache = args
+        .cache_dir
+        .as_deref()
+        .or_else(|| project_dirs.as_ref().map(ProjectDirs::cache_dir));
 
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, cache)?;
