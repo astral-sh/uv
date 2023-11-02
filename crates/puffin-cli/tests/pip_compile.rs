@@ -8,7 +8,9 @@ use assert_fs::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-const BIN_NAME: &str = "puffin";
+use common::{BIN_NAME, INSTA_FILTERS};
+
+mod common;
 
 #[test]
 fn missing_requirements_in() -> Result<()> {
@@ -69,11 +71,7 @@ fn compile_requirements_in() -> Result<()> {
     requirements_in.write_str("django==5.0b1")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -119,11 +117,7 @@ dependencies = [
     )?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -163,11 +157,7 @@ fn compile_constraints_txt() -> Result<()> {
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -210,11 +200,7 @@ fn compile_constraints_inline() -> Result<()> {
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -311,11 +297,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -364,11 +346,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
     )?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -417,11 +395,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
@@ -470,11 +444,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")

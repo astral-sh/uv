@@ -4,7 +4,9 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-const BIN_NAME: &str = "puffin";
+use common::BIN_NAME;
+
+mod common;
 
 #[test]
 fn no_arguments() -> Result<()> {

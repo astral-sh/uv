@@ -8,7 +8,9 @@ use assert_fs::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-const BIN_NAME: &str = "puffin";
+use common::{BIN_NAME, INSTA_FILTERS};
+
+mod common;
 
 #[test]
 fn missing_requirements_txt() -> Result<()> {
@@ -70,9 +72,7 @@ fn install() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -115,9 +115,7 @@ fn install_copy() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -162,9 +160,7 @@ fn install_hardlink() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -209,9 +205,7 @@ fn install_many() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -264,9 +258,7 @@ fn noop() -> Result<()> {
         .success();
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -331,9 +323,7 @@ fn link() -> Result<()> {
     venv.assert(predicates::path::is_dir());
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -391,9 +381,7 @@ fn add_remove() -> Result<()> {
     requirements_txt.write_str("tomli==2.0.1")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -458,9 +446,7 @@ fn install_sequential() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -518,9 +504,7 @@ fn upgrade() -> Result<()> {
     requirements_txt.write_str("tomli==2.0.1")?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d+ms|\d+\.\d+s", "[TIME]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
