@@ -15,11 +15,39 @@ use tracing::{debug, info, warn};
 use url::Url;
 
 use crate::util::retry;
-use crate::{FetchStrategy, GitReference};
+use crate::FetchStrategy;
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
+
+/// A reference to commit or commit-ish.
+#[derive(Debug, Clone)]
+pub(crate) enum GitReference {
+    /// From a branch.
+    #[allow(unused)]
+    Branch(String),
+    /// From a tag.
+    #[allow(unused)]
+    Tag(String),
+    /// From a reference that's ambiguously a branch or tag.
+    BranchOrTag(String),
+    /// From a specific revision. Can be a commit hash (either short or full),
+    /// or a named reference like `refs/pull/493/head`.
+    Rev(String),
+    /// The default branch of the repository, the reference named `HEAD`.
+    DefaultBranch,
+}
+
+impl GitReference {
+    pub(crate) fn from_rev(rev: &str) -> Self {
+        if looks_like_commit_hash(rev) || rev.starts_with("refs/") {
+            Self::Rev(rev.to_owned())
+        } else {
+            Self::BranchOrTag(rev.to_owned())
+        }
+    }
+}
 
 /// A short abbreviated OID.
 ///
@@ -208,6 +236,23 @@ impl GitReference {
                 b.get()
                     .target()
                     .ok_or_else(|| anyhow::format_err!("branch `{s}` did not have a target"))?
+            }
+
+            // Attempt to resolve the branch, then the tag.
+            GitReference::BranchOrTag(s) => {
+                let name = format!("origin/{s}");
+
+                repo.find_branch(&name, git2::BranchType::Remote)
+                    .ok()
+                    .and_then(|b| b.get().target())
+                    .or_else(|| {
+                        let refname = format!("refs/remotes/origin/tags/{s}");
+                        let id = repo.refname_to_id(&refname).ok()?;
+                        let obj = repo.find_object(id, None).ok()?;
+                        let obj = obj.peel(ObjectType::Commit).ok()?;
+                        Some(obj.id())
+                    })
+                    .ok_or_else(|| anyhow::format_err!("failed to find branch or tag `{s}`"))?
             }
 
             // We'll be using the HEAD commit
@@ -859,6 +904,15 @@ pub(crate) fn fetch(
             refspecs.push(format!("+refs/tags/{tag}:refs/remotes/origin/tags/{tag}"));
         }
 
+        GitReference::BranchOrTag(branch_or_tag) => {
+            refspecs.push(format!(
+                "+refs/heads/{branch_or_tag}:refs/remotes/origin/{branch_or_tag}"
+            ));
+            refspecs.push(format!(
+                "+refs/tags/{branch_or_tag}:refs/remotes/origin/tags/{branch_or_tag}"
+            ));
+        }
+
         GitReference::DefaultBranch => {
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
@@ -1158,6 +1212,7 @@ fn github_fast_path(
     let github_branch_name = match reference {
         GitReference::Branch(branch) => branch,
         GitReference::Tag(tag) => tag,
+        GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
         GitReference::Rev(rev) => {
             if rev.starts_with("refs/") {

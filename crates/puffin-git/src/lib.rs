@@ -1,5 +1,7 @@
 use url::Url;
 
+use crate::git::GitReference;
+
 pub use self::source::GitSource;
 
 mod git;
@@ -22,24 +24,22 @@ impl TryFrom<Url> for Git {
 
     /// Initialize a [`Git`] source from a URL.
     fn try_from(mut url: Url) -> Result<Self, Self::Error> {
-        let mut reference = GitReference::DefaultBranch;
-        for (k, v) in url.query_pairs() {
-            match &k[..] {
-                // Map older 'ref' to branch.
-                "branch" | "ref" => reference = GitReference::Branch(v.into_owned()),
-                "rev" => reference = GitReference::Rev(v.into_owned()),
-                "tag" => reference = GitReference::Tag(v.into_owned()),
-                _ => {}
-            }
-        }
-        let precise = url.fragment().map(git2::Oid::from_str).transpose()?;
+        // Remove any query parameters and fragments.
         url.set_fragment(None);
         url.set_query(None);
+
+        // If the URL ends with a reference, like `https://git.example.com/MyProject.git@v1.0`,
+        // extract it.
+        let mut reference = GitReference::DefaultBranch;
+        if let Some((prefix, rev)) = url.as_str().rsplit_once('@') {
+            reference = GitReference::from_rev(rev);
+            url = Url::parse(prefix)?;
+        }
 
         Ok(Self {
             url,
             reference,
-            precise,
+            precise: None,
         })
     }
 }
@@ -48,20 +48,6 @@ impl std::fmt::Display for Git {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.url)
     }
-}
-
-/// Information to find a specific commit in a Git repository.
-#[derive(Debug, Clone)]
-pub enum GitReference {
-    /// From a tag.
-    Tag(String),
-    /// From a branch.
-    Branch(String),
-    /// From a specific revision. Can be a commit hash (either short or full),
-    /// or a named reference like `refs/pull/493/head`.
-    Rev(String),
-    /// The default branch of the repository, the reference named `HEAD`.
-    DefaultBranch,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -9,8 +9,8 @@ use tracing::debug;
 
 use puffin_cache::{digest, CanonicalUrl};
 
-use crate::git::GitRemote;
-use crate::{FetchStrategy, Git, GitReference};
+use crate::git::{GitReference, GitRemote};
+use crate::{FetchStrategy, Git};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
