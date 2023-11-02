@@ -687,14 +687,20 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let build_tree = SourceDistributionBuildTree::new(self.build_context);
                 let distribution = RemoteDistributionRef::from_url(&package_name, &url);
                 let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
-                    Ok(Some(metadata)) => metadata,
-                    Ok(None) => build_tree
-                        .download_and_build_sdist(&distribution, self.client)
-                        .await
-                        .map_err(|err| ResolveError::UrlDistribution {
-                            url: url.clone(),
-                            err,
-                        })?,
+                    Ok(Some(metadata)) => {
+                        debug!("Found source distribution metadata in cache: {url}");
+                        metadata
+                    }
+                    Ok(None) => {
+                        debug!("Downloading source distribution from: {url}");
+                        build_tree
+                            .download_and_build_sdist(&distribution, self.client)
+                            .await
+                            .map_err(|err| ResolveError::UrlDistribution {
+                                url: url.clone(),
+                                err,
+                            })?
+                    }
                     Err(err) => {
                         error!(
                             "Failed to read source distribution {distribution} from cache: {err}",
@@ -715,18 +721,22 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let build_tree = SourceDistributionBuildTree::new(self.build_context);
                 let distribution = RemoteDistributionRef::from_url(&package_name, &url);
                 let metadata = match build_tree.find_dist_info(&distribution, self.tags) {
-                    Ok(Some(metadata)) => metadata,
-                    Ok(None) => build_tree
-                        .download_wheel(&distribution, self.client)
-                        .await
-                        .map_err(|err| ResolveError::UrlDistribution {
-                            url: url.clone(),
-                            err,
-                        })?,
+                    Ok(Some(metadata)) => {
+                        debug!("Found wheel metadata in cache: {url}");
+                        metadata
+                    }
+                    Ok(None) => {
+                        debug!("Downloading wheel from: {url}");
+                        build_tree
+                            .download_wheel(&distribution, self.client)
+                            .await
+                            .map_err(|err| ResolveError::UrlDistribution {
+                                url: url.clone(),
+                                err,
+                            })?
+                    }
                     Err(err) => {
-                        error!(
-                            "Failed to read built distribution {distribution} from cache: {err}",
-                        );
+                        error!("Failed to read wheel {distribution} from cache: {err}",);
                         build_tree
                             .download_wheel(&distribution, self.client)
                             .await

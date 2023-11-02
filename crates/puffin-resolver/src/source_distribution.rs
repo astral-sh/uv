@@ -1,23 +1,28 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use fs_err::tokio as fs;
 use tempfile::tempdir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
+use url::Url;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistributionRef;
+use puffin_git::{Git, GitSource};
 use puffin_package::pypi_types::Metadata21;
 use puffin_traits::BuildContext;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
 const REMOTE_WHEELS_CACHE: &str = "remote-wheels-v0";
+
+const GIT_CACHE: &str = "git-v0";
 
 /// Stores wheels built from source distributions. We need to keep those separate from the regular
 /// wheel cache since a wheel with the same name may be uploaded after we made our build and in that
@@ -49,16 +54,36 @@ impl<'a, T: BuildContext> SourceDistributionBuildTree<'a, T> {
         client: &RegistryClient,
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
-        let url = distribution.url()?;
-        let reader = client.stream_external(&url).await?;
-        let mut reader = tokio::io::BufReader::new(reader.compat());
+
         let temp_dir = tempdir()?;
 
-        // Download the source distribution.
-        let sdist_filename = distribution.filename()?;
-        let sdist_file = temp_dir.path().join(sdist_filename.as_ref());
-        let mut writer = tokio::fs::File::create(&sdist_file).await?;
-        tokio::io::copy(&mut reader, &mut writer).await?;
+        let source = DistributionSource::try_from(distribution)?;
+        let sdist_file = match source {
+            DistributionSource::Url(url) => {
+                debug!("Fetching source distribution from: {url}");
+
+                let reader = client.stream_external(&url).await?;
+                let mut reader = tokio::io::BufReader::new(reader.compat());
+
+                // Download the source distribution.
+                let sdist_filename = distribution.filename()?;
+                let sdist_file = temp_dir.path().join(sdist_filename.as_ref());
+                let mut writer = tokio::fs::File::create(&sdist_file).await?;
+                tokio::io::copy(&mut reader, &mut writer).await?;
+
+                sdist_file
+            }
+            DistributionSource::Git(git) => {
+                debug!("Fetching source distribution from: {git}");
+
+                let git_dir = self.0.cache().map_or_else(
+                    || temp_dir.path().join(GIT_CACHE),
+                    |cache| cache.join(GIT_CACHE),
+                );
+                let source = GitSource::new(git, git_dir);
+                tokio::task::spawn_blocking(move || source.fetch()).await??
+            }
+        };
 
         // Create a directory for the wheel.
         let wheel_dir = self.0.cache().map_or_else(
@@ -165,4 +190,39 @@ fn read_dist_info(wheel: &CachedWheel) -> Result<Metadata21> {
         archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?,
     )?;
     Ok(Metadata21::parse(dist_info.as_bytes())?)
+}
+
+/// The host source for a distribution.
+#[derive(Debug)]
+enum DistributionSource<'a> {
+    /// The distribution is available at a remote URL. This could be a dedicated URL, or a URL
+    /// served by a registry, like PyPI.
+    Url(Cow<'a, Url>),
+    /// The distribution is available in a remote Git repository.
+    Git(Git),
+}
+
+impl<'a> TryFrom<&'a RemoteDistributionRef<'_>> for DistributionSource<'a> {
+    type Error = Error;
+
+    fn try_from(value: &'a RemoteDistributionRef<'_>) -> Result<Self, Self::Error> {
+        match value {
+            // If a distribution is hosted on a registry, it must be available at a URL.
+            RemoteDistributionRef::Registry(_, _, file) => {
+                let url = Url::parse(&file.url)?;
+                Ok(Self::Url(Cow::Owned(url)))
+            }
+            // If a distribution is specified via a direct URL, it could be a URL to a hosted file,
+            // or a URL to a Git repository.
+            RemoteDistributionRef::Url(_, url) => {
+                if let Some(url) = url.as_str().strip_prefix("git+") {
+                    let url = Url::parse(url)?;
+                    let git = Git::try_from(url)?;
+                    Ok(Self::Git(git))
+                } else {
+                    Ok(Self::Url(Cow::Borrowed(url)))
+                }
+            }
+        }
+    }
 }

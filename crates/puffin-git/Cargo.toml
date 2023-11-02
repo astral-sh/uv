@@ -1,0 +1,30 @@
+[package]
+name = "puffin-git"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+puffin-cache = { path = "../puffin-cache" }
+
+anyhow = { workspace = true }
+cargo-util = { version = "0.2.6" }
+git2 = { version = "0.18.1" }
+glob = { workspace = true }
+hex = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+tokio.workspace = true
+
+[features]
+vendored-libgit2 = ["git2/vendored-libgit2"]
+vendored-openssl = ["git2/vendored-openssl"]
