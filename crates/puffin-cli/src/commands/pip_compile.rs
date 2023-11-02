@@ -42,6 +42,17 @@ pub(crate) async fn pip_compile(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // If the user requests `extras` but does not provide a pyproject toml source
+    if !matches!(extras, ExtrasSpecification::None)
+        && !requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::PyprojectToml(_)))
+    {
+        return Err(anyhow!(
+            "Requesting extras requires a pyproject.toml input file."
+        ));
+    }
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         requirements,
