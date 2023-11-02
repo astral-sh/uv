@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use fs_err::tokio as fs;
 use tempfile::tempdir_in;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -10,12 +10,13 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
+use puffin_distribution::RemoteDistributionRef;
 use puffin_git::{Git, GitSource};
 use puffin_package::pypi_types::Metadata21;
 use puffin_traits::BuildContext;
 
 use crate::distribution::cached_wheel::CachedWheel;
-use crate::distribution::precise::Precise;
+use crate::distribution::source::Source;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
@@ -33,7 +34,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Read the [`Metadata21`] from a built source distribution, if it exists in the cache.
     pub(crate) fn find_dist_info(
         &self,
-        distribution: &Precise<'_>,
+        distribution: &RemoteDistributionRef<'_>,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
         CachedWheel::find_in_cache(distribution, tags, self.0.cache().join(BUILT_WHEELS_CACHE))
@@ -45,49 +46,36 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Download and build a source distribution, storing the built wheel in the cache.
     pub(crate) async fn download_and_build_sdist(
         &self,
-        distribution: &Precise<'_>,
+        distribution: &RemoteDistributionRef<'_>,
         client: &RegistryClient,
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
 
-        let sdist_file = match distribution {
-            Precise::Registry(.., file) => {
-                debug!("Fetching source distribution from registry: {}", file.url);
-
-                let reader = client.stream_external(&file.url).await?;
-                let mut reader = tokio::io::BufReader::new(reader.compat());
-
-                // Download the source distribution.
-                let temp_dir = tempdir_in(self.0.cache())?.into_path();
-                let sdist_file = temp_dir.join(&file.filename);
-                let mut writer = tokio::fs::File::create(&sdist_file).await?;
-                tokio::io::copy(&mut reader, &mut writer).await?;
-
-                sdist_file
-            }
-            Precise::Url(.., url) => {
-                debug!("Fetching source distribution from URL: {url}");
+        let source = Source::try_from(distribution)?;
+        let sdist_file = match source {
+            Source::Url(url) => {
+                debug!("Fetching source distribution from: {url}");
 
                 let reader = client.stream_external(&url).await?;
                 let mut reader = tokio::io::BufReader::new(reader.compat());
 
                 // Download the source distribution.
                 let temp_dir = tempdir_in(self.0.cache())?.into_path();
-                let sdist_file = temp_dir.join(url.path_segments()
-                    .and_then(Iterator::last)
-                    .ok_or_else(|| anyhow!("Could not parse filename from URL: {url}"))?);
+                let sdist_filename = distribution.filename()?;
+                let sdist_file = temp_dir.join(sdist_filename.as_ref());
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
                 tokio::io::copy(&mut reader, &mut writer).await?;
 
                 sdist_file
             }
-            Precise::Git(.., git) => {
-                debug!(
-                    "Building source distribution from Git checkout: {}",
-                    git.revision()
-                );
+            Source::Git(git) => {
+                debug!("Fetching source distribution from: {git}");
 
-                git.checkout().to_path_buf()
+                let git_dir = self.0.cache().join(GIT_CACHE);
+                let source = GitSource::new(git, git_dir);
+                tokio::task::spawn_blocking(move || source.fetch())
+                    .await??
+                    .into()
             }
         };
 
@@ -121,12 +109,22 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// For example, given a Git dependency with a reference to a branch or tag, return a URL
     /// with a precise reference to the current commit of that branch or tag.
     pub(crate) async fn precise(&self, url: &Url) -> Result<Option<Url>> {
-        let url = url.as_str().strip_prefix("git+")?;
+        let Some(url) = url.as_str().strip_prefix("git+") else {
+            return Ok(None);
+        };
+
+        // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
+        // commit, etc.).
         let url = Url::parse(url)?;
         let git = Git::try_from(url)?;
         let git_dir = self.0.cache().join(GIT_CACHE);
         let source = GitSource::new(git, git_dir);
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
-        Ok(Some(Url::from(precise)))
+
+        // TODO(charlie): Avoid this double-parse by encoding the source kind separately from the
+        // URL.
+        let url = Url::from(Git::from(precise));
+        let url = Url::parse(&format!("{}{}", "git+", url.as_str()))?;
+        Ok(Some(url))
     }
 }

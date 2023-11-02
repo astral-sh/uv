@@ -4,7 +4,7 @@ use crate::git::GitReference;
 pub use crate::source::GitSource;
 
 mod git;
- mod source;
+mod source;
 mod util;
 
 /// A reference to a Git repository.
@@ -19,14 +19,6 @@ pub struct Git {
 }
 
 impl Git {
-    pub(crate) fn new(url: Url, reference: GitReference, precise: Option<git2::Oid>) -> Self {
-        Self {
-            url,
-            reference,
-            precise,
-        }
-    }
-
     #[must_use]
     pub(crate) fn with_precise(mut self, precise: git2::Oid) -> Self {
         self.precise = Some(precise);
@@ -69,10 +61,10 @@ impl From<Git> for Url {
         } else {
             // Otherwise, add the branch or tag name.
             match git.reference {
-                GitReference::Branch(rev) |
-                GitReference::Tag(rev) |
-                GitReference::BranchOrTag(rev) |
-                GitReference::Rev(rev) => {
+                GitReference::Branch(rev)
+                | GitReference::Tag(rev)
+                | GitReference::BranchOrTag(rev)
+                | GitReference::Rev(rev) => {
                     url.set_path(&format!("{}@{}", url.path(), rev));
                 }
                 GitReference::DefaultBranch => {}

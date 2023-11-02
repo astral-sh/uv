@@ -7,10 +7,10 @@ use anyhow::Result;
 use reqwest::Client;
 use tracing::debug;
 
-use puffin_cache::{CanonicalUrl, digest};
+use puffin_cache::{digest, CanonicalUrl};
 
-use crate::{FetchStrategy, Git};
 use crate::git::GitRemote;
+use crate::{FetchStrategy, Git};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -34,7 +34,7 @@ impl GitSource {
         }
     }
 
-    pub fn fetch(self) -> Result<Git> {
+    pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
         let ident = digest(&CanonicalUrl::new(&self.git.url));
         let db_path = self.cache.join("db").join(&ident);
@@ -77,6 +77,28 @@ impl GitSource {
             .join(short_id.as_str());
         db.copy_to(actual_rev, &checkout_path, self.strategy, &self.client)?;
 
-        Ok(self.git.with_precise(actual_rev))
+        Ok(Fetch {
+            git: self.git.with_precise(actual_rev),
+            path: checkout_path,
+        })
+    }
+}
+
+pub struct Fetch {
+    /// The [`Git`] reference that was fetched.
+    git: Git,
+    /// The path to the checked out repository.
+    path: PathBuf,
+}
+
+impl From<Fetch> for Git {
+    fn from(fetch: Fetch) -> Self {
+        fetch.git
+    }
+}
+
+impl From<Fetch> for PathBuf {
+    fn from(fetch: Fetch) -> Self {
+        fetch.path
     }
 }

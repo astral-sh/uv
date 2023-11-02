@@ -6,9 +6,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
+use puffin_distribution::RemoteDistributionRef;
 use puffin_package::pypi_types::Metadata21;
-
-use crate::distribution::precise::Precise;
 
 /// A cached wheel built from a remote source.
 #[derive(Debug)]
@@ -24,7 +23,7 @@ impl CachedWheel {
 
     /// Search for a wheel matching the tags that was built from the given distribution.
     pub(super) fn find_in_cache(
-        distribution: &Precise<'_>,
+        distribution: &RemoteDistributionRef<'_>,
         tags: &Tags,
         cache: impl AsRef<Path>,
     ) -> Option<Self> {

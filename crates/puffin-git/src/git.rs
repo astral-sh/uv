@@ -922,7 +922,9 @@ pub(crate) fn fetch(
                 refspecs.push(format!("+{rev}:{rev}"));
             } else if let Some(oid_to_fetch) = oid_to_fetch {
                 refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else if rev.parse::<git2::Oid>().is_ok() {
+            } else if rev.parse::<git2::Oid>().is_ok()
+                && (rev.len() == 40 || rev.starts_with("refs/"))
+            {
                 // There is a specific commit to fetch and we will do so in shallow-mode only
                 // to not disturb the previous logic.
                 // Note that with typical settings for shallowing, we will just fetch a single `rev`
