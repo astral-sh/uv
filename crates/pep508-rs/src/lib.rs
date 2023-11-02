@@ -11,7 +11,7 @@
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::from_str(marker).unwrap();
 //! assert_eq!(dependency_specification.name.as_ref(), "requests");
-//! assert_eq!(dependency_specification.extras, Some(vec![ExtraName::new("security"), ExtraName::new("tests")]));
+//! assert_eq!(dependency_specification.extras, Some(vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()]));
 //! ```
 
 #![deny(missing_docs)]
@@ -63,19 +63,11 @@ pub struct Pep508Error {
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum Pep508ErrorSource {
     /// An error from our parser
+    #[error("{0}")]
     String(String),
     /// A url parsing error
     #[error(transparent)]
     UrlError(#[from] url::ParseError),
-}
-
-impl Display for Pep508ErrorSource {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Pep508ErrorSource::String(string) => string.fmt(f),
-            Pep508ErrorSource::UrlError(parse_err) => parse_err.fmt(f),
-        }
-    }
 }
 
 impl Display for Pep508Error {
@@ -568,7 +560,11 @@ fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
                     });
                 }
             }
-            Some(_) | None => return Ok(PackageName::new(name)),
+            Some(_) | None => {
+                // Unwrap safety: We parse and validate the package name manually and generate a
+                // better error message than `PackageName::new` would
+                return Ok(PackageName::new(name).unwrap());
+            }
         }
     }
 }
@@ -641,10 +637,13 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
         // end or next identifier?
         match chars.next() {
             Some((_, ',')) => {
-                extras.push(ExtraName::new(buffer));
+                // Unwrap safety: We parse and validate the extra name manually and generate a
+                // better error message than `ExtraName::new` would
+                extras.push(ExtraName::new(buffer).unwrap());
             }
             Some((_, ']')) => {
-                extras.push(ExtraName::new(buffer));
+                // Unwrap safety: Same as above
+                extras.push(ExtraName::new(buffer).unwrap());
                 break;
             }
             Some((pos, other)) => {
@@ -944,8 +943,11 @@ mod tests {
         let requests = Requirement::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
-            name: PackageName::new("requests"),
-            extras: Some(vec![ExtraName::new("security"), ExtraName::new("tests")]),
+            name: PackageName::from_str("requests").unwrap(),
+            extras: Some(vec![
+                ExtraName::from_str("security").unwrap(),
+                ExtraName::from_str("tests").unwrap(),
+            ]),
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::new(
@@ -1086,7 +1088,7 @@ mod tests {
     #[test]
     fn error_extras1() {
         let numpy = Requirement::from_str("black[d]").unwrap();
-        assert_eq!(numpy.extras, Some(vec![ExtraName::new("d")]));
+        assert_eq!(numpy.extras, Some(vec![ExtraName::from_str("d").unwrap()]));
     }
 
     #[test]
@@ -1094,7 +1096,10 @@ mod tests {
         let numpy = Requirement::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
             numpy.extras,
-            Some(vec![ExtraName::new("d"), ExtraName::new("jupyter")])
+            Some(vec![
+                ExtraName::from_str("d").unwrap(),
+                ExtraName::from_str("jupyter").unwrap()
+            ])
         );
     }
 
@@ -1141,7 +1146,7 @@ mod tests {
                 .unwrap();
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
-            name: PackageName::new("pip"),
+            name: PackageName::from_str("pip").unwrap(),
             extras: None,
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),

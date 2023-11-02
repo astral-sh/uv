@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use miette::{Diagnostic, IntoDiagnostic};
+use puffin_normalize::PackageName;
 use thiserror::Error;
 use tracing::info;
 
@@ -12,7 +13,7 @@ use crate::printer::Printer;
 
 /// Remove a dependency from the workspace.
 #[allow(clippy::unnecessary_wraps)]
-pub(crate) fn remove(name: &str, _printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn remove(name: &PackageName, _printer: Printer) -> Result<ExitStatus> {
     match remove_impl(name) {
         Ok(status) => Ok(status),
         Err(err) => {
@@ -46,7 +47,7 @@ enum RemoveError {
     RemovalError(String, #[source] WorkspaceError),
 }
 
-fn remove_impl(name: &str) -> miette::Result<ExitStatus> {
+fn remove_impl(name: &PackageName) -> miette::Result<ExitStatus> {
     // Locate the workspace.
     let cwd = std::env::current_dir().into_diagnostic()?;
     let Some(workspace_root) = puffin_workspace::find_pyproject_toml(cwd) else {

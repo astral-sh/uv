@@ -8,9 +8,9 @@ info:
     - "--extra"
     - invalid name!
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpXIuamZ
+    - /tmp/.tmpiOHlGv
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp0LGEEX/.venv
+    VIRTUAL_ENV: /tmp/.tmpA05wES/.venv
 ---
 success: false
 exit_code: 2

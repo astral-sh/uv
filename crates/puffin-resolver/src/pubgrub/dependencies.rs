@@ -53,7 +53,7 @@ impl PubGrubDependencies {
                     .clone()
                     .into_iter()
                     .flatten()
-                    .map(|extra| to_pubgrub(requirement, Some(ExtraName::new(extra)))),
+                    .map(|extra| to_pubgrub(requirement, Some(extra))),
             ) {
                 let (package, version) = result?;
 
@@ -101,7 +101,7 @@ impl PubGrubDependencies {
                     .clone()
                     .into_iter()
                     .flatten()
-                    .map(|extra| to_pubgrub(constraint, Some(ExtraName::new(extra)))),
+                    .map(|extra| to_pubgrub(constraint, Some(extra))),
             ) {
                 let (package, version) = result?;
 

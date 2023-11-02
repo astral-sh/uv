@@ -9,11 +9,11 @@ use directories::ProjectDirs;
 use tempfile::tempdir;
 use url::Url;
 
-use puffin_normalize::ExtraName;
+use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use requirements::ExtrasSpecification;
 
-use crate::commands::ExitStatus;
+use crate::commands::{extra_name_with_clap_error, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::requirements::RequirementsSource;
 
@@ -78,7 +78,7 @@ struct PipCompileArgs {
     constraint: Vec<PathBuf>,
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
-    #[clap(long, conflicts_with = "all_extras")]
+    #[clap(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     extra: Vec<ExtraName>,
 
     /// Include all optional dependencies.
@@ -169,7 +169,7 @@ struct AddArgs {
 #[derive(Args)]
 struct RemoveArgs {
     /// The name of the package to remove (e.g., `Django`).
-    name: String,
+    name: PackageName,
 }
 
 async fn inner() -> Result<ExitStatus> {

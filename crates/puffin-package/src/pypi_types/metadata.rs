@@ -13,7 +13,7 @@ use tracing::warn;
 
 use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
-use puffin_normalize::PackageName;
+use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
 
 /// Python Package Metadata 2.1 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>
@@ -48,7 +48,7 @@ pub struct Metadata21 {
     pub requires_python: Option<VersionSpecifiers>,
     pub requires_external: Vec<String>,
     pub project_urls: HashMap<String, String>,
-    pub provides_extras: Vec<String>,
+    pub provides_extras: Vec<ExtraName>,
 }
 
 /// <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/error.rs>
@@ -86,6 +86,8 @@ pub enum Error {
     /// Invalid Requirement
     #[error(transparent)]
     Pep508Error(#[from] Pep508Error),
+    #[error(transparent)]
+    InvalidName(#[from] InvalidNameError),
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>
@@ -127,7 +129,7 @@ impl Metadata21 {
             headers
                 .get_first_value("Name")
                 .ok_or(Error::FieldNotFound("Name"))?,
-        );
+        )?;
         let version = Version::from_str(
             &headers
                 .get_first_value("Version")
@@ -155,9 +157,9 @@ impl Metadata21 {
             .map(|requires_dist| LenientRequirement::from_str(requires_dist).map(Requirement::from))
             .collect::<Result<Vec<_>, _>>()?;
         let provides_dist = get_all_values("Provides-Dist")
-            .iter()
+            .into_iter()
             .map(PackageName::new)
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         let obsoletes_dist = get_all_values("Obsoletes-Dist");
         let maintainer = get_first_value("Maintainer");
         let maintainer_email = get_first_value("Maintainer-email");
@@ -174,7 +176,10 @@ impl Metadata21 {
                 Some((name, value)) => Ok((name.to_string(), value.trim().to_string())),
             })
             .collect::<Result<_, _>>()?;
-        let provides_extras = get_all_values("Provides-Extra");
+        let provides_extras = get_all_values("Provides-Extra")
+            .into_iter()
+            .map(ExtraName::new)
+            .collect::<Result<Vec<_>, _>>()?;
         let description_content_type = get_first_value("Description-Content-Type");
         Ok(Metadata21 {
             metadata_version,

@@ -1,10 +1,9 @@
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Error, Result};
-use once_cell::sync::Lazy;
-use regex::Regex;
+use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of an extra dependency group.
 ///
@@ -14,8 +13,33 @@ use regex::Regex;
 /// See:
 /// - <https://peps.python.org/pep-0685/#specification/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub struct ExtraName(String);
+
+impl ExtraName {
+    /// Create a validated, normalized extra name.
+    pub fn new(name: String) -> Result<Self, InvalidNameError> {
+        validate_and_normalize_owned(name).map(Self)
+    }
+}
+
+impl FromStr for ExtraName {
+    type Err = InvalidNameError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        validate_and_normalize_ref(name).map(Self)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExtraName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
 
 impl Display for ExtraName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -23,82 +47,8 @@ impl Display for ExtraName {
     }
 }
 
-static NAME_NORMALIZE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-_.]+").unwrap());
-static NAME_VALIDATE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$").unwrap());
-
-impl ExtraName {
-    pub fn new(name: impl AsRef<str>) -> Self {
-        // TODO(charlie): Avoid allocating in the common case (when no normalization is required).
-        let mut normalized = NAME_NORMALIZE.replace_all(name.as_ref(), "-").to_string();
-        normalized.make_ascii_lowercase();
-        Self(normalized)
-    }
-
-    /// Create a validated, normalized extra name.
-    pub fn validate(name: impl AsRef<str>) -> Result<Self> {
-        if NAME_VALIDATE.is_match(name.as_ref()) {
-            Ok(Self::new(name))
-        } else {
-            Err(anyhow!(
-                "Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters"
-            ))
-        }
-    }
-}
-
 impl AsRef<str> for ExtraName {
     fn as_ref(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-
-impl FromStr for ExtraName {
-    type Err = Error;
-
-    fn from_str(name: &str) -> Result<Self> {
-        Self::validate(name)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize() {
-        assert_eq!(ExtraName::new("friendly-bard").as_ref(), "friendly-bard");
-        assert_eq!(ExtraName::new("Friendly-Bard").as_ref(), "friendly-bard");
-        assert_eq!(ExtraName::new("FRIENDLY-BARD").as_ref(), "friendly-bard");
-        assert_eq!(ExtraName::new("friendly.bard").as_ref(), "friendly-bard");
-        assert_eq!(ExtraName::new("friendly_bard").as_ref(), "friendly-bard");
-        assert_eq!(ExtraName::new("friendly--bard").as_ref(), "friendly-bard");
-        assert_eq!(
-            ExtraName::new("FrIeNdLy-._.-bArD").as_ref(),
-            "friendly-bard"
-        );
-    }
-
-    #[test]
-    fn validate() {
-        // Unchanged
-        assert_eq!(
-            ExtraName::validate("friendly-bard").unwrap().as_ref(),
-            "friendly-bard"
-        );
-        assert_eq!(ExtraName::validate("1okay").unwrap().as_ref(), "1okay");
-        assert_eq!(ExtraName::validate("okay2").unwrap().as_ref(), "okay2");
-        // Normalizes
-        assert_eq!(
-            ExtraName::validate("Friendly-Bard").unwrap().as_ref(),
-            "friendly-bard"
-        );
-        // Failures...
-        assert!(ExtraName::validate(" starts-with-space").is_err());
-        assert!(ExtraName::validate("-starts-with-dash").is_err());
-        assert!(ExtraName::validate("ends-with-dash-").is_err());
-        assert!(ExtraName::validate("ends-with-space ").is_err());
-        assert!(ExtraName::validate("includes!invalid-char").is_err());
-        assert!(ExtraName::validate("space in middle").is_err());
+        &self.0
     }
 }

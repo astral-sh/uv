@@ -98,7 +98,7 @@ impl Workspace {
     }
 
     /// Remove a dependency from the workspace.
-    pub fn remove_dependency(&mut self, name: &str) -> Result<(), WorkspaceError> {
+    pub fn remove_dependency(&mut self, name: &PackageName) -> Result<(), WorkspaceError> {
         let Some(project) = self
             .document
             .get_mut("project")
@@ -123,7 +123,7 @@ impl Workspace {
                 return false;
             };
 
-            PackageName::new(name) == existing.name
+            name == &existing.name
         });
 
         let Some(index) = index else {

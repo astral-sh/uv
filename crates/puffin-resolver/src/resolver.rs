@@ -518,7 +518,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     if !metadata
                         .provides_extras
                         .iter()
-                        .any(|provided_extra| ExtraName::new(provided_extra) == *extra)
+                        .any(|provided_extra| provided_extra == extra)
                     {
                         return Ok(Dependencies::Unknown);
                     }
