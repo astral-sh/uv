@@ -8,11 +8,13 @@ use puffin_normalize::{ExtraName, PackageName};
 
 pub(crate) use crate::pubgrub::package::PubGrubPackage;
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};
+pub use crate::pubgrub::report::ResolutionFailureReporter;
 pub(crate) use crate::pubgrub::specifier::PubGrubSpecifier;
 pub(crate) use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 
 mod package;
 mod priority;
+mod report;
 mod specifier;
 mod version;
 
