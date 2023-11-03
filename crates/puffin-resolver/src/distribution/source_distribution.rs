@@ -125,7 +125,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         Ok(metadata21)
     }
 
-    /// Given a URL dependency for a source distribution, return a precise variant, if possible.
+    /// Given a remote source distribution, return a precise variant, if possible.
     ///
     /// For example, given a Git dependency with a reference to a branch or tag, return a URL
     /// with a precise reference to the current commit of that branch or tag.
@@ -133,35 +133,24 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub(crate) async fn precise(&self, url: &Url) -> Result<Option<Url>> {
-        // Extract the subdirectory.
-        let subdirectory = url.fragment().and_then(|fragment| {
-            fragment
-                .split('&')
-                .find_map(|fragment| fragment.strip_prefix("subdirectory="))
-        });
-
-        let Some(url) = url.as_str().strip_prefix("git+") else {
+    pub(crate) async fn precise(
+        &self,
+        distribution: &RemoteDistributionRef<'_>,
+    ) -> Result<Option<Url>> {
+        let source = Source::try_from(distribution)?;
+        let Source::Git(git, subdirectory) = source else {
             return Ok(None);
         };
 
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
-        let git = Git::try_from(Url::parse(url)?)?;
         let dir = self.0.cache().join(GIT_CACHE);
         let source = GitSource::new(git, dir);
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
         let git = Git::from(precise);
 
-        // TODO(charlie): Avoid this double-parse by encoding the source kind separately from the
-        // URL.
-        let mut url = Url::parse(&format!("{}{}", "git+", Url::from(git).as_str()))?;
-
-        // Re-add the subdirectory fragment.
-        if let Some(subdirectory) = subdirectory {
-            url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
-        }
-
-        Ok(Some(url))
+        // Re-encode as a URL.
+        let source = Source::Git(git, subdirectory);
+        Ok(Some(source.into()))
     }
 }
