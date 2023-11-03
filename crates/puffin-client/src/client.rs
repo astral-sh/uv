@@ -241,6 +241,7 @@ impl RegistryClient {
                     .map_err(|err| Error::WheelMetadataFromRemoteZip(url.clone(), err))?;
                 let mut metadata = Metadata21::parse(text.as_bytes())?;
                 if metadata.description.is_some() {
+                    // Perf (and cache size) improvement
                     metadata.description = Some("[omitted]".to_string());
                 }
                 let is_immutable = response
