@@ -5,12 +5,13 @@ use fs_err::tokio as fs;
 use tempfile::tempdir_in;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
+use url::Url;
 
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistributionRef;
-use puffin_git::GitSource;
+use puffin_git::{Git, GitSource};
 use puffin_package::pypi_types::Metadata21;
 use puffin_traits::BuildContext;
 
@@ -72,7 +73,9 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 
                 let git_dir = self.0.cache().join(GIT_CACHE);
                 let source = GitSource::new(git, git_dir);
-                tokio::task::spawn_blocking(move || source.fetch()).await??
+                tokio::task::spawn_blocking(move || source.fetch())
+                    .await??
+                    .into()
             }
         };
 
@@ -99,5 +102,29 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 
         debug!("Finished building: {distribution}");
         Ok(metadata21)
+    }
+
+    /// Given a URL dependency for a source distribution, return a precise variant, if possible.
+    ///
+    /// For example, given a Git dependency with a reference to a branch or tag, return a URL
+    /// with a precise reference to the current commit of that branch or tag.
+    pub(crate) async fn precise(&self, url: &Url) -> Result<Option<Url>> {
+        let Some(url) = url.as_str().strip_prefix("git+") else {
+            return Ok(None);
+        };
+
+        // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
+        // commit, etc.).
+        let url = Url::parse(url)?;
+        let git = Git::try_from(url)?;
+        let git_dir = self.0.cache().join(GIT_CACHE);
+        let source = GitSource::new(git, git_dir);
+        let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
+
+        // TODO(charlie): Avoid this double-parse by encoding the source kind separately from the
+        // URL.
+        let url = Url::from(Git::from(precise));
+        let url = Url::parse(&format!("{}{}", "git+", url.as_str()))?;
+        Ok(Some(url))
     }
 }

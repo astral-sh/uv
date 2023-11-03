@@ -2371,6 +2371,7 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "pubgrub",
+ "puffin-cache",
  "puffin-client",
  "puffin-distribution",
  "puffin-git",

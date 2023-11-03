@@ -1,8 +1,7 @@
 use url::Url;
 
 use crate::git::GitReference;
-
-pub use self::source::GitSource;
+pub use crate::source::GitSource;
 
 mod git;
 mod source;
@@ -17,6 +16,14 @@ pub struct Git {
     reference: GitReference,
     /// The precise commit to use, if known.
     precise: Option<git2::Oid>,
+}
+
+impl Git {
+    #[must_use]
+    pub(crate) fn with_precise(mut self, precise: git2::Oid) -> Self {
+        self.precise = Some(precise);
+        self
+    }
 }
 
 impl TryFrom<Url> for Git {
@@ -41,6 +48,30 @@ impl TryFrom<Url> for Git {
             reference,
             precise: None,
         })
+    }
+}
+
+impl From<Git> for Url {
+    fn from(git: Git) -> Self {
+        let mut url = git.url;
+
+        // If we have a precise commit, add `@` and the commit hash to the URL.
+        if let Some(precise) = git.precise {
+            url.set_path(&format!("{}@{}", url.path(), precise));
+        } else {
+            // Otherwise, add the branch or tag name.
+            match git.reference {
+                GitReference::Branch(rev)
+                | GitReference::Tag(rev)
+                | GitReference::BranchOrTag(rev)
+                | GitReference::Rev(rev) => {
+                    url.set_path(&format!("{}@{}", url.path(), rev));
+                }
+                GitReference::DefaultBranch => {}
+            }
+        }
+
+        url
     }
 }
 

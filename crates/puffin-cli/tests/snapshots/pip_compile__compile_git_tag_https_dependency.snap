@@ -6,9 +6,9 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpSeBcqs
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpb1bm7b
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp3ahlnG/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp5Bcufx/.venv
 ---
 success: true
 exit_code: 0
@@ -19,7 +19,7 @@ blinker==1.7.0
     # via flask
 click==8.1.7
     # via flask
-flask @ git+https://github.com/pallets/flask.git@3.0.0
+flask @ git+https://github.com/pallets/flask.git@735a4701d6d5e848241e7d7535db898efb62d400
 itsdangerous==2.1.2
     # via flask
 jinja2==3.1.2

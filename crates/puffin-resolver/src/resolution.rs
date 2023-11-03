@@ -6,6 +6,8 @@ use petgraph::visit::EdgeRef;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
+use url::Url;
+use waitmap::WaitMap;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
@@ -56,6 +58,7 @@ impl Graph {
     pub fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FxHashMap<PackageName, FxHashMap<Version, File>>,
+        redirects: &WaitMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Self {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
@@ -81,6 +84,9 @@ impl Graph {
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
+                    let url = redirects
+                        .get(url)
+                        .map_or_else(|| url.clone(), |url| url.value().clone());
                     let pinned_package =
                         RemoteDistribution::from_url(package_name.clone(), url.clone());
 

@@ -182,7 +182,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     })
             else {
                 let selection = state.partial_solution.extract_solution();
-                return Ok(Graph::from_state(&selection, &pins, &state));
+                return Ok(Graph::from_state(
+                    &selection,
+                    &pins,
+                    &self.index.redirects,
+                    &state,
+                ));
             };
             next = highest_priority_pkg;
 
@@ -572,7 +577,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         while let Some(response) = response_stream.next().await {
             match response? {
                 Response::Package(package_name, metadata) => {
-                    trace!("Received package metadata for: {}", package_name);
+                    trace!("Received package metadata for: {package_name}");
 
                     // Group the distributions by version and kind, discarding any incompatible
                     // distributions.
@@ -623,13 +628,19 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .versions
                         .insert(file.hashes.sha256.clone(), metadata);
                 }
-                Response::WheelUrl(url, metadata) => {
-                    trace!("Received remote wheel metadata for: {}", url);
+                Response::WheelUrl(url, precise, metadata) => {
+                    trace!("Received remote wheel metadata for: {url}");
                     self.index.versions.insert(url.to_string(), metadata);
+                    if let Some(precise) = precise {
+                        self.index.redirects.insert(url, precise);
+                    }
                 }
-                Response::SdistUrl(url, metadata) => {
-                    trace!("Received remote source distribution metadata for: {}", url);
+                Response::SdistUrl(url, precise, metadata) => {
+                    trace!("Received remote source distribution metadata for: {url}");
                     self.index.versions.insert(url.to_string(), metadata);
+                    if let Some(precise) = precise {
+                        self.index.redirects.insert(url, precise);
+                    }
                 }
             }
         }
@@ -687,7 +698,20 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Build a source distribution from a remote URL, returning its metadata.
             Request::SdistUrl(package_name, url) => {
                 let fetcher = SourceDistributionFetcher::new(self.build_context);
-                let distribution = RemoteDistributionRef::from_url(&package_name, &url);
+                let precise =
+                    fetcher
+                        .precise(&url)
+                        .await
+                        .map_err(|err| ResolveError::UrlDistribution {
+                            url: url.clone(),
+                            err,
+                        })?;
+
+                let distribution = RemoteDistributionRef::from_url(
+                    &package_name,
+                    precise.as_ref().unwrap_or(&url),
+                );
+
                 let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => {
                         debug!("Found source distribution metadata in cache: {url}");
@@ -716,7 +740,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             })?
                     }
                 };
-                Ok(Response::SdistUrl(url, metadata))
+                Ok(Response::SdistUrl(url, precise, metadata))
             }
             // Fetch wheel metadata from a remote URL.
             Request::WheelUrl(package_name, url) => {
@@ -748,7 +772,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             })?
                     }
                 };
-                Ok(Response::WheelUrl(url, metadata))
+                Ok(Response::WheelUrl(url, None, metadata))
             }
         }
     }
@@ -810,9 +834,9 @@ enum Response {
     /// The returned metadata for a source distribution hosted on a registry.
     Sdist(SdistFile, Metadata21),
     /// The returned metadata for a wheel hosted on a remote URL.
-    WheelUrl(Url, Metadata21),
+    WheelUrl(Url, Option<Url>, Metadata21),
     /// The returned metadata for a source distribution hosted on a remote URL.
-    SdistUrl(Url, Metadata21),
+    SdistUrl(Url, Option<Url>, Metadata21),
 }
 
 pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistributionFile>;
@@ -850,6 +874,9 @@ struct Index {
 
     /// A map from wheel SHA or URL to the metadata for that wheel.
     versions: WaitMap<String, Metadata21>,
+
+    /// A map from source URL to precise URL.
+    redirects: WaitMap<Url, Url>,
 }
 
 impl Default for Index {
@@ -857,6 +884,7 @@ impl Default for Index {
         Self {
             packages: WaitMap::new(),
             versions: WaitMap::new(),
+            redirects: WaitMap::new(),
         }
     }
 }
