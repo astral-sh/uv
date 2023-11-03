@@ -1,19 +1,17 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use async_http_range_reader::{
-    AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod,
-};
-use distribution_filename::WheelFilename;
+use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
 use futures::{AsyncRead, StreamExt, TryStreamExt};
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
-use reqwest::{Client, ClientBuilder, StatusCode};
+use reqwest::{header, Client, ClientBuilder, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use tracing::{debug, trace};
 use url::Url;
 
+use distribution_filename::WheelFilename;
 use puffin_normalize::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
@@ -236,12 +234,22 @@ impl RegistryClient {
             {
                 debug!("Cache hit for wheel metadata for {url}");
                 cached_metadata
-            } else if let Some(mut reader) = self.range_reader(url.clone()).await? {
+            } else if let Some((mut reader, response)) = self.range_reader(url.clone()).await? {
                 debug!("Using remote zip reader for wheel metadata for {url}");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader)
                     .await
                     .map_err(|err| Error::WheelMetadataFromRemoteZip(url.clone(), err))?;
-                wheel_metadata_write_cache(url, self.cache.as_deref(), &text).await?;
+                let is_immutable = response
+                    .headers()
+                    .get(header::CACHE_CONTROL)
+                    .and_then(|header| header.to_str().ok())
+                    .unwrap_or_default()
+                    .split(',')
+                    .any(|entry| entry.trim().to_lowercase() == "immutable");
+                if is_immutable {
+                    debug!("Immutable (cacheable) wheel metadata for {url}");
+                    wheel_metadata_write_cache(url, self.cache.as_deref(), &text).await?;
+                }
                 text
             } else {
                 debug!("Downloading whole wheel to extract metadata from {url}");
@@ -290,15 +298,13 @@ impl RegistryClient {
     /// Try using HTTP range requests to only read the METADATA file of a remote zip
     ///
     /// <https://github.com/prefix-dev/rip/pull/66>
-    async fn range_reader(&self, url: Url) -> Result<Option<AsyncHttpRangeReader>, Error> {
-        let response = AsyncHttpRangeReader::new(
-            self.client_raw.clone(),
-            url.clone(),
-            CheckSupportMethod::Head,
-        )
-        .await;
+    async fn range_reader(
+        &self,
+        url: Url,
+    ) -> Result<Option<(AsyncHttpRangeReader, Response)>, Error> {
+        let response = AsyncHttpRangeReader::new_head(self.client_raw.clone(), url.clone()).await;
         match response {
-            Ok(reader) => Ok(Some(reader)),
+            Ok((reader, response)) => Ok(Some((reader, response))),
             Err(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported) => Ok(None),
             Err(err) => Err(err.into()),
         }
