@@ -121,18 +121,24 @@ impl SourceDistributionBuilder {
     /// contents from an archive if necessary.
     pub async fn setup(
         sdist: &Path,
+        subdirectory: Option<&Path>,
         interpreter_info: &InterpreterInfo,
         build_context: &impl BuildContext,
     ) -> Result<SourceDistributionBuilder, Error> {
         let temp_dir = tempdir()?;
 
         // TODO(konstin): Parse and verify filenames
-        let source_tree = if fs::metadata(sdist)?.is_dir() {
+        let source_root = if fs::metadata(sdist)?.is_dir() {
             sdist.to_path_buf()
         } else {
             debug!("Unpacking for build: {}", sdist.display());
             let extracted = temp_dir.path().join("extracted");
             extract_archive(sdist, &extracted)?
+        };
+        let source_tree = if let Some(subdir) = subdirectory {
+            source_root.join(subdir)
+        } else {
+            source_root
         };
 
         // Check if we have a PEP 517 build, a legacy setup.py, or an edge case

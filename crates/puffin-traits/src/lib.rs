@@ -74,6 +74,7 @@ pub trait BuildContext {
     fn build_source_distribution<'a>(
         &'a self,
         sdist: &'a Path,
+        subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
 }
