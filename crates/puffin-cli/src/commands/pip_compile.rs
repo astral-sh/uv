@@ -44,6 +44,7 @@ pub(crate) async fn pip_compile(
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
+        project,
         requirements,
         constraints,
         extras: used_extras,
@@ -84,6 +85,7 @@ pub(crate) async fn pip_compile(
         preferences,
         resolution_mode,
         prerelease_mode,
+        project,
     );
 
     // Detect the current Python interpreter.

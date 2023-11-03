@@ -19,7 +19,7 @@ impl PubGrubPriorities {
     /// Return the priority of the given package, if it exists.
     pub(crate) fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
         match package {
-            PubGrubPackage::Root => Some(Reverse(0)),
+            PubGrubPackage::Root(_) => Some(Reverse(0)),
             PubGrubPackage::Package(name, _, _) => self
                 .0
                 .get(name)
