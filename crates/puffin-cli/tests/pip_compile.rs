@@ -885,9 +885,9 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Resolve two packages from a `requirements.in` file with the same Git HTTPS dependency.
+/// Resolve a Git dependency with a declared name that differs from the true name of the package.
 #[test]
-fn compile_git_concurrent_access() -> Result<()> {
+fn compile_git_mismatched_name() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");

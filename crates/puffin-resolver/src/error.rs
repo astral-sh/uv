@@ -3,6 +3,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep508_rs::Requirement;
+use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 
@@ -25,6 +26,12 @@ pub enum ResolveError {
 
     #[error(transparent)]
     PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>),
+
+    #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
+    NameMismatch {
+        given: PackageName,
+        metadata: PackageName,
+    },
 
     #[error("Failed to build distribution: {filename}")]
     RegistryDistribution {

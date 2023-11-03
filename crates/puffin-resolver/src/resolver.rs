@@ -354,7 +354,10 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             match candidate.file {
                 DistributionFile::Wheel(file) => {
                     if in_flight.insert_file(&file) {
-                        request_sink.unbounded_send(Request::Wheel(file.clone()))?;
+                        request_sink.unbounded_send(Request::Wheel(
+                            candidate.package_name.clone(),
+                            file.clone(),
+                        ))?;
                     }
                 }
                 DistributionFile::Sdist(file) => {
@@ -441,7 +444,10 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 match candidate.file {
                     DistributionFile::Wheel(file) => {
                         if in_flight.insert_file(&file) {
-                            request_sink.unbounded_send(Request::Wheel(file.clone()))?;
+                            request_sink.unbounded_send(Request::Wheel(
+                                candidate.package_name.clone(),
+                                file.clone(),
+                            ))?;
                         }
                     }
                     DistributionFile::Sdist(file) => {
@@ -663,12 +669,21 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .await
             }
             // Fetch wheel metadata from the registry.
-            Request::Wheel(file) => {
-                self.client
+            Request::Wheel(package_name, file) => {
+                let metadata = self
+                    .client
                     .file(file.clone().into())
-                    .map_ok(move |metadata| Response::Wheel(file, metadata))
                     .map_err(ResolveError::Client)
-                    .await
+                    .await?;
+
+                if metadata.name != package_name {
+                    return Err(ResolveError::NameMismatch {
+                        metadata: metadata.name,
+                        given: package_name,
+                    });
+                }
+
+                Ok(Response::Wheel(file, metadata))
             }
             // Build a source distribution from the registry, returning its metadata.
             Request::Sdist(package_name, version, file) => {
@@ -697,6 +712,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             })?
                     }
                 };
+
+                if metadata.name != package_name {
+                    return Err(ResolveError::NameMismatch {
+                        metadata: metadata.name,
+                        given: package_name,
+                    });
+                }
+
                 Ok(Response::Sdist(file, metadata))
             }
             // Build a source distribution from a remote URL, returning its metadata.
@@ -746,6 +769,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             })?
                     }
                 };
+
+                if metadata.name != package_name {
+                    return Err(ResolveError::NameMismatch {
+                        metadata: metadata.name,
+                        given: package_name,
+                    });
+                }
+
                 Ok(Response::SdistUrl(url, precise, metadata))
             }
             // Fetch wheel metadata from a remote URL.
@@ -781,6 +812,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             })?
                     }
                 };
+
+                if metadata.name != package_name {
+                    return Err(ResolveError::NameMismatch {
+                        metadata: metadata.name,
+                        given: package_name,
+                    });
+                }
+
                 Ok(Response::WheelUrl(url, None, metadata))
             }
         }
@@ -825,7 +864,7 @@ enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
     /// A request to fetch wheel metadata from a registry.
-    Wheel(WheelFile),
+    Wheel(PackageName, WheelFile),
     /// A request to fetch source distribution metadata from a registry.
     Sdist(PackageName, pep440_rs::Version, SdistFile),
     /// A request to fetch wheel metadata from a remote URL.
