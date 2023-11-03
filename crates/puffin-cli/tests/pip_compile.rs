@@ -460,6 +460,51 @@ optional-dependencies.foo = [
     Ok(())
 }
 
+/// Request extras when using a `requirements.in` file which does not support extras.
+#[test]
+fn compile_requirements_file_extra() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("django==5.0b1")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--all-extras")
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir),
+            @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Requesting extras requires a pyproject.toml input file.
+        "###);
+    });
+
+    Ok(())
+}
+
 /// Request an extra with a name that does not conform to the specification.
 #[test]
 fn invalid_extra_name() -> Result<()> {
