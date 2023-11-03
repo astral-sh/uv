@@ -23,6 +23,16 @@ impl CanonicalUrl {
             url.path_segments_mut().unwrap().pop_if_empty();
         }
 
+        // If a URL starts with a kind (like `git+`), remove it.
+        if let Some(suffix) = url.as_str().strip_prefix("git+") {
+            // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
+            if let Some((prefix, _)) = suffix.rsplit_once('@') {
+                url = prefix.parse().unwrap();
+            } else {
+                url = suffix.parse().unwrap();
+            }
+        }
+
         // For GitHub URLs specifically, just lower-case everything. GitHub
         // treats both the same, but they hash differently, and we're gonna be
         // hashing them. This wants a more general solution, and also we're

@@ -14,6 +14,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
+use tokio::sync::Mutex;
 use tracing::{debug, error, trace};
 use url::Url;
 use waitmap::WaitMap;
@@ -21,6 +22,7 @@ use waitmap::WaitMap;
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
+use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -45,6 +47,7 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     client: &'a RegistryClient,
     selector: CandidateSelector,
     index: Arc<Index>,
+    locks: Arc<Locks>,
     build_context: &'a Context,
     reporter: Option<Box<dyn Reporter>>,
 }
@@ -59,8 +62,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         build_context: &'a Context,
     ) -> Self {
         Self {
-            selector: CandidateSelector::from(&manifest),
             index: Arc::new(Index::default()),
+            locks: Arc::new(Locks::default()),
+            selector: CandidateSelector::from(&manifest),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -697,6 +701,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // Build a source distribution from a remote URL, returning its metadata.
             Request::SdistUrl(package_name, url) => {
+                let lock = self.locks.acquire(&url).await;
+                let _guard = lock.lock().await;
+
                 let fetcher = SourceDistributionFetcher::new(self.build_context);
                 let precise =
                     fetcher
@@ -744,6 +751,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // Fetch wheel metadata from a remote URL.
             Request::WheelUrl(package_name, url) => {
+                let lock = self.locks.acquire(&url).await;
+                let _guard = lock.lock().await;
+
                 let fetcher = WheelFetcher::new(self.build_context.cache());
                 let distribution = RemoteDistributionRef::from_url(&package_name, &url);
                 let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
@@ -864,6 +874,20 @@ impl InFlight {
 
     fn insert_url(&mut self, url: &Url) -> bool {
         self.urls.insert(url.clone())
+    }
+}
+
+/// A set of locks used to prevent concurrent access to the same resource.
+#[derive(Debug, Default)]
+struct Locks(Mutex<FxHashMap<String, Arc<Mutex<()>>>>);
+
+impl Locks {
+    /// Acquire a lock on the given resource.
+    async fn acquire(&self, url: &Url) -> Arc<Mutex<()>> {
+        let mut map = self.0.lock().await;
+        map.entry(puffin_cache::digest(&CanonicalUrl::new(url)))
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
     }
 }
 
