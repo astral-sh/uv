@@ -74,7 +74,13 @@ async fn black() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -97,7 +103,13 @@ async fn black_colorama() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -120,7 +132,13 @@ async fn black_python_310() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_310, &TAGS_310, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_310,
+        &TAGS_310,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -145,7 +163,13 @@ async fn black_mypy_extensions() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -170,7 +194,13 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -195,7 +225,13 @@ async fn black_flake8() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -218,7 +254,13 @@ async fn black_lowest() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -241,7 +283,13 @@ async fn black_lowest_direct() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -264,7 +312,13 @@ async fn black_respect_preference() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -287,7 +341,13 @@ async fn black_ignore_preference() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -310,7 +370,13 @@ async fn black_disallow_prerelease() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let err = resolver.resolve().await.unwrap_err();
 
     insta::assert_display_snapshot!(err);
@@ -333,7 +399,13 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await.unwrap_err();
 
     insta::assert_display_snapshot!(resolution);
@@ -356,7 +428,13 @@ async fn pylint_disallow_prerelease() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -379,7 +457,13 @@ async fn pylint_allow_prerelease() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -405,7 +489,13 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);
@@ -431,7 +521,13 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
+    let resolver = Resolver::<DummyContext, ()>::new(
+        manifest,
+        &MARKERS_311,
+        &TAGS_311,
+        &client,
+        &DummyContext,
+    );
     let resolution = resolver.resolve().await?;
 
     insta::assert_display_snapshot!(resolution);

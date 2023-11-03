@@ -1,8 +1,11 @@
+use colored::Colorize;
 use std::time::Duration;
 
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use puffin_distribution::{CachedDistribution, RemoteDistribution, VersionOrUrl};
+use puffin_distribution::{
+    CachedDistribution, RemoteDistribution, RemoteDistributionRef, VersionOrUrl,
+};
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
 
@@ -185,12 +188,16 @@ impl puffin_installer::BuildReporter for BuildReporter {
 
 #[derive(Debug)]
 pub(crate) struct ResolverReporter {
+    printer: Printer,
+    multi_progress: MultiProgress,
     progress: ProgressBar,
 }
 
 impl From<Printer> for ResolverReporter {
     fn from(printer: Printer) -> Self {
-        let progress = ProgressBar::with_draw_target(None, printer.target());
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+
+        let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
         progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
             ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
@@ -198,11 +205,20 @@ impl From<Printer> for ResolverReporter {
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         progress.set_message("Resolving dependencies...");
-        Self { progress }
+
+        Self {
+            printer,
+            multi_progress,
+            progress,
+        }
     }
 }
 
-impl puffin_resolver::ResolverReporter for ResolverReporter {
+/// A task ID to capture an in-flight progress bar.
+#[derive(Debug)]
+pub(crate) struct TaskId(ProgressBar);
+
+impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
     fn on_progress(
         &self,
         name: &PackageName,
@@ -229,5 +245,22 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
 
     fn on_complete(&self) {
         self.progress.finish_and_clear();
+    }
+
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> TaskId {
+        let progress = self.multi_progress.insert_before(
+            &self.progress,
+            ProgressBar::with_draw_target(None, self.printer.target()),
+        );
+
+        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        progress.set_message(format!("{} {}", "Building".bold().green(), distribution));
+
+        TaskId(progress)
+    }
+
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, task: TaskId) {
+        let progress = task.0;
+        progress.finish_with_message(format!("{} {}", "Built".bold().green(), distribution));
     }
 }

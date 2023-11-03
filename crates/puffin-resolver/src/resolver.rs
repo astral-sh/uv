@@ -38,7 +38,7 @@ use crate::pubgrub::{
 };
 use crate::resolution::Graph;
 
-pub struct Resolver<'a, Context: BuildContext + Sync> {
+pub struct Resolver<'a, Context: BuildContext + Sync, Task> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
@@ -50,10 +50,10 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     index: Arc<Index>,
     locks: Arc<Locks>,
     build_context: &'a Context,
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Box<dyn Reporter<Task>>>,
 }
 
-impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
+impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: impl Reporter<Task> + 'static) -> Self {
         Self {
             reporter: Some(Box::new(reporter)),
             ..self
@@ -698,6 +698,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     precise.as_ref().unwrap_or(&url),
                 );
 
+                let task = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_build_start(&distribution));
+
                 let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => {
                         debug!("Found source distribution metadata in cache: {url}");
@@ -732,6 +737,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         metadata: metadata.name,
                         given: package_name,
                     });
+                }
+
+                if let Some(task) = task {
+                    if let Some(reporter) = self.reporter.as_ref() {
+                        reporter.on_build_complete(&distribution, task);
+                    }
                 }
 
                 Ok(Response::SdistUrl(url, precise, metadata))
@@ -807,12 +818,18 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     }
 }
 
-pub trait Reporter: Send + Sync {
+pub trait Reporter<Task>: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
+
+    /// Callback to invoke when a source distribution build is kicked off.
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> Task;
+
+    /// Callback to invoke when a source distribution build is complete.
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, task: Task);
 }
 
 /// Fetch the metadata for an item

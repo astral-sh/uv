@@ -1136,7 +1136,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.touch()?;
-    requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0 \nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
+    requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
