@@ -1030,8 +1030,12 @@ pub fn find_dist_info(
     filename: &WheelFilename,
     archive: &mut ZipArchive<impl Read + Seek + Sized>,
 ) -> Result<String, Error> {
-    let dist_info_matcher =
-        format!("{}-{}", filename.distribution, filename.version).to_lowercase();
+    let dist_info_matcher = format!(
+        "{}-{}",
+        filename.distribution.as_dist_info_name(),
+        filename.version
+    )
+    .to_lowercase();
     let dist_infos: Vec<_> = archive
         .file_names()
         .filter_map(|name| name.split_once('/'))
