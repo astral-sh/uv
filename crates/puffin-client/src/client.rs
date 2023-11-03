@@ -1,10 +1,13 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
+use async_http_range_reader::{
+    AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod,
+};
 use futures::{AsyncRead, StreamExt, TryStreamExt};
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
-use reqwest::{header, Client, ClientBuilder, Response, StatusCode};
+use reqwest::header::HeaderMap;
+use reqwest::{header, Client, ClientBuilder, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -234,7 +237,7 @@ impl RegistryClient {
             {
                 debug!("Cache hit for wheel metadata for {url}");
                 cached_metadata
-            } else if let Some((mut reader, response)) = self.range_reader(url.clone()).await? {
+            } else if let Some((mut reader, headers)) = self.range_reader(url.clone()).await? {
                 debug!("Using remote zip reader for wheel metadata for {url}");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader)
                     .await
@@ -244,8 +247,7 @@ impl RegistryClient {
                     // Perf (and cache size) improvement
                     metadata.description = Some("[omitted]".to_string());
                 }
-                let is_immutable = response
-                    .headers()
+                let is_immutable = headers
                     .get(header::CACHE_CONTROL)
                     .and_then(|header| header.to_str().ok())
                     .unwrap_or_default()
@@ -306,10 +308,15 @@ impl RegistryClient {
     async fn range_reader(
         &self,
         url: Url,
-    ) -> Result<Option<(AsyncHttpRangeReader, Response)>, Error> {
-        let response = AsyncHttpRangeReader::new_head(self.client_raw.clone(), url.clone()).await;
+    ) -> Result<Option<(AsyncHttpRangeReader, HeaderMap)>, Error> {
+        let response = AsyncHttpRangeReader::new(
+            self.client_raw.clone(),
+            url.clone(),
+            CheckSupportMethod::Head,
+        )
+        .await;
         match response {
-            Ok((reader, response)) => Ok(Some((reader, response))),
+            Ok((reader, headers)) => Ok(Some((reader, headers))),
             Err(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported) => Ok(None),
             Err(err) => Err(err.into()),
         }
