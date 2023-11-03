@@ -1,20 +1,26 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
 
+use async_http_range_reader::{
+    AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod,
+};
+use distribution_filename::WheelFilename;
 use futures::{AsyncRead, StreamExt, TryStreamExt};
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
-use reqwest::ClientBuilder;
-use reqwest::StatusCode;
+use reqwest::{Client, ClientBuilder, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use tracing::trace;
+use tracing::{debug, trace};
 use url::Url;
 
 use puffin_normalize::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::Error;
+use crate::remote_metadata::{
+    wheel_metadata_from_remote_zip, wheel_metadata_get_cached, wheel_metadata_write_cache,
+};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -96,10 +102,10 @@ impl RegistryClientBuilder {
         let mut client_builder =
             reqwest_middleware::ClientBuilder::new(client_raw.clone()).with(retry_strategy);
 
-        if let Some(path) = self.cache {
+        if let Some(path) = &self.cache {
             client_builder = client_builder.with(Cache(HttpCache {
                 mode: CacheMode::Default,
-                manager: CACacheManager { path },
+                manager: CACacheManager { path: path.clone() },
                 options: HttpCacheOptions::default(),
             }));
         }
@@ -108,15 +114,16 @@ impl RegistryClientBuilder {
         let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
 
         let uncached_client_builder =
-            reqwest_middleware::ClientBuilder::new(client_raw).with(retry_strategy);
+            reqwest_middleware::ClientBuilder::new(client_raw.clone()).with(retry_strategy);
 
         RegistryClient {
             index: self.index,
             extra_index: self.extra_index,
             no_index: self.no_index,
-            proxy: self.proxy,
             client: client_builder.build(),
+            client_raw,
             uncached_client: uncached_client_builder.build(),
+            cache: self.cache,
         }
     }
 }
@@ -128,9 +135,11 @@ pub struct RegistryClient {
     pub(crate) extra_index: Vec<Url>,
     /// Ignore the package index, instead relying on local archives and caches.
     pub(crate) no_index: bool,
-    pub(crate) proxy: Url,
     pub(crate) client: ClientWithMiddleware,
     pub(crate) uncached_client: ClientWithMiddleware,
+    pub(crate) client_raw: Client,
+    /// Used for the remote wheel METADATA cache
+    pub(crate) cache: Option<PathBuf>,
 }
 
 impl RegistryClient {
@@ -184,33 +193,66 @@ impl RegistryClient {
     }
 
     /// Fetch the metadata from a wheel file.
-    pub async fn file(&self, file: File) -> Result<Metadata21, Error> {
+    pub async fn wheel_metadata(
+        &self,
+        file: File,
+        filename: WheelFilename,
+    ) -> Result<Metadata21, Error> {
         if self.no_index {
             return Err(Error::NoIndex(file.filename));
         }
 
         // Per PEP 658, if `data-dist-info-metadata` is available, we can request it directly;
-        // otherwise, send to our dedicated caching proxy.
-        let url = if file.data_dist_info_metadata.is_available() {
-            Url::parse(&format!("{}.metadata", file.url))?
+        // otherwise, try using HTTP range requests to read only the `.dist-info/METADATA` file
+        // from the zip, and if that also fails, download the whole wheel into the cache and read
+        // from there
+        let url = Url::parse(&file.url)?;
+        let text = if file.data_dist_info_metadata.is_available() {
+            let url = Url::parse(&format!("{}.metadata", file.url))?;
+            trace!("Fetching file {} from {}", file.filename, url);
+            self.wheel_metadata_impl(&url).await.map_err(|err| {
+                if err.status() == Some(StatusCode::NOT_FOUND) {
+                    Error::FileNotFound(file.filename, err)
+                } else {
+                    err.into()
+                }
+            })?
         } else {
-            self.proxy.join(file.url.parse::<Url>()?.path())?
+            self.wheel_metadata_no_index(filename, &url).await?
         };
 
-        trace!("Fetching file {} from {}", file.filename, url);
-
-        // Fetch from the index.
-        let text = self.file_impl(&url).await.map_err(|err| {
-            if err.status() == Some(StatusCode::NOT_FOUND) {
-                Error::FileNotFound(file.filename, err)
-            } else {
-                err.into()
-            }
-        })?;
-        Metadata21::parse(text.as_bytes()).map_err(std::convert::Into::into)
+        Ok(Metadata21::parse(text.as_bytes())?)
     }
 
-    async fn file_impl(&self, url: &Url) -> Result<String, reqwest_middleware::Error> {
+    /// Get the wheel metadata if it isn't available in an index through PEP 658
+    pub async fn wheel_metadata_no_index(
+        &self,
+        filename: WheelFilename,
+        url: &Url,
+    ) -> Result<String, Error> {
+        Ok(
+            if let Some(cached_metadata) =
+                wheel_metadata_get_cached(url, self.cache.as_deref()).await
+            {
+                debug!("Cache hit for wheel metadata for {url}");
+                cached_metadata
+            } else if let Some(mut reader) = self.range_reader(url.clone()).await? {
+                debug!("Using remote zip reader for wheel metadata for {url}");
+                let text = wheel_metadata_from_remote_zip(filename, &mut reader)
+                    .await
+                    .map_err(|err| Error::WheelMetadataFromRemoteZip(url.clone(), err))?;
+                wheel_metadata_write_cache(url, self.cache.as_deref(), &text).await?;
+                text
+            } else {
+                debug!("Downloading whole wheel to extract metadata from {url}");
+                // Download to cache
+                // Read from cache the regular way
+                todo!()
+            },
+        )
+    }
+
+    async fn wheel_metadata_impl(&self, url: &Url) -> Result<String, reqwest_middleware::Error> {
         Ok(self
             .client
             .get(url.clone())
@@ -243,5 +285,22 @@ impl RegistryClient {
                 })
                 .into_async_read(),
         ))
+    }
+
+    /// Try using HTTP range requests to only read the METADATA file of a remote zip
+    ///
+    /// <https://github.com/prefix-dev/rip/pull/66>
+    async fn range_reader(&self, url: Url) -> Result<Option<AsyncHttpRangeReader>, Error> {
+        let response = AsyncHttpRangeReader::new(
+            self.client_raw.clone(),
+            url.clone(),
+            CheckSupportMethod::Head,
+        )
+        .await;
+        match response {
+            Ok(reader) => Ok(Some(reader)),
+            Err(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 }

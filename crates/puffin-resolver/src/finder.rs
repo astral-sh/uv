@@ -157,6 +157,7 @@ impl<'a> DistributionFinder<'a> {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Request {
     /// A request to fetch the metadata for a package.
     Package(Requirement),

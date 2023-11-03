@@ -16,10 +16,12 @@ use resolve_many::ResolveManyArgs;
 
 use crate::build::{build, BuildArgs};
 use crate::resolve_cli::ResolveCliArgs;
+use crate::wheel_metadata::WheelMetadataArgs;
 
 mod build;
 mod resolve_cli;
 mod resolve_many;
+mod wheel_metadata;
 
 #[derive(Parser)]
 enum Cli {
@@ -34,6 +36,7 @@ enum Cli {
     ResolveMany(ResolveManyArgs),
     /// Resolve requirements passed on the CLI
     ResolveCli(ResolveCliArgs),
+    WheelMetadata(WheelMetadataArgs),
 }
 
 async fn run() -> Result<()> {
@@ -49,6 +52,7 @@ async fn run() -> Result<()> {
         Cli::ResolveCli(args) => {
             resolve_cli::resolve_cli(args).await?;
         }
+        Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
     }
     Ok(())
 }

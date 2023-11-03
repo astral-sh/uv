@@ -4,10 +4,15 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+distribution-filename = { path = "../distribution-filename" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-package = { path = "../puffin-package" }
 
+async_http_range_reader = { workspace = true }
+async_zip = { workspace = true }
 futures = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 http-cache-reqwest = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
@@ -16,5 +21,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

@@ -1,5 +1,9 @@
+use async_http_range_reader::AsyncHttpRangeReaderError;
+use std::io;
 use thiserror::Error;
+use url::Url;
 
+use crate::remote_metadata::WheelMetadataFromRemoteZipError;
 use puffin_package::pypi_types;
 
 #[derive(Debug, Error)]
@@ -41,6 +45,15 @@ pub enum Error {
         source: serde_json::Error,
         url: String,
     },
+
+    #[error(transparent)]
+    AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
+
+    #[error("Failed to read `METADATA` file from remote zip at {0}")]
+    WheelMetadataFromRemoteZip(Url, #[source] WheelMetadataFromRemoteZipError),
+
+    #[error(transparent)]
+    IO(#[from] io::Error),
 }
 
 impl Error {
