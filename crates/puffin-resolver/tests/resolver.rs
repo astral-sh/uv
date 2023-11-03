@@ -52,6 +52,7 @@ impl BuildContext for DummyContext {
     fn build_source_distribution<'a>(
         &'a self,
         _sdist: &'a Path,
+        _subdirectory: Option<&'a Path>,
         _wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")

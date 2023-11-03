@@ -21,7 +21,10 @@ pub(crate) struct BuildArgs {
     /// Directory to story the built wheel in
     #[clap(short, long)]
     wheels: Option<PathBuf>,
+    /// The source distribution to build, either a directory or a source archive.
     sdist: PathBuf,
+    /// The subdirectory to build within the source distribution.
+    subdirectory: Option<PathBuf>,
 }
 
 /// Build a source distribution to a wheel
@@ -49,9 +52,13 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
     );
-    let builder =
-        SourceDistributionBuilder::setup(&args.sdist, venv.interpreter_info(), &build_dispatch)
-            .await?;
+    let builder = SourceDistributionBuilder::setup(
+        &args.sdist,
+        args.subdirectory.as_deref(),
+        venv.interpreter_info(),
+        &build_dispatch,
+    )
+    .await?;
     let wheel = builder.build(&wheel_dir)?;
     Ok(wheel_dir.join(wheel))
 }

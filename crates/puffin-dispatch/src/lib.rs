@@ -197,11 +197,13 @@ impl BuildContext for BuildDispatch {
     fn build_source_distribution<'a>(
         &'a self,
         sdist: &'a Path,
+        subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let builder =
-                SourceDistributionBuilder::setup(sdist, &self.interpreter_info, self).await?;
+                SourceDistributionBuilder::setup(sdist, subdirectory, &self.interpreter_info, self)
+                    .await?;
             Ok(builder.build(wheel_dir)?)
         })
     }

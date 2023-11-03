@@ -51,10 +51,11 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
 
+        // This could extract the subdirectory.
         let source = Source::try_from(distribution)?;
-        let sdist_file = match source {
-            Source::Url(url) => {
-                debug!("Fetching source distribution from: {url}");
+        let (sdist_file, subdirectory) = match source {
+            Source::RegistryUrl(url) => {
+                debug!("Fetching source distribution from registry: {url}");
 
                 let reader = client.stream_external(&url).await?;
                 let mut reader = tokio::io::BufReader::new(reader.compat());
@@ -66,16 +67,36 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
                 tokio::io::copy(&mut reader, &mut writer).await?;
 
-                sdist_file
+                // Registry dependencies can't specify a subdirectory.
+                let subdirectory = None;
+
+                (sdist_file, subdirectory)
             }
-            Source::Git(git) => {
-                debug!("Fetching source distribution from: {git}");
+            Source::RemoteUrl(url, subdirectory) => {
+                debug!("Fetching source distribution from URL: {url}");
+
+                let reader = client.stream_external(url).await?;
+                let mut reader = tokio::io::BufReader::new(reader.compat());
+
+                // Download the source distribution.
+                let temp_dir = tempdir_in(self.0.cache())?.into_path();
+                let sdist_filename = distribution.filename()?;
+                let sdist_file = temp_dir.join(sdist_filename.as_ref());
+                let mut writer = tokio::fs::File::create(&sdist_file).await?;
+                tokio::io::copy(&mut reader, &mut writer).await?;
+
+                (sdist_file, subdirectory)
+            }
+            Source::Git(git, subdirectory) => {
+                debug!("Fetching source distribution from Git: {git}");
 
                 let git_dir = self.0.cache().join(GIT_CACHE);
                 let source = GitSource::new(git, git_dir);
-                tokio::task::spawn_blocking(move || source.fetch())
+                let sdist_file = tokio::task::spawn_blocking(move || source.fetch())
                     .await??
-                    .into()
+                    .into();
+
+                (sdist_file, subdirectory)
             }
         };
 
@@ -90,7 +111,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         // Build the wheel.
         let disk_filename = self
             .0
-            .build_source_distribution(&sdist_file, &wheel_dir)
+            .build_source_distribution(&sdist_file, subdirectory.as_deref(), &wheel_dir)
             .await?;
 
         // Read the metadata from the wheel.
@@ -108,23 +129,39 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     ///
     /// For example, given a Git dependency with a reference to a branch or tag, return a URL
     /// with a precise reference to the current commit of that branch or tag.
+    ///
+    /// This method takes into account various normalizations that are independent from the Git
+    /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
+    /// prefix kinds.
     pub(crate) async fn precise(&self, url: &Url) -> Result<Option<Url>> {
+        // Extract the subdirectory.
+        let subdirectory = url.fragment().and_then(|fragment| {
+            fragment
+                .split('&')
+                .find_map(|fragment| fragment.strip_prefix("subdirectory="))
+        });
+
         let Some(url) = url.as_str().strip_prefix("git+") else {
             return Ok(None);
         };
 
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
-        let url = Url::parse(url)?;
-        let git = Git::try_from(url)?;
-        let git_dir = self.0.cache().join(GIT_CACHE);
-        let source = GitSource::new(git, git_dir);
+        let git = Git::try_from(Url::parse(url)?)?;
+        let dir = self.0.cache().join(GIT_CACHE);
+        let source = GitSource::new(git, dir);
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
+        let git = Git::from(precise);
 
         // TODO(charlie): Avoid this double-parse by encoding the source kind separately from the
         // URL.
-        let url = Url::from(Git::from(precise));
-        let url = Url::parse(&format!("{}{}", "git+", url.as_str()))?;
+        let mut url = Url::parse(&format!("{}{}", "git+", Url::from(git).as_str()))?;
+
+        // Re-add the subdirectory fragment.
+        if let Some(subdirectory) = subdirectory {
+            url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+        }
+
         Ok(Some(url))
     }
 }
