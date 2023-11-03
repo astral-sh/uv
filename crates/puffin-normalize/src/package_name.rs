@@ -36,6 +36,13 @@ impl PackageName {
         normalized.make_ascii_lowercase();
         Self(normalized)
     }
+
+    /// Escape this name with underscores (`_`) instead of dashes (`-`)
+    ///
+    /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
+    pub fn as_dist_info_name(&self) -> String {
+        self.0.replace('-', "_")
+    }
 }
 
 impl AsRef<str> for PackageName {
