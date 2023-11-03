@@ -705,14 +705,13 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let _guard = lock.lock().await;
 
                 let fetcher = SourceDistributionFetcher::new(self.build_context);
-                let precise =
-                    fetcher
-                        .precise(&url)
-                        .await
-                        .map_err(|err| ResolveError::UrlDistribution {
-                            url: url.clone(),
-                            err,
-                        })?;
+                let precise = fetcher
+                    .precise(&RemoteDistributionRef::from_url(&package_name, &url))
+                    .await
+                    .map_err(|err| ResolveError::UrlDistribution {
+                        url: url.clone(),
+                        err,
+                    })?;
 
                 let distribution = RemoteDistributionRef::from_url(
                     &package_name,

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Error, Result};
+
 use url::Url;
 
 use puffin_distribution::RemoteDistributionRef;
@@ -46,6 +47,31 @@ impl<'a> TryFrom<&'a RemoteDistributionRef<'_>> for Source<'a> {
                 } else {
                     Ok(Self::RemoteUrl(url, subdirectory))
                 }
+            }
+        }
+    }
+}
+
+impl From<Source<'_>> for Url {
+    fn from(value: Source) -> Self {
+        match value {
+            Source::RegistryUrl(url) => url,
+            Source::RemoteUrl(url, subdirectory) => {
+                if let Some(subdirectory) = subdirectory {
+                    let mut url = (*url).clone();
+                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                    url
+                } else {
+                    url.clone()
+                }
+            }
+            Source::Git(git, subdirectory) => {
+                let mut url = Url::parse(&format!("{}{}", "git+", Url::from(git).as_str()))
+                    .expect("git url is valid");
+                if let Some(subdirectory) = subdirectory {
+                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                }
+                url
             }
         }
     }
