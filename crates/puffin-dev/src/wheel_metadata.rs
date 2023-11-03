@@ -39,6 +39,6 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> anyhow::Result<()
     )?;
 
     let metadata = client.wheel_metadata_no_index(filename, &args.url).await?;
-    println!("{:?}", metadata);
+    println!("{metadata:?}");
     Ok(())
 }
