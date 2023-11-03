@@ -205,21 +205,21 @@ impl RegistryClient {
         // from the zip, and if that also fails, download the whole wheel into the cache and read
         // from there
         let url = Url::parse(&file.url)?;
-        let text = if file.data_dist_info_metadata.is_available() {
+        if file.data_dist_info_metadata.is_available() {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
             trace!("Fetching file {} from {}", file.filename, url);
-            self.wheel_metadata_impl(&url).await.map_err(|err| {
+            let text = self.wheel_metadata_impl(&url).await.map_err(|err| {
                 if err.status() == Some(StatusCode::NOT_FOUND) {
                     Error::FileNotFound(file.filename, err)
                 } else {
                     err.into()
                 }
-            })?
-        } else {
-            self.wheel_metadata_no_index(filename, &url).await?
-        };
+            })?;
 
-        Ok(Metadata21::parse(text.as_bytes())?)
+            Ok(Metadata21::parse(text.as_bytes())?)
+        } else {
+            self.wheel_metadata_no_index(filename, &url).await
+        }
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
@@ -227,7 +227,7 @@ impl RegistryClient {
         &self,
         filename: WheelFilename,
         url: &Url,
-    ) -> Result<String, Error> {
+    ) -> Result<Metadata21, Error> {
         Ok(
             if let Some(cached_metadata) =
                 wheel_metadata_get_cached(url, self.cache.as_deref()).await
@@ -239,6 +239,10 @@ impl RegistryClient {
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader)
                     .await
                     .map_err(|err| Error::WheelMetadataFromRemoteZip(url.clone(), err))?;
+                let mut metadata = Metadata21::parse(text.as_bytes())?;
+                if metadata.description.is_some() {
+                    metadata.description = Some("[omitted]".to_string());
+                }
                 let is_immutable = response
                     .headers()
                     .get(header::CACHE_CONTROL)
@@ -248,9 +252,9 @@ impl RegistryClient {
                     .any(|entry| entry.trim().to_lowercase() == "immutable");
                 if is_immutable {
                     debug!("Immutable (cacheable) wheel metadata for {url}");
-                    wheel_metadata_write_cache(url, self.cache.as_deref(), &text).await?;
+                    wheel_metadata_write_cache(url, self.cache.as_deref(), &metadata).await?;
                 }
-                text
+                metadata
             } else {
                 debug!("Downloading whole wheel to extract metadata from {url}");
                 // Download to cache

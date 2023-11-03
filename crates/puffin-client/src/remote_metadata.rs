@@ -11,6 +11,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use puffin_cache::CanonicalUrl;
+use puffin_package::pypi_types::Metadata21;
 
 const WHEEL_METADATA_FROM_ZIP_CACHE: &str = "wheel-metadata-v0";
 
@@ -23,23 +24,26 @@ pub enum WheelMetadataFromRemoteZipError {
 }
 
 /// Try to read the cached METADATA previously extracted from a remote zip, if it exists
-pub(crate) async fn wheel_metadata_get_cached(url: &Url, cache: Option<&Path>) -> Option<String> {
+pub(crate) async fn wheel_metadata_get_cached(
+    url: &Url,
+    cache: Option<&Path>,
+) -> Option<Metadata21> {
     // TODO(konstin): Actual good cache layout
-    let cache1 = cache?;
-    let path = cache1
+    let path = cache?
         .join(WHEEL_METADATA_FROM_ZIP_CACHE)
         .join(puffin_cache::digest(&CanonicalUrl::new(url)));
     if !path.is_file() {
         return None;
     }
-    fs::read_to_string(path).await.ok()
+    let data = fs::read(path).await.ok()?;
+    serde_json::from_slice(&data).ok()
 }
 
 /// Write the cached METADATA extracted from a remote zip to the cache
 pub(crate) async fn wheel_metadata_write_cache(
     url: &Url,
     cache: Option<&Path>,
-    metadata: &str,
+    metadata: &Metadata21,
 ) -> io::Result<()> {
     // TODO(konstin): Don't cache the whole text, cache the json version with the description
     // stripped instead.
@@ -50,7 +54,7 @@ pub(crate) async fn wheel_metadata_write_cache(
     let dir = cache.join(WHEEL_METADATA_FROM_ZIP_CACHE);
     fs::create_dir_all(&dir).await?;
     let path = dir.join(puffin_cache::digest(&CanonicalUrl::new(url)));
-    fs::write(path, metadata).await
+    fs::write(path, serde_json::to_vec(metadata)?).await
 }
 
 pub(crate) async fn wheel_metadata_from_remote_zip(
