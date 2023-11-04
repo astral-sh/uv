@@ -22,7 +22,7 @@ use waitmap::WaitMap;
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_cache::CanonicalUrl;
+use puffin_cache::RepositoryUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -923,7 +923,7 @@ impl Locks {
     /// Acquire a lock on the given resource.
     async fn acquire(&self, url: &Url) -> Arc<Mutex<()>> {
         let mut map = self.0.lock().await;
-        map.entry(puffin_cache::digest(&CanonicalUrl::new(url)))
+        map.entry(puffin_cache::digest(&RepositoryUrl::new(url)))
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
     }

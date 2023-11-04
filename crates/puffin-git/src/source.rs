@@ -7,7 +7,7 @@ use anyhow::Result;
 use reqwest::Client;
 use tracing::debug;
 
-use puffin_cache::{digest, CanonicalUrl};
+use puffin_cache::{digest, RepositoryUrl};
 
 use crate::git::GitRemote;
 use crate::{FetchStrategy, Git};
@@ -36,7 +36,7 @@ impl GitSource {
 
     pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
-        let ident = digest(&CanonicalUrl::new(&self.git.url));
+        let ident = digest(&RepositoryUrl::new(&self.git.url));
         let db_path = self.cache.join("db").join(&ident);
 
         let remote = GitRemote::new(&self.git.url);
