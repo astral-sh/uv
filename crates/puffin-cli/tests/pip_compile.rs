@@ -885,6 +885,43 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
     Ok(())
 }
 
+/// Resolve two packages from a `requirements.in` file with the same Git HTTPS dependency.
+#[test]
+fn compile_git_concurrent_access() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in
+        .write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
 /// Resolve a Git dependency with a declared name that differs from the true name of the package.
 #[test]
 fn compile_git_mismatched_name() -> Result<()> {
