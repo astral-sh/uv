@@ -4,6 +4,7 @@ use pubgrub::range::Range;
 use pep440_rs::{Operator, VersionSpecifier};
 
 use crate::pubgrub::version::PubGrubVersion;
+use crate::ResolveError;
 
 /// A range of versions that can be used to satisfy a requirement.
 #[derive(Debug)]
@@ -17,10 +18,10 @@ impl From<PubGrubSpecifier> for Range<PubGrubVersion> {
 }
 
 impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
-    type Error = anyhow::Error;
+    type Error = ResolveError;
 
     /// Convert a PEP 508 specifier to a `PubGrub`-compatible version range.
-    fn try_from(specifier: &VersionSpecifier) -> Result<Self> {
+    fn try_from(specifier: &VersionSpecifier) -> Result<Self, ResolveError> {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = PubGrubVersion::from(specifier.version().clone());
@@ -36,9 +37,7 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
             }
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = specifier.version().release.as_slice() else {
-                    return Err(anyhow::anyhow!(
-                        "~= operator requires at least two release segments"
-                    ));
+                    return Err(ResolveError::InvalidTildeEquals(specifier.clone()));
                 };
                 let upper = PubGrubVersion::from(pep440_rs::Version {
                     dev: Some(0),

@@ -1,0 +1,20 @@
+---
+source: crates/puffin-cli/tests/pip_compile.rs
+info:
+  program: puffin
+  args:
+    - pip-compile
+    - requirements.in
+    - "--cache-dir"
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpVyrxMG
+  env:
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpF8a4y3/.venv
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+  × No solution found when resolving dependencies:
+  ╰─▶ root depends on werkzeug 3.0.0
+
