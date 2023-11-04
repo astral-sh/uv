@@ -35,15 +35,27 @@ impl CanonicalUrl {
         }
 
         // Repos can generally be accessed with or without `.git` extension.
-        let needs_chopping = std::path::Path::new(url.path())
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
-        if needs_chopping {
-            let last = {
-                let last = url.path_segments().unwrap().next_back().unwrap();
-                last[..last.len() - 4].to_owned()
-            };
-            url.path_segments_mut().unwrap().pop().push(&last);
+        if let Some((prefix, suffix)) = url.path().rsplit_once('@') {
+            // Ex) `git+https://github.com/pypa/sample-namespace-packages.git@2.0.0`
+            let needs_chopping = std::path::Path::new(prefix)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
+            if needs_chopping {
+                let prefix = &prefix[..prefix.len() - 4];
+                url.set_path(&format!("{prefix}@{suffix}"));
+            }
+        } else {
+            // Ex) `git+https://github.com/pypa/sample-namespace-packages.git`
+            let needs_chopping = std::path::Path::new(url.path())
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
+            if needs_chopping {
+                let last = {
+                    let last = url.path_segments().unwrap().next_back().unwrap();
+                    last[..last.len() - 4].to_owned()
+                };
+                url.path_segments_mut().unwrap().pop().push(&last);
+            }
         }
 
         CanonicalUrl(url)
@@ -116,6 +128,12 @@ mod tests {
             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages")?,
         );
 
+        // Two URLs should be considered equal regardless of the `.git` suffix.
+        assert_eq!(
+            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?,
+            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages@2.0.0")?,
+        );
+
         // Two URLs should be _not_ considered equal if they point to different repositories.
         assert_ne!(
             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
@@ -145,14 +163,22 @@ mod tests {
     fn repository_url() -> Result<(), url::ParseError> {
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages")?,
+        );
+
+        // Two URLs should be considered equal regardless of the `.git` suffix.
+        assert_eq!(
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@2.0.0"
+            )?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages@2.0.0")?,
         );
 
         // Two URLs should be _not_ considered equal if they point to different repositories.
         assert_ne!(
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-packages.git")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-packages.git")?,
         );
 
         // Two URLs should be considered equal if they map to the same repository, even if they
