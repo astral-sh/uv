@@ -129,35 +129,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         let mut priorities = PubGrubPriorities::default();
 
         // Push all the requirements into the package sink.
-        for requirement in &self.requirements {
-            debug!("Adding root dependency: {requirement}");
-            let package_name = requirement.name.clone();
-            match &requirement.version_or_url {
-                // If this is a registry-based package, fetch the package metadata.
-                None | Some(pep508_rs::VersionOrUrl::VersionSpecifier(_)) => {
-                    if in_flight.insert_package(&package_name) {
-                        priorities.add(package_name.clone());
-                        request_sink.unbounded_send(Request::Package(package_name))?;
-                    }
-                }
-                // If this is a URL-based package, fetch the source.
-                Some(pep508_rs::VersionOrUrl::Url(url)) => {
-                    if in_flight.insert_url(url) {
-                        priorities.add(package_name.clone());
-                        if WheelFilename::try_from(url).is_ok() {
-                            request_sink.unbounded_send(Request::WheelUrl(
-                                package_name.clone(),
-                                url.clone(),
-                            ))?;
-                        } else {
-                            request_sink.unbounded_send(Request::SdistUrl(
-                                package_name.clone(),
-                                url.clone(),
-                            ))?;
-                        }
-                    }
-                }
-            }
+        for (package, version) in
+            iter_requirements(self.requirements.iter(), None, None, self.markers)
+        {
+            debug!("Adding root dependency: {package} {version}");
+            Self::visit_package(&package, &mut priorities, &mut in_flight, request_sink)?;
         }
 
         // Start the solve.
