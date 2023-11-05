@@ -279,7 +279,7 @@ impl RegistryClient {
                     .map_err(|err| Error::Zip(filename.clone(), err))?;
 
                 let ((metadata_idx, _metadata_entry), _path) = find_dist_info_metadata(
-                    &filename,
+                    filename,
                     reader
                         .file()
                         .entries()

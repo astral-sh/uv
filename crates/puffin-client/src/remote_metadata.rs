@@ -73,7 +73,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .map_err(|err| Error::Zip(filename.clone(), err))?;
 
     let ((metadata_idx, metadata_entry), _path) = find_dist_info_metadata(
-        &filename,
+        filename,
         reader
             .file()
             .entries()
