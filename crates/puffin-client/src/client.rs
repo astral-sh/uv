@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use async_http_range_reader::{
     AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod,
 };
+use async_zip::tokio::read::seek::ZipFileReader;
 use futures::{AsyncRead, StreamExt, TryStreamExt};
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
 use reqwest::header::HeaderMap;
@@ -11,10 +12,14 @@ use reqwest::{header, Client, ClientBuilder, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use tempfile::tempfile;
+use tokio::io::BufWriter;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, trace};
 use url::Url;
 
 use distribution_filename::WheelFilename;
+use install_wheel_rs::find_dist_info_metadata;
 use puffin_normalize::PackageName;
 use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 
@@ -221,14 +226,14 @@ impl RegistryClient {
 
             Ok(Metadata21::parse(text.as_bytes())?)
         } else {
-            self.wheel_metadata_no_index(filename, &url).await
+            self.wheel_metadata_no_index(&filename, &url).await
         }
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
     pub async fn wheel_metadata_no_index(
         &self,
-        filename: WheelFilename,
+        filename: &WheelFilename,
         url: &Url,
     ) -> Result<Metadata21, Error> {
         Ok(
@@ -239,9 +244,7 @@ impl RegistryClient {
                 cached_metadata
             } else if let Some((mut reader, headers)) = self.range_reader(url.clone()).await? {
                 debug!("Using remote zip reader for wheel metadata for {url}");
-                let text = wheel_metadata_from_remote_zip(filename, &mut reader)
-                    .await
-                    .map_err(|err| Error::WheelMetadataFromRemoteZip(url.clone(), err))?;
+                let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let mut metadata = Metadata21::parse(text.as_bytes())?;
                 if metadata.description.is_some() {
                     // Perf (and cache size) improvement
@@ -260,9 +263,45 @@ impl RegistryClient {
                 metadata
             } else {
                 debug!("Downloading whole wheel to extract metadata from {url}");
-                // Download to cache
-                // Read from cache the regular way
-                todo!()
+                // TODO(konstin): Download the wheel into a cache shared with the installer instead
+                // Note that this branch is only hit when you're not using and the server where
+                // you host your wheels for some reasons doesn't support range requests
+                // (tbh we should probably warn here and tekk users to get a better registry because
+                // their current one makes resolution unnecessary slow)
+                let temp_download = tempfile()?;
+                let mut writer = BufWriter::new(tokio::fs::File::from_std(temp_download));
+                let mut reader = self.stream_external(url).await?.compat();
+                tokio::io::copy(&mut reader, &mut writer).await?;
+                let temp_download = writer.into_inner();
+
+                let mut reader = ZipFileReader::new(temp_download.compat())
+                    .await
+                    .map_err(|err| Error::Zip(filename.clone(), err))?;
+
+                let ((metadata_idx, _metadata_entry), _path) = find_dist_info_metadata(
+                    &filename,
+                    reader
+                        .file()
+                        .entries()
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, e)| {
+                            Some(((idx, e), e.entry().filename().as_str().ok()?))
+                        }),
+                )
+                .map_err(|err| Error::InvalidWheel(filename.clone(), err))?;
+
+                // Read the contents of the METADATA file
+                let mut contents = Vec::new();
+                reader
+                    .reader_with_entry(metadata_idx)
+                    .await
+                    .map_err(|err| Error::Zip(filename.clone(), err))?
+                    .read_to_end_checked(&mut contents)
+                    .await
+                    .map_err(|err| Error::Zip(filename.clone(), err))?;
+
+                Metadata21::parse(&contents)?
             },
         )
     }

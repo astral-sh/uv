@@ -1,9 +1,10 @@
-use async_http_range_reader::AsyncHttpRangeReaderError;
 use std::io;
-use thiserror::Error;
-use url::Url;
 
-use crate::remote_metadata::WheelMetadataFromRemoteZipError;
+use async_http_range_reader::AsyncHttpRangeReaderError;
+use async_zip::error::ZipError;
+use thiserror::Error;
+
+use distribution_filename::WheelFilename;
 use puffin_package::pypi_types;
 
 #[derive(Debug, Error)]
@@ -49,8 +50,12 @@ pub enum Error {
     #[error(transparent)]
     AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
 
-    #[error("Failed to read `METADATA` file from remote zip at {0}")]
-    WheelMetadataFromRemoteZip(Url, #[source] WheelMetadataFromRemoteZipError),
+    /// Invalid dist-info dir
+    #[error("Invalid wheel {0}: {0}")]
+    InvalidWheel(WheelFilename, String),
+
+    #[error("The wheel {0} is not a valid zip file")]
+    Zip(WheelFilename, #[source] ZipError),
 
     #[error(transparent)]
     IO(#[from] io::Error),

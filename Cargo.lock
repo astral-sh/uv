@@ -2255,12 +2255,14 @@ dependencies = [
 name = "puffin-client"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "async_http_range_reader",
  "async_zip",
  "distribution-filename",
  "fs-err",
  "futures",
  "http-cache-reqwest",
+ "install-wheel-rs",
  "puffin-cache",
  "puffin-normalize",
  "puffin-package",
@@ -2269,6 +2271,7 @@ dependencies = [
  "reqwest-retry",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
