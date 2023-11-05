@@ -38,8 +38,6 @@ pub(crate) async fn wheel_metadata_write_cache(
     cache: Option<&Path>,
     metadata: &Metadata21,
 ) -> io::Result<()> {
-    // TODO(konstin): Don't cache the whole text, cache the json version with the description
-    // stripped instead.
     let Some(cache) = cache else {
         return Ok(());
     };
