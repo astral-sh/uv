@@ -71,6 +71,9 @@ impl Error {
     }
 }
 
+/// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
+/// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
+/// Either way, we just search the wheel for the name
 pub fn find_dist_info_metadata<'a, T: Copy>(
     filename: &WheelFilename,
     files: impl Iterator<Item = (T, &'a str)>,
