@@ -57,6 +57,11 @@ pub(crate) async fn wheel_metadata_write_cache(
     fs::write(path, serde_json::to_vec(metadata)?).await
 }
 
+/// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
+/// entire wheel just for the one file.
+///
+/// This method is copied from <https://github.com/prefix-dev/rip/pull/66> and licensed under
+/// BSD-3-Clause, see `LICENSE.BSD-3-Clause`
 pub(crate) async fn wheel_metadata_from_remote_zip(
     filename: WheelFilename,
     reader: &mut AsyncHttpRangeReader,
