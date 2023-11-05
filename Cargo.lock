@@ -220,7 +220,7 @@ dependencies = [
 [[package]]
 name = "async_http_range_reader"
 version = "0.3.0"
-source = "git+https://github.com/konstin/async_http_range_reader?branch=return-head-response#f61678c9545c05dfb2353047b8cd97250bac0739"
+source = "git+https://github.com/baszalmstra/async_http_range_reader#4cafe5afda889d53060e0565c949d4ffd6ef3786"
 dependencies = [
  "bisection",
  "futures",

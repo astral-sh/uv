@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 anyhow = { version = "1.0.75" }
-async_http_range_reader = { version = "0.3.0", git = "https://github.com/konstin/async_http_range_reader", branch = "return-head-response" }
+async_http_range_reader = { version = "0.3.0", git = "https://github.com/baszalmstra/async_http_range_reader", ref = "4cafe5afda889d53060e0565c949d4ffd6ef3786" }
 async_zip = { version = "0.0.15", features = ["tokio", "deflate"] }
 bitflags = { version = "2.4.0" }
 cacache = { version = "11.7.1", default-features = false, features = ["tokio-runtime"] }
