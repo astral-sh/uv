@@ -996,12 +996,9 @@ fn mixed_url_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Request Flask, but include a URL dependency for a conflicting version of Werkzeug.
-///
-/// TODO(charlie): This test _should_ fail, but sometimes passes due to inadequacies in our
-/// URL dependency model.
+/// Request Werkzeug via both a version and a URL dependency at a _different_ version, which
+/// should result in a conflict.
 #[test]
-#[ignore]
 fn conflicting_direct_url_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -1020,6 +1017,116 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.touch()?;
     requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request Werkzeug via both a version and a URL dependency at _the same_ version, which
+/// should prefer the direct URL dependency.
+#[test]
+fn compatible_direct_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("werkzeug==2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request Werkzeug via two different URLs at different versions, which should result in a conflict.
+#[test]
+fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("werkzeug @ https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request Werkzeug via two different URLs at the same version. Despite mapping to the same
+/// version, it should still result in a conflict.
+#[test]
+fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("werkzeug @ git+git+https://github.com/pallets/flask.git@2.0.0 \nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1063,6 +1170,130 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
             .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request `transitive_url_dependency`, which depends on `git+https://github.com/pallets/werkzeug@2.0.0`.
+/// Since this URL isn't declared upfront, we should reject it.
+#[test]
+fn disallowed_transitive_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request `transitive_url_dependency`, which depends on `git+https://github.com/pallets/werkzeug@2.0.0`.
+/// Since this URL is declared as a constraint, we should accept it.
+#[test]
+fn allowed_transitive_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
+
+    let constraints_txt = temp_dir.child("constraints.txt");
+    constraints_txt.touch()?;
+    constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug@2.0.0")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Request `transitive_url_dependency`, which depends on `git+https://github.com/pallets/werkzeug@2.0.0`.
+/// Since this `git+https://github.com/pallets/werkzeug@2.0.0.git` is declared as a constraint, and
+/// those map to the same canonical URL, we should accept it.
+#[test]
+fn allowed_transitive_canonical_url_dependency() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
+
+    let constraints_txt = temp_dir.child("constraints.txt");
+    constraints_txt.touch()?;
+    constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())

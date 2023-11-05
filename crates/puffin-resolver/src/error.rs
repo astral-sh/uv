@@ -33,6 +33,15 @@ pub enum ResolveError {
         metadata: PackageName,
     },
 
+    #[error("~= operator requires at least two release segments: {0}")]
+    InvalidTildeEquals(pep440_rs::VersionSpecifier),
+
+    #[error("Conflicting URLs for package `{0}`: {1} and {2}")]
+    ConflictingUrls(PackageName, String, String),
+
+    #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
+    DisallowedUrl(PackageName, Url),
+
     #[error("Failed to build distribution: {filename}")]
     RegistryDistribution {
         filename: String,

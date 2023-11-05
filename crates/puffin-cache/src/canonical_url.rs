@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use url::Url;
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
@@ -74,6 +75,14 @@ impl CacheKey for CanonicalUrl {
     }
 }
 
+impl Hash for CanonicalUrl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.0.as_str().hash(state);
+    }
+}
+
 /// Like [`CanonicalUrl`], but attempts to represent an underlying source repository, abstracting
 /// away details like the specific commit or branch, or the subdirectory to build within the
 /// repository.
@@ -113,6 +122,14 @@ impl CacheKey for RepositoryUrl {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
         self.0.as_str().cache_key(state);
+    }
+}
+
+impl Hash for RepositoryUrl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.0.as_str().hash(state);
     }
 }
 

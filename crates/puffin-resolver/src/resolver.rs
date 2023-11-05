@@ -1,6 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -22,7 +21,7 @@ use waitmap::WaitMap;
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_cache::RepositoryUrl;
+use puffin_cache::{CanonicalUrl, RepositoryUrl};
 use puffin_client::RegistryClient;
 use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -34,14 +33,16 @@ use crate::distribution::{SourceDistributionFetcher, WheelFetcher};
 use crate::error::ResolveError;
 use crate::file::{DistributionFile, SdistFile, WheelFile};
 use crate::manifest::Manifest;
-use crate::pubgrub::{iter_requirements, version_range};
-use crate::pubgrub::{PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION};
+use crate::pubgrub::{
+    PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
+};
 use crate::resolution::Graph;
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
+    allowed_urls: AllowedUrls,
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
     client: &'a RegistryClient,
@@ -65,6 +66,18 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             index: Arc::new(Index::default()),
             locks: Arc::new(Locks::default()),
             selector: CandidateSelector::from(&manifest),
+            allowed_urls: manifest
+                .requirements
+                .iter()
+                .chain(manifest.constraints.iter())
+                .filter_map(|req| {
+                    if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
+                        Some(url)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -127,14 +140,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         let mut in_flight = InFlight::default();
         let mut pins = FxHashMap::default();
         let mut priorities = PubGrubPriorities::default();
-
-        // Push all the requirements into the package sink.
-        for (package, version) in
-            iter_requirements(self.requirements.iter(), None, None, self.markers)
-        {
-            debug!("Adding root dependency: {package} {version}");
-            Self::visit_package(&package, &mut priorities, &mut in_flight, request_sink)?;
-        }
 
         // Start the solve.
         let mut state = State::init(root.clone(), MIN_VERSION.clone());
@@ -366,6 +371,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 debug!("Searching for a compatible version of {package_name} @ {url} ({range})",);
 
+                // If the URL wasn't declared in the direct dependencies or constraints, reject it.
+                if !self.allowed_urls.contains(url) {
+                    return Err(ResolveError::DisallowedUrl(
+                        package_name.clone(),
+                        url.clone(),
+                    ));
+                }
+
                 if let Ok(wheel_filename) = WheelFilename::try_from(url) {
                     // If the URL is that of a wheel, extract the version.
                     let version = PubGrubVersion::from(wheel_filename.version);
@@ -455,37 +468,23 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {
-                let mut constraints =
-                    DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
-
                 // Add the root requirements.
-                for (package, version) in
-                    iter_requirements(self.requirements.iter(), None, None, self.markers)
-                {
+                let constraints = PubGrubDependencies::try_from_requirements(
+                    &self.requirements,
+                    &self.constraints,
+                    None,
+                    None,
+                    self.markers,
+                )?;
+
+                for (package, version) in constraints.iter() {
+                    debug!("Adding direct dependency: {package:?} {version:?}");
+
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(&package, priorities, in_flight, request_sink)?;
-
-                    // Add it to the constraints.
-                    match constraints.entry(package) {
-                        Entry::Occupied(mut entry) => {
-                            entry.insert(entry.get().intersection(&version));
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(version);
-                        }
-                    }
+                    Self::visit_package(package, priorities, in_flight, request_sink)?;
                 }
 
-                // If any requirements were further constrained by the user, add those constraints.
-                for (package, version) in
-                    iter_requirements(self.constraints.iter(), None, None, self.markers)
-                {
-                    if let Some(range) = constraints.get_mut(&package) {
-                        *range = range.intersection(&version);
-                    }
-                }
-
-                Ok(Dependencies::Known(constraints))
+                Ok(Dependencies::Known(constraints.into()))
             }
 
             PubGrubPackage::Package(package_name, extra, url) => {
@@ -500,39 +499,19 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 };
                 let metadata = entry.value();
 
-                let mut constraints =
-                    DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
-
-                for (package, version) in iter_requirements(
-                    metadata.requires_dist.iter(),
+                let mut constraints = PubGrubDependencies::try_from_requirements(
+                    &metadata.requires_dist,
+                    &self.constraints,
                     extra.as_ref(),
                     Some(package_name),
                     self.markers,
-                ) {
+                )?;
+
+                for (package, version) in constraints.iter() {
                     debug!("Adding transitive dependency: {package} {version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(&package, priorities, in_flight, request_sink)?;
-
-                    // Add it to the constraints.
-                    match constraints.entry(package) {
-                        Entry::Occupied(mut entry) => {
-                            entry.insert(entry.get().intersection(&version));
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(version);
-                        }
-                    }
-                }
-
-                // If any packages were further constrained by the user, add those constraints.
-                for constraint in &self.constraints {
-                    let package = PubGrubPackage::Package(constraint.name.clone(), None, None);
-                    if let Some(range) = constraints.get_mut(&package) {
-                        *range = range.intersection(
-                            &version_range(constraint.version_or_url.as_ref()).unwrap(),
-                        );
-                    }
+                    Self::visit_package(package, priorities, in_flight, request_sink)?;
                 }
 
                 if let Some(extra) = extra {
@@ -549,7 +528,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     );
                 }
 
-                Ok(Dependencies::Known(constraints))
+                Ok(Dependencies::Known(constraints.into()))
             }
         }
     }
@@ -924,6 +903,21 @@ impl Default for Index {
             versions: WaitMap::new(),
             redirects: WaitMap::new(),
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct AllowedUrls(FxHashSet<CanonicalUrl>);
+
+impl AllowedUrls {
+    fn contains(&self, url: &Url) -> bool {
+        self.0.contains(&CanonicalUrl::new(url))
+    }
+}
+
+impl<'a> FromIterator<&'a Url> for AllowedUrls {
+    fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
+        Self(iter.into_iter().map(CanonicalUrl::new).collect())
     }
 }
 
