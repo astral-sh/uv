@@ -23,7 +23,7 @@ serde = { workspace = true, features = ["derive"], optional = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 
-pyo3 = { version = "0.19", optional = true, features = ["extension-module", "abi3-py37"] }
+pyo3 = { version = "0.20", optional = true, features = ["extension-module", "abi3-py37"] }
 
 [dev-dependencies]
-indoc = "2.0.1"
+indoc = "2.0.4"
