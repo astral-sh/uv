@@ -1445,6 +1445,7 @@ dependencies = [
  "platform-info",
  "plist",
  "pyo3",
+ "pypi-types",
  "rayon",
  "reflink-copy",
  "regex",

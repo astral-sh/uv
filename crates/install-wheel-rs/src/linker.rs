@@ -10,12 +10,14 @@ use fs_err::File;
 use mailparse::MailHeaderMap;
 use tracing::{debug, span, Level};
 
+use pypi_types::DirectUrl;
+
 use crate::install_location::InstallLocation;
 use crate::wheel::{
     extra_dist_info, install_data, parse_wheel_version, read_scripts_from_section,
     write_script_entrypoints,
 };
-use crate::{read_record_file, DirectUrl, Error, Script};
+use crate::{read_record_file, Error, Script};
 
 /// Install the given wheel to the given venv
 ///
