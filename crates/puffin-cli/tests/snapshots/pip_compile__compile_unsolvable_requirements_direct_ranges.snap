@@ -6,14 +6,14 @@ info:
     - pip-compile
     - pyproject.toml
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpQZyk8c
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpAFfkaN
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpOV0S3e/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpOGc5nS/.venv
 ---
 success: false
 exit_code: 2
 ----- stdout -----
 
 ----- stderr -----
-error: Conflicting versions for package `django`: >=4.0 is incompatible with <=3.0
+error: Conflicting versions requested for package `django`: `>=4.0` is incompatible with `<=3.0`
 

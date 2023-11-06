@@ -39,7 +39,7 @@ pub enum ResolveError {
     #[error("Conflicting URLs for package `{0}`: {1} and {2}")]
     ConflictingUrls(PackageName, String, String),
 
-    #[error("Conflicting versions for package `{0}`: {1} is incompatible with {2}")]
+    #[error("Conflicting versions requested for package `{0}`: `{1}` is incompatible with `{2}`")]
     ConflictingPackageVersions(PackageName, Range<PubGrubVersion>, Range<PubGrubVersion>),
 
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
