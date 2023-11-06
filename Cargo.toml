@@ -42,7 +42,7 @@ once_cell = { version = "1.18.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.5.0" }
-pyproject-toml = { version = "0.7.0" }
+pyproject-toml = { version = "0.8.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.10" }
