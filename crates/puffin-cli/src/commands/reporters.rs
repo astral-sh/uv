@@ -9,11 +9,11 @@ use puffin_normalize::PackageName;
 use crate::printer::Printer;
 
 #[derive(Debug)]
-pub(crate) struct WheelFinderReporter {
+pub(crate) struct FinderReporter {
     progress: ProgressBar,
 }
 
-impl From<Printer> for WheelFinderReporter {
+impl From<Printer> for FinderReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
         progress.set_style(
@@ -24,7 +24,7 @@ impl From<Printer> for WheelFinderReporter {
     }
 }
 
-impl WheelFinderReporter {
+impl FinderReporter {
     #[must_use]
     pub(crate) fn with_length(self, length: u64) -> Self {
         self.progress.set_length(length);
@@ -32,7 +32,7 @@ impl WheelFinderReporter {
     }
 }
 
-impl puffin_resolver::WheelFinderReporter for WheelFinderReporter {
+impl puffin_resolver::FinderReporter for FinderReporter {
     fn on_progress(&self, wheel: &RemoteDistribution) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);

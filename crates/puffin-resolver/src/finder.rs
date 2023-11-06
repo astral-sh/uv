@@ -1,4 +1,4 @@
-//! Given a set of selected packages, find a compatible set of wheels to install.
+//! Given a set of selected packages, find a compatible set of distributions to install.
 //!
 //! This is similar to running `pip install` with the `--no-deps` flag.
 
@@ -6,30 +6,28 @@ use std::hash::BuildHasherDefault;
 use std::str::FromStr;
 
 use anyhow::Result;
-use futures::future::Either;
 use futures::{StreamExt, TryFutureExt};
 use fxhash::FxHashMap;
-use tracing::debug;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistribution;
 use puffin_normalize::PackageName;
-use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
+use puffin_package::pypi_types::{File, SimpleJson};
 
 use crate::error::ResolveError;
 use crate::resolution::Resolution;
 
-pub struct WheelFinder<'a> {
+pub struct DistributionFinder<'a> {
     tags: &'a Tags,
     client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
 }
 
-impl<'a> WheelFinder<'a> {
-    /// Initialize a new wheel finder.
+impl<'a> DistributionFinder<'a> {
+    /// Initialize a new distribution finder.
     pub fn new(tags: &'a Tags, client: &'a RegistryClient) -> Self {
         Self {
             tags,
@@ -53,23 +51,16 @@ impl<'a> WheelFinder<'a> {
             return Ok(Resolution::default());
         }
 
-        // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
-        // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
+        // A channel to fetch package metadata (e.g., given `flask`, fetch all versions).
         let (package_sink, package_stream) = futures::channel::mpsc::unbounded();
 
         // Initialize the package stream.
         let mut package_stream = package_stream
             .map(|request: Request| match request {
-                Request::Package(requirement) => Either::Left(
-                    self.client
-                        .simple(requirement.name.clone())
-                        .map_ok(move |metadata| Response::Package(requirement, metadata)),
-                ),
-                Request::Version(requirement, file) => Either::Right(
-                    self.client
-                        .file(file.clone())
-                        .map_ok(move |metadata| Response::Version(requirement, file, metadata)),
-                ),
+                Request::Package(requirement) => self
+                    .client
+                    .simple(requirement.name.clone())
+                    .map_ok(move |metadata| Response::Package(requirement, metadata)),
             })
             .buffer_unordered(32)
             .ready_chunks(32);
@@ -107,42 +98,17 @@ impl<'a> WheelFinder<'a> {
                 match result {
                     Response::Package(requirement, metadata) => {
                         // Pick a version that satisfies the requirement.
-                        let Some(file) = metadata.files.iter().rev().find(|file| {
-                            // We only support wheels for now.
-                            let Ok(name) = WheelFilename::from_str(file.filename.as_str()) else {
-                                return false;
-                            };
-
-                            if !name.is_compatible(self.tags) {
-                                return false;
-                            }
-
-                            requirement.is_satisfied_by(&name.version)
-                        }) else {
+                        let Some(distribution) = self.select(&requirement, metadata.files) else {
                             return Err(ResolveError::NotFound(requirement));
                         };
 
-                        package_sink.unbounded_send(Request::Version(requirement, file.clone()))?;
-                    }
-                    Response::Version(requirement, file, metadata) => {
-                        debug!(
-                            "Selecting: {}=={} ({})",
-                            metadata.name, metadata.version, file.filename
-                        );
-
-                        let package = RemoteDistribution::from_registry(
-                            metadata.name,
-                            metadata.version,
-                            file,
-                        );
-
                         if let Some(reporter) = self.reporter.as_ref() {
-                            reporter.on_progress(&package);
+                            reporter.on_progress(&distribution);
                         }
 
                         // Add to the resolved set.
                         let normalized_name = requirement.name.clone();
-                        resolution.insert(normalized_name, package);
+                        resolution.insert(normalized_name, distribution);
                     }
                 }
             }
@@ -158,26 +124,52 @@ impl<'a> WheelFinder<'a> {
 
         Ok(Resolution::new(resolution))
     }
+
+    /// select a version that satisfies the requirement, preferring wheels to source distributions.
+    fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<RemoteDistribution> {
+        let mut fallback = None;
+        for file in files.into_iter().rev() {
+            if let Ok(wheel) = WheelFilename::from_str(file.filename.as_str()) {
+                if !wheel.is_compatible(self.tags) {
+                    continue;
+                }
+                if requirement.is_satisfied_by(&wheel.version) {
+                    return Some(RemoteDistribution::from_registry(
+                        wheel.distribution,
+                        wheel.version,
+                        file,
+                    ));
+                }
+            } else if let Ok(sdist) =
+                SourceDistributionFilename::parse(file.filename.as_str(), &requirement.name)
+            {
+                if requirement.is_satisfied_by(&sdist.version) {
+                    fallback = Some(RemoteDistribution::from_registry(
+                        sdist.name,
+                        sdist.version,
+                        file,
+                    ));
+                }
+            }
+        }
+        fallback
+    }
 }
 
 #[derive(Debug)]
 enum Request {
     /// A request to fetch the metadata for a package.
     Package(Requirement),
-    /// A request to fetch the metadata for a specific version of a package.
-    Version(Requirement, File),
 }
 
 #[derive(Debug)]
 enum Response {
     /// The returned metadata for a package.
     Package(Requirement, SimpleJson),
-    /// The returned metadata for a specific version of a package.
-    Version(Requirement, File, Metadata21),
 }
 
 pub trait Reporter: Send + Sync {
-    /// Callback to invoke when a package is resolved to a wheel.
+    /// Callback to invoke when a package is resolved to a specific distribution.
     fn on_progress(&self, wheel: &RemoteDistribution);
 
     /// Callback to invoke when the resolution is complete.
