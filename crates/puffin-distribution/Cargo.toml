@@ -17,4 +17,6 @@ puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
+fs-err = { workspace = true }
+serde_json = { workspace = true }
 url = { workspace = true }

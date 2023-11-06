@@ -4,8 +4,10 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use pep508_rs::{Requirement, VersionOrUrl};
+use puffin_distribution::source::Source;
 use puffin_distribution::{CachedDistribution, InstalledDistribution};
 use puffin_interpreter::Virtualenv;
+use pypi_types::DirectUrl;
 
 use crate::url_index::UrlIndex;
 use crate::{RegistryIndex, SitePackages};
@@ -47,14 +49,35 @@ impl InstallPlan {
 
         for requirement in requirements {
             // Filter out already-installed packages.
-            // TODO(charlie): Detect packages installed via URL. Right now, like pip, we _always_
-            // attempt to reinstall a package if it was installed via URL. This is often very
-            // fast, since the wheel is cached, but it should still be avoidable.
             if let Some(distribution) = site_packages.remove(&requirement.name) {
-                if requirement.is_satisfied_by(distribution.version()) {
-                    debug!("Requirement already satisfied: {distribution}",);
-                    continue;
+                // We need to map here from the requirement to its DirectUrl, then see if that DirectUrl
+                // is anywhere in `site_packages`.
+                match requirement.version_or_url.as_ref() {
+                    // If the requirement comes from a registry, check by name.
+                    None | Some(VersionOrUrl::VersionSpecifier(_)) => {
+                        if requirement.is_satisfied_by(distribution.version()) {
+                            debug!("Requirement already satisfied: {distribution}");
+                            continue;
+                        }
+                    }
+
+                    // If the requirement comes from a direct URL, check by URL.
+                    Some(VersionOrUrl::Url(url)) => {
+                        if let Ok(Some(direct_url)) = distribution.direct_url() {
+                            if let Ok(source) = Source::try_from(url) {
+                                if let Ok(target) = DirectUrl::try_from(source) {
+                                    // TODO(charlie): These don't need to be strictly equal. We only care
+                                    // about a subset of the fields.
+                                    if target == direct_url {
+                                        debug!("Requirement already satisfied: {distribution}");
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+
                 extraneous.push(distribution);
             }
 

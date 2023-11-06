@@ -24,6 +24,29 @@ impl Git {
         self.precise = Some(precise);
         self
     }
+
+    /// Return the [`Url`] of the Git repository.
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
+    /// Return the reference to the commit to use, which could be a branch, tag or revision.
+    pub fn reference(&self) -> Option<&str> {
+        match &self.reference {
+            GitReference::Branch(rev)
+            | GitReference::Tag(rev)
+            | GitReference::BranchOrTag(rev)
+            | GitReference::Ref(rev)
+            | GitReference::FullCommit(rev)
+            | GitReference::ShortCommit(rev) => Some(rev),
+            GitReference::DefaultBranch => None,
+        }
+    }
+
+    /// Return the precise commit, if known.
+    pub fn precise(&self) -> Option<git2::Oid> {
+        self.precise
+    }
 }
 
 impl TryFrom<Url> for Git {

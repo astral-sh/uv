@@ -1,12 +1,10 @@
-use std::path::PathBuf;
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use url::Url;
-use install_wheel_rs::DirectUrl;
 
+use puffin_distribution::source::Source;
 use puffin_distribution::CachedDistribution;
-use puffin_git::Git;
 use puffin_interpreter::Virtualenv;
+use pypi_types::DirectUrl;
 
 pub struct Installer<'a> {
     venv: &'a Virtualenv,
@@ -51,10 +49,10 @@ impl<'a> Installer<'a> {
                 install_wheel_rs::linker::install_wheel(
                     &location,
                     wheel.path(),
-                    None,
+                    direct_url(wheel)?.as_ref(),
                     self.link_mode,
                 )
-                    .with_context(|| format!("Failed to install: {wheel}"))?;
+                .with_context(|| format!("Failed to install: {wheel}"))?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_install_progress(wheel);
@@ -67,27 +65,14 @@ impl<'a> Installer<'a> {
 }
 
 /// Return the [`DirectUrl`] for a wheel, if applicable.
+///
+/// TODO(charlie): This shouldn't be in `puffin-installer`.
 fn direct_url(wheel: &CachedDistribution) -> Result<Option<DirectUrl>> {
     let CachedDistribution::Url(_, url, _) = wheel else {
         return Ok(None);
     };
-
-    // If the URL points to a subdirectory, extract it, as in:
-    //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
-    //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-    let subdirectory = url.fragment().and_then(|fragment| {
-        fragment.split('&').find_map(|fragment| {
-            fragment.strip_prefix("subdirectory=").map(PathBuf::from)
-        })
-    });
-
-    if let Some(url) = url.as_str().strip_prefix("git+") {
-        let url = Url::parse(url)?;
-        let git = Git::try_from(url)?;
-        Ok(Self::Git(git, subdirectory))
-    } else {
-        Ok(Self::RemoteUrl(url, subdirectory))
-    }
+    let source = Source::try_from(url)?;
+    DirectUrl::try_from(source).map(Some)
 }
 
 pub trait Reporter: Send + Sync {

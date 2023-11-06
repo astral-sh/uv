@@ -8,7 +8,7 @@ use url::Url;
 use pep440_rs::Version;
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
-use pypi_types::File;
+use pypi_types::{DirectUrl, File};
 
 pub mod source;
 
@@ -267,15 +267,6 @@ pub struct InstalledDistribution {
 }
 
 impl InstalledDistribution {
-    /// Initialize a new installed distribution.
-    pub fn new(name: PackageName, version: Version, path: PathBuf) -> Self {
-        Self {
-            name,
-            version,
-            path,
-        }
-    }
-
     /// Try to parse a distribution from a `.dist-info` directory name (like `django-5.0a1.dist-info`).
     ///
     /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
@@ -310,6 +301,7 @@ impl InstalledDistribution {
         &self.name
     }
 
+    /// Return the [`Version`] of the distribution.
     pub fn version(&self) -> &Version {
         &self.version
     }
@@ -322,7 +314,19 @@ impl InstalledDistribution {
     /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
     /// distributions.
     pub fn version_or_url(&self) -> VersionOrUrl {
+        // TODO(charlie): If this dependency was installed via a direct URL, return it here, rather
+        // than the version.
         VersionOrUrl::Version(&self.version)
+    }
+
+    /// Return the [`DirectUrl`] metadata for this distribution, if it exists.
+    pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
+        let path = self.path.join("direct_url.json");
+        let Ok(file) = fs_err::File::open(path) else {
+            return Ok(None);
+        };
+        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
+        Ok(Some(direct_url))
     }
 }
 
