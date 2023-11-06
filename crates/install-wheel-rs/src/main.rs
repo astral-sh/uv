@@ -65,6 +65,7 @@ fn main() -> Result<(), Error> {
                 &locked_dir,
                 File::open(wheel)?,
                 &filename,
+                None,
                 args.compile,
                 !args.skip_hashes,
                 &[],

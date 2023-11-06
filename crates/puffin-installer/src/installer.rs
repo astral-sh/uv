@@ -44,8 +44,13 @@ impl<'a> Installer<'a> {
                     self.venv.interpreter_info().simple_version(),
                 );
 
-                install_wheel_rs::linker::install_wheel(&location, wheel.path(), self.link_mode)
-                    .with_context(|| format!("Failed to install: {wheel}"))?;
+                install_wheel_rs::linker::install_wheel(
+                    &location,
+                    wheel.path(),
+                    None,
+                    self.link_mode,
+                )
+                .with_context(|| format!("Failed to install: {wheel}"))?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_install_progress(wheel);

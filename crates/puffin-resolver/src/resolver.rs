@@ -615,7 +615,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         Ok::<(), ResolveError>(())
     }
 
-    async fn process_request(&'a self, request: Request) -> Result<Response, ResolveError> {
+    async fn process_request(&self, request: Request) -> Result<Response, ResolveError> {
         match request {
             // Fetch package metadata from the registry.
             Request::Package(package_name) => {

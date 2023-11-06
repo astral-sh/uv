@@ -46,10 +46,7 @@ impl<'a> Downloader<'a> {
     }
 
     /// Download a set of distributions.
-    pub async fn download(
-        &'a self,
-        distributions: Vec<RemoteDistribution>,
-    ) -> Result<Vec<Download>> {
+    pub async fn download(&self, distributions: Vec<RemoteDistribution>) -> Result<Vec<Download>> {
         // Sort the distributions by size.
         let mut distributions = distributions;
         distributions.sort_unstable_by_key(|wheel| match wheel {

@@ -15,7 +15,7 @@ use crate::wheel::{
     extra_dist_info, install_data, parse_wheel_version, read_scripts_from_section,
     write_script_entrypoints,
 };
-use crate::{read_record_file, Error, Script};
+use crate::{read_record_file, DirectUrl, Error, Script};
 
 /// Install the given wheel to the given venv
 ///
@@ -27,6 +27,7 @@ use crate::{read_record_file, Error, Script};
 pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
+    direct_url: Option<&DirectUrl>,
     link_mode: LinkMode,
 ) -> Result<(), Error> {
     let root = location.venv_root();
@@ -105,8 +106,13 @@ pub fn install_wheel(
     }
 
     debug!(name, "Writing extra metadata");
-
-    extra_dist_info(&site_packages, &dist_info_prefix, true, &mut record)?;
+    extra_dist_info(
+        &site_packages,
+        &dist_info_prefix,
+        true,
+        direct_url,
+        &mut record,
+    )?;
 
     debug!(name, "Writing record");
     let mut record_writer = csv::WriterBuilder::new()

@@ -62,6 +62,7 @@ impl LockedVenv {
                 &self.location,
                 File::open(wheel)?,
                 &filename,
+                None,
                 true,
                 true,
                 &[],

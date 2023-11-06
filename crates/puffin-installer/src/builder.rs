@@ -39,7 +39,7 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
     }
 
     /// Build a set of source distributions.
-    pub async fn build(&'a self, distributions: Vec<SourceDistribution>) -> Result<Vec<Wheel>> {
+    pub async fn build(&self, distributions: Vec<SourceDistribution>) -> Result<Vec<Wheel>> {
         // Sort the distributions by size.
         let mut distributions = distributions;
         distributions.sort_unstable_by_key(|distribution| match &distribution.remote {

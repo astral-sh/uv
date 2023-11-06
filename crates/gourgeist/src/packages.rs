@@ -54,8 +54,8 @@ pub(crate) fn install_base_packages(
     let install_location = InstallLocation::new(location.canonicalize()?, info.simple_version());
     let install_location = install_location.acquire_lock()?;
 
-    // TODO: Use the json api instead
-    // TODO: Only check the json API so often (monthly? daily?)
+    // TODO(konstin): Use the json api instead
+    // TODO(konstin): Only check the json API so often (monthly? daily?)
     let packages = [
         ("pip-23.2.1-py3-none-any.whl", "https://files.pythonhosted.org/packages/50/c2/e06851e8cc28dcad7c155f4753da8833ac06a5c704c109313b8d5a62968a/pip-23.2.1-py3-none-any.whl"),
         ("setuptools-68.2.2-py3-none-any.whl", "https://files.pythonhosted.org/packages/bb/26/7945080113158354380a12ce26873dd6c1ebd88d47f5bc24e2c5bb38c16a/setuptools-68.2.2-py3-none-any.whl"),
@@ -73,6 +73,7 @@ pub(crate) fn install_base_packages(
                 &install_location,
                 File::open(wheel_file)?,
                 &parsed_filename,
+                None,
                 false,
                 false,
                 &[],
