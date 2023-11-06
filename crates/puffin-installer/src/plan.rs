@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tracing::debug;
 
 use pep508_rs::{Requirement, VersionOrUrl};
@@ -34,11 +34,12 @@ impl PartitionedRequirements {
         venv: &Virtualenv,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
-        let mut site_packages = SitePackages::try_from_executable(venv)?;
+        let mut site_packages =
+            SitePackages::try_from_executable(venv).context("Failed to list installed packages")?;
 
         // Index all the already-downloaded wheels in the cache.
-        let registry_index = RegistryIndex::try_from_directory(cache)?;
-        let url_index = UrlIndex::try_from_directory(cache)?;
+        let registry_index = RegistryIndex::try_from_directory(cache);
+        let url_index = UrlIndex::try_from_directory(cache);
 
         let mut local = vec![];
         let mut remote = vec![];

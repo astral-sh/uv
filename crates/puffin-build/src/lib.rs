@@ -169,11 +169,15 @@ impl SourceDistributionBuilder {
             let resolved_requirements = build_context
                 .resolve(&build_system.requires)
                 .await
-                .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+                .map_err(|err| {
+                    Error::RequirementsInstall("build-system.requires (resolve)", err)
+                })?;
             build_context
                 .install(&resolved_requirements, &venv)
                 .await
-                .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+                .map_err(|err| {
+                    Error::RequirementsInstall("build-system.requires (install)", err)
+                })?;
             build_system.requires.clone()
         } else {
             // TODO(konstin): Resolve those once globally and cache per puffin invocation
@@ -185,11 +189,11 @@ impl SourceDistributionBuilder {
             let resolved_requirements = build_context
                 .resolve(&requirements)
                 .await
-                .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
+                .map_err(|err| Error::RequirementsInstall("setup.py build (resolve)", err))?;
             build_context
                 .install(&resolved_requirements, &venv)
                 .await
-                .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
+                .map_err(|err| Error::RequirementsInstall("setup.py build (install)", err))?;
             requirements
         };
 
@@ -458,12 +462,12 @@ async fn create_pep517_build_environment(
         let resolved_requirements = build_context
             .resolve(&requirements)
             .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+            .map_err(|err| Error::RequirementsInstall("build-system.requires (resolve)", err))?;
 
         build_context
             .install(&resolved_requirements, venv)
             .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
+            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
     }
     Ok(())
 }
