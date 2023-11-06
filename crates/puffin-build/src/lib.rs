@@ -7,6 +7,7 @@ use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use flate2::read::GzDecoder;
 use fs_err as fs;
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use tar::Archive;
 use tempfile::{tempdir, TempDir};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 use zip::ZipArchive;
 
@@ -93,12 +95,20 @@ impl Pep517Backend {
     }
 }
 
+/// Uses an [`Arc`] internally, clone freely
+#[derive(Debug, Default, Clone)]
+pub struct SourceDistributionBuildContext {
+    /// Cache the first resolution of `pip`, `setuptools` and `wheel` we made for setup.py (and
+    /// some PEP 517) builds so we can reuse it
+    setup_py_requirements: Arc<Mutex<Option<Vec<Requirement>>>>,
+}
+
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
 /// invocation.
 ///
 /// This keeps both the temp dir and the result of a potential `prepare_metadata_for_build_wheel`
 /// call which changes how we call `build_wheel`.
-pub struct SourceDistributionBuilder {
+pub struct SourceDistributionBuild {
     temp_dir: TempDir,
     source_tree: PathBuf,
     /// `Some` if this is a PEP 517 build
@@ -116,7 +126,7 @@ pub struct SourceDistributionBuilder {
     metadata_directory: Option<PathBuf>,
 }
 
-impl SourceDistributionBuilder {
+impl SourceDistributionBuild {
     /// Create a virtual environment in which to build a source distribution, extracting the
     /// contents from an archive if necessary.
     pub async fn setup(
@@ -124,7 +134,8 @@ impl SourceDistributionBuilder {
         subdirectory: Option<&Path>,
         interpreter_info: &InterpreterInfo,
         build_context: &impl BuildContext,
-    ) -> Result<SourceDistributionBuilder, Error> {
+        setup_py_requirements: SourceDistributionBuildContext,
+    ) -> Result<SourceDistributionBuild, Error> {
         let temp_dir = tempdir()?;
 
         // TODO(konstin): Parse and verify filenames
@@ -176,16 +187,22 @@ impl SourceDistributionBuilder {
                 .map_err(|err| Error::RequirementsInstall("build-system.requires", err))?;
             build_system.requires.clone()
         } else {
-            // TODO(konstin): Resolve those once globally and cache per puffin invocation
             let requirements = vec![
                 Requirement::from_str("wheel").unwrap(),
                 Requirement::from_str("setuptools").unwrap(),
                 Requirement::from_str("pip").unwrap(),
             ];
-            let resolved_requirements = build_context
-                .resolve(&requirements)
-                .await
-                .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
+            let mut resolution = setup_py_requirements.setup_py_requirements.lock().await;
+            let resolved_requirements = if let Some(resolved_requirements) = &*resolution {
+                resolved_requirements.clone()
+            } else {
+                let resolved_requirements = build_context
+                    .resolve(&requirements)
+                    .await
+                    .map_err(|err| Error::RequirementsInstall("setup.py build", err))?;
+                *resolution = Some(resolved_requirements.clone());
+                resolved_requirements
+            };
             build_context
                 .install(&resolved_requirements, &venv)
                 .await
