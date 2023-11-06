@@ -149,6 +149,41 @@ impl puffin_installer::InstallReporter for InstallReporter {
 }
 
 #[derive(Debug)]
+pub(crate) struct BuildReporter {
+    progress: ProgressBar,
+}
+
+impl From<Printer> for BuildReporter {
+    fn from(printer: Printer) -> Self {
+        let progress = ProgressBar::with_draw_target(None, printer.target());
+        progress.set_style(
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+        );
+        progress.set_message("Building wheels...");
+        Self { progress }
+    }
+}
+
+impl BuildReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.progress.set_length(length);
+        self
+    }
+}
+
+impl puffin_installer::BuildReporter for BuildReporter {
+    fn on_progress(&self, wheel: &RemoteDistribution) {
+        self.progress.set_message(format!("{wheel}"));
+        self.progress.inc(1);
+    }
+
+    fn on_complete(&self) {
+        self.progress.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct ResolverReporter {
     progress: ProgressBar,
 }

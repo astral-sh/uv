@@ -569,3 +569,140 @@ fn install_url() -> Result<()> {
 
     Ok(())
 }
+
+/// Install a package into a virtual environment from a Git repository.
+#[test]
+#[cfg(feature = "git")]
+fn install_git() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import werkzeug")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Install two packages from the same Git repository.
+#[test]
+#[cfg(feature = "git")]
+fn install_git_subdirectories() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import example_pkg")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Install a source distribution into a virtual environment.
+#[test]
+fn install_sdist() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("Werkzeug==0.9.6")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import werkzeug")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
