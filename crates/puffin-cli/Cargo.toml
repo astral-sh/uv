@@ -65,3 +65,5 @@ predicates = { version = "3.0.4" }
 python = []
 # Introduces a dependency on PyPI.
 pypi = []
+# Introduces a dependency on Git.
+git = []
