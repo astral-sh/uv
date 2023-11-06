@@ -6,9 +6,9 @@ info:
     - pip-compile
     - pyproject.toml
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpmN6eIS
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpN531dN
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpaj2K70/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp99w9dK/.venv
 ---
 success: false
 exit_code: 1
@@ -16,5 +16,5 @@ exit_code: 1
 
 ----- stderr -----
   × No solution found when resolving dependencies:
-  ╰─▶ my-project depends on django ∅
+  ╰─▶ my-project depends on django∅
 

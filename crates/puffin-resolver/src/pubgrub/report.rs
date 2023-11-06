@@ -383,22 +383,22 @@ impl fmt::Display for PuffinExternal {
                 if package_set == &Range::full() && dependency_set == &Range::full() {
                     write!(f, "{package} depends on {dependency}")
                 } else if package_set == &Range::full() {
-                    write!(f, "{package} depends on {dependency} {dependency_set}")
+                    write!(f, "{package} depends on {dependency}{dependency_set}")
                 } else if dependency_set == &Range::full() {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         write!(f, "{package} depends on {dependency}")
                     } else {
-                        write!(f, "{package} {package_set} depends on {dependency}")
+                        write!(f, "{package}{package_set} depends on {dependency}")
                     }
                 } else {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
-                        write!(f, "{package} depends on {dependency} {dependency_set}")
+                        write!(f, "{package} depends on {dependency}{dependency_set}")
                     } else {
                         write!(
                             f,
-                            "{package} {package_set} depends on {dependency} {dependency_set}"
+                            "{package}{package_set} depends on {dependency}{dependency_set}"
                         )
                     }
                 }
