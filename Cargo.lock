@@ -754,15 +754,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dirs"
-version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
-dependencies = [
- "dirs-sys",
-]
-
-[[package]]
 name = "dirs-sys"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1094,18 +1085,11 @@ version = "0.0.4"
 dependencies = [
  "camino",
  "clap",
- "configparser",
- "dirs",
- "distribution-filename",
  "fs-err",
- "install-wheel-rs",
  "platform-host",
  "puffin-interpreter",
- "rayon",
- "reqwest",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror",
  "tracing",
  "tracing-subscriber",
@@ -2168,14 +2152,12 @@ name = "puffin-build"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "clap",
  "flate2",
  "fs-err",
  "gourgeist",
  "indoc",
  "pep508_rs",
  "platform-host",
- "platform-tags",
  "puffin-interpreter",
  "puffin-traits",
  "pyproject-toml",

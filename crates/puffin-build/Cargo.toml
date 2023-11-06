@@ -14,12 +14,10 @@ license = { workspace = true }
 gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
-platform-tags = { path = "../platform-tags" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-traits = { path = "../puffin-traits" }
 
 anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
