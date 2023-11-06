@@ -1432,9 +1432,10 @@ optional-dependencies.bar = [
     Ok(())
 }
 
-/// Compile requirements that cannot be solved due to conflict in a `pyproject.toml` fil;e.
+/// Compile requirements that cannot be solved due to conflict in a `pyproject.toml` file
+/// where two direct requirements of a package have incompatible pinned versions.
 #[test]
-fn compile_unsolvable_requirements() -> Result<()> {
+fn compile_unsolvable_requirements_direct_pinned() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
@@ -1462,11 +1463,142 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
     )?;
 
     insta::with_settings!({
-        filters => vec![
-            (r"\d(ms|s)", "[TIME]"),
-            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
-            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-        ]
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Compile requirements that cannot be solved due to conflict in a `pyproject.toml` file
+/// where two direct requirements of a package have incompatible version ranges.
+#[test]
+fn compile_unsolvable_requirements_direct_ranges() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "my-project"
+dependencies = ["django>=4.0", "django<=3.0"]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Compile requirements that cannot be solved due to conflict in a `pyproject.toml` file
+/// where direct requirements of a package have a mix of compatible and incompatible version ranges.
+#[test]
+fn compile_unsolvable_requirements_direct_mixed_ranges() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "my-project"
+dependencies = ["django>=3.0", "django<=3.0", "django>5.0"]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Compile requirements in a `pyproject.toml` file where there are multiple direct requirements of a package
+/// but the versions are compatible.
+#[test]
+fn compile_solvable_requirements_multiple_direct_versions_for_package() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "my-project"
+dependencies = ["django>=3.0", "django<=3.0", "django==3.0"]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-compile")
