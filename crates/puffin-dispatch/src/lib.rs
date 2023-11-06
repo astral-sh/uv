@@ -8,14 +8,14 @@ use std::pin::Pin;
 
 use anyhow::Context;
 use anyhow::Result;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use tracing::{debug, instrument};
 
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClient;
-use puffin_installer::{Downloader, Installer, PartitionedRequirements, Unzipper};
+use puffin_installer::{Builder, Downloader, Installer, PartitionedRequirements, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{DistributionFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
@@ -143,6 +143,33 @@ impl BuildContext for BuildDispatch {
                     .await
                     .context("Failed to download build dependencies")?
             };
+
+            let (wheels, sdists): (Vec<_>, Vec<_>) =
+                downloads
+                    .into_iter()
+                    .partition_map(|download| match download {
+                        puffin_installer::Download::Wheel(wheel) => Either::Left(wheel),
+                        puffin_installer::Download::SourceDistribution(sdist) => {
+                            Either::Right(sdist)
+                        }
+                    });
+
+            // Build any missing source distributions.
+            let sdists = if sdists.is_empty() {
+                vec![]
+            } else {
+                debug!(
+                    "Building source distributions{}: {}",
+                    if sdists.len() == 1 { "" } else { "s" },
+                    sdists.iter().map(ToString::to_string).join(", ")
+                );
+                Builder::new(self)
+                    .build(sdists)
+                    .await
+                    .context("Failed to build source distributions")?
+            };
+
+            let downloads = wheels.into_iter().chain(sdists).collect::<Vec<_>>();
 
             // Unzip any downloaded distributions.
             let unzips = if downloads.is_empty() {

@@ -1,0 +1,25 @@
+---
+source: crates/puffin-cli/tests/pip_sync.rs
+info:
+  program: puffin
+  args:
+    - pip-sync
+    - requirements.txt
+    - "--cache-dir"
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpJvtAcl
+  env:
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpYIBn2G/.venv
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Resolved 2 packages in [TIME]
+Downloaded 2 packages in [TIME]
+Built 2 packages in [TIME]
+Unzipped 2 packages in [TIME]
+Installed 2 packages in [TIME]
+ + example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a
+ + example-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b
+

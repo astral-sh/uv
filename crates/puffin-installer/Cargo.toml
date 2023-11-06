@@ -13,11 +13,14 @@ license = { workspace = true }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
 puffin-distribution = { path = "../puffin-distribution" }
+puffin-git = { path = "../puffin-git" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-package = { path = "../puffin-package" }
+puffin-traits = { path = "../puffin-traits" }
 distribution-filename = { path = "../distribution-filename" }
 
 anyhow = { workspace = true }
@@ -26,6 +29,7 @@ fs-err = { workspace = true }
 fxhash = { workspace = true }
 rayon = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

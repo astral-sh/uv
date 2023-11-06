@@ -1,3 +1,7 @@
+//! Fetch and build source distributions from remote sources.
+//!
+//! TODO(charlie): Unify with `crates/puffin-installer/src/sdist_builder.rs`.
+
 use std::str::FromStr;
 
 use anyhow::Result;

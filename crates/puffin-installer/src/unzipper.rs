@@ -1,4 +1,5 @@
 use std::cmp::Reverse;
+use std::io::{Read, Seek};
 use std::path::Path;
 
 use anyhow::Result;
@@ -10,8 +11,8 @@ use zip::ZipArchive;
 use puffin_distribution::{CachedDistribution, RemoteDistribution};
 
 use crate::cache::WheelCache;
-use crate::downloader::InMemoryDistribution;
-use crate::vendor::CloneableSeekableReader;
+use crate::downloader::Wheel;
+use crate::vendor::{CloneableSeekableReader, HasLength};
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -30,7 +31,7 @@ impl Unzipper {
     /// Unzip a set of downloaded wheels.
     pub async fn unzip(
         &self,
-        downloads: Vec<InMemoryDistribution>,
+        downloads: Vec<Wheel>,
         target: &Path,
     ) -> Result<Vec<CachedDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
@@ -39,14 +40,17 @@ impl Unzipper {
 
         // Sort the wheels by size.
         let mut downloads = downloads;
-        downloads.sort_unstable_by_key(|wheel| Reverse(wheel.buffer.len()));
+        downloads.sort_unstable_by_key(|wheel| match wheel {
+            Wheel::Disk(_) => Reverse(usize::MIN),
+            Wheel::InMemory(wheel) => Reverse(wheel.buffer.len()),
+        });
 
         let staging = tempfile::tempdir_in(wheel_cache.root())?;
 
         // Unpack the wheels into the cache.
         let mut wheels = Vec::with_capacity(downloads.len());
         for download in downloads {
-            let remote = download.remote.clone();
+            let remote = download.remote().clone();
 
             debug!("Unpacking wheel: {remote}");
 
@@ -89,12 +93,17 @@ impl Unzipper {
 }
 
 /// Unzip a wheel into the target directory.
-fn unzip_wheel(wheel: InMemoryDistribution, target: &Path) -> Result<()> {
-    // Read the wheel into a buffer.
-    let reader = std::io::Cursor::new(wheel.buffer);
-    let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
+fn unzip_wheel(wheel: Wheel, target: &Path) -> Result<()> {
+    match wheel {
+        Wheel::InMemory(wheel) => unzip_archive(std::io::Cursor::new(wheel.buffer), target),
+        Wheel::Disk(wheel) => unzip_archive(std::fs::File::open(wheel.path)?, target),
+    }
+}
 
+/// Unzip a zip archive into the target directory.
+fn unzip_archive<R: Send + Read + Seek + HasLength>(reader: R, target: &Path) -> Result<()> {
     // Unzip in parallel.
+    let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     (0..archive.len())
         .par_bridge()
         .map(|file_number| {

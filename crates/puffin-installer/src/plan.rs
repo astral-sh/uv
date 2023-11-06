@@ -46,6 +46,9 @@ impl PartitionedRequirements {
 
         for requirement in requirements {
             // Filter out already-installed packages.
+            // TODO(charlie): Detect packages installed via URL. Right now, like pip, we _always_
+            // attempt to reinstall a package if it was installed via URL. This is often very
+            // fast, since the wheel is cached, but it should still be avoidable.
             if let Some(distribution) = site_packages.remove(&requirement.name) {
                 if requirement.is_satisfied_by(distribution.version()) {
                     debug!("Requirement already satisfied: {distribution}",);

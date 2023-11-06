@@ -3,20 +3,22 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use colored::Colorize;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use tracing::debug;
 
+use fs_err as fs;
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
+use puffin_dispatch::BuildDispatch;
 use puffin_distribution::Distribution;
-use puffin_installer::PartitionedRequirements;
+use puffin_installer::{Builder, PartitionedRequirements};
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::reporters::{
-    DownloadReporter, FinderReporter, InstallReporter, UnzipReporter,
+    BuildReporter, DownloadReporter, FinderReporter, InstallReporter, UnzipReporter,
 };
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
@@ -55,7 +57,6 @@ pub(crate) async fn sync_requirements(
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
-    // Audit the requirements.
     let start = std::time::Instant::now();
 
     // Detect the current Python interpreter.
@@ -162,6 +163,49 @@ pub(crate) async fn sync_requirements(
 
         downloads
     };
+
+    let (wheels, sdists): (Vec<_>, Vec<_>) =
+        downloads
+            .into_iter()
+            .partition_map(|download| match download {
+                puffin_installer::Download::Wheel(wheel) => Either::Left(wheel),
+                puffin_installer::Download::SourceDistribution(sdist) => Either::Right(sdist),
+            });
+
+    // Build any missing source distributions.
+    let sdists = if sdists.is_empty() {
+        vec![]
+    } else {
+        let start = std::time::Instant::now();
+
+        let build_dispatch = BuildDispatch::new(
+            RegistryClientBuilder::default().build(),
+            cache.to_path_buf(),
+            venv.interpreter_info().clone(),
+            fs::canonicalize(venv.python_executable())?,
+        );
+
+        let builder = Builder::new(&build_dispatch)
+            .with_reporter(BuildReporter::from(printer).with_length(sdists.len() as u64));
+
+        let wheels = builder.build(sdists).await?;
+
+        let s = if wheels.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Built {} in {}",
+                format!("{} package{}", wheels.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+
+        wheels
+    };
+
+    let downloads = wheels.into_iter().chain(sdists).collect::<Vec<_>>();
 
     // Unzip any downloaded distributions.
     let unzips = if downloads.is_empty() {

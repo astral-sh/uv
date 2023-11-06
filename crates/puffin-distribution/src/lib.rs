@@ -97,6 +97,31 @@ impl RemoteDistribution {
         Self::Url(name, url)
     }
 
+    /// Return the URL of the distribution.
+    pub fn url(&self) -> Result<Cow<'_, Url>> {
+        match self {
+            Self::Registry(_, _, file) => {
+                let url = Url::parse(&file.url)?;
+                Ok(Cow::Owned(url))
+            }
+            Self::Url(_, url) => Ok(Cow::Borrowed(url)),
+        }
+    }
+
+    /// Return the filename of the distribution.
+    pub fn filename(&self) -> Result<Cow<'_, str>> {
+        match self {
+            Self::Registry(_, _, file) => Ok(Cow::Borrowed(&file.filename)),
+            Self::Url(_, url) => {
+                let filename = url
+                    .path_segments()
+                    .and_then(std::iter::Iterator::last)
+                    .ok_or_else(|| anyhow!("Could not parse filename from URL: {}", url))?;
+                Ok(Cow::Owned(filename.to_owned()))
+            }
+        }
+    }
+
     /// Return the normalized [`PackageName`] of the distribution.
     pub fn name(&self) -> &PackageName {
         match self {
@@ -124,6 +149,17 @@ impl RemoteDistribution {
             }
             Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }
+    }
+
+    /// Returns `true` if this distribution is a wheel.
+    pub fn is_wheel(&self) -> bool {
+        let filename = match self {
+            Self::Registry(_name, _version, file) => &file.filename,
+            Self::Url(_name, url) => url.path(),
+        };
+        Path::new(filename)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
     }
 }
 
@@ -376,6 +412,17 @@ impl std::fmt::Display for RemoteDistributionRef<'_> {
             Self::Url(name, url) => {
                 write!(f, "{name} @ {url}")
             }
+        }
+    }
+}
+
+impl<'a> From<&'a RemoteDistribution> for RemoteDistributionRef<'a> {
+    fn from(dist: &'a RemoteDistribution) -> Self {
+        match dist {
+            RemoteDistribution::Registry(name, version, file) => {
+                Self::Registry(name, version, file)
+            }
+            RemoteDistribution::Url(name, url) => Self::Url(name, url),
         }
     }
 }
