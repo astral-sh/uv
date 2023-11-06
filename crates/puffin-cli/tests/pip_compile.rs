@@ -628,6 +628,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
 
 /// Resolve a specific Flask source distribution via a Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_https_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -668,6 +669,7 @@ fn compile_git_https_dependency() -> Result<()> {
 
 /// Resolve a specific Flask branch via a Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_branch_https_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -704,6 +706,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
 
 /// Resolve a specific Flask tag via a Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_tag_https_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -740,6 +743,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
 
 /// Resolve a specific Flask commit via a Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_long_commit_https_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -778,6 +782,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
 
 /// Resolve a specific Flask commit via a Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_short_commit_https_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -814,6 +819,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
 
 /// Resolve a specific Flask ref via a Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_refs_https_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -851,6 +857,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
 
 /// Resolve a specific Git dependency with a subdirectory.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_subdirectory_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -868,7 +875,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.touch()?;
-    requirements_in.write_str("hypothesis @ git+https://github.com/Zac-HD/hypothesis.git@ablation-mutation#subdirectory=hypothesis-python")?;
+    requirements_in.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a")?;
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -887,6 +894,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
 
 /// Resolve two packages from a `requirements.in` file with the same Git HTTPS dependency.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_concurrent_access() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -924,6 +932,7 @@ fn compile_git_concurrent_access() -> Result<()> {
 
 /// Resolve a Git dependency with a declared name that differs from the true name of the package.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_mismatched_name() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -1109,6 +1118,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
 /// Request Werkzeug via two different URLs at the same version. Despite mapping to the same
 /// version, it should still result in a conflict.
 #[test]
+#[cfg(feature = "git")]
 fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -1182,6 +1192,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 /// Request `transitive_url_dependency`, which depends on `git+https://github.com/pallets/werkzeug@2.0.0`.
 /// Since this URL isn't declared upfront, we should reject it.
 #[test]
+#[cfg(feature = "git")]
 fn disallowed_transitive_url_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -1219,6 +1230,7 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
 /// Request `transitive_url_dependency`, which depends on `git+https://github.com/pallets/werkzeug@2.0.0`.
 /// Since this URL is declared as a constraint, we should accept it.
 #[test]
+#[cfg(feature = "git")]
 fn allowed_transitive_url_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -1263,6 +1275,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
 /// Since this `git+https://github.com/pallets/werkzeug@2.0.0.git` is declared as a constraint, and
 /// those map to the same canonical URL, we should accept it.
 #[test]
+#[cfg(feature = "git")]
 fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
