@@ -97,10 +97,10 @@ impl Pep517Backend {
 
 /// Uses an [`Arc`] internally, clone freely
 #[derive(Debug, Default, Clone)]
-pub struct SourceDistributionBuildContext {
+pub struct SourceBuildContext {
     /// Cache the first resolution of `pip`, `setuptools` and `wheel` we made for setup.py (and
     /// some PEP 517) builds so we can reuse it
-    setup_py_requirements: Arc<Mutex<Option<Vec<Requirement>>>>,
+    setup_py_resolution: Arc<Mutex<Option<Vec<Requirement>>>>,
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
@@ -108,7 +108,7 @@ pub struct SourceDistributionBuildContext {
 ///
 /// This keeps both the temp dir and the result of a potential `prepare_metadata_for_build_wheel`
 /// call which changes how we call `build_wheel`.
-pub struct SourceDistributionBuild {
+pub struct SourceBuild {
     temp_dir: TempDir,
     source_tree: PathBuf,
     /// `Some` if this is a PEP 517 build
@@ -126,25 +126,25 @@ pub struct SourceDistributionBuild {
     metadata_directory: Option<PathBuf>,
 }
 
-impl SourceDistributionBuild {
+impl SourceBuild {
     /// Create a virtual environment in which to build a source distribution, extracting the
     /// contents from an archive if necessary.
     pub async fn setup(
-        sdist: &Path,
+        source: &Path,
         subdirectory: Option<&Path>,
         interpreter_info: &InterpreterInfo,
         build_context: &impl BuildContext,
-        setup_py_requirements: SourceDistributionBuildContext,
-    ) -> Result<SourceDistributionBuild, Error> {
+        source_build_context: SourceBuildContext,
+    ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
 
         // TODO(konstin): Parse and verify filenames
-        let source_root = if fs::metadata(sdist)?.is_dir() {
-            sdist.to_path_buf()
+        let source_root = if fs::metadata(source)?.is_dir() {
+            source.to_path_buf()
         } else {
-            debug!("Unpacking for build: {}", sdist.display());
+            debug!("Unpacking for build: {}", source.display());
             let extracted = temp_dir.path().join("extracted");
-            extract_archive(sdist, &extracted)?
+            extract_archive(source, &extracted)?
         };
         let source_tree = if let Some(subdir) = subdirectory {
             source_root.join(subdir)
@@ -192,7 +192,7 @@ impl SourceDistributionBuild {
                 Requirement::from_str("setuptools").unwrap(),
                 Requirement::from_str("pip").unwrap(),
             ];
-            let mut resolution = setup_py_requirements.setup_py_requirements.lock().await;
+            let mut resolution = source_build_context.setup_py_resolution.lock().await;
             let resolved_requirements = if let Some(resolved_requirements) = &*resolution {
                 resolved_requirements.clone()
             } else {

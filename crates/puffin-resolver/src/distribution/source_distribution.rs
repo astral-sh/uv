@@ -111,7 +111,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         // Build the wheel.
         let disk_filename = self
             .0
-            .build_source_distribution(&sdist_file, subdirectory.as_deref(), &wheel_dir)
+            .build_source(&sdist_file, subdirectory.as_deref(), &wheel_dir)
             .await?;
 
         // Read the metadata from the wheel.
