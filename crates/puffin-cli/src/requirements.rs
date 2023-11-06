@@ -112,7 +112,9 @@ impl RequirementsSpecification {
                         for (name, optional_requirements) in
                             project.optional_dependencies.unwrap_or_default()
                         {
-                            let normalized_name = ExtraName::new(name);
+                            // TODO(konstin): It's not ideal that pyproject-toml doesn't use
+                            // `ExtraName`
+                            let normalized_name = ExtraName::new(name)?;
                             if extras.contains(&normalized_name) {
                                 used_extras.insert(normalized_name);
                                 requirements.extend(optional_requirements);
@@ -120,7 +122,9 @@ impl RequirementsSpecification {
                         }
                     }
                     // Parse the project name
-                    project_name = Some(PackageName::new(project.name));
+                    project_name = Some(PackageName::new(project.name).with_context(|| {
+                        format!("Invalid `project.name` in {}", path.display())
+                    })?);
                 }
 
                 Self {

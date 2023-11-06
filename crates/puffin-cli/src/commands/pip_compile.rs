@@ -16,7 +16,9 @@ use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
+use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionFailureReporter, ResolutionMode};
+use std::str::FromStr;
 
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
@@ -228,4 +230,13 @@ impl From<bool> for UpgradeMode {
             Self::PreferPinned
         }
     }
+}
+
+pub(crate) fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
+    ExtraName::from_str(arg).map_err(|_err| {
+        anyhow!(
+            "Extra names must start and end with a letter or digit and may only \
+            contain -, _, ., and alphanumeric characters"
+        )
+    })
 }

@@ -172,7 +172,7 @@ impl CachedDistribution {
             return Ok(None);
         };
 
-        let name = PackageName::new(name);
+        let name = PackageName::from_str(name)?;
         let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
         let path = path.to_path_buf();
 
@@ -251,7 +251,7 @@ impl InstalledDistribution {
                 return Ok(None);
             };
 
-            let name = PackageName::new(name);
+            let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
             let path = path.to_path_buf();
 

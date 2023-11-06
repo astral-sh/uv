@@ -4,7 +4,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use pep440_rs::Version;
-use puffin_normalize::PackageName;
+use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceDistributionExtension {
@@ -71,8 +71,12 @@ impl SourceDistributionFilename {
             ));
         };
 
+        let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
+            .map_err(|err| {
+                SourceDistributionFilenameError::InvalidPackageName(filename.to_string(), err)
+            })?;
         if stem.len() <= package_name.as_ref().len() + "-".len()
-            || &PackageName::new(&stem[..package_name.as_ref().len()]) != package_name
+            || &actual_package_name != package_name
         {
             return Err(SourceDistributionFilenameError::InvalidFilename {
                 filename: filename.to_string(),
@@ -109,11 +113,14 @@ pub enum SourceDistributionFilenameError {
     InvalidExtension(String),
     #[error("Source distribution filename version section is invalid: {0}")]
     InvalidVersion(String),
+    #[error("Source distribution filename has an invalid package name: {0}")]
+    InvalidPackageName(String, #[source] InvalidNameError),
 }
 
 #[cfg(test)]
 mod tests {
     use puffin_normalize::PackageName;
+    use std::str::FromStr;
 
     use crate::SourceDistributionFilename;
 
@@ -126,9 +133,12 @@ mod tests {
             "foo-lib-1.2.3.tar.gz",
         ] {
             assert_eq!(
-                SourceDistributionFilename::parse(normalized, &PackageName::new("foo_lib"))
-                    .unwrap()
-                    .to_string(),
+                SourceDistributionFilename::parse(
+                    normalized,
+                    &PackageName::from_str("foo_lib").unwrap()
+                )
+                .unwrap()
+                .to_string(),
                 normalized
             );
         }
@@ -137,7 +147,11 @@ mod tests {
     #[test]
     fn errors() {
         for invalid in ["b-1.2.3.zip", "a-1.2.3-gamma.3.zip", "a-1.2.3.tar.zstd"] {
-            assert!(SourceDistributionFilename::parse(invalid, &PackageName::new("a")).is_err());
+            assert!(SourceDistributionFilename::parse(
+                invalid,
+                &PackageName::from_str("a").unwrap()
+            )
+            .is_err());
         }
     }
 }

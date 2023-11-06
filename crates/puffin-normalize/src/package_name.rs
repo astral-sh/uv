@@ -1,9 +1,10 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a package.
 ///
@@ -14,27 +15,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub struct PackageName(String);
 
-impl From<&PackageName> for PackageName {
-    /// Required for `WaitMap::wait`
-    fn from(package_name: &PackageName) -> Self {
-        package_name.clone()
-    }
-}
-
-impl Display for PackageName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-static NAME_NORMALIZE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-_.]+").unwrap());
-
 impl PackageName {
-    pub fn new(name: impl AsRef<str>) -> Self {
-        // TODO(charlie): Avoid allocating in the common case (when no normalization is required).
-        let mut normalized = NAME_NORMALIZE.replace_all(name.as_ref(), "-").to_string();
-        normalized.make_ascii_lowercase();
-        Self(normalized)
+    /// Create a validated, normalized package name.
+    pub fn new(name: String) -> Result<Self, InvalidNameError> {
+        validate_and_normalize_owned(name).map(Self)
     }
 
     /// Escape this name with underscores (`_`) instead of dashes (`-`)
@@ -45,9 +29,18 @@ impl PackageName {
     }
 }
 
-impl AsRef<str> for PackageName {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
+impl From<&PackageName> for PackageName {
+    /// Required for `WaitMap::wait`
+    fn from(package_name: &PackageName) -> Self {
+        package_name.clone()
+    }
+}
+
+impl FromStr for PackageName {
+    type Err = InvalidNameError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        validate_and_normalize_ref(name).map(Self)
     }
 }
 
@@ -57,25 +50,18 @@ impl<'de> Deserialize<'de> for PackageName {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Ok(Self::new(s))
+        Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl Display for PackageName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
-    #[test]
-    fn normalize() {
-        assert_eq!(PackageName::new("friendly-bard").as_ref(), "friendly-bard");
-        assert_eq!(PackageName::new("Friendly-Bard").as_ref(), "friendly-bard");
-        assert_eq!(PackageName::new("FRIENDLY-BARD").as_ref(), "friendly-bard");
-        assert_eq!(PackageName::new("friendly.bard").as_ref(), "friendly-bard");
-        assert_eq!(PackageName::new("friendly_bard").as_ref(), "friendly-bard");
-        assert_eq!(PackageName::new("friendly--bard").as_ref(), "friendly-bard");
-        assert_eq!(
-            PackageName::new("FrIeNdLy-._.-bArD").as_ref(),
-            "friendly-bard"
-        );
+impl AsRef<str> for PackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }

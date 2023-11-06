@@ -6,7 +6,7 @@ use url::Url;
 
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_normalize::PackageName;
+use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct WheelFilename {
@@ -87,10 +87,12 @@ impl FromStr for WheelFilename {
                 )
             };
 
+        let distribution = PackageName::from_str(distribution)
+            .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
         Ok(WheelFilename {
-            distribution: PackageName::new(distribution),
+            distribution,
             version,
             python_tag: python_tag.split('.').map(String::from).collect(),
             abi_tag: abi_tag.split('.').map(String::from).collect(),
@@ -165,4 +167,6 @@ pub enum WheelFilenameError {
     InvalidWheelFileName(String, String),
     #[error("The wheel filename \"{0}\" has an invalid version part: {1}")]
     InvalidVersion(String, String),
+    #[error("The wheel filename \"{0}\" has an invalid package name")]
+    InvalidPackageName(String, InvalidNameError),
 }
