@@ -32,7 +32,7 @@ mailparse = { workspace = true }
 once_cell = { workspace = true }
 platform-info = { workspace = true }
 plist = { workspace = true }
-pyo3 = { version = "0.19.2", features = ["extension-module", "abi3-py37"], optional = true }
+pyo3 = { version = "0.20.0", features = ["extension-module", "abi3-py37"], optional = true }
 rayon = { version = "1.8.0", optional = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }

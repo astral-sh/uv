@@ -29,14 +29,14 @@ tracing = { workspace = true, features = ["log"] }
 unicode-width = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 
-pyo3 = { version = "0.19.2", optional = true, features = ["abi3", "extension-module"] }
-pyo3-log = { version = "0.8.3", optional = true }
+pyo3 = { version = "0.20.0", optional = true, features = ["abi3", "extension-module"] }
+pyo3-log = { version = "0.9.0", optional = true }
 
 [dev-dependencies]
 indoc = "2.0.4"
 log = "0.4.20"
 testing_logger = "0.1.1"
-serde_json = "1.0.107"
+serde_json = "1.0.108"
 
 [features]
 pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log"]
