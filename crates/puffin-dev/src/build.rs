@@ -7,10 +7,10 @@ use directories::ProjectDirs;
 use fs_err as fs;
 
 use platform_host::Platform;
-use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
+use puffin_traits::BuildContext;
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -52,13 +52,8 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
     );
-    let builder = SourceDistributionBuilder::setup(
-        &args.sdist,
-        args.subdirectory.as_deref(),
-        venv.interpreter_info(),
-        &build_dispatch,
-    )
-    .await?;
-    let wheel = builder.build(&wheel_dir)?;
+    let wheel = build_dispatch
+        .build_source_distribution(&args.sdist, args.subdirectory.as_deref(), &wheel_dir)
+        .await?;
     Ok(wheel_dir.join(wheel))
 }
