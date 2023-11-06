@@ -16,7 +16,7 @@ use puffin_installer::PartitionedRequirements;
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::reporters::{
-    DownloadReporter, InstallReporter, UnzipReporter, WheelFinderReporter,
+    DownloadReporter, FinderReporter, InstallReporter, UnzipReporter,
 };
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
@@ -118,8 +118,8 @@ pub(crate) async fn sync_requirements(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::WheelFinder::new(&tags, &client)
-            .with_reporter(WheelFinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder = puffin_resolver::DistributionFinder::new(&tags, &client)
+            .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };

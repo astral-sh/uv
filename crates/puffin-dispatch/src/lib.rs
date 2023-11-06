@@ -17,7 +17,7 @@ use puffin_build::SourceDistributionBuilder;
 use puffin_client::RegistryClient;
 use puffin_installer::{Downloader, Installer, PartitionedRequirements, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver, WheelFinder};
+use puffin_resolver::{DistributionFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -122,7 +122,7 @@ impl BuildContext for BuildDispatch {
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
-                let resolution = WheelFinder::new(&tags, &self.client)
+                let resolution = DistributionFinder::new(&tags, &self.client)
                     .resolve(&remote)
                     .await
                     .context("Failed to resolve build dependencies")?;
