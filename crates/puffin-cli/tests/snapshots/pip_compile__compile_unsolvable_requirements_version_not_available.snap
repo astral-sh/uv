@@ -6,9 +6,9 @@ info:
     - pip-compile
     - pyproject.toml
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpQEKgej
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp2JLrkd
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpf3kQGp/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp0ZV4ob/.venv
 ---
 success: false
 exit_code: 1
@@ -17,5 +17,5 @@ exit_code: 1
 ----- stderr -----
   × No solution found when resolving dependencies:
   ╰─▶ Because there is no version of django available matching ==300.1.4 and
-      my-project depends on django==300.1.4, my-project cannot be satisfied..
+      my-project depends on django==300.1.4, my-project cannot be satisfied.
 

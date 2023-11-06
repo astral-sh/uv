@@ -270,7 +270,7 @@ impl ResolutionFailureReporter {
         match terms_vec.as_slice() {
             [] => "version solving failed".into(),
             [(package @ PubGrubPackage::Root(_), _)] => {
-                format!("{package} cannot be satisfied.")
+                format!("{package} cannot be satisfied")
             }
             [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
                 format!("{package} {range} is forbidden")
