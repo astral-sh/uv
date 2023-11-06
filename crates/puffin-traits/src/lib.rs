@@ -16,7 +16,7 @@ use puffin_interpreter::{InterpreterInfo, Virtualenv};
 /// them and then build. The installer, the resolver and the source distribution builder are each in
 /// their own crate. To avoid circular crate dependencies, this type dispatches between the three
 /// crates with its three main methods ([`BuildContext::resolve`], [`BuildContext::install`] and
-/// [`BuildContext::build_source_distribution`]).
+/// [`BuildContext::build_source`]).
 ///
 /// The overall main crate structure looks like this:
 ///
@@ -62,6 +62,7 @@ pub trait BuildContext {
         &'a self,
         requirements: &'a [Requirement],
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + Send + 'a>>;
+
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base python as [`BuildContext::base_python`]
     fn install<'a>(
@@ -69,12 +70,13 @@ pub trait BuildContext {
         requirements: &'a [Requirement],
         venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
+
     /// Build a source distribution into a wheel from an archive.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
-    fn build_source_distribution<'a>(
+    fn build_source<'a>(
         &'a self,
-        sdist: &'a Path,
+        source: &'a Path,
         subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
