@@ -7,6 +7,7 @@ use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
 
+pub use direct_url::DirectUrl;
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use platform_host::{Arch, Os};
 pub use record::RecordEntry;
@@ -17,6 +18,7 @@ pub use wheel::{
     relative_to, SHEBANG_PYTHON,
 };
 
+mod direct_url;
 mod install_location;
 pub mod linker;
 #[cfg(feature = "python_bindings")]
@@ -60,6 +62,8 @@ pub enum Error {
     PlatformInfo(#[source] PlatformInfoError),
     #[error("Invalid version specification, only none or == is supported")]
     Pep440,
+    #[error("Invalid direct_url.json")]
+    DirectUrlJson(#[from] serde_json::Error),
 }
 
 impl Error {

@@ -14,6 +14,7 @@ use mailparse::MailHeaderMap;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 use tracing::{debug, error, span, warn, Level};
+
 use walkdir::WalkDir;
 use zip::result::ZipError;
 use zip::write::FileOptions;
@@ -24,7 +25,7 @@ use distribution_filename::WheelFilename;
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
 use crate::script::Script;
-use crate::Error;
+use crate::{DirectUrl, Error};
 
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
@@ -810,28 +811,32 @@ pub(crate) fn write_file_recorded(
     Ok(())
 }
 
-/// Adds INSTALLER, REQUESTED and `direct_url.json` to the .dist-info dir
+/// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
 pub(crate) fn extra_dist_info(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
+    direct_url: Option<&DirectUrl>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
+    let dist_info_dir = PathBuf::from(format!("{dist_info_prefix}.dist-info"));
     write_file_recorded(
         site_packages,
-        &PathBuf::from(format!("{dist_info_prefix}.dist-info")).join("INSTALLER"),
+        &dist_info_dir.join("INSTALLER"),
         env!("CARGO_PKG_NAME"),
         record,
     )?;
     if requested {
+        write_file_recorded(site_packages, &dist_info_dir.join("REQUESTED"), "", record)?;
+    }
+    if let Some(direct_url) = direct_url {
         write_file_recorded(
             site_packages,
-            &PathBuf::from(format!("{dist_info_prefix}.dist-info")).join("REQUESTED"),
-            "",
+            &dist_info_dir.join("direct_url.json"),
+            serde_json::to_string(direct_url)?.as_bytes(),
             record,
         )?;
     }
-
     Ok(())
 }
 
@@ -891,6 +896,7 @@ pub fn install_wheel(
     location: &InstallLocation<LockedDir>,
     reader: impl Read + Seek,
     filename: &WheelFilename,
+    direct_url: Option<&DirectUrl>,
     compile: bool,
     check_hashes: bool,
     // initially used to the console scripts, currently unused. Keeping it because we likely need
@@ -1006,7 +1012,13 @@ pub fn install_wheel(
 
     debug!(name = name.as_str(), "Writing extra metadata");
 
-    extra_dist_info(&site_packages, &dist_info_prefix, true, &mut record)?;
+    extra_dist_info(
+        &site_packages,
+        &dist_info_prefix,
+        true,
+        direct_url,
+        &mut record,
+    )?;
 
     debug!(name = name.as_str(), "Writing record");
     let mut record_writer = csv::WriterBuilder::new()
