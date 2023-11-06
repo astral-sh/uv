@@ -10,13 +10,13 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
+use puffin_distribution::source::Source;
 use puffin_distribution::RemoteDistributionRef;
 use puffin_git::{Git, GitSource};
 use puffin_package::pypi_types::Metadata21;
 use puffin_traits::BuildContext;
 
 use crate::distribution::cached_wheel::CachedWheel;
-use crate::distribution::source::Source;
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 

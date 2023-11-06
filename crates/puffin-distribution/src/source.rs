@@ -1,15 +1,15 @@
 use std::path::PathBuf;
 
 use anyhow::{Error, Result};
-
 use url::Url;
 
-use puffin_distribution::RemoteDistributionRef;
 use puffin_git::Git;
+
+use crate::RemoteDistributionRef;
 
 /// The source of a distribution.
 #[derive(Debug)]
-pub(crate) enum Source<'a> {
+pub enum Source<'a> {
     /// The distribution is available at a URL in a registry, like PyPI.
     RegistryUrl(Url),
     /// The distribution is available at an arbitrary remote URL, like a GitHub Release.

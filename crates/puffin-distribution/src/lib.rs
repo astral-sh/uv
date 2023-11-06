@@ -10,6 +10,8 @@ use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 use puffin_package::pypi_types::File;
 
+pub mod source;
+
 /// A built distribution (wheel), which either exists remotely or locally.
 #[derive(Debug, Clone)]
 pub enum Distribution {
