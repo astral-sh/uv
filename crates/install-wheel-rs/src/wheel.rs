@@ -14,18 +14,18 @@ use mailparse::MailHeaderMap;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 use tracing::{debug, error, span, warn, Level};
-
 use walkdir::WalkDir;
 use zip::result::ZipError;
 use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
 
 use distribution_filename::WheelFilename;
+use pypi_types::DirectUrl;
 
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
 use crate::script::Script;
-use crate::{DirectUrl, Error};
+use crate::Error;
 
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";

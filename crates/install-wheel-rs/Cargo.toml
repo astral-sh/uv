@@ -17,8 +17,9 @@ license = { workspace = true }
 name = "install_wheel_rs"
 
 [dependencies]
-platform-host = { path = "../platform-host" }
 distribution-filename = { path = "../distribution-filename" }
+platform-host = { path = "../platform-host" }
+pypi-types = { path = "../pypi-types" }
 
 clap = { workspace = true, optional = true, features = ["derive", "env"] }
 configparser = { workspace = true }

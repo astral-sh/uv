@@ -7,7 +7,6 @@ use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
 
-pub use direct_url::DirectUrl;
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use platform_host::{Arch, Os};
 pub use record::RecordEntry;
@@ -18,7 +17,6 @@ pub use wheel::{
     relative_to, SHEBANG_PYTHON,
 };
 
-mod direct_url;
 mod install_location;
 pub mod linker;
 #[cfg(feature = "python_bindings")]
