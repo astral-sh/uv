@@ -382,7 +382,7 @@ impl<V: Display + Eq> Display for Range<V> {
                     (Included(v), Unbounded) => write!(f, ">={v}")?,
                     (Included(v), Included(b)) => {
                         if v == b {
-                            write!(f, "{v}")?
+                            write!(f, "=={v}")?
                         } else {
                             write!(f, ">={v},<={b}")?
                         }
