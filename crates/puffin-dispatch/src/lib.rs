@@ -60,7 +60,7 @@ impl BuildContext for BuildDispatch {
         &self.base_python
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, requirements))]
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],

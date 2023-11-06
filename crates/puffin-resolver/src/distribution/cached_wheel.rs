@@ -53,14 +53,12 @@ impl CachedWheel {
     pub(super) fn read_dist_info(&self) -> Result<Metadata21> {
         let mut archive = ZipArchive::new(fs_err::File::open(&self.path)?)?;
         let filename = &self.filename;
-        let dist_info_prefix =
-            find_dist_info(filename, archive.file_names().map(|name| (name, name)))
-                .map_err(|err| format_err!("Invalid wheel {filename}: {err}"))?
-                .1
-                .to_string();
-        let dist_info = std::io::read_to_string(
-            archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?,
-        )?;
+        let dist_info_dir = find_dist_info(filename, archive.file_names().map(|name| (name, name)))
+            .map_err(|err| format_err!("Invalid wheel {filename}: {err}"))?
+            .1
+            .to_string();
+        let dist_info =
+            std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
         Ok(Metadata21::parse(dist_info.as_bytes())?)
     }
 }

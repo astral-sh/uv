@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fs_err::tokio as fs;
 
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -34,7 +34,7 @@ impl<'a> WheelFetcher<'a> {
     ) -> Result<Option<Metadata21>> {
         CachedWheel::find_in_cache(distribution, tags, self.0.join(REMOTE_WHEELS_CACHE))
             .as_ref()
-            .map(CachedWheel::read_dist_info)
+            .map(|wheel| CachedWheel::read_dist_info(wheel).context("Failed to read dist info"))
             .transpose()
     }
 
