@@ -2241,6 +2241,7 @@ dependencies = [
  "anyhow",
  "pep440_rs 0.3.12",
  "puffin-cache",
+ "puffin-git",
  "puffin-normalize",
  "puffin-package",
  "url",
