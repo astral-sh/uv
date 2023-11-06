@@ -3,8 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use fs_err as fs;
-use pyproject_toml::{BuildSystem, Project};
-use serde::{Deserialize, Serialize};
+use pyproject_toml::PyProjectToml;
 use toml_edit::Document;
 
 use pep508_rs::Requirement;
@@ -13,17 +12,6 @@ use puffin_normalize::PackageName;
 use crate::toml::format_multiline_array;
 use crate::verbatim::VerbatimRequirement;
 use crate::WorkspaceError;
-
-/// Unlike [`pyproject_toml::PyProjectToml`], in our case `build_system` is also optional
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-struct PyProjectToml {
-    /// Build-related data
-    build_system: Option<BuildSystem>,
-
-    /// Project metadata
-    project: Option<Project>,
-}
 
 #[derive(Debug)]
 pub struct Workspace {
