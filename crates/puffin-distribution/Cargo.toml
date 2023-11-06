@@ -14,7 +14,7 @@ pep440_rs = { path = "../pep440-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-git = { path = "../puffin-git" }
 puffin-normalize = { path = "../puffin-normalize" }
-puffin-package = { path = "../puffin-package" }
+pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
 url = { workspace = true }

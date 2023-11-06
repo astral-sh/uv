@@ -27,7 +27,8 @@ puffin-distribution = { path = "../puffin-distribution" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
-puffin-package = { path = "../puffin-package" }
+pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-workspace = { path = "../puffin-workspace" }
 

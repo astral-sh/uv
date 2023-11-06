@@ -10,6 +10,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+distribution-filename = { path = "../distribution-filename" }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
@@ -19,9 +20,8 @@ puffin-distribution = { path = "../puffin-distribution" }
 puffin-git = { path = "../puffin-git" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
-puffin-package = { path = "../puffin-package" }
 puffin-traits = { path = "../puffin-traits" }
-distribution-filename = { path = "../distribution-filename" }
+pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
 cacache = { workspace = true }

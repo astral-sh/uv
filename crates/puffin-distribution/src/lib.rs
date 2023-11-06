@@ -8,7 +8,7 @@ use url::Url;
 use pep440_rs::Version;
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
-use puffin_package::pypi_types::File;
+use pypi_types::File;
 
 pub mod source;
 

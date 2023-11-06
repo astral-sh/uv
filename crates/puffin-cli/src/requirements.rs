@@ -9,7 +9,7 @@ use fs_err as fs;
 
 use pep508_rs::Requirement;
 use puffin_normalize::{ExtraName, PackageName};
-use puffin_package::requirements_txt::RequirementsTxt;
+use requirements_txt::RequirementsTxt;
 
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {

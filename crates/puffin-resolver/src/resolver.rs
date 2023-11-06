@@ -25,8 +25,8 @@ use puffin_cache::{CanonicalUrl, RepositoryUrl};
 use puffin_client::RegistryClient;
 use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
-use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
 use puffin_traits::BuildContext;
+use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::distribution::{SourceDistributionFetcher, WheelFetcher};

@@ -8,7 +8,7 @@ distribution-filename = { path = "../distribution-filename" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-normalize = { path = "../puffin-normalize" }
-puffin-package = { path = "../puffin-package" }
+pypi-types = { path = "../pypi-types" }
 
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true }

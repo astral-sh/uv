@@ -1,25 +1,29 @@
 [package]
-name = "puffin-package"
+name = "requirements-txt"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 puffin-normalize = { path = "../puffin-normalize" }
 
-anyhow = { workspace = true }
 fs-err = { workspace = true }
-mailparse = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
-rfc2047-decoder = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-tracing.workspace = true
+tracing = { workspace = true }
 unscanny = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 indoc = { version = "2.0.4" }
 insta = { version = "1.34.0" }
 serde_json = { version = "1.0.108" }

@@ -1,7 +1,7 @@
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use std::ops::Deref;
 
-use puffin_package::pypi_types::File;
+use pypi_types::File;
 
 /// A distribution can either be a wheel or a source distribution.
 #[derive(Debug, Clone)]

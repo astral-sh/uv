@@ -473,7 +473,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
 
-    use crate::requirements_txt::RequirementsTxt;
+    use crate::RequirementsTxt;
 
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]

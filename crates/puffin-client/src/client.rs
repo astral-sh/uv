@@ -21,7 +21,7 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info_metadata;
 use puffin_normalize::PackageName;
-use puffin_package::pypi_types::{File, Metadata21, SimpleJson};
+use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::error::Error;
 use crate::remote_metadata::{

@@ -1,5 +1,5 @@
 ---
-source: crates/puffin-package/src/requirements_txt.rs
+source: crates/requirements-txt/src/lib.rs
 expression: actual
 ---
 RequirementsTxt {
@@ -7,7 +7,7 @@ RequirementsTxt {
         RequirementEntry {
             requirement: Requirement {
                 name: PackageName(
-                    "django",
+                    "tqdm",
                 ),
                 extras: None,
                 version_or_url: Some(
@@ -19,9 +19,9 @@ RequirementsTxt {
                                     version: Version {
                                         epoch: 0,
                                         release: [
-                                            2,
-                                            1,
-                                            15,
+                                            4,
+                                            65,
+                                            0,
                                         ],
                                         pre: None,
                                         post: None,
@@ -41,7 +41,7 @@ RequirementsTxt {
         RequirementEntry {
             requirement: Requirement {
                 name: PackageName(
-                    "pytz",
+                    "tomli-w",
                 ),
                 extras: None,
                 version_or_url: Some(
@@ -53,8 +53,9 @@ RequirementsTxt {
                                     version: Version {
                                         epoch: 0,
                                         release: [
-                                            2023,
-                                            3,
+                                            1,
+                                            0,
+                                            0,
                                         ],
                                         pre: None,
                                         post: None,

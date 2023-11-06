@@ -11,7 +11,7 @@ use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistributionRef;
-use puffin_package::pypi_types::Metadata21;
+use pypi_types::Metadata21;
 
 use crate::distribution::cached_wheel::CachedWheel;
 
