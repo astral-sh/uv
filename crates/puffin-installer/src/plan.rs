@@ -11,7 +11,7 @@ use crate::url_index::UrlIndex;
 use crate::{RegistryIndex, SitePackages};
 
 #[derive(Debug, Default)]
-pub struct PartitionedRequirements {
+pub struct InstallPlan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
     pub local: Vec<CachedDistribution>,
@@ -25,7 +25,7 @@ pub struct PartitionedRequirements {
     pub extraneous: Vec<InstalledDistribution>,
 }
 
-impl PartitionedRequirements {
+impl InstallPlan {
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
     pub fn try_from_requirements(
@@ -93,7 +93,7 @@ impl PartitionedRequirements {
             extraneous.push(dist_info);
         }
 
-        Ok(PartitionedRequirements {
+        Ok(InstallPlan {
             local,
             remote,
             extraneous,

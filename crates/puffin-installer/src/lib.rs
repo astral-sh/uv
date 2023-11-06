@@ -1,7 +1,7 @@
 pub use builder::{Builder, Reporter as BuildReporter};
 pub use downloader::{Download, Downloader, Reporter as DownloadReporter};
 pub use installer::{Installer, Reporter as InstallReporter};
-pub use plan::PartitionedRequirements;
+pub use plan::InstallPlan;
 pub use registry_index::RegistryIndex;
 pub use site_packages::SitePackages;
 pub use uninstall::uninstall;
