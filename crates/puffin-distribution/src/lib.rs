@@ -145,7 +145,11 @@ impl RemoteDistribution {
             Self::Registry(name, version, _) => {
                 // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
                 // `version` is normalized by its `ToString` impl
-                format!("{}-{}", PackageName::from(name), version)
+                format!(
+                    "{}-{}",
+                    PackageName::from(name).as_dist_info_name(),
+                    version
+                )
             }
             Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }
