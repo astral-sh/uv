@@ -561,9 +561,8 @@ fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
                 }
             }
             Some(_) | None => {
-                // Unwrap safety: We parse and validate the package name manually and generate a
-                // better error message than `PackageName::new` would
-                return Ok(PackageName::new(name).unwrap());
+                return Ok(PackageName::new(name)
+                    .expect("`PackageName` validation should match PEP 508 parsing"));
             }
         }
     }
@@ -637,13 +636,16 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
         // end or next identifier?
         match chars.next() {
             Some((_, ',')) => {
-                // Unwrap safety: We parse and validate the extra name manually and generate a
-                // better error message than `ExtraName::new` would
-                extras.push(ExtraName::new(buffer).unwrap());
+                extras.push(
+                    ExtraName::new(buffer)
+                        .expect("`ExtraName` validation should match PEP 508 parsing"),
+                );
             }
             Some((_, ']')) => {
-                // Unwrap safety: Same as above
-                extras.push(ExtraName::new(buffer).unwrap());
+                extras.push(
+                    ExtraName::new(buffer)
+                        .expect("`ExtraName` validation should match PEP 508 parsing"),
+                );
                 break;
             }
             Some((pos, other)) => {
