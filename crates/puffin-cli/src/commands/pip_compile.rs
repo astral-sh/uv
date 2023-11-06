@@ -150,9 +150,8 @@ pub(crate) async fn pip_compile(
     .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
-            mut derivation_tree,
+            derivation_tree,
         ))) => {
-            derivation_tree.collapse_no_versions();
             #[allow(clippy::print_stderr)]
             {
                 let report =

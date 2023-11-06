@@ -1,11 +1,9 @@
 use std::fmt;
 
-use pubgrub::package::Package;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, Reporter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
-use pubgrub::version_set::VersionSet;
 
 use super::{PubGrubPackage, PubGrubVersion};
 
@@ -31,7 +29,7 @@ impl ResolutionFailureReporter {
         }
     }
 
-    fn build_recursive<P: Package, VS: VersionSet>(&mut self, derived: &Derived<P, VS>) {
+    fn build_recursive(&mut self, derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>) {
         self.build_recursive_helper(derived);
         if let Some(id) = derived.shared_id {
             if self.shared_with_ref.get(&id).is_none() {
@@ -41,7 +39,7 @@ impl ResolutionFailureReporter {
         };
     }
 
-    fn build_recursive_helper<P: Package, VS: VersionSet>(&mut self, current: &Derived<P, VS>) {
+    fn build_recursive_helper(&mut self, current: &Derived<PubGrubPackage, Range<PubGrubVersion>>) {
         match (&*current.cause1, &*current.cause2) {
             (DerivationTree::External(external1), DerivationTree::External(external2)) => {
                 // Simplest case, we just combine two external incompatibilities.
@@ -118,11 +116,11 @@ impl ResolutionFailureReporter {
     ///
     /// The result will depend on the fact that the derived incompatibility
     /// has already been explained or not.
-    fn report_one_each<P: Package, VS: VersionSet>(
+    fn report_one_each(
         &mut self,
-        derived: &Derived<P, VS>,
-        external: &External<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+        derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) {
         match self.line_ref_of(derived.shared_id) {
             Some(ref_id) => self.lines.push(Self::explain_ref_and_external(
@@ -136,11 +134,11 @@ impl ResolutionFailureReporter {
     }
 
     /// Report one derived (without a line ref yet) and one external.
-    fn report_recurse_one_each<P: Package, VS: VersionSet>(
+    fn report_recurse_one_each(
         &mut self,
-        derived: &Derived<P, VS>,
-        external: &External<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+        derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) {
         match (&*derived.cause1, &*derived.cause2) {
             // If the derived cause has itself one external prior cause,
@@ -174,27 +172,27 @@ impl ResolutionFailureReporter {
     // String explanations #####################################################
 
     /// Simplest case, we just combine two external incompatibilities.
-    fn explain_both_external<P: Package, VS: VersionSet>(
-        external1: &External<P, VS>,
-        external2: &External<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+    fn explain_both_external(
+        external1: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        external2: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
         format!(
             "Because {} and {}, {}.",
-            external1,
-            external2,
+            PuffinExternal::from_pubgrub(external1.clone()),
+            PuffinExternal::from_pubgrub(external2.clone()),
             Self::string_terms(current_terms)
         )
     }
 
     /// Both causes have already been explained so we use their refs.
-    fn explain_both_ref<P: Package, VS: VersionSet>(
+    fn explain_both_ref(
         ref_id1: usize,
-        derived1: &Derived<P, VS>,
+        derived1: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
         ref_id2: usize,
-        derived2: &Derived<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+        derived2: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
         format!(
@@ -210,39 +208,39 @@ impl ResolutionFailureReporter {
     /// One cause is derived (already explained so one-line),
     /// the other is a one-line external cause,
     /// and finally we conclude with the current incompatibility.
-    fn explain_ref_and_external<P: Package, VS: VersionSet>(
+    fn explain_ref_and_external(
         ref_id: usize,
-        derived: &Derived<P, VS>,
-        external: &External<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+        derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
         format!(
             "Because {} ({}) and {}, {}.",
             Self::string_terms(&derived.terms),
             ref_id,
-            external,
+            PuffinExternal::from_pubgrub(external.clone()),
             Self::string_terms(current_terms)
         )
     }
 
     /// Add an external cause to the chain of explanations.
-    fn and_explain_external<P: Package, VS: VersionSet>(
-        external: &External<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+    fn and_explain_external(
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) -> String {
         format!(
             "And because {}, {}.",
-            external,
+            PuffinExternal::from_pubgrub(external.clone()),
             Self::string_terms(current_terms)
         )
     }
 
     /// Add an already explained incompat to the chain of explanations.
-    fn and_explain_ref<P: Package, VS: VersionSet>(
+    fn and_explain_ref(
         ref_id: usize,
-        derived: &Derived<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+        derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) -> String {
         format!(
             "And because {} ({}), {}.",
@@ -253,10 +251,10 @@ impl ResolutionFailureReporter {
     }
 
     /// Add an already explained incompat to the chain of explanations.
-    fn and_explain_prior_and_external<P: Package, VS: VersionSet>(
-        prior_external: &External<P, VS>,
-        external: &External<P, VS>,
-        current_terms: &Map<P, Term<VS>>,
+    fn and_explain_prior_and_external(
+        prior_external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
     ) -> String {
         format!(
             "And because {} and {}, {}.",
@@ -267,18 +265,36 @@ impl ResolutionFailureReporter {
     }
 
     /// Try to print terms of an incompatibility in a human-readable way.
-    pub fn string_terms<P: Package, VS: VersionSet>(terms: &Map<P, Term<VS>>) -> String {
+    pub fn string_terms(terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>) -> String {
         let terms_vec: Vec<_> = terms.iter().collect();
         match terms_vec.as_slice() {
             [] => "version solving failed".into(),
-            // TODO: special case when that unique package is root.
-            [(package, Term::Positive(range))] => format!("{package} {range} is forbidden"),
-            [(package, Term::Negative(range))] => format!("{package} {range} is mandatory"),
+            [(package @ PubGrubPackage::Root(_), _)] => {
+                format!("{package} cannot be satisfied")
+            }
+            [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
+                format!("{package} {range} is forbidden")
+            }
+            [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
+                format!("{package} {range} is mandatory")
+            }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => {
-                External::FromDependencyOf(p1, r1.clone(), p2, r2.clone()).to_string()
+                PuffinExternal::FromDependencyOf(
+                    (*p1).clone(),
+                    r1.clone(),
+                    (*p2).clone(),
+                    r2.clone(),
+                )
+                .to_string()
             }
             [(p1, Term::Negative(r1)), (p2, Term::Positive(r2))] => {
-                External::FromDependencyOf(p2, r2.clone(), p1, r1.clone()).to_string()
+                PuffinExternal::FromDependencyOf(
+                    (*p2).clone(),
+                    r2.clone(),
+                    (*p1).clone(),
+                    r1.clone(),
+                )
+                .to_string()
             }
             slice => {
                 let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{p} {t}")).collect();
@@ -366,7 +382,10 @@ impl fmt::Display for PuffinExternal {
                 if set == &Range::full() {
                     write!(f, "there is no available version for {package}")
                 } else {
-                    write!(f, "there is no version of {package} in {set}")
+                    write!(
+                        f,
+                        "there is no version of {package} available matching {set}"
+                    )
                 }
             }
             Self::UnavailableDependencies(package, set) => {

@@ -1,0 +1,21 @@
+---
+source: crates/puffin-cli/tests/pip_compile.rs
+info:
+  program: puffin
+  args:
+    - pip-compile
+    - pyproject.toml
+    - "--cache-dir"
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp2JLrkd
+  env:
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp0ZV4ob/.venv
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+  × No solution found when resolving dependencies:
+  ╰─▶ Because there is no version of django available matching ==300.1.4 and
+      my-project depends on django==300.1.4, my-project cannot be satisfied.
+
