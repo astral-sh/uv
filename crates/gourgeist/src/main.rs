@@ -17,8 +17,6 @@ struct Cli {
     path: Option<Utf8PathBuf>,
     #[clap(short, long)]
     python: Option<Utf8PathBuf>,
-    #[clap(long)]
-    bare: bool,
 }
 
 fn run() -> Result<(), gourgeist::Error> {
@@ -27,7 +25,7 @@ fn run() -> Result<(), gourgeist::Error> {
     let python = parse_python_cli(cli.python)?;
     let platform = Platform::current()?;
     let info = InterpreterInfo::query(python.as_std_path(), platform, None).unwrap();
-    create_venv(location, &python, &info, cli.bare)?;
+    create_venv(location, &python, &info)?;
 
     Ok(())
 }

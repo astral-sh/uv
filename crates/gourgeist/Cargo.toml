@@ -14,27 +14,15 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-distribution-filename = { path = "../distribution-filename" }
-install-wheel-rs = { path = "../install-wheel-rs", optional = true }
 platform-host = { path = "../platform-host" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
 camino = { workspace = true }
 clap = { workspace = true }
-configparser = { workspace = true }
-dirs = { workspace = true }
 fs-err = { workspace = true }
-reqwest = { workspace = true, optional = true, default-features = false, features = ["blocking"] }
-rayon = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 which = { workspace = true }
-
-[features]
-default = ["install"]
-install = ["install-wheel-rs", "reqwest"]
-parallel = ["rayon"]

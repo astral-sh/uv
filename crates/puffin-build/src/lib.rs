@@ -166,7 +166,6 @@ impl SourceDistributionBuild {
             temp_dir.path().join(".venv"),
             build_context.base_python(),
             interpreter_info,
-            true,
         )?;
 
         // There are packages such as DTLSSocket 0.1.16 that say

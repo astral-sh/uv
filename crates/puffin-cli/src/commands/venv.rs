@@ -87,7 +87,7 @@ fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    gourgeist::create_venv(path, &base_python, &interpreter_info, true)
+    gourgeist::create_venv(path, &base_python, &interpreter_info)
         .map_err(VenvError::CreationError)?;
 
     Ok(ExitStatus::Success)
