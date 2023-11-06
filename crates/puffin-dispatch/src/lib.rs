@@ -15,7 +15,7 @@ use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceDistributionBuild, SourceDistributionBuildContext};
 use puffin_client::RegistryClient;
-use puffin_installer::{Builder, Downloader, Installer, PartitionedRequirements, Unzipper};
+use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{DistributionFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
@@ -104,11 +104,11 @@ impl BuildContext for BuildDispatch {
                 venv.root().display(),
             );
 
-            let PartitionedRequirements {
+            let InstallPlan {
                 local,
                 remote,
                 extraneous,
-            } = PartitionedRequirements::try_from_requirements(requirements, &self.cache, venv)?;
+            } = InstallPlan::try_from_requirements(requirements, &self.cache, venv)?;
 
             let tags = Tags::from_env(
                 self.interpreter_info.platform(),

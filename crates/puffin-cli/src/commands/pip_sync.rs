@@ -14,7 +14,7 @@ use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_distribution::Distribution;
-use puffin_installer::{Builder, PartitionedRequirements};
+use puffin_installer::{Builder, InstallPlan};
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::reporters::{
@@ -69,11 +69,11 @@ pub(crate) async fn sync_requirements(
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let PartitionedRequirements {
+    let InstallPlan {
         local,
         remote,
         extraneous,
-    } = PartitionedRequirements::try_from_requirements(requirements, cache, &venv)?;
+    } = InstallPlan::try_from_requirements(requirements, cache, &venv)?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && extraneous.is_empty() {
