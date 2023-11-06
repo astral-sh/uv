@@ -1,0 +1,5 @@
+# Source: https://github.com/pdm-project/pdm/issues/2193#issuecomment-1685056667
+pandas
+pystac
+pystac-client
+sat-stac>=0.4
