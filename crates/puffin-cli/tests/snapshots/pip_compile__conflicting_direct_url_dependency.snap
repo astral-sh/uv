@@ -6,9 +6,9 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpVyrxMG
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpleIayX
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpF8a4y3/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp24qRXe/.venv
 ---
 success: false
 exit_code: 1
@@ -16,5 +16,5 @@ exit_code: 1
 
 ----- stderr -----
   × No solution found when resolving dependencies:
-  ╰─▶ root depends on werkzeug 3.0.0
+  ╰─▶ root depends on werkzeug==3.0.0
 

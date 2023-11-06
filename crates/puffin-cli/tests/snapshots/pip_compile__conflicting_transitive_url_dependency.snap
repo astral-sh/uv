@@ -6,9 +6,9 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpb7ldgy
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpfXoEZG
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp6FMPGr/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpJkukgJ/.venv
 ---
 success: false
 exit_code: 1
@@ -16,6 +16,6 @@ exit_code: 1
 
 ----- stderr -----
   × No solution found when resolving dependencies:
-  ╰─▶ Because flask 3.0.0 depends on werkzeug >=3.0.0 and root 0a0.dev0
-      depends on flask 3.0.0, root 0a0.dev0 is forbidden.
+  ╰─▶ Because flask ==3.0.0 depends on werkzeug >=3.0.0 and root ==0a0.dev0
+      depends on flask ==3.0.0, root ==0a0.dev0 is forbidden.
 
