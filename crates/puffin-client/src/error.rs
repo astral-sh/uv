@@ -1,5 +1,10 @@
+use std::io;
+
+use async_http_range_reader::AsyncHttpRangeReaderError;
+use async_zip::error::ZipError;
 use thiserror::Error;
 
+use distribution_filename::WheelFilename;
 use puffin_package::pypi_types;
 
 #[derive(Debug, Error)]
@@ -41,6 +46,18 @@ pub enum Error {
         source: serde_json::Error,
         url: String,
     },
+
+    #[error(transparent)]
+    AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
+
+    #[error("Expected a single .dist-info directory in {0}, found {1}")]
+    InvalidDistInfo(WheelFilename, String),
+
+    #[error("The wheel {0} is not a valid zip file")]
+    Zip(WheelFilename, #[source] ZipError),
+
+    #[error(transparent)]
+    IO(#[from] io::Error),
 }
 
 impl Error {

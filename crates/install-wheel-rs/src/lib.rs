@@ -2,6 +2,7 @@
 
 use std::io;
 
+use distribution_filename::WheelFilename;
 use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
@@ -68,4 +69,46 @@ impl Error {
             _ => Self::Zip(file, value),
         }
     }
+}
+
+/// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
+/// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
+/// Either way, we just search the wheel for the name
+pub fn find_dist_info_metadata<'a, T: Copy>(
+    filename: &WheelFilename,
+    files: impl Iterator<Item = (T, &'a str)>,
+) -> Result<(T, &'a str), String> {
+    let dist_info_matcher = format!(
+        "{}-{}",
+        filename.distribution.as_dist_info_name(),
+        filename.version
+    );
+    let metadatas: Vec<_> = files
+        .filter_map(|(payload, path)| {
+            let (dir, file) = path.split_once('/')?;
+            let dir = dir.strip_suffix(".dist-info")?;
+            if dir.to_lowercase() == dist_info_matcher && file == "METADATA" {
+                Some((payload, path))
+            } else {
+                None
+            }
+        })
+        .collect();
+    let (payload, path) = match metadatas[..] {
+        [] => {
+            return Err("no .dist-info directory".to_string());
+        }
+        [(payload, path)] => (payload, path),
+        _ => {
+            return Err(format!(
+                "multiple .dist-info directories: {}",
+                metadatas
+                    .into_iter()
+                    .map(|(_, path)| path.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    };
+    Ok((payload, path))
 }

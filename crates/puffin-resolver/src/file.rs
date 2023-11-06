@@ -1,13 +1,14 @@
+use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use std::ops::Deref;
 
 use puffin_package::pypi_types::File;
 
 /// A distribution can either be a wheel or a source distribution.
 #[derive(Debug, Clone)]
-pub(crate) struct WheelFile(File);
+pub(crate) struct WheelFile(pub(crate) File, pub(crate) WheelFilename);
 
 #[derive(Debug, Clone)]
-pub(crate) struct SdistFile(File);
+pub(crate) struct SdistFile(pub(crate) File, pub(crate) SourceDistributionFilename);
 
 #[derive(Debug, Clone)]
 pub(crate) enum DistributionFile {
@@ -28,18 +29,6 @@ impl Deref for SdistFile {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl From<File> for WheelFile {
-    fn from(file: File) -> Self {
-        Self(file)
-    }
-}
-
-impl From<File> for SdistFile {
-    fn from(file: File) -> Self {
-        Self(file)
     }
 }
 
@@ -64,19 +53,6 @@ impl From<WheelFile> for DistributionFile {
 impl From<SdistFile> for DistributionFile {
     fn from(sdist: SdistFile) -> Self {
         Self::Sdist(sdist)
-    }
-}
-
-impl From<File> for DistributionFile {
-    fn from(file: File) -> Self {
-        if std::path::Path::new(file.filename.as_str())
-            .extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("whl"))
-        {
-            Self::Wheel(WheelFile::from(file))
-        } else {
-            Self::Sdist(SdistFile::from(file))
-        }
     }
 }
 

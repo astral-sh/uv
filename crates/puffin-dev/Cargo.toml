@@ -11,6 +11,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+distribution-filename = { path = "../distribution-filename" }
 gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
@@ -36,3 +37,4 @@ tracing = { workspace = true }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 which = { workspace = true }
+url = { workspace = true }

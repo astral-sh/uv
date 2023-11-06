@@ -548,31 +548,33 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     // distributions.
                     let mut version_map: VersionMap = BTreeMap::new();
                     for file in metadata.files {
-                        if let Ok(name) = WheelFilename::from_str(file.filename.as_str()) {
-                            if name.is_compatible(self.tags) {
-                                let version = PubGrubVersion::from(name.version);
+                        if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
+                            if filename.is_compatible(self.tags) {
+                                let version = PubGrubVersion::from(filename.version.clone());
                                 match version_map.entry(version) {
                                     std::collections::btree_map::Entry::Occupied(mut entry) => {
                                         if matches!(entry.get(), DistributionFile::Sdist(_)) {
                                             // Wheels get precedence over source distributions.
-                                            entry.insert(DistributionFile::from(WheelFile::from(
-                                                file,
+                                            entry.insert(DistributionFile::from(WheelFile(
+                                                file, filename,
                                             )));
                                         }
                                     }
                                     std::collections::btree_map::Entry::Vacant(entry) => {
-                                        entry.insert(DistributionFile::from(WheelFile::from(file)));
+                                        entry.insert(DistributionFile::from(WheelFile(
+                                            file, filename,
+                                        )));
                                     }
                                 }
                             }
-                        } else if let Ok(name) =
+                        } else if let Ok(filename) =
                             SourceDistributionFilename::parse(file.filename.as_str(), &package_name)
                         {
-                            let version = PubGrubVersion::from(name.version);
+                            let version = PubGrubVersion::from(filename.version.clone());
                             if let std::collections::btree_map::Entry::Vacant(entry) =
                                 version_map.entry(version)
                             {
-                                entry.insert(DistributionFile::from(SdistFile::from(file)));
+                                entry.insert(DistributionFile::from(SdistFile(file, filename)));
                             }
                         }
                     }
@@ -627,7 +629,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             Request::Wheel(package_name, file) => {
                 let metadata = self
                     .client
-                    .file(file.clone().into())
+                    .wheel_metadata(file.0.clone(), file.1.clone())
                     .map_err(ResolveError::Client)
                     .await?;
 
