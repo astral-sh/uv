@@ -1,7 +1,11 @@
+use std::path::PathBuf;
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use url::Url;
+use install_wheel_rs::DirectUrl;
 
 use puffin_distribution::CachedDistribution;
+use puffin_git::Git;
 use puffin_interpreter::Virtualenv;
 
 pub struct Installer<'a> {
@@ -50,7 +54,7 @@ impl<'a> Installer<'a> {
                     None,
                     self.link_mode,
                 )
-                .with_context(|| format!("Failed to install: {wheel}"))?;
+                    .with_context(|| format!("Failed to install: {wheel}"))?;
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_install_progress(wheel);
@@ -59,6 +63,30 @@ impl<'a> Installer<'a> {
                 Ok::<(), Error>(())
             })
         })
+    }
+}
+
+/// Return the [`DirectUrl`] for a wheel, if applicable.
+fn direct_url(wheel: &CachedDistribution) -> Result<Option<DirectUrl>> {
+    let CachedDistribution::Url(_, url, _) = wheel else {
+        return Ok(None);
+    };
+
+    // If the URL points to a subdirectory, extract it, as in:
+    //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
+    //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
+    let subdirectory = url.fragment().and_then(|fragment| {
+        fragment.split('&').find_map(|fragment| {
+            fragment.strip_prefix("subdirectory=").map(PathBuf::from)
+        })
+    });
+
+    if let Some(url) = url.as_str().strip_prefix("git+") {
+        let url = Url::parse(url)?;
+        let git = Git::try_from(url)?;
+        Ok(Self::Git(git, subdirectory))
+    } else {
+        Ok(Self::RemoteUrl(url, subdirectory))
     }
 }
 
