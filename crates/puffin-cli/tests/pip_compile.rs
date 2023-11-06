@@ -1479,3 +1479,52 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
 
     Ok(())
 }
+
+/// Compile requirements in a `pyproject.toml` file that cannot be resolved due to
+/// a requirement with a version that is not available online.
+#[test]
+fn compile_unsolvable_requirements_version_not_available() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let pyproject_toml = temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+    pyproject_toml.write_str(
+        r#"[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "my-project"
+dependencies = ["django==300.1.4"]
+"#,
+    )?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"\d(ms|s)", "[TIME]"),
+            (r"#    .* pip-compile", "#    [BIN_PATH] pip-compile"),
+            (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("pyproject.toml")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
