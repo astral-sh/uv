@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::Result;
+use fs_err as fs;
+use tracing::warn;
 
 use puffin_distribution::CachedDistribution;
 use puffin_normalize::PackageName;
@@ -14,24 +15,48 @@ pub struct RegistryIndex(HashMap<PackageName, CachedDistribution>);
 
 impl RegistryIndex {
     /// Build an index of cached distributions from a directory.
-    pub fn try_from_directory(path: &Path) -> Result<Self> {
+    pub fn try_from_directory(path: &Path) -> Self {
         let mut index = HashMap::new();
 
         let cache = WheelCache::new(path);
         let Ok(dir) = cache.read_dir(CacheShard::Registry) else {
-            return Ok(Self(index));
+            return Self(index);
         };
 
         for entry in dir {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                if let Some(dist_info) = CachedDistribution::try_from_path(&entry.path())? {
-                    index.insert(dist_info.name().clone(), dist_info);
+            let (path, file_type) =
+                match entry.and_then(|entry| Ok((entry.path(), entry.file_type()?))) {
+                    Ok((path, file_type)) => (path, file_type),
+                    Err(err) => {
+                        warn!(
+                            "Failed to read entry of cache at {}: {}",
+                            path.display(),
+                            err
+                        );
+                        continue;
+                    }
+                };
+            if file_type.is_dir() {
+                match CachedDistribution::try_from_path(&path) {
+                    Ok(None) => {}
+                    Ok(Some(dist_info)) => {
+                        index.insert(dist_info.name().clone(), dist_info);
+                    }
+                    Err(err) => {
+                        warn!("Invalid cache entry at {}, removing. {err}", path.display());
+                        let result = fs::remove_dir_all(&path);
+                        if let Err(err) = result {
+                            warn!(
+                                "Failed to remove invalid cache entry at {}: {err}",
+                                path.display()
+                            );
+                        }
+                    }
                 }
             }
         }
 
-        Ok(Self(index))
+        Self(index)
     }
 
     /// Returns a distribution from the index, if it exists.
