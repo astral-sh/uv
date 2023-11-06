@@ -51,8 +51,44 @@ pub(crate) async fn wheel_metadata_write_cache(
 /// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
 /// entire wheel just for the one file.
 ///
-/// This method is copied from <https://github.com/prefix-dev/rip/pull/66> and licensed under
-/// BSD-3-Clause, see `LICENSE.BSD-3-Clause`
+/// This method is derived from `prefix-div/rip`, which is available under the following BSD-3
+/// Clause license:
+///
+/// ```text
+/// BSD 3-Clause License
+///
+/// Copyright (c) 2023, prefix.dev GmbH
+///
+/// Redistribution and use in source and binary forms, with or without
+/// modification, are permitted provided that the following conditions are met:
+///
+/// 1. Redistributions of source code must retain the above copyright notice, this
+///    list of conditions and the following disclaimer.
+///
+/// 2. Redistributions in binary form must reproduce the above copyright notice,
+///    this list of conditions and the following disclaimer in the documentation
+///    and/or other materials provided with the distribution.
+///
+/// 3. Neither the name of the copyright holder nor the names of its
+///    contributors may be used to endorse or promote products derived from
+///    this software without specific prior written permission.
+///
+/// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+/// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+/// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+/// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+/// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+/// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+/// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+/// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+/// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+/// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+/// ```
+///
+/// Additional work and modifications to the originating source are available under the
+/// Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+/// or MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>), as per the
+/// rest of the crate.
 pub(crate) async fn wheel_metadata_from_remote_zip(
     filename: &WheelFilename,
     reader: &mut AsyncHttpRangeReader,
@@ -79,7 +115,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .enumerate()
             .filter_map(|(idx, e)| Some(((idx, e), e.entry().filename().as_str().ok()?))),
     )
-    .map_err(|err| Error::InvalidWheel(filename.clone(), err))?;
+    .map_err(|err| Error::InvalidDistInfo(filename.clone(), err))?;
 
     let offset = metadata_entry.header_offset();
     let size = metadata_entry.entry().compressed_size()

@@ -50,9 +50,8 @@ pub enum Error {
     #[error(transparent)]
     AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
 
-    /// Invalid dist-info dir
-    #[error("Invalid wheel {0}: {0}")]
-    InvalidWheel(WheelFilename, String),
+    #[error("Expected a single .dist-info directory in {0}, found {1}")]
+    InvalidDistInfo(WheelFilename, String),
 
     #[error("The wheel {0} is not a valid zip file")]
     Zip(WheelFilename, #[source] ZipError),

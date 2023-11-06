@@ -96,12 +96,12 @@ pub fn find_dist_info_metadata<'a, T: Copy>(
         .collect();
     let (payload, path) = match metadatas[..] {
         [] => {
-            return Err("Missing .dist-info directory".to_string());
+            return Err("no .dist-info directory".to_string());
         }
         [(payload, path)] => (payload, path),
         _ => {
             return Err(format!(
-                "Multiple .dist-info directories: {}",
+                "multiple .dist-info directories: {}",
                 metadatas
                     .into_iter()
                     .map(|(_, path)| path.to_string())

@@ -208,10 +208,7 @@ impl RegistryClient {
             return Err(Error::NoIndex(file.filename));
         }
 
-        // Per PEP 658, if `data-dist-info-metadata` is available, we can request it directly;
-        // otherwise, try using HTTP range requests to read only the `.dist-info/METADATA` file
-        // from the zip, and if that also fails, download the whole wheel into the cache and read
-        // from there
+        // If the metadata file is available at its own url (PEP 658), download it from there
         let url = Url::parse(&file.url)?;
         if file.data_dist_info_metadata.is_available() {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
@@ -225,6 +222,9 @@ impl RegistryClient {
             })?;
 
             Ok(Metadata21::parse(text.as_bytes())?)
+        // If we lack PEP 658 support, try using HTTP range requests to read only the
+        // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
+        // into the cache and read from there
         } else {
             self.wheel_metadata_no_index(&filename, &url).await
         }
@@ -245,11 +245,7 @@ impl RegistryClient {
             } else if let Some((mut reader, headers)) = self.range_reader(url.clone()).await? {
                 debug!("Using remote zip reader for wheel metadata for {url}");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-                let mut metadata = Metadata21::parse(text.as_bytes())?;
-                if metadata.description.is_some() {
-                    // Perf (and cache size) improvement
-                    metadata.description = Some("[omitted]".to_string());
-                }
+                let metadata = Metadata21::parse(text.as_bytes())?;
                 let is_immutable = headers
                     .get(header::CACHE_CONTROL)
                     .and_then(|header| header.to_str().ok())
@@ -289,7 +285,7 @@ impl RegistryClient {
                             Some(((idx, e), e.entry().filename().as_str().ok()?))
                         }),
                 )
-                .map_err(|err| Error::InvalidWheel(filename.clone(), err))?;
+                .map_err(|err| Error::InvalidDistInfo(filename.clone(), err))?;
 
                 // Read the contents of the METADATA file
                 let mut contents = Vec::new();
@@ -341,9 +337,8 @@ impl RegistryClient {
         ))
     }
 
-    /// Try using HTTP range requests to only read the METADATA file of a remote zip
-    ///
-    /// <https://github.com/prefix-dev/rip/pull/66>
+    /// An async for individual files inside a remote zip file, if the server supports it. Returns
+    /// the headers of the initial request for caching.
     async fn range_reader(
         &self,
         url: Url,
