@@ -5,7 +5,6 @@ use async_zip::error::ZipError;
 use thiserror::Error;
 
 use distribution_filename::WheelFilename;
-use puffin_package::pypi_types;
 
 #[derive(Debug, Error)]
 pub enum Error {

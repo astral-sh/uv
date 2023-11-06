@@ -10,7 +10,7 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info_metadata;
 use puffin_cache::CanonicalUrl;
-use puffin_package::pypi_types::Metadata21;
+use pypi_types::Metadata21;
 
 use crate::Error;
 

@@ -17,8 +17,8 @@ use puffin_client::RegistryClient;
 use puffin_distribution::source::Source;
 use puffin_distribution::RemoteDistributionRef;
 use puffin_git::{Git, GitSource};
-use puffin_package::pypi_types::Metadata21;
 use puffin_traits::BuildContext;
+use pypi_types::Metadata21;
 
 use crate::distribution::cached_wheel::CachedWheel;
 

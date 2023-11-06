@@ -1,5 +1,5 @@
 ---
-source: crates/puffin-package/src/requirements_txt.rs
+source: crates/requirements-txt/src/lib.rs
 expression: actual
 ---
 RequirementsTxt {

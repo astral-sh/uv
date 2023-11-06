@@ -13,7 +13,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_distribution::RemoteDistribution;
 use puffin_normalize::PackageName;
-use puffin_package::pypi_types::File;
+use pypi_types::File;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 

@@ -15,7 +15,7 @@ use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::RemoteDistribution;
 use puffin_normalize::PackageName;
-use puffin_package::pypi_types::{File, SimpleJson};
+use pypi_types::{File, SimpleJson};
 
 use crate::error::ResolveError;
 use crate::resolution::Resolution;

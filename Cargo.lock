@@ -2232,10 +2232,11 @@ dependencies = [
  "puffin-installer",
  "puffin-interpreter",
  "puffin-normalize",
- "puffin-package",
  "puffin-resolver",
  "puffin-workspace",
+ "pypi-types",
  "pyproject-toml",
+ "requirements-txt",
  "tempfile",
  "thiserror",
  "tokio",
@@ -2261,7 +2262,7 @@ dependencies = [
  "install-wheel-rs",
  "puffin-cache",
  "puffin-normalize",
- "puffin-package",
+ "pypi-types",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
@@ -2296,8 +2297,8 @@ dependencies = [
  "puffin-client",
  "puffin-dispatch",
  "puffin-interpreter",
- "puffin-package",
  "puffin-traits",
+ "pypi-types",
  "tempfile",
  "tokio",
  "tracing",
@@ -2322,9 +2323,9 @@ dependencies = [
  "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
- "puffin-package",
  "puffin-resolver",
  "puffin-traits",
+ "pypi-types",
  "tempfile",
  "tracing",
 ]
@@ -2338,7 +2339,7 @@ dependencies = [
  "puffin-cache",
  "puffin-git",
  "puffin-normalize",
- "puffin-package",
+ "pypi-types",
  "url",
 ]
 
@@ -2379,8 +2380,8 @@ dependencies = [
  "puffin-git",
  "puffin-interpreter",
  "puffin-normalize",
- "puffin-package",
  "puffin-traits",
+ "pypi-types",
  "rayon",
  "tempfile",
  "thiserror",
@@ -2412,39 +2413,9 @@ dependencies = [
 name = "puffin-normalize"
 version = "0.0.1"
 dependencies = [
- "anyhow",
- "indoc",
- "insta",
  "once_cell",
  "regex",
  "serde",
- "serde_json",
- "tempfile",
- "test-case",
-]
-
-[[package]]
-name = "puffin-package"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "fs-err",
- "indoc",
- "insta",
- "mailparse",
- "once_cell",
- "pep440_rs 0.3.12",
- "pep508_rs",
- "puffin-normalize",
- "regex",
- "rfc2047-decoder",
- "serde",
- "serde_json",
- "tempfile",
- "test-case",
- "thiserror",
- "tracing",
- "unscanny",
 ]
 
 [[package]]
@@ -2477,8 +2448,8 @@ dependencies = [
  "puffin-git",
  "puffin-interpreter",
  "puffin-normalize",
- "puffin-package",
  "puffin-traits",
+ "pypi-types",
  "sha2",
  "tempfile",
  "thiserror",
@@ -2583,6 +2554,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "pypi-types"
+version = "0.0.1"
+dependencies = [
+ "indoc",
+ "insta",
+ "mailparse",
+ "once_cell",
+ "pep440_rs 0.3.12",
+ "pep508_rs",
+ "puffin-normalize",
+ "regex",
+ "rfc2047-decoder",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "test-case",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -2764,6 +2756,28 @@ name = "regex-syntax"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
+
+[[package]]
+name = "requirements-txt"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "indoc",
+ "insta",
+ "once_cell",
+ "pep440_rs 0.3.12",
+ "pep508_rs",
+ "puffin-normalize",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "test-case",
+ "thiserror",
+ "tracing",
+ "unscanny",
+]
 
 [[package]]
 name = "reqwest"
