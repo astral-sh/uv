@@ -399,7 +399,7 @@ pub(crate) async fn pip_compile(
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
     None,

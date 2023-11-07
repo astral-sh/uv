@@ -774,6 +774,39 @@ async fn run() -> Result<ExitStatus> {
             };
             let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
             let no_build = NoBuild::from_args(args.only_binary, args.no_build);
+            let iters = std::env::var("PUFFIN_RESOLVE_ITERS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            for _ in 0..iters {
+                commands::pip_compile(
+                    &requirements,
+                    &constraints,
+                    &overrides,
+                    extras.clone(),
+                    args.output_file.as_deref(),
+                    args.resolution,
+                    args.prerelease,
+                    upgrade.clone(),
+                    args.generate_hashes,
+                    !args.no_annotate,
+                    !args.no_header,
+                    args.emit_index_url,
+                    args.emit_find_links,
+                    index_urls.clone(),
+                    if args.legacy_setup_py {
+                        SetupPyStrategy::Setuptools
+                    } else {
+                        SetupPyStrategy::Pep517
+                    },
+                    &no_build,
+                    args.python_version.clone(),
+                    args.exclude_newer,
+                    cache.clone(),
+                    printer,
+                )
+                .await?;
+            }
             commands::pip_compile(
                 &requirements,
                 &constraints,
