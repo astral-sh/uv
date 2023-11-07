@@ -32,17 +32,26 @@ pub(crate) enum GitReference {
     Tag(String),
     /// From a reference that's ambiguously a branch or tag.
     BranchOrTag(String),
-    /// From a specific revision. Can be a commit hash (either short or full),
-    /// or a named reference like `refs/pull/493/head`.
-    Rev(String),
+    /// From a specific revision, using a full 40-character commit hash.
+    FullCommit(String),
+    /// From a truncated revision.
+    ShortCommit(String),
+    /// From a named reference, like `refs/pull/493/head`.
+    Ref(String),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
 }
 
 impl GitReference {
     pub(crate) fn from_rev(rev: &str) -> Self {
-        if looks_like_commit_hash(rev) || rev.starts_with("refs/") {
-            Self::Rev(rev.to_owned())
+        if rev.starts_with("refs/") {
+            Self::Ref(rev.to_owned())
+        } else if looks_like_commit_hash(rev) {
+            if rev.len() == 40 {
+                Self::FullCommit(rev.to_owned())
+            } else {
+                Self::ShortCommit(rev.to_owned())
+            }
         } else {
             Self::BranchOrTag(rev.to_owned())
         }
@@ -123,7 +132,7 @@ impl GitRemote {
         strategy: FetchStrategy,
         client: &Client,
     ) -> Result<(GitDatabase, git2::Oid)> {
-        let locked_ref = locked_rev.map(|oid| GitReference::Rev(oid.to_string()));
+        let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
@@ -262,7 +271,7 @@ impl GitReference {
                 head.peel(ObjectType::Commit)?.id()
             }
 
-            GitReference::Rev(s) => {
+            GitReference::FullCommit(s) | GitReference::ShortCommit(s) | GitReference::Ref(s) => {
                 let obj = repo.revparse_single(s)?;
                 match obj.as_tag() {
                     Some(tag) => tag.target_id(),
@@ -483,7 +492,7 @@ impl<'a> GitCheckout<'a> {
 
                 // Fetch data from origin and reset to the head commit
                 debug!("Updating Git submodule: {}", child_remote_url);
-                let reference = GitReference::Rev(head.to_string());
+                let reference = GitReference::FullCommit(head.to_string());
                 fetch(&mut repo, &child_remote_url, &reference, strategy, client).with_context(
                     || {
                         format!(
@@ -917,14 +926,14 @@ pub(crate) fn fetch(
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
 
-        GitReference::Rev(rev) => {
-            if rev.starts_with("refs/") {
-                refspecs.push(format!("+{rev}:{rev}"));
-            } else if let Some(oid_to_fetch) = oid_to_fetch {
+        GitReference::Ref(rev) => {
+            refspecs.push(format!("+{rev}:{rev}"));
+        }
+
+        GitReference::FullCommit(rev) => {
+            if let Some(oid_to_fetch) = oid_to_fetch {
                 refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else if rev.parse::<git2::Oid>().is_ok()
-                && (rev.len() == 40 || rev.starts_with("refs/"))
-            {
+            } else {
                 // There is a specific commit to fetch and we will do so in shallow-mode only
                 // to not disturb the previous logic.
                 // Note that with typical settings for shallowing, we will just fetch a single `rev`
@@ -932,6 +941,12 @@ pub(crate) fn fetch(
                 // The reason we write to `refs/remotes/origin/HEAD` is that it's of special significance
                 // when during `GitReference::resolve()`, but otherwise it shouldn't matter.
                 refspecs.push(format!("+{rev}:refs/remotes/origin/HEAD"));
+            }
+        }
+
+        GitReference::ShortCommit(_) => {
+            if let Some(oid_to_fetch) = oid_to_fetch {
+                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
             } else {
                 // We don't know what the rev will point to. To handle this
                 // situation we fetch all branches and tags, and then we pray
@@ -1216,10 +1231,9 @@ fn github_fast_path(
         GitReference::Tag(tag) => tag,
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
-        GitReference::Rev(rev) => {
-            if rev.starts_with("refs/") {
-                rev
-            } else if looks_like_commit_hash(rev) {
+        GitReference::Ref(rev) => rev,
+        GitReference::FullCommit(rev) | GitReference::ShortCommit(rev) => {
+            if looks_like_commit_hash(rev) {
                 // `revparse_single` (used by `resolve`) is the only way to turn
                 // short hash -> long hash, but it also parses other things,
                 // like branch and tag names, which might coincidentally be

@@ -42,11 +42,16 @@ impl TryFrom<Url> for Git {
             reference = GitReference::from_rev(rev);
             url = Url::parse(prefix)?;
         }
+        let precise = if let GitReference::FullCommit(rev) = &reference {
+            Some(git2::Oid::from_str(rev)?)
+        } else {
+            None
+        };
 
         Ok(Self {
             url,
             reference,
-            precise: None,
+            precise,
         })
     }
 }
@@ -64,7 +69,9 @@ impl From<Git> for Url {
                 GitReference::Branch(rev)
                 | GitReference::Tag(rev)
                 | GitReference::BranchOrTag(rev)
-                | GitReference::Rev(rev) => {
+                | GitReference::Ref(rev)
+                | GitReference::FullCommit(rev)
+                | GitReference::ShortCommit(rev) => {
                     url.set_path(&format!("{}@{}", url.path(), rev));
                 }
                 GitReference::DefaultBranch => {}
