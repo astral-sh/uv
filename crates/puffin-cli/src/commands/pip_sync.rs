@@ -147,7 +147,10 @@ pub(crate) async fn sync_requirements(
         let downloader = puffin_installer::Downloader::new(&client, cache)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
-        let downloads = downloader.download(remote).await?;
+        let downloads = downloader
+            .download(remote)
+            .await
+            .context("Failed to download distributions")?;
 
         let s = if downloads.len() == 1 { "" } else { "s" };
         writeln!(
@@ -188,7 +191,10 @@ pub(crate) async fn sync_requirements(
         let builder = Builder::new(&build_dispatch)
             .with_reporter(BuildReporter::from(printer).with_length(sdists.len() as u64));
 
-        let wheels = builder.build(sdists).await?;
+        let wheels = builder
+            .build(sdists)
+            .await
+            .context("Failed to build source distributions")?;
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
@@ -219,7 +225,7 @@ pub(crate) async fn sync_requirements(
         let unzips = unzipper
             .unzip(downloads, cache)
             .await
-            .context("Failed to download and unpack wheels")?;
+            .context("Failed to unpack wheels")?;
 
         let s = if unzips.len() == 1 { "" } else { "s" };
         writeln!(
