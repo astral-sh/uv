@@ -9,6 +9,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
 use tokio::sync::Semaphore;
+use tokio::time::Instant;
 use tracing::{info, info_span, span, Level, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
@@ -31,9 +32,13 @@ pub(crate) struct ResolveManyArgs {
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
     let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = project_dirs
-        .as_ref()
-        .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
+    let cache = args
+        .cache_dir
+        .or_else(|| {
+            project_dirs
+                .as_ref()
+                .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
+        })
         .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
         .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
 
@@ -60,7 +65,8 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
 
     let header_span = info_span!("resolve many");
     header_span.pb_set_style(&ProgressStyle::default_bar());
-    header_span.pb_set_length(requirements.len() as u64);
+    let total = requirements.len();
+    header_span.pb_set_length(total as u64);
 
     let _header_span_enter = header_span.enter();
 
@@ -68,13 +74,15 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
         let build_dispatch_arc = build_dispatch_arc.clone();
         let semaphore = semaphore.clone();
         tasks.push(tokio::spawn(async move {
+            let permit = semaphore.clone().acquire_owned().await.unwrap();
             let span = span!(Level::TRACE, "resolving");
             let _enter = span.enter();
+            let start = Instant::now();
 
-            let permit = semaphore.clone().acquire_owned().await.unwrap();
             let result = build_dispatch_arc.resolve(&[requirement.clone()]).await;
+
             drop(permit);
-            (requirement.to_string(), result)
+            (requirement.to_string(), start.elapsed(), result)
         }));
     }
 
@@ -82,14 +90,29 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
     let mut errors = Vec::new();
 
     while let Some(result) = tasks.next().await {
-        let (package, result) = result.unwrap();
+        let (package, duration, result) = result.unwrap();
+
         match result {
             Ok(resolution) => {
-                info!("Success: {} ({} package(s))", package, resolution.len());
+                info!(
+                    "Success ({}/{}, {} ms): {} ({} package(s))",
+                    success + errors.len(),
+                    total,
+                    duration.as_millis(),
+                    package,
+                    resolution.len(),
+                );
                 success += 1;
             }
             Err(err) => {
-                info!("Error for {}: {:?}", package, err);
+                info!(
+                    "Error for {} ({}/{}, {} ms):: {:?}",
+                    package,
+                    success + errors.len(),
+                    total,
+                    duration.as_millis(),
+                    err,
+                );
                 errors.push(package);
             }
         }
