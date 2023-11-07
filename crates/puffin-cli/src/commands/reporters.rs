@@ -266,8 +266,8 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, index: usize) {
-        let mut bars = self.bars.lock().unwrap();
-        let progress = bars.remove(index);
+        let bars = self.bars.lock().unwrap();
+        let progress = &bars[index];
         progress.finish_with_message(format!(
             "{} {}",
             "Built".bold().green(),
@@ -296,8 +296,8 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        let mut bars = self.bars.lock().unwrap();
-        let progress = bars.remove(index);
+        let bars = self.bars.lock().unwrap();
+        let progress = &bars[index];
         progress.finish_with_message(format!(
             "{} {} ({})",
             "Updated".bold().green(),
