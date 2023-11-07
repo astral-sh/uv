@@ -20,6 +20,10 @@ pub(crate) struct ResolveCliArgs {
     /// Path to the cache directory.
     #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
     cache_dir: Option<PathBuf>,
+    /// Don't build source distributions. This means resolving will not run arbitrary code. The
+    /// cached wheels of already built source distributions will be reused.
+    #[clap(long)]
+    no_build: bool,
 }
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
@@ -37,6 +41,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
         cache.clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
+        args.no_build,
     );
 
     let mut resolution = build_dispatch.resolve(&args.requirements).await?;

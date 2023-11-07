@@ -5,7 +5,7 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use fs_err::tokio as fs;
 
 use tempfile::tempdir_in;
@@ -75,6 +75,10 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         client: &RegistryClient,
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
+
+        if self.build_context.no_build() {
+            bail!("Building source distributions is disabled");
+        }
 
         // This could extract the subdirectory.
         let source = Source::try_from(distribution)?;

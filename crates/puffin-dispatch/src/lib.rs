@@ -6,8 +6,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
-use anyhow::Context;
 use anyhow::Result;
+use anyhow::{bail, Context};
 use itertools::{Either, Itertools};
 use tracing::{debug, instrument};
 
@@ -28,6 +28,7 @@ pub struct BuildDispatch {
     interpreter_info: InterpreterInfo,
     base_python: PathBuf,
     source_build_context: SourceBuildContext,
+    no_build: bool,
 }
 
 impl BuildDispatch {
@@ -36,6 +37,7 @@ impl BuildDispatch {
         cache: PathBuf,
         interpreter_info: InterpreterInfo,
         base_python: PathBuf,
+        no_build: bool,
     ) -> Self {
         Self {
             client,
@@ -43,6 +45,7 @@ impl BuildDispatch {
             interpreter_info,
             base_python,
             source_build_context: SourceBuildContext::default(),
+            no_build,
         }
     }
 }
@@ -60,7 +63,11 @@ impl BuildContext for BuildDispatch {
         &self.base_python
     }
 
-    #[instrument(skip(self, requirements))]
+    fn no_build(&self) -> bool {
+        self.no_build
+    }
+
+    #[instrument(skip(self, requirements), fields(requirements = requirements.iter().map(ToString::to_string).join(", ")))]
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
@@ -230,6 +237,9 @@ impl BuildContext for BuildDispatch {
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
+            if self.no_build {
+                bail!("Building source distributions is disabled");
+            }
             let builder = SourceBuild::setup(
                 source,
                 subdirectory,
