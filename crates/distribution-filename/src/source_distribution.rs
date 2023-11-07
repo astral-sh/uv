@@ -71,13 +71,17 @@ impl SourceDistributionFilename {
             ));
         };
 
+        if stem.len() <= package_name.as_ref().len() + "-".len() {
+            return Err(SourceDistributionFilenameError::InvalidFilename {
+                filename: filename.to_string(),
+                package_name: package_name.to_string(),
+            });
+        }
         let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
             .map_err(|err| {
                 SourceDistributionFilenameError::InvalidPackageName(filename.to_string(), err)
             })?;
-        if stem.len() <= package_name.as_ref().len() + "-".len()
-            || &actual_package_name != package_name
-        {
+        if &actual_package_name != package_name {
             return Err(SourceDistributionFilenameError::InvalidFilename {
                 filename: filename.to_string(),
                 package_name: package_name.to_string(),
@@ -153,5 +157,14 @@ mod tests {
             )
             .is_err());
         }
+    }
+
+    #[test]
+    fn name_to_long() {
+        assert!(SourceDistributionFilename::parse(
+            "foo.zip",
+            &PackageName::from_str("foo-lib").unwrap()
+        )
+        .is_err());
     }
 }
