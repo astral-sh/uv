@@ -165,7 +165,7 @@ pub fn resolve<P: Package, VS: VersionSet>(
                 Dependencies::Known(x) if x.contains_key(p) => {
                     return Err(PubGrubError::SelfDependency {
                         package: p.clone(),
-                        version: v.clone(),
+                        version: v,
                     });
                 }
                 Dependencies::Known(x) => x,

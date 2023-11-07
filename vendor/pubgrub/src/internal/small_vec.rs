@@ -166,9 +166,9 @@ impl<T> IntoIterator for SmallVec<T> {
     fn into_iter(self) -> Self::IntoIter {
         match self {
             SmallVec::Empty => SmallVecIntoIter::Empty,
-            SmallVec::One(a) => SmallVecIntoIter::One(IntoIterator::into_iter(a)),
-            SmallVec::Two(a) => SmallVecIntoIter::Two(IntoIterator::into_iter(a)),
-            SmallVec::Flexible(v) => SmallVecIntoIter::Flexible(IntoIterator::into_iter(v)),
+            SmallVec::One(a) => SmallVecIntoIter::One(a.into_iter()),
+            SmallVec::Two(a) => SmallVecIntoIter::Two(a.into_iter()),
+            SmallVec::Flexible(v) => SmallVecIntoIter::Flexible(v.into_iter()),
         }
     }
 }
