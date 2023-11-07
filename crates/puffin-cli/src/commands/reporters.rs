@@ -1,9 +1,7 @@
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
 use colored::Colorize;
 use std::time::Duration;
 
-use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
 use puffin_distribution::{
@@ -192,9 +190,8 @@ impl puffin_installer::BuildReporter for BuildReporter {
 #[derive(Debug)]
 pub(crate) struct ResolverReporter {
     printer: Printer,
-    multi_progress: Arc<Mutex<MultiProgress>>,
+    multi_progress: MultiProgress,
     progress: ProgressBar,
-    bars: Arc<Mutex<Vec<ProgressBar>>>,
 }
 
 impl From<Printer> for ResolverReporter {
@@ -212,9 +209,8 @@ impl From<Printer> for ResolverReporter {
 
         Self {
             printer,
-            multi_progress: Arc::new(Mutex::new(multi_progress)),
+            multi_progress,
             progress,
-            bars: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -253,8 +249,7 @@ impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
     }
 
     fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> TaskId {
-        let multi_progress = self.multi_progress.lock().unwrap();
-        let progress = multi_progress.insert_before(
+        let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
@@ -271,8 +266,7 @@ impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
     }
 
     fn on_fetch_git_repo(&self, url: &Url) {
-        let multi_progress = self.multi_progress.lock().unwrap();
-        let progress = multi_progress.insert_before(
+        let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );

@@ -685,19 +685,13 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
                 let _guard = lock.lock().await;
 
                 let fetcher = if let Some(reporter) = &self.reporter {
-                    SourceDistributionFetcher::new(self.build_context).with_reporter(
-                        Relay {
-                            reporter: reporter.clone(),
-                        },
-                    )
+                    SourceDistributionFetcher::new(self.build_context).with_reporter(Relay {
+                        reporter: reporter.clone(),
+                    })
                 } else {
                     SourceDistributionFetcher::new(self.build_context)
                 };
-                // if let Some(reporter) = &self.reporter {
-                //     reporter.on_fetch_git_repo(&Url::parse("https://google.com").unwrap());
-                // }
 
-                // let fetcher = SourceDistributionFetcher::new(self.build_context);
                 let precise = fetcher
                     .precise(&RemoteDistributionRef::from_url(&package_name, &url))
                     .await

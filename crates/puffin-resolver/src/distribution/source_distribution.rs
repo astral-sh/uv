@@ -2,13 +2,12 @@
 //!
 //! TODO(charlie): Unify with `crates/puffin-installer/src/sdist_builder.rs`.
 
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
-use futures::Sink;
+
 use tempfile::tempdir_in;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
@@ -64,9 +63,9 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             tags,
             self.build_context.cache().join(BUILT_WHEELS_CACHE),
         )
-            .as_ref()
-            .map(CachedWheel::read_dist_info)
-            .transpose()
+        .as_ref()
+        .map(CachedWheel::read_dist_info)
+        .transpose()
     }
 
     /// Download and build a source distribution, storing the built wheel in the cache.
@@ -182,17 +181,13 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
         let git_dir = self.build_context.cache().join(GIT_CACHE);
-        // let source = if let Some(reporter) = &self.reporter {
-        //     GitSource::new(git, git_dir).with_reporter(Relay {
-        //         reporter: reporter.clone(),
-        //     })
-        // } else {
-        //     GitSource::new(git, git_dir)
-        // };
-        if let Some(reporter) = &self.reporter {
-            reporter.on_fetch_git_repo(git.url());
-        }
-        let source = GitSource::new(git, git_dir);
+        let source = if let Some(reporter) = &self.reporter {
+            GitSource::new(git, git_dir).with_reporter(Relay {
+                reporter: reporter.clone(),
+            })
+        } else {
+            GitSource::new(git, git_dir)
+        };
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
         let git = Git::from(precise);
 
@@ -202,7 +197,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     }
 }
 
-pub trait Reporter: Send + Sync {
+pub(crate) trait Reporter: Send + Sync {
     /// Callback to invoke when a repository is updated.
     fn on_fetch_git_repo(&self, url: &Url);
 }

@@ -39,7 +39,7 @@ impl GitSource {
         }
     }
 
-    /// Set the [`Reporter`] to use for this GIt source.
+    /// Set the [`Reporter`] to use for this `GIt` source.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
@@ -65,6 +65,7 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
+                debug!("updating git source `{:?}`", self.git.url);
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_fetch_git_repo(remote.url());
                 }
