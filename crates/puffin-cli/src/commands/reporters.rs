@@ -2,12 +2,14 @@ use colored::Colorize;
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use url::Url;
 
 use puffin_distribution::{
     CachedDistribution, RemoteDistribution, RemoteDistributionRef, VersionOrUrl,
 };
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
+use puffin_resolver::BuildId;
 
 use crate::printer::Printer;
 
@@ -191,6 +193,7 @@ pub(crate) struct ResolverReporter {
     printer: Printer,
     multi_progress: MultiProgress,
     progress: ProgressBar,
+    builds: Vec<ProgressBar>,
 }
 
 impl From<Printer> for ResolverReporter {
@@ -210,15 +213,12 @@ impl From<Printer> for ResolverReporter {
             printer,
             multi_progress,
             progress,
+            builds: Vec::new(),
         }
     }
 }
 
-/// A task ID to capture an in-flight progress bar.
-#[derive(Debug)]
-pub(crate) struct TaskId(ProgressBar);
-
-impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
+impl puffin_resolver::ResolverReporter for ResolverReporter {
     fn on_progress(
         &self,
         name: &PackageName,
@@ -247,7 +247,7 @@ impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> TaskId {
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> BuildId {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -256,11 +256,17 @@ impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!("{} {}", "Building".bold().green(), distribution));
 
-        TaskId(progress)
+        self.builds.push(progress);
+
+        BuildId(progress)
     }
 
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, task: TaskId) {
-        let progress = task.0;
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, build: BuildId) {
+        let progress = &self.builds[build.0];
         progress.finish_with_message(format!("{} {}", "Built".bold().green(), distribution));
+    }
+
+    fn on_update(&self, url: &Url) {
+        todo!()
     }
 }

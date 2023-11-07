@@ -29,7 +29,7 @@ use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{SourceDistributionFetcher, WheelFetcher};
+use crate::distribution::{SourceDistributionFetcher, SourceDistributionReporter, WheelFetcher};
 use crate::error::ResolveError;
 use crate::file::{DistributionFile, SdistFile, WheelFile};
 use crate::manifest::Manifest;
@@ -38,7 +38,7 @@ use crate::pubgrub::{
 };
 use crate::resolution::Graph;
 
-pub struct Resolver<'a, Context: BuildContext + Sync, Task> {
+pub struct Resolver<'a, Context: BuildContext + Sync> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
@@ -50,10 +50,10 @@ pub struct Resolver<'a, Context: BuildContext + Sync, Task> {
     index: Arc<Index>,
     locks: Arc<Locks>,
     build_context: &'a Context,
-    reporter: Option<Box<dyn Reporter<Task>>>,
+    reporter: Option<Box<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
+impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter<Task> + 'static) -> Self {
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
             reporter: Some(Box::new(reporter)),
             ..self
@@ -165,15 +165,15 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
                     .pick_highest_priority_pkg(|package, _range| {
                         priorities.get(package).unwrap_or_default()
                     })
-            else {
-                let selection = state.partial_solution.extract_solution();
-                return Ok(Graph::from_state(
-                    &selection,
-                    &pins,
-                    &self.index.redirects,
-                    &state,
-                ));
-            };
+                else {
+                    let selection = state.partial_solution.extract_solution();
+                    return Ok(Graph::from_state(
+                        &selection,
+                        &pins,
+                        &self.index.redirects,
+                        &state,
+                    ));
+                };
             next = highest_priority_pkg;
 
             let term_intersection = state
@@ -241,7 +241,7 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
                             package: package.clone(),
                             version: version.clone(),
                         }
-                        .into());
+                            .into());
                     }
                     Dependencies::Known(constraints) => constraints,
                 };
@@ -307,7 +307,7 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
     /// metadata for all of the packages in parallel.
     fn pre_visit(
         &self,
-        packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
+        packages: impl Iterator<Item=(&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
         in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
@@ -818,7 +818,9 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
     }
 }
 
-pub trait Reporter<Task>: Send + Sync {
+pub type BuildId = usize;
+
+pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
@@ -826,10 +828,22 @@ pub trait Reporter<Task>: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> Task;
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> BuildId;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, task: Task);
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, id: BuildId);
+
+    /// Callback to invoke when a repository is updated.
+    fn on_update(&self, url: &Url);
+}
+
+impl<T> SourceDistributionReporter for T
+    where
+        T: Reporter,
+{
+    fn on_update(&self, url: &Url) {
+        self.on_update(url);
+    }
 }
 
 /// Fetch the metadata for an item
@@ -935,7 +949,7 @@ impl AllowedUrls {
 }
 
 impl<'a> FromIterator<&'a Url> for AllowedUrls {
-    fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item=&'a Url>>(iter: T) -> Self {
         Self(iter.into_iter().map(CanonicalUrl::new).collect())
     }
 }

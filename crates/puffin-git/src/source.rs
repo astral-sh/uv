@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use reqwest::Client;
 use tracing::debug;
+use url::Url;
 
 use puffin_cache::{digest, RepositoryUrl};
 
@@ -22,18 +23,32 @@ pub struct GitSource {
     strategy: FetchStrategy,
     /// The path to the Git source database.
     cache: PathBuf,
+    /// The reporter to use for this source.
+    reporter: Option<Box<dyn Reporter>>,
 }
 
 impl GitSource {
+    /// Initialize a new Git source.
     pub fn new(git: Git, cache: impl Into<PathBuf>) -> Self {
         Self {
             git,
             client: Client::new(),
             strategy: FetchStrategy::Libgit2,
             cache: cache.into(),
+            reporter: None,
         }
     }
 
+    /// Set the [`Reporter`] to use for this GIt source.
+    #[must_use]
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Box::new(reporter)),
+            ..self
+        }
+    }
+
+    /// Fetch the underlying Git repository at the given revision.
     pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
         let ident = digest(&RepositoryUrl::new(&self.git.url));
@@ -51,6 +66,10 @@ impl GitSource {
             // doesn't have it.
             (locked_rev, db) => {
                 debug!("Updating Git source: `{:?}`", remote);
+
+                if let Some(reporter) = self.reporter.as_ref() {
+                    reporter.on_checkout(remote.url());
+                }
 
                 remote.checkout(
                     &db_path,
@@ -101,4 +120,9 @@ impl From<Fetch> for PathBuf {
     fn from(fetch: Fetch) -> Self {
         fetch.path
     }
+}
+
+pub trait Reporter: Send + Sync {
+    /// Callback to invoke when a repository is checked out.
+    fn on_checkout(&self, url: &Url);
 }

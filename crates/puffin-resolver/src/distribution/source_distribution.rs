@@ -163,3 +163,9 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         Ok(Some(source.into()))
     }
 }
+
+
+pub(crate) trait Reporter {
+    /// Callback to invoke when a dependency is resolved.
+    fn on_update(&self, url: &Url);
+}
