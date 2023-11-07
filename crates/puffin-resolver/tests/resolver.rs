@@ -49,7 +49,7 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    fn build_source_distribution<'a>(
+    fn build_source<'a>(
         &'a self,
         _sdist: &'a Path,
         _subdirectory: Option<&'a Path>,

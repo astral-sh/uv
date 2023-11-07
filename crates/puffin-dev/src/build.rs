@@ -53,7 +53,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         fs::canonicalize(venv.python_executable())?,
     );
     let wheel = build_dispatch
-        .build_source_distribution(&args.sdist, args.subdirectory.as_deref(), &wheel_dir)
+        .build_source(&args.sdist, args.subdirectory.as_deref(), &wheel_dir)
         .await?;
     Ok(wheel_dir.join(wheel))
 }

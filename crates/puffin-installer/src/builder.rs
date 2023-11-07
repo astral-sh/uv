@@ -86,7 +86,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
     // repository is used by multiple dependencies, at multiple commits, the local checkout may now
     // point to the wrong commit.
     let disk_filename = build_context
-        .build_source_distribution(
+        .build_source(
             &distribution.sdist_file,
             distribution.subdirectory.as_deref(),
             &wheel_dir,

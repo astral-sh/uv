@@ -13,7 +13,7 @@ use tracing::{debug, instrument};
 
 use pep508_rs::Requirement;
 use platform_tags::Tags;
-use puffin_build::{SourceDistributionBuild, SourceDistributionBuildContext};
+use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
@@ -27,7 +27,7 @@ pub struct BuildDispatch {
     cache: PathBuf,
     interpreter_info: InterpreterInfo,
     base_python: PathBuf,
-    source_distribution_builder: SourceDistributionBuildContext,
+    source_build_context: SourceBuildContext,
 }
 
 impl BuildDispatch {
@@ -42,7 +42,7 @@ impl BuildDispatch {
             cache,
             interpreter_info,
             base_python,
-            source_distribution_builder: SourceDistributionBuildContext::default(),
+            source_build_context: SourceBuildContext::default(),
         }
     }
 }
@@ -223,19 +223,19 @@ impl BuildContext for BuildDispatch {
     }
 
     #[instrument(skip(self))]
-    fn build_source_distribution<'a>(
+    fn build_source<'a>(
         &'a self,
-        sdist: &'a Path,
+        source: &'a Path,
         subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
-            let builder = SourceDistributionBuild::setup(
-                sdist,
+            let builder = SourceBuild::setup(
+                source,
                 subdirectory,
                 &self.interpreter_info,
                 self,
-                self.source_distribution_builder.clone(),
+                self.source_build_context.clone(),
             )
             .await?;
             Ok(builder.build(wheel_dir)?)
