@@ -25,7 +25,7 @@ use pypi_types::DirectUrl;
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
 use crate::script::Script;
-use crate::Error;
+use crate::{find_dist_info, Error};
 
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
@@ -930,11 +930,10 @@ pub fn install_wheel(
         ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
 
     debug!(name = name.as_ref(), "Getting wheel metadata");
-    let dist_info_prefix =
-        (match crate::find_dist_info(filename, archive.file_names().map(|name| (name, name))) {
-            Ok((_, dist_info_dir)) => Ok(dist_info_dir.to_string()),
-            Err(err) => Err(Error::InvalidWheel(err)),
-        })?;
+    let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))
+        .map_err(Error::InvalidWheel)?
+        .1
+        .to_string();
     let (name, _version) = read_metadata(&dist_info_prefix, &mut archive)?;
     // TODO: Check that name and version match
 

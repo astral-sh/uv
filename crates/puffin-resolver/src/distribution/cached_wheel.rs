@@ -55,8 +55,7 @@ impl CachedWheel {
         let filename = &self.filename;
         let dist_info_dir = find_dist_info(filename, archive.file_names().map(|name| (name, name)))
             .map_err(|err| format_err!("Invalid wheel {filename}: {err}"))?
-            .1
-            .to_string();
+            .1;
         let dist_info =
             std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
         Ok(Metadata21::parse(dist_info.as_bytes())?)
