@@ -37,7 +37,7 @@ impl From<PathBuf> for RequirementsSource {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) enum ExtrasSpecification<'a> {
     #[default]
     None,

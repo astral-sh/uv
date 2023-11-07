@@ -143,6 +143,7 @@ fn maybe_spurious(err: &Error) -> bool {
             git2::ErrorClass::Net
             | git2::ErrorClass::Os
             | git2::ErrorClass::Zlib
+            | git2::ErrorClass::Ssl
             | git2::ErrorClass::Http => return git_err.code() != git2::ErrorCode::Certificate,
             _ => (),
         }
