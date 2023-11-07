@@ -1,0 +1,42 @@
+# Based on https://github.com/pydantic/pydantic/blob/1e32b011ed0ad260d0b94939ac84585ce0a229e1/pyproject.toml
+# Replaced pydantic-core==2.11.0 with pydantic-core==2.10.1 to make it resolve because we lack the root pydantic from
+# main here that exists when resolving the actual project
+annotated-types>=0.4.0
+ansi2html
+autoflake
+cloudpickle
+coverage[toml]
+devtools
+dirty-equals
+email-validator>=2.0.0
+faker>=18.13.0
+greenlet>=3.0.0rc3
+importlib_metadata; python_version=='3.7'
+mike @ git+https://github.com/jimporter/mike.git
+mkdocs
+mkdocs-embed-external-markdown
+mkdocs-embed-external-markdown>=2.3.0
+mkdocs-exclude
+mkdocs-material
+mkdocs-redirects
+mkdocs-simple-hooks
+mkdocstrings-python
+mypy
+mypy~=1.1.1
+pydantic-core==2.10.1
+pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git@main
+pydantic-settings>=2.0.0
+pydantic-settings>=2.0b1
+pytest
+pytest-benchmark>=4.0.0
+pytest-examples
+pytest-examples>=0.0.10
+pytest-memray; platform_system != 'Windows'
+pytest-memray==1.5.0
+pytest-mock
+pytest-pretty
+pyupgrade
+ruff==0.1.3
+sqlalchemy>=2.0,<3.0
+tomli
+typing-extensions>=4.6.1
