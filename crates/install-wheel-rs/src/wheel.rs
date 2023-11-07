@@ -25,7 +25,7 @@ use pypi_types::DirectUrl;
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
 use crate::script::Script;
-use crate::Error;
+use crate::{find_dist_info, Error};
 
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
@@ -930,7 +930,10 @@ pub fn install_wheel(
         ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
 
     debug!(name = name.as_ref(), "Getting wheel metadata");
-    let dist_info_prefix = find_dist_info(filename, &mut archive)?;
+    let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))
+        .map_err(Error::InvalidWheel)?
+        .1
+        .to_string();
     let (name, _version) = read_metadata(&dist_info_prefix, &mut archive)?;
     // TODO: Check that name and version match
 
@@ -1031,45 +1034,6 @@ pub fn install_wheel(
     }
 
     Ok(filename.get_tag())
-}
-
-/// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
-/// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
-/// Either way, we just search the wheel for the name
-///
-/// <https://github.com/PyO3/python-pkginfo-rs>
-pub fn find_dist_info(
-    filename: &WheelFilename,
-    archive: &mut ZipArchive<impl Read + Seek + Sized>,
-) -> Result<String, Error> {
-    let dist_info_matcher = format!(
-        "{}-{}",
-        filename.distribution.as_dist_info_name(),
-        filename.version
-    )
-    .to_lowercase();
-    let dist_infos: Vec<_> = archive
-        .file_names()
-        .filter_map(|name| name.split_once('/'))
-        .filter_map(|(dir, file)| Some((dir.strip_suffix(".dist-info")?, file)))
-        .filter(|(dir, file)| dir.to_lowercase() == dist_info_matcher && *file == "METADATA")
-        .map(|(dir, _file)| dir)
-        .collect();
-    let dist_info = match dist_infos.as_slice() {
-        [] => {
-            return Err(Error::InvalidWheel(
-                "Missing .dist-info directory".to_string(),
-            ));
-        }
-        [dist_info] => (*dist_info).to_string(),
-        _ => {
-            return Err(Error::InvalidWheel(format!(
-                "Multiple .dist-info directories: {}",
-                dist_infos.join(", ")
-            )));
-        }
-    };
-    Ok(dist_info)
 }
 
 /// <https://github.com/PyO3/python-pkginfo-rs>

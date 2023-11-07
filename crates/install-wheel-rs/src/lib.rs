@@ -1,6 +1,7 @@
 //! Takes a wheel and installs it into a venv..
 
 use std::io;
+use std::str::FromStr;
 
 use distribution_filename::WheelFilename;
 use platform_info::PlatformInfoError;
@@ -8,13 +9,15 @@ use thiserror::Error;
 use zip::result::ZipError;
 
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
+use pep440_rs::Version;
 use platform_host::{Arch, Os};
+use puffin_normalize::PackageName;
 pub use record::RecordEntry;
 pub use script::Script;
 pub use uninstall::{uninstall_wheel, Uninstall};
 pub use wheel::{
-    find_dist_info, get_script_launcher, install_wheel, parse_key_value_file, read_record_file,
-    relative_to, SHEBANG_PYTHON,
+    get_script_launcher, install_wheel, parse_key_value_file, read_record_file, relative_to,
+    SHEBANG_PYTHON,
 };
 
 mod install_location;
@@ -75,28 +78,29 @@ impl Error {
 
 /// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
 /// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
-/// Either way, we just search the wheel for the name
-pub fn find_dist_info_metadata<'a, T: Copy>(
+/// Either way, we just search the wheel for the name.
+///
+/// Reference implementation: <https://github.com/pypa/packaging/blob/2f83540272e79e3fe1f5d42abae8df0c14ddf4c2/src/packaging/utils.py#L146-L172>
+pub fn find_dist_info<'a, T: Copy>(
     filename: &WheelFilename,
     files: impl Iterator<Item = (T, &'a str)>,
 ) -> Result<(T, &'a str), String> {
-    let dist_info_matcher = format!(
-        "{}-{}",
-        filename.distribution.as_dist_info_name(),
-        filename.version
-    );
     let metadatas: Vec<_> = files
         .filter_map(|(payload, path)| {
-            let (dir, file) = path.split_once('/')?;
-            let dir = dir.strip_suffix(".dist-info")?;
-            if dir.to_lowercase() == dist_info_matcher && file == "METADATA" {
-                Some((payload, path))
+            let (dist_info_dir, file) = path.split_once('/')?;
+            let dir_stem = dist_info_dir.strip_suffix(".dist-info")?;
+            let (name, version) = dir_stem.rsplit_once('-')?;
+            if PackageName::from_str(name).ok()? == filename.distribution
+                && Version::from_str(version).ok()? == filename.version
+                && file == "METADATA"
+            {
+                Some((payload, dist_info_dir))
             } else {
                 None
             }
         })
         .collect();
-    let (payload, path) = match metadatas[..] {
+    let (payload, dist_info_dir) = match metadatas[..] {
         [] => {
             return Err("no .dist-info directory".to_string());
         }
@@ -106,11 +110,37 @@ pub fn find_dist_info_metadata<'a, T: Copy>(
                 "multiple .dist-info directories: {}",
                 metadatas
                     .into_iter()
-                    .map(|(_, path)| path.to_string())
+                    .map(|(_, dist_info_dir)| dist_info_dir.to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
         }
     };
-    Ok((payload, path))
+    Ok((payload, dist_info_dir))
+}
+
+#[cfg(test)]
+mod test {
+    use crate::find_dist_info;
+    use distribution_filename::WheelFilename;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_dot_in_name() {
+        let files = [
+            "mastodon/Mastodon.py",
+            "mastodon/__init__.py",
+            "mastodon/streaming.py",
+            "Mastodon.py-1.5.1.dist-info/DESCRIPTION.rst",
+            "Mastodon.py-1.5.1.dist-info/metadata.json",
+            "Mastodon.py-1.5.1.dist-info/top_level.txt",
+            "Mastodon.py-1.5.1.dist-info/WHEEL",
+            "Mastodon.py-1.5.1.dist-info/METADATA",
+            "Mastodon.py-1.5.1.dist-info/RECORD",
+        ];
+        let filename = WheelFilename::from_str("Mastodon.py-1.5.1-py2.py3-none-any.whl").unwrap();
+        let (_, dist_info_dir) =
+            find_dist_info(&filename, files.into_iter().map(|file| (file, file))).unwrap();
+        assert_eq!(dist_info_dir, "Mastodon.py-1.5.1.dist-info");
+    }
 }
