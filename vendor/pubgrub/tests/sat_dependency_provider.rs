@@ -1,22 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use pubgrub::error::PubGrubError;
 use pubgrub::package::Package;
 use pubgrub::solver::{Dependencies, DependencyProvider, OfflineDependencyProvider};
 use pubgrub::type_aliases::{Map, SelectedDependencies};
 use pubgrub::version_set::VersionSet;
 use varisat::ExtendFormula;
-
-const fn num_bits<T>() -> usize {
-    std::mem::size_of::<T>() * 8
-}
-
-fn log_bits(x: usize) -> usize {
-    if x == 0 {
-        return 0;
-    }
-    assert!(x > 0);
-    (num_bits::<usize>() as u32 - x.leading_zeros()) as usize
-}
 
 fn sat_at_most_one(solver: &mut impl varisat::ExtendFormula, vars: &[varisat::Var]) {
     if vars.len() <= 1 {
@@ -32,7 +21,8 @@ fn sat_at_most_one(solver: &mut impl varisat::ExtendFormula, vars: &[varisat::Va
     }
     // use the "Binary Encoding" from
     // https://www.it.uu.se/research/group/astra/ModRef10/papers/Alan%20M.%20Frisch%20and%20Paul%20A.%20Giannoros.%20SAT%20Encodings%20of%20the%20At-Most-k%20Constraint%20-%20ModRef%202010.pdf
-    let bits: Vec<varisat::Var> = solver.new_var_iter(log_bits(vars.len())).collect();
+    let len_bits = vars.len().ilog2() as usize + 1;
+    let bits: Vec<varisat::Var> = solver.new_var_iter(len_bits).collect();
     for (i, p) in vars.iter().enumerate() {
         for (j, &bit) in bits.iter().enumerate() {
             solver.add_clause(&[p.negative(), bit.lit(((1 << j) & i) > 0)]);
@@ -110,7 +100,7 @@ impl<P: Package, VS: VersionSet> SatResolve<P, VS> {
         }
     }
 
-    pub fn sat_resolve(&mut self, name: &P, ver: &VS::V) -> bool {
+    pub fn resolve(&mut self, name: &P, ver: &VS::V) -> bool {
         if let Some(vers) = self.all_versions_by_p.get(name) {
             if let Some((_, var)) = vers.iter().find(|(v, _)| v == ver) {
                 self.solver.assume(&[var.positive()]);
@@ -126,16 +116,13 @@ impl<P: Package, VS: VersionSet> SatResolve<P, VS> {
         }
     }
 
-    pub fn sat_is_valid_solution(&mut self, pids: &SelectedDependencies<P, VS::V>) -> bool {
+    pub fn is_valid_solution(&mut self, pids: &SelectedDependencies<P, VS::V>) -> bool {
         let mut assumption = vec![];
 
         for (p, vs) in &self.all_versions_by_p {
+            let pid_for_p = pids.get(p);
             for (v, var) in vs {
-                assumption.push(if pids.get(p) == Some(v) {
-                    var.positive()
-                } else {
-                    var.negative()
-                })
+                assumption.push(var.lit(pid_for_p == Some(v)))
             }
         }
 
@@ -144,5 +131,21 @@ impl<P: Package, VS: VersionSet> SatResolve<P, VS> {
         self.solver
             .solve()
             .expect("docs say it can't error in default config")
+    }
+
+    pub fn check_resolve(
+        &mut self,
+        res: &Result<SelectedDependencies<P, VS::V>, PubGrubError<P, VS>>,
+        p: &P,
+        v: &VS::V,
+    ) {
+        match res {
+            Ok(s) => {
+                assert!(self.is_valid_solution(s));
+            }
+            Err(_) => {
+                assert!(!self.resolve(p, v));
+            }
+        }
     }
 }

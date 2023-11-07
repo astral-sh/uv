@@ -30,7 +30,7 @@ use crate::version_set::VersionSet;
 /// [PubGrub documentation](https://github.com/dart-lang/pub/blob/master/doc/solver.md#incompatibility).
 #[derive(Debug, Clone)]
 pub struct Incompatibility<P: Package, VS: VersionSet> {
-    pub package_terms: SmallMap<P, Term<VS>>,
+    package_terms: SmallMap<P, Term<VS>>,
     pub kind: Kind<P, VS>,
 }
 
