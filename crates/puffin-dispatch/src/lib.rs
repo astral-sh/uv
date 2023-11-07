@@ -70,7 +70,7 @@ impl BuildContext for BuildDispatch {
                 self.interpreter_info.platform(),
                 self.interpreter_info.simple_version(),
             )?;
-            let resolver = Resolver::<Self, ()>::new(
+            let resolver = Resolver::new(
                 Manifest::new(
                     requirements.to_vec(),
                     Vec::default(),

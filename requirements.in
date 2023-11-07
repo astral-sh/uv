@@ -1,5 +1,0 @@
-#flask @ git+https://github.com/pallets/flask.git@d92b64a
-werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0
-#ruff
-#typing-extensions
-#meine_stadt_transparent==0.2.14

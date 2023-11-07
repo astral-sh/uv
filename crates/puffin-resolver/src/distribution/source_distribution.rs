@@ -117,9 +117,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 
                 let git_dir = self.build_context.cache().join(GIT_CACHE);
                 let source = if let Some(reporter) = &self.reporter {
-                    GitSource::new(git, git_dir).with_reporter(Relay {
-                        reporter: reporter.clone(),
-                    })
+                    GitSource::new(git, git_dir).with_reporter(Facade::from(reporter.clone()))
                 } else {
                     GitSource::new(git, git_dir)
                 };
@@ -182,9 +180,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         // commit, etc.).
         let git_dir = self.build_context.cache().join(GIT_CACHE);
         let source = if let Some(reporter) = &self.reporter {
-            GitSource::new(git, git_dir).with_reporter(Relay {
-                reporter: reporter.clone(),
-            })
+            GitSource::new(git, git_dir).with_reporter(Facade::from(reporter.clone()))
         } else {
             GitSource::new(git, git_dir)
         };
@@ -198,22 +194,30 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 }
 
 pub(crate) trait Reporter: Send + Sync {
-    /// Callback to invoke when a repository is updated.
-    fn on_fetch_git_repo(&self, url: &Url);
+    /// Callback to invoke when a repository checkout begins.
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+
+    /// Callback to invoke when a repository checkout completes.
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-impl puffin_git::Reporter for dyn Reporter {
-    fn on_fetch_git_repo(&self, url: &Url) {
-        self.on_fetch_git_repo(url);
-    }
-}
-
-struct Relay {
+/// A facade for converting from [`Reporter`] to  [`puffin_git::Reporter`].
+struct Facade {
     reporter: Arc<dyn Reporter>,
 }
 
-impl puffin_git::Reporter for Relay {
-    fn on_fetch_git_repo(&self, url: &Url) {
-        self.reporter.on_fetch_git_repo(url);
+impl From<Arc<dyn Reporter>> for Facade {
+    fn from(reporter: Arc<dyn Reporter>) -> Self {
+        Self { reporter }
+    }
+}
+
+impl puffin_git::Reporter for Facade {
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index);
     }
 }

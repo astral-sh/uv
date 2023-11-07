@@ -1,4 +1,5 @@
 use colored::Colorize;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -192,6 +193,7 @@ pub(crate) struct ResolverReporter {
     printer: Printer,
     multi_progress: MultiProgress,
     progress: ProgressBar,
+    bars: Arc<Mutex<Vec<ProgressBar>>>,
 }
 
 impl From<Printer> for ResolverReporter {
@@ -211,15 +213,12 @@ impl From<Printer> for ResolverReporter {
             printer,
             multi_progress,
             progress,
+            bars: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
 
-/// A task ID to capture an in-flight progress bar.
-#[derive(Debug)]
-pub(crate) struct TaskId(ProgressBar);
-
-impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
+impl puffin_resolver::ResolverReporter for ResolverReporter {
     fn on_progress(
         &self,
         name: &PackageName,
@@ -248,31 +247,80 @@ impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> TaskId {
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!("{} {}", "Building".bold().green(), distribution));
+        progress.set_message(format!(
+            "{} {}",
+            "Building".bold().green(),
+            distribution.to_color_string()
+        ));
 
-        TaskId(progress)
+        let mut bars = self.bars.lock().unwrap();
+        bars.push(progress);
+        bars.len() - 1
     }
 
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, task: TaskId) {
-        let progress = task.0;
-        progress.finish_with_message(format!("{} {}", "Built".bold().green(), distribution));
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, index: usize) {
+        let mut bars = self.bars.lock().unwrap();
+        let progress = bars.remove(index);
+        progress.finish_with_message(format!(
+            "{} {}",
+            "Built".bold().green(),
+            distribution.to_color_string()
+        ));
     }
 
-    fn on_fetch_git_repo(&self, url: &Url) {
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!("{} {}", "Updating".bold().green(), url));
+        progress.set_message(format!(
+            "{} {} ({})",
+            "Updating".bold().green(),
+            url,
+            rev.dimmed()
+        ));
         progress.finish();
+
+        let mut bars = self.bars.lock().unwrap();
+        bars.push(progress);
+        bars.len() - 1
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        let mut bars = self.bars.lock().unwrap();
+        let progress = bars.remove(index);
+        progress.finish_with_message(format!(
+            "{} {} ({})",
+            "Updated".bold().green(),
+            url,
+            rev.dimmed()
+        ));
+    }
+}
+
+/// Like [`std::fmt::Display`], but with colors.
+trait ColorDisplay {
+    fn to_color_string(&self) -> String;
+}
+
+impl ColorDisplay for &RemoteDistributionRef<'_> {
+    fn to_color_string(&self) -> String {
+        match self {
+            RemoteDistributionRef::Registry(name, version, _file) => {
+                format!("{}{}", name, format!("=={version}").dimmed())
+            }
+            RemoteDistributionRef::Url(name, url) => {
+                format!("{}{}", name, format!(" @ {url}").dimmed())
+            }
+        }
     }
 }

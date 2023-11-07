@@ -38,7 +38,7 @@ use crate::pubgrub::{
 };
 use crate::resolution::Graph;
 
-pub struct Resolver<'a, Context: BuildContext + Sync, Task: 'static> {
+pub struct Resolver<'a, Context: BuildContext + Sync> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
@@ -50,10 +50,10 @@ pub struct Resolver<'a, Context: BuildContext + Sync, Task: 'static> {
     index: Arc<Index>,
     locks: Arc<Locks>,
     build_context: &'a Context,
-    reporter: Option<Arc<dyn Reporter<Task>>>,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
+impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter<Task> + 'static) -> Self {
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
             reporter: Some(Arc::new(reporter)),
             ..self
@@ -685,7 +685,7 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
                 let _guard = lock.lock().await;
 
                 let fetcher = if let Some(reporter) = &self.reporter {
-                    SourceDistributionFetcher::new(self.build_context).with_reporter(Relay {
+                    SourceDistributionFetcher::new(self.build_context).with_reporter(Facade {
                         reporter: reporter.clone(),
                     })
                 } else {
@@ -827,7 +827,7 @@ impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
 
 pub type BuildId = usize;
 
-pub trait Reporter<BuildId>: Send + Sync {
+pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
@@ -835,22 +835,30 @@ pub trait Reporter<BuildId>: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> BuildId;
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, id: BuildId);
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, id: usize);
 
-    /// Callback to invoke when a repository is updated.
-    fn on_fetch_git_repo(&self, url: &Url);
+    /// Callback to invoke when a repository checkout begins.
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+
+    /// Callback to invoke when a repository checkout completes.
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-struct Relay<BuildId> {
-    reporter: Arc<dyn Reporter<BuildId>>,
+/// A facade for converting from [`Reporter`] to  [`puffin_git::Reporter`].
+struct Facade {
+    reporter: Arc<dyn Reporter>,
 }
 
-impl<BuildId> SourceDistributionReporter for Relay<BuildId> {
-    fn on_fetch_git_repo(&self, url: &Url) {
-        self.reporter.on_fetch_git_repo(url);
+impl SourceDistributionReporter for Facade {
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index);
     }
 }
 
