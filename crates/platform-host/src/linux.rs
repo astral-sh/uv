@@ -4,13 +4,15 @@
 use crate::{Os, PlatformError};
 use fs_err as fs;
 use goblin::elf::Elf;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tracing::trace;
 
 // glibc version is taken from std/sys/unix/os.rs
-fn get_version() -> Result<Os, PlatformError> {
+fn glibc_version_from_ldd() -> Result<Os, PlatformError> {
+    trace!("falling back to `ldd --version` to detect OS libc version");
     let output = Command::new("ldd")
         .args(["--version"])
         .output()
@@ -26,14 +28,13 @@ fn get_version() -> Result<Os, PlatformError> {
 }
 
 fn ldd_output_to_version_str(output_str: &str) -> Result<&str, PlatformError> {
-    let version_reg = Regex::new(r"ldd \(.+\) ([0-9]+\.[0-9]+)").unwrap();
-    if let Some(captures) = version_reg.captures(output_str) {
-        Ok(captures.get(1).unwrap().as_str())
-    } else {
-        Err(PlatformError::OsVersionDetectionError(format!(
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"ldd \(.+\) ([0-9]+\.[0-9]+)").unwrap());
+    let Some((_, [version])) = RE.captures(output_str).map(|c| c.extract()) else {
+        return Err(PlatformError::OsVersionDetectionError(format!(
             "ERROR: failed to detect glibc version. ldd output: {output_str}",
-        )))
-    }
+        )));
+    };
+    Ok(version)
 }
 
 // Returns Some((major, minor)) if the string is a valid "x.y" version,
@@ -50,35 +51,42 @@ pub(crate) fn detect_linux_libc() -> Result<Os, PlatformError> {
     let libc = find_libc()?;
     let linux = if let Ok(Some((major, minor))) = get_musl_version(&libc) {
         Os::Musllinux { major, minor }
-    } else if let Ok(glibc_ld) = fs::read_link(&libc) {
-        // Try reading the link first as it's faster
-        let filename = glibc_ld
-            .file_name()
-            .ok_or_else(|| {
-                PlatformError::OsVersionDetectionError(
-                    "Expected the glibc ld to be a file".to_string(),
-                )
-            })?
-            .to_string_lossy();
-        let expr = Regex::new(r"ld-(\d{1,3})\.(\d{1,3})\.so").unwrap();
-
-        if let Some(capture) = expr.captures(&filename) {
-            let major = capture.get(1).unwrap().as_str().parse::<u16>().unwrap();
-            let minor = capture.get(2).unwrap().as_str().parse::<u16>().unwrap();
-            Os::Manylinux { major, minor }
-        } else {
-            trace!("Couldn't use ld filename, using `ldd --version`");
-            // runs `ldd --version`
-            get_version().map_err(|err| {
-                PlatformError::OsVersionDetectionError(format!(
-                    "Failed to determine glibc version with `ldd --version`: {err}"
-                ))
-            })?
-        }
+    } else if let Some(osversion) = detect_linux_libc_from_ld_symlink(&libc) {
+        return Ok(osversion);
+    } else if let Ok(osversion) = glibc_version_from_ldd() {
+        return Ok(osversion);
     } else {
-        return Err(PlatformError::OsVersionDetectionError("Couldn't detect neither glibc version nor musl libc version, at least one of which is required".to_string()));
+        let msg = "\
+            Couldn't detect either glibc version nor musl libc version, \
+            at least one of which is required\
+        ";
+        return Err(PlatformError::OsVersionDetectionError(msg.to_string()));
     };
     Ok(linux)
+}
+
+fn detect_linux_libc_from_ld_symlink(path: &Path) -> Option<Os> {
+    static RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"^ld-([0-9]{1,3})\.([0-9]{1,3})\.so$").unwrap());
+
+    let target = fs::read_link(path).ok()?;
+    let Some(filename) = target.file_name() else {
+        trace!("expected dynamic linker symlink {target:?} to have a filename");
+        return None;
+    };
+    let filename = filename.to_string_lossy();
+    let Some((_, [major, minor])) = RE.captures(&filename).map(|c| c.extract()) else {
+        trace!(
+            "couldn't find major/minor version in dynamic linker symlink \
+             filename {filename:?} from its path {target:?}"
+        );
+        return None;
+    };
+    // OK since we are guaranteed to have between 1 and 3 ASCII digits and the
+    // maximum possible value, 999, fits into a u16.
+    let major = major.parse().expect("valid major version");
+    let minor = minor.parse().expect("valid minor version");
+    Some(Os::Manylinux { major, minor })
 }
 
 /// Read the musl version from libc library's output. Taken from maturin.
@@ -91,18 +99,22 @@ pub(crate) fn detect_linux_libc() -> Result<Os, PlatformError> {
 /// Dynamic Program Loader
 /// ```
 fn get_musl_version(ld_path: impl AsRef<Path>) -> std::io::Result<Option<(u16, u16)>> {
+    static RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"Version ([0-9]{2,4})\.([0-9]{2,4})").unwrap());
+
     let output = Command::new(ld_path.as_ref())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let expr = Regex::new(r"Version (\d{2,4})\.(\d{2,4})").unwrap();
-    if let Some(capture) = expr.captures(&stderr) {
-        let major = capture.get(1).unwrap().as_str().parse::<u16>().unwrap();
-        let minor = capture.get(2).unwrap().as_str().parse::<u16>().unwrap();
-        return Ok(Some((major, minor)));
-    }
-    Ok(None)
+    let Some((_, [major, minor])) = RE.captures(&stderr).map(|c| c.extract()) else {
+        return Ok(None);
+    };
+    // OK since we are guaranteed to have between 2 and 4 ASCII digits and the
+    // maximum possible value, 9999, fits into a u16.
+    let major = major.parse().expect("valid major version");
+    let minor = minor.parse().expect("valid minor version");
+    Ok(Some((major, minor)))
 }
 
 /// Find musl libc path from executable's ELF header.

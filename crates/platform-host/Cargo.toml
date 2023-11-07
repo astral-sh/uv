@@ -12,6 +12,7 @@ license = { workspace = true }
 [dependencies]
 fs-err = { workspace = true }
 goblin = { workspace = true }
+once_cell = { workspace = true }
 platform-info = { workspace = true }
 plist = { workspace = true }
 regex = { workspace = true }
