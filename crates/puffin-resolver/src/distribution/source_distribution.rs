@@ -146,6 +146,11 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             return Ok(None);
         };
 
+        // If the commit already contains a complete SHA, short-circuit.
+        if git.precise().is_some() {
+            return Ok(None);
+        }
+
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
         let dir = self.0.cache().join(GIT_CACHE);

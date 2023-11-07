@@ -2326,11 +2326,13 @@ name = "puffin-distribution"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "fs-err",
  "pep440_rs 0.3.12",
  "puffin-cache",
  "puffin-git",
  "puffin-normalize",
  "pypi-types",
+ "serde_json",
  "url",
 ]
 

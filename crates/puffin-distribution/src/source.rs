@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use anyhow::{Error, Result};
+use anyhow::{anyhow, Error, Result};
 use url::Url;
 
 use puffin_git::Git;
+use pypi_types::{ArchiveInfo, DirectUrl, VcsInfo, VcsKind};
 
 use crate::RemoteDistributionRef;
 
@@ -30,24 +31,32 @@ impl<'a> TryFrom<&'a RemoteDistributionRef<'_>> for Source<'a> {
 
             // If a distribution is specified via a direct URL, it could be a URL to a hosted file,
             // or a URL to a Git repository.
-            RemoteDistributionRef::Url(_, url) => {
-                // If the URL points to a subdirectory, extract it, as in:
-                //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
-                //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-                let subdirectory = url.fragment().and_then(|fragment| {
-                    fragment.split('&').find_map(|fragment| {
-                        fragment.strip_prefix("subdirectory=").map(PathBuf::from)
-                    })
-                });
+            RemoteDistributionRef::Url(_, url) => Self::try_from(*url),
+        }
+    }
+}
 
-                if let Some(url) = url.as_str().strip_prefix("git+") {
-                    let url = Url::parse(url)?;
-                    let git = Git::try_from(url)?;
-                    Ok(Self::Git(git, subdirectory))
-                } else {
-                    Ok(Self::RemoteUrl(url, subdirectory))
-                }
-            }
+impl<'a> TryFrom<&'a Url> for Source<'a> {
+    type Error = Error;
+
+    fn try_from(url: &'a Url) -> Result<Self, Self::Error> {
+        // If the URL points to a subdirectory, extract it, as in:
+        //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
+        //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
+        let subdirectory = url.fragment().and_then(|fragment| {
+            fragment
+                .split('&')
+                .find_map(|fragment| fragment.strip_prefix("subdirectory=").map(PathBuf::from))
+        });
+
+        // If a distribution is specified via a direct URL, it could be a URL to a hosted file,
+        // or a URL to a Git repository.
+        if let Some(url) = url.as_str().strip_prefix("git+") {
+            let url = Url::parse(url)?;
+            let git = Git::try_from(url)?;
+            Ok(Self::Git(git, subdirectory))
+        } else {
+            Ok(Self::RemoteUrl(url, subdirectory))
         }
     }
 }
@@ -73,6 +82,35 @@ impl From<Source<'_>> for Url {
                 }
                 url
             }
+        }
+    }
+}
+
+impl TryFrom<Source<'_>> for DirectUrl {
+    type Error = Error;
+
+    fn try_from(value: Source<'_>) -> Result<Self, Self::Error> {
+        match value {
+            Source::RegistryUrl(_) => Err(anyhow!("Registry dependencies have no direct URL")),
+            Source::RemoteUrl(url, subdirectory) => Ok(DirectUrl::ArchiveUrl {
+                url: url.to_string(),
+                archive_info: ArchiveInfo {
+                    hash: None,
+                    hashes: None,
+                },
+                subdirectory,
+            }),
+            Source::Git(git, subdirectory) => Ok(DirectUrl::VcsUrl {
+                url: git.url().to_string(),
+                vcs_info: VcsInfo {
+                    vcs: VcsKind::Git,
+                    // TODO(charlie): In `pip-sync`, we should `.precise` our Git dependencies,
+                    // even though we expect it to be a no-op.
+                    commit_id: git.precise().map(|oid| oid.to_string()),
+                    requested_revision: git.reference().map(ToString::to_string),
+                },
+                subdirectory,
+            }),
         }
     }
 }
