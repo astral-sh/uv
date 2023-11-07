@@ -29,7 +29,7 @@ use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{SourceDistributionFetcher, WheelFetcher};
+use crate::distribution::{SourceDistributionFetcher, SourceDistributionReporter, WheelFetcher};
 use crate::error::ResolveError;
 use crate::file::{DistributionFile, SdistFile, WheelFile};
 use crate::manifest::Manifest;
@@ -50,7 +50,7 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     index: Arc<Index>,
     locks: Arc<Locks>,
     build_context: &'a Context,
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
@@ -93,7 +93,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
-            reporter: Some(Box::new(reporter)),
+            reporter: Some(Arc::new(reporter)),
             ..self
         }
     }
@@ -684,7 +684,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let lock = self.locks.acquire(&url).await;
                 let _guard = lock.lock().await;
 
-                let fetcher = SourceDistributionFetcher::new(self.build_context);
+                let fetcher = if let Some(reporter) = &self.reporter {
+                    SourceDistributionFetcher::new(self.build_context).with_reporter(Facade {
+                        reporter: reporter.clone(),
+                    })
+                } else {
+                    SourceDistributionFetcher::new(self.build_context)
+                };
+
                 let precise = fetcher
                     .precise(&RemoteDistributionRef::from_url(&package_name, &url))
                     .await
@@ -697,6 +704,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     &package_name,
                     precise.as_ref().unwrap_or(&url),
                 );
+
+                let task = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_build_start(&distribution));
 
                 let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
                     Ok(Some(metadata)) => {
@@ -732,6 +744,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         metadata: metadata.name,
                         given: package_name,
                     });
+                }
+
+                if let Some(task) = task {
+                    if let Some(reporter) = self.reporter.as_ref() {
+                        reporter.on_build_complete(&distribution, task);
+                    }
                 }
 
                 Ok(Response::SdistUrl(url, precise, metadata))
@@ -807,12 +825,41 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     }
 }
 
+pub type BuildId = usize;
+
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
+
+    /// Callback to invoke when a source distribution build is kicked off.
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> usize;
+
+    /// Callback to invoke when a source distribution build is complete.
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, id: usize);
+
+    /// Callback to invoke when a repository checkout begins.
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+
+    /// Callback to invoke when a repository checkout completes.
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+}
+
+/// A facade for converting from [`Reporter`] to  [`puffin_git::Reporter`].
+struct Facade {
+    reporter: Arc<dyn Reporter>,
+}
+
+impl SourceDistributionReporter for Facade {
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index);
+    }
 }
 
 /// Fetch the metadata for an item

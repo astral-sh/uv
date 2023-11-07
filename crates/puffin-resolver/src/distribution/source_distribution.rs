@@ -3,9 +3,11 @@
 //! TODO(charlie): Unify with `crates/puffin-installer/src/sdist_builder.rs`.
 
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
+
 use tempfile::tempdir_in;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
@@ -27,12 +29,27 @@ const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 const GIT_CACHE: &str = "git-v0";
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
-pub(crate) struct SourceDistributionFetcher<'a, T: BuildContext>(&'a T);
+pub(crate) struct SourceDistributionFetcher<'a, T: BuildContext> {
+    build_context: &'a T,
+    reporter: Option<Arc<dyn Reporter>>,
+}
 
 impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Initialize a [`SourceDistributionFetcher`] from a [`BuildContext`].
     pub(crate) fn new(build_context: &'a T) -> Self {
-        Self(build_context)
+        Self {
+            build_context,
+            reporter: None,
+        }
+    }
+
+    /// Set the [`Reporter`] to use for this source distribution fetcher.
+    #[must_use]
+    pub(crate) fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Arc::new(reporter)),
+            ..self
+        }
     }
 
     /// Read the [`Metadata21`] from a built source distribution, if it exists in the cache.
@@ -41,10 +58,14 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         distribution: &RemoteDistributionRef<'_>,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
-        CachedWheel::find_in_cache(distribution, tags, self.0.cache().join(BUILT_WHEELS_CACHE))
-            .as_ref()
-            .map(CachedWheel::read_dist_info)
-            .transpose()
+        CachedWheel::find_in_cache(
+            distribution,
+            tags,
+            self.build_context.cache().join(BUILT_WHEELS_CACHE),
+        )
+        .as_ref()
+        .map(CachedWheel::read_dist_info)
+        .transpose()
     }
 
     /// Download and build a source distribution, storing the built wheel in the cache.
@@ -65,7 +86,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 let mut reader = tokio::io::BufReader::new(reader.compat());
 
                 // Download the source distribution.
-                let temp_dir = tempdir_in(self.0.cache())?.into_path();
+                let temp_dir = tempdir_in(self.build_context.cache())?.into_path();
                 let sdist_filename = distribution.filename()?;
                 let sdist_file = temp_dir.join(sdist_filename.as_ref());
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
@@ -83,7 +104,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 let mut reader = tokio::io::BufReader::new(reader.compat());
 
                 // Download the source distribution.
-                let temp_dir = tempdir_in(self.0.cache())?.into_path();
+                let temp_dir = tempdir_in(self.build_context.cache())?.into_path();
                 let sdist_filename = distribution.filename()?;
                 let sdist_file = temp_dir.join(sdist_filename.as_ref());
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
@@ -94,8 +115,12 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             Source::Git(git, subdirectory) => {
                 debug!("Fetching source distribution from Git: {git}");
 
-                let git_dir = self.0.cache().join(GIT_CACHE);
-                let source = GitSource::new(git, git_dir);
+                let git_dir = self.build_context.cache().join(GIT_CACHE);
+                let source = if let Some(reporter) = &self.reporter {
+                    GitSource::new(git, git_dir).with_reporter(Facade::from(reporter.clone()))
+                } else {
+                    GitSource::new(git, git_dir)
+                };
                 let sdist_file = tokio::task::spawn_blocking(move || source.fetch())
                     .await??
                     .into();
@@ -106,7 +131,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 
         // Create a directory for the wheel.
         let wheel_dir = self
-            .0
+            .build_context
             .cache()
             .join(BUILT_WHEELS_CACHE)
             .join(distribution.id());
@@ -114,7 +139,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 
         // Build the wheel.
         let disk_filename = self
-            .0
+            .build_context
             .build_source(&sdist_file, subdirectory.as_deref(), &wheel_dir)
             .await?;
 
@@ -153,13 +178,46 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
 
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
-        let dir = self.0.cache().join(GIT_CACHE);
-        let source = GitSource::new(git, dir);
+        let git_dir = self.build_context.cache().join(GIT_CACHE);
+        let source = if let Some(reporter) = &self.reporter {
+            GitSource::new(git, git_dir).with_reporter(Facade::from(reporter.clone()))
+        } else {
+            GitSource::new(git, git_dir)
+        };
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
         let git = Git::from(precise);
 
         // Re-encode as a URL.
         let source = Source::Git(git, subdirectory);
         Ok(Some(source.into()))
+    }
+}
+
+pub(crate) trait Reporter: Send + Sync {
+    /// Callback to invoke when a repository checkout begins.
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+
+    /// Callback to invoke when a repository checkout completes.
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+}
+
+/// A facade for converting from [`Reporter`] to  [`puffin_git::Reporter`].
+struct Facade {
+    reporter: Arc<dyn Reporter>,
+}
+
+impl From<Arc<dyn Reporter>> for Facade {
+    fn from(reporter: Arc<dyn Reporter>) -> Self {
+        Self { reporter }
+    }
+}
+
+impl puffin_git::Reporter for Facade {
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index);
     }
 }

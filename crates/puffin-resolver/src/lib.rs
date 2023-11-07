@@ -5,7 +5,7 @@ pub use prerelease_mode::PreReleaseMode;
 pub use pubgrub::ResolutionFailureReporter;
 pub use resolution::Graph;
 pub use resolution_mode::ResolutionMode;
-pub use resolver::{Reporter as ResolverReporter, Resolver};
+pub use resolver::{BuildId, Reporter as ResolverReporter, Resolver};
 
 mod candidate_selector;
 mod distribution;

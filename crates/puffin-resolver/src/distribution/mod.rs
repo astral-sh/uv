@@ -1,4 +1,6 @@
-pub(crate) use source_distribution::SourceDistributionFetcher;
+pub(crate) use source_distribution::{
+    Reporter as SourceDistributionReporter, SourceDistributionFetcher,
+};
 pub(crate) use wheel::WheelFetcher;
 
 mod cached_wheel;

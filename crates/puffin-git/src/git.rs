@@ -56,6 +56,19 @@ impl GitReference {
             Self::BranchOrTag(rev.to_owned())
         }
     }
+
+    /// Views the short ID as a `str`.
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            GitReference::Branch(rev)
+            | GitReference::Tag(rev)
+            | GitReference::BranchOrTag(rev)
+            | GitReference::FullCommit(rev)
+            | GitReference::ShortCommit(rev)
+            | GitReference::Ref(rev) => rev,
+            GitReference::DefaultBranch => "HEAD",
+        }
+    }
 }
 
 /// A short abbreviated OID.

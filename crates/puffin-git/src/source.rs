@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use reqwest::Client;
 use tracing::debug;
+use url::Url;
 
 use puffin_cache::{digest, RepositoryUrl};
 
@@ -22,44 +23,65 @@ pub struct GitSource {
     strategy: FetchStrategy,
     /// The path to the Git source database.
     cache: PathBuf,
+    /// The reporter to use for this source.
+    reporter: Option<Box<dyn Reporter>>,
 }
 
 impl GitSource {
+    /// Initialize a new Git source.
     pub fn new(git: Git, cache: impl Into<PathBuf>) -> Self {
         Self {
             git,
             client: Client::new(),
             strategy: FetchStrategy::Libgit2,
             cache: cache.into(),
+            reporter: None,
         }
     }
 
+    /// Set the [`Reporter`] to use for this `GIt` source.
+    #[must_use]
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Box::new(reporter)),
+            ..self
+        }
+    }
+
+    /// Fetch the underlying Git repository at the given revision.
     pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
         let ident = digest(&RepositoryUrl::new(&self.git.url));
         let db_path = self.cache.join("db").join(&ident);
 
         let remote = GitRemote::new(&self.git.url);
-        let (db, actual_rev) = match (self.git.precise, remote.db_at(&db_path).ok()) {
+        let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev) => (db, rev),
+            (Some(rev), Some(db)) if db.contains(rev) => (db, rev, None),
 
             // ... otherwise we use this state to update the git database. Note
             // that we still check for being offline here, for example in the
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!("Updating Git source: `{:?}`", remote);
+                debug!("Updating git source `{:?}`", self.git.url);
 
-                remote.checkout(
+                // Report the checkout operation to the reporter.
+                let task = self.reporter.as_ref().map(|reporter| {
+                    reporter.on_checkout_start(remote.url(), self.git.reference.as_str())
+                });
+
+                let (db, actual_rev) = remote.checkout(
                     &db_path,
                     db,
                     &self.git.reference,
                     locked_rev,
                     self.strategy,
                     &self.client,
-                )?
+                )?;
+
+                (db, actual_rev, task)
             }
         };
 
@@ -76,6 +98,13 @@ impl GitSource {
             .join(&ident)
             .join(short_id.as_str());
         db.copy_to(actual_rev, &checkout_path, self.strategy, &self.client)?;
+
+        // Report the checkout operation to the reporter.
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_checkout_complete(remote.url(), short_id.as_str(), task);
+            }
+        }
 
         Ok(Fetch {
             git: self.git.with_precise(actual_rev),
@@ -101,4 +130,12 @@ impl From<Fetch> for PathBuf {
     fn from(fetch: Fetch) -> Self {
         fetch.path
     }
+}
+
+pub trait Reporter: Send + Sync {
+    /// Callback to invoke when a repository checkout begins.
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+
+    /// Callback to invoke when a repository checkout completes.
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
