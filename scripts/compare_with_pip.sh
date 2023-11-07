@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+# Compare the resolutions of pip(-tools) and puffin, e.g.
+# ```bash
+# scripts/compare_with_pip.sh scripts/benchmarks/requirements/pydantic.in
+# ```
+
+set -euo pipefail
+
 TEMPD=$(mktemp -d)
 
 # `| grep -v " *#"` to ignore the comment when diffing
