@@ -76,7 +76,11 @@ pub(crate) fn detect_linux_libc() -> Result<Os, PlatformError> {
             })?
         }
     } else {
-        return Err(PlatformError::OsVersionDetectionError("Couldn't detect neither glibc version nor musl libc version, at least one of which is required".to_string()));
+        let msg = "\
+            Couldn't detect either glibc version nor musl libc version, \
+            at least one of which is required\
+        ";
+        return Err(PlatformError::OsVersionDetectionError(msg.to_string()));
     };
     Ok(linux)
 }
