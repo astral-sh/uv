@@ -110,8 +110,7 @@ pub(crate) async fn sync_requirements(
 
     // Instantiate a client.
     let client = {
-        let mut builder = RegistryClientBuilder::default();
-        builder = builder.cache(Some(cache));
+        let mut builder = RegistryClientBuilder::new(cache);
         if let Some(IndexUrls { index, extra_index }) = index_urls {
             if let Some(index) = index {
                 builder = builder.index(index);
@@ -193,7 +192,7 @@ pub(crate) async fn sync_requirements(
         let start = std::time::Instant::now();
 
         let build_dispatch = BuildDispatch::new(
-            RegistryClientBuilder::default().build(),
+            client,
             cache.to_path_buf(),
             venv.interpreter_info().clone(),
             fs::canonicalize(venv.python_executable())?,

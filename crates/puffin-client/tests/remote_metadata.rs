@@ -10,9 +10,7 @@ use puffin_client::RegistryClientBuilder;
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
     let temp_cache = tempdir().unwrap();
-    let client = RegistryClientBuilder::default()
-        .cache(Some(temp_cache.path().to_path_buf()))
-        .build();
+    let client = RegistryClientBuilder::new(temp_cache.path().to_path_buf()).build();
     // The first run is without cache (the tempdir is empty), the second has the cache from the
     // first run
     for _ in 0..2 {

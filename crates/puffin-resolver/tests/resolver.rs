@@ -10,6 +10,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
+use tempfile::tempdir;
 
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
@@ -64,7 +65,8 @@ impl BuildContext for DummyContext {
 async fn black() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -87,7 +89,8 @@ async fn black() -> Result<()> {
 async fn black_colorama() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
@@ -110,7 +113,8 @@ async fn black_colorama() -> Result<()> {
 async fn black_python_310() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -135,7 +139,8 @@ async fn black_python_310() -> Result<()> {
 async fn black_mypy_extensions() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -160,7 +165,8 @@ async fn black_mypy_extensions() -> Result<()> {
 async fn black_mypy_extensions_extra() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -185,7 +191,8 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 async fn black_flake8() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -208,7 +215,8 @@ async fn black_flake8() -> Result<()> {
 async fn black_lowest() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
@@ -231,7 +239,8 @@ async fn black_lowest() -> Result<()> {
 async fn black_lowest_direct() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
@@ -254,7 +263,8 @@ async fn black_lowest_direct() -> Result<()> {
 async fn black_respect_preference() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -277,7 +287,8 @@ async fn black_respect_preference() -> Result<()> {
 async fn black_ignore_preference() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -300,7 +311,8 @@ async fn black_ignore_preference() -> Result<()> {
 async fn black_disallow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=20.0").unwrap()],
@@ -323,7 +335,8 @@ async fn black_disallow_prerelease() -> Result<()> {
 async fn black_allow_prerelease_if_necessary() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=20.0").unwrap()],
@@ -346,7 +359,8 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
 async fn pylint_disallow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("pylint==2.3.0").unwrap()],
@@ -369,7 +383,8 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 async fn pylint_allow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("pylint==2.3.0").unwrap()],
@@ -392,7 +407,8 @@ async fn pylint_allow_prerelease() -> Result<()> {
 async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![
@@ -418,7 +434,8 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     colored::control::set_override(false);
 
-    let client = RegistryClientBuilder::default().build();
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![

@@ -47,7 +47,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let venv = Virtualenv::from_env(platform, Some(&cache))?;
 
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::default().build(),
+        RegistryClientBuilder::new(cache.clone()).build(),
         cache,
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,

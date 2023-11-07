@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
 install-wheel-rs = { path = "../install-wheel-rs" }
-puffin-cache = { path = "../puffin-cache" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 
@@ -14,7 +13,9 @@ async_http_range_reader = { workspace = true }
 async_zip = { workspace = true }
 futures = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+http = { workspace = true }
 http-cache-reqwest = { workspace = true }
+http-cache-semantics = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
