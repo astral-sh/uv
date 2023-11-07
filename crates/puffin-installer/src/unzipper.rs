@@ -96,7 +96,7 @@ impl Unzipper {
 fn unzip_wheel(wheel: Wheel, target: &Path) -> Result<()> {
     match wheel {
         Wheel::InMemory(wheel) => unzip_archive(std::io::Cursor::new(wheel.buffer), target),
-        Wheel::Disk(wheel) => unzip_archive(std::fs::File::open(wheel.path)?, target),
+        Wheel::Disk(wheel) => unzip_archive(fs_err::File::open(wheel.path)?, target),
     }
 }
 

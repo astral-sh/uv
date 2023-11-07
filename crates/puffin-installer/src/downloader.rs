@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
-use cacache::{Algorithm, Integrity};
+use bytesize::ByteSize;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
@@ -58,8 +58,6 @@ impl<'a> Downloader<'a> {
         let mut fetches = JoinSet::new();
         let mut downloads = Vec::with_capacity(distributions.len());
         for distribution in distributions {
-            debug!("Downloading wheel: {distribution}");
-
             fetches.spawn(fetch_distribution(
                 distribution.clone(),
                 self.client.clone(),
@@ -100,47 +98,56 @@ async fn fetch_distribution(
     if distribution.is_wheel() {
         match &distribution {
             RemoteDistribution::Registry(.., file) => {
-                // Parse the wheel's SRI.
-                let sri = Integrity::from_hex(&file.hashes.sha256, Algorithm::Sha256)?;
-
-                // Read from the cache, if possible.
-                if let Ok(buffer) = cacache::read_hash(&cache, &sri).await {
-                    debug!("Extracted wheel from cache: {distribution}");
-                    return Ok(Download::Wheel(Wheel::InMemory(InMemoryWheel {
-                        remote: distribution,
-                        buffer,
-                    })));
-                }
-
                 // Fetch the wheel.
                 let url = Url::parse(&file.url)?;
                 let reader = client.stream_external(&url).await?;
 
-                // Read into a buffer.
-                let mut buffer = Vec::with_capacity(file.size);
-                let mut reader = tokio::io::BufReader::new(reader.compat());
-                tokio::io::copy(&mut reader, &mut buffer).await?;
+                // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
+                let file_size = ByteSize::b(file.size as u64);
+                if file_size >= ByteSize::mb(5) {
+                    debug!("Fetching disk-based wheel from registry: {distribution} ({file_size})");
 
-                // Write the buffer to the cache.
-                cacache::write_hash(&cache, &buffer).await?;
+                    // Download the wheel to a temporary file.
+                    let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+                    let wheel_filename = distribution.filename()?;
+                    let wheel_file = temp_dir.join(wheel_filename.as_ref());
+                    let mut writer = tokio::fs::File::create(&wheel_file).await?;
+                    tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                Ok(Download::Wheel(Wheel::InMemory(InMemoryWheel {
-                    remote: distribution,
-                    buffer,
-                })))
+                    Ok(Download::Wheel(Wheel::Disk(DiskWheel {
+                        remote: distribution,
+                        path: wheel_file,
+                    })))
+                } else {
+                    debug!("Fetching in-memory wheel from registry: {distribution} ({file_size})");
+
+                    // Read into a buffer.
+                    let mut buffer = Vec::with_capacity(file.size);
+                    let mut reader = tokio::io::BufReader::new(reader.compat());
+                    tokio::io::copy(&mut reader, &mut buffer).await?;
+
+                    Ok(Download::Wheel(Wheel::InMemory(InMemoryWheel {
+                        remote: distribution,
+                        buffer,
+                    })))
+                }
             }
             RemoteDistribution::Url(.., url) => {
+                debug!("Fetching disk-based wheel from URL: {url}");
+
                 // Fetch the wheel.
                 let reader = client.stream_external(url).await?;
 
-                // Read into a buffer.
-                let mut buffer = Vec::with_capacity(1024 * 1024);
-                let mut reader = tokio::io::BufReader::new(reader.compat());
-                tokio::io::copy(&mut reader, &mut buffer).await?;
+                // Download the wheel to a temporary file.
+                let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+                let wheel_filename = distribution.filename()?;
+                let wheel_file = temp_dir.join(wheel_filename.as_ref());
+                let mut writer = tokio::fs::File::create(&wheel_file).await?;
+                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                Ok(Download::Wheel(Wheel::InMemory(InMemoryWheel {
+                Ok(Download::Wheel(Wheel::Disk(DiskWheel {
                     remote: distribution,
-                    buffer,
+                    path: wheel_file,
                 })))
             }
         }

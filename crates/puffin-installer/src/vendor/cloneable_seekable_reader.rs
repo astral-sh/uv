@@ -123,6 +123,12 @@ impl HasLength for File {
     }
 }
 
+impl HasLength for fs_err::File {
+    fn len(&self) -> u64 {
+        self.metadata().unwrap().len()
+    }
+}
+
 impl HasLength for Cursor<Vec<u8>> {
     fn len(&self) -> u64 {
         self.get_ref().len() as u64

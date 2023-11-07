@@ -115,7 +115,7 @@ impl RemoteDistribution {
             Self::Url(_, url) => {
                 let filename = url
                     .path_segments()
-                    .and_then(std::iter::Iterator::last)
+                    .and_then(Iterator::last)
                     .ok_or_else(|| anyhow!("Could not parse filename from URL: {}", url))?;
                 Ok(Cow::Owned(filename.to_owned()))
             }

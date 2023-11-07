@@ -1,0 +1,23 @@
+---
+source: crates/puffin-cli/tests/pip_sync.rs
+assertion_line: 554
+info:
+  program: puffin
+  args:
+    - pip-sync
+    - requirements.txt
+    - "--cache-dir"
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpZjdQsr
+  env:
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpkhiPUZ/.venv
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+Resolved 1 package in [TIME]
+Downloaded 1 package in [TIME]
+error: Failed to download and unpack wheels
+  Caused by: No such file or directory (os error 2)
+
