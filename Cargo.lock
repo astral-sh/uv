@@ -2003,6 +2003,7 @@ version = "0.0.1"
 dependencies = [
  "fs-err",
  "goblin",
+ "once_cell",
  "platform-info",
  "plist",
  "regex",
