@@ -65,10 +65,8 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!("Updating Git source: `{:?}`", remote);
-
                 if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_checkout(remote.url());
+                    reporter.on_fetch_git_repo(remote.url());
                 }
 
                 remote.checkout(
@@ -124,5 +122,5 @@ impl From<Fetch> for PathBuf {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a repository is checked out.
-    fn on_checkout(&self, url: &Url);
+    fn on_fetch_git_repo(&self, url: &Url);
 }

@@ -1,7 +1,9 @@
+use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use colored::Colorize;
 use std::time::Duration;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
 use url::Url;
 
 use puffin_distribution::{
@@ -9,7 +11,6 @@ use puffin_distribution::{
 };
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
-use puffin_resolver::BuildId;
 
 use crate::printer::Printer;
 
@@ -191,9 +192,9 @@ impl puffin_installer::BuildReporter for BuildReporter {
 #[derive(Debug)]
 pub(crate) struct ResolverReporter {
     printer: Printer,
-    multi_progress: MultiProgress,
+    multi_progress: Arc<Mutex<MultiProgress>>,
     progress: ProgressBar,
-    builds: Vec<ProgressBar>,
+    bars: Arc<Mutex<Vec<ProgressBar>>>,
 }
 
 impl From<Printer> for ResolverReporter {
@@ -211,14 +212,18 @@ impl From<Printer> for ResolverReporter {
 
         Self {
             printer,
-            multi_progress,
+            multi_progress: Arc::new(Mutex::new(multi_progress)),
             progress,
-            builds: Vec::new(),
+            bars: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
 
-impl puffin_resolver::ResolverReporter for ResolverReporter {
+/// A task ID to capture an in-flight progress bar.
+#[derive(Debug)]
+pub(crate) struct TaskId(ProgressBar);
+
+impl puffin_resolver::ResolverReporter<TaskId> for ResolverReporter {
     fn on_progress(
         &self,
         name: &PackageName,
@@ -247,8 +252,9 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> BuildId {
-        let progress = self.multi_progress.insert_before(
+    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> TaskId {
+        let multi_progress = self.multi_progress.lock().unwrap();
+        let progress = multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
@@ -256,17 +262,23 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!("{} {}", "Building".bold().green(), distribution));
 
-        self.builds.push(progress);
-
-        BuildId(progress)
+        TaskId(progress)
     }
 
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, build: BuildId) {
-        let progress = &self.builds[build.0];
+    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, task: TaskId) {
+        let progress = task.0;
         progress.finish_with_message(format!("{} {}", "Built".bold().green(), distribution));
     }
 
-    fn on_update(&self, url: &Url) {
-        todo!()
+    fn on_fetch_git_repo(&self, url: &Url) {
+        let multi_progress = self.multi_progress.lock().unwrap();
+        let progress = multi_progress.insert_before(
+            &self.progress,
+            ProgressBar::with_draw_target(None, self.printer.target()),
+        );
+
+        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        progress.set_message(format!("{} {}", "Updating".bold().green(), url));
+        progress.finish();
     }
 }

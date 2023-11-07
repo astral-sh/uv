@@ -38,7 +38,7 @@ use crate::pubgrub::{
 };
 use crate::resolution::Graph;
 
-pub struct Resolver<'a, Context: BuildContext + Sync> {
+pub struct Resolver<'a, Context: BuildContext + Sync, Task: 'static> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
@@ -50,10 +50,10 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     index: Arc<Index>,
     locks: Arc<Locks>,
     build_context: &'a Context,
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Arc<dyn Reporter<Task>>>,
 }
 
-impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
+impl<'a, Context: BuildContext + Sync, Task> Resolver<'a, Context, Task> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
@@ -91,9 +91,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: impl Reporter<Task> + 'static) -> Self {
         Self {
-            reporter: Some(Box::new(reporter)),
+            reporter: Some(Arc::new(reporter)),
             ..self
         }
     }
@@ -165,15 +165,15 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .pick_highest_priority_pkg(|package, _range| {
                         priorities.get(package).unwrap_or_default()
                     })
-                else {
-                    let selection = state.partial_solution.extract_solution();
-                    return Ok(Graph::from_state(
-                        &selection,
-                        &pins,
-                        &self.index.redirects,
-                        &state,
-                    ));
-                };
+            else {
+                let selection = state.partial_solution.extract_solution();
+                return Ok(Graph::from_state(
+                    &selection,
+                    &pins,
+                    &self.index.redirects,
+                    &state,
+                ));
+            };
             next = highest_priority_pkg;
 
             let term_intersection = state
@@ -241,7 +241,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             package: package.clone(),
                             version: version.clone(),
                         }
-                            .into());
+                        .into());
                     }
                     Dependencies::Known(constraints) => constraints,
                 };
@@ -307,7 +307,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// metadata for all of the packages in parallel.
     fn pre_visit(
         &self,
-        packages: impl Iterator<Item=(&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
+        packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
         in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
@@ -684,7 +684,20 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let lock = self.locks.acquire(&url).await;
                 let _guard = lock.lock().await;
 
-                let fetcher = SourceDistributionFetcher::new(self.build_context);
+                let fetcher = if let Some(reporter) = &self.reporter {
+                    SourceDistributionFetcher::new(self.build_context).with_reporter(
+                        Relay {
+                            reporter: reporter.clone(),
+                        },
+                    )
+                } else {
+                    SourceDistributionFetcher::new(self.build_context)
+                };
+                // if let Some(reporter) = &self.reporter {
+                //     reporter.on_fetch_git_repo(&Url::parse("https://google.com").unwrap());
+                // }
+
+                // let fetcher = SourceDistributionFetcher::new(self.build_context);
                 let precise = fetcher
                     .precise(&RemoteDistributionRef::from_url(&package_name, &url))
                     .await
@@ -820,7 +833,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
 pub type BuildId = usize;
 
-pub trait Reporter: Send + Sync {
+pub trait Reporter<BuildId>: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
@@ -834,15 +847,16 @@ pub trait Reporter: Send + Sync {
     fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, id: BuildId);
 
     /// Callback to invoke when a repository is updated.
-    fn on_update(&self, url: &Url);
+    fn on_fetch_git_repo(&self, url: &Url);
 }
 
-impl<T> SourceDistributionReporter for T
-    where
-        T: Reporter,
-{
-    fn on_update(&self, url: &Url) {
-        self.on_update(url);
+struct Relay<BuildId> {
+    reporter: Arc<dyn Reporter<BuildId>>,
+}
+
+impl<BuildId> SourceDistributionReporter for Relay<BuildId> {
+    fn on_fetch_git_repo(&self, url: &Url) {
+        self.reporter.on_fetch_git_repo(url);
     }
 }
 
@@ -949,7 +963,7 @@ impl AllowedUrls {
 }
 
 impl<'a> FromIterator<&'a Url> for AllowedUrls {
-    fn from_iter<T: IntoIterator<Item=&'a Url>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
         Self(iter.into_iter().map(CanonicalUrl::new).collect())
     }
 }

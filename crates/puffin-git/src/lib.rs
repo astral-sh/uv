@@ -1,7 +1,7 @@
 use url::Url;
 
 use crate::git::GitReference;
-pub use crate::source::GitSource;
+pub use crate::source::{GitSource, Reporter};
 
 mod git;
 mod source;
