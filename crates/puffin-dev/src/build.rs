@@ -54,7 +54,13 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         false,
     );
     let wheel = build_dispatch
-        .build_source(&args.sdist, args.subdirectory.as_deref(), &wheel_dir)
+        .build_source(
+            &args.sdist,
+            args.subdirectory.as_deref(),
+            &wheel_dir,
+            // Good enough for the dev command
+            &args.sdist.display().to_string(),
+        )
         .await?;
     Ok(wheel_dir.join(wheel))
 }

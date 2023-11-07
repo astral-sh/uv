@@ -2,6 +2,7 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
@@ -13,7 +14,9 @@ use flate2::read::GzDecoder;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use indoc::formatdoc;
+use once_cell::sync::Lazy;
 use pyproject_toml::{BuildSystem, Project};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tar::Archive;
 use tempfile::{tempdir, TempDir};
@@ -25,6 +28,14 @@ use zip::ZipArchive;
 use pep508_rs::Requirement;
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_traits::BuildContext;
+
+/// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
+static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r".*\.(c|c..|h|h..):\d+:\d+: fatal error: (?<header>.*\.(h|h..)): No such file or directory"
+    )
+    .unwrap()
+});
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -50,14 +61,62 @@ pub enum Error {
         stdout: String,
         stderr: String,
     },
+    /// Nudge the user towards installing the missing dev library
+    #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    MissingHeader {
+        message: String,
+        stdout: String,
+        stderr: String,
+        #[source]
+        missing_header_cause: MissingHeaderCause,
+    },
+}
+
+#[derive(Debug, Error)]
+pub struct MissingHeaderCause {
+    header: String,
+    // I've picked this over the better readable package name to make clear that you need to
+    // look for the build dependencies of that version or git commit respectively
+    package_id: String,
+}
+
+impl Display for MissingHeaderCause {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "This error likely indicates that you need to install a library that provides \"{}\" for {}",
+            self.header, self.package_id
+        )
+    }
 }
 
 impl Error {
-    fn from_command_output(message: String, output: &Output) -> Self {
+    fn from_command_output(message: String, output: &Output, package_id: &str) -> Self {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+        // In the cases i've seen it was the 5th last line (see test case), 10 seems like a
+        // reasonable cutoff
+        if let Some(header) =
+            stderr.lines().rev().take(10).find_map(|line| {
+                Some(MISSING_HEADER_RE.captures(line.trim())?["header"].to_string())
+            })
+        {
+            return Self::MissingHeader {
+                message,
+                stdout,
+                stderr,
+                missing_header_cause: MissingHeaderCause {
+                    header,
+                    package_id: package_id.to_string(),
+                },
+            };
+        }
+
         Self::BuildBackend {
             message,
-            stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            stdout,
+            stderr,
         }
     }
 }
@@ -124,17 +183,22 @@ pub struct SourceBuild {
     /// > directory created by prepare_metadata_for_build_wheel, including any unrecognized files
     /// > it created.
     metadata_directory: Option<PathBuf>,
+    /// Package id such as `foo-1.2.3`, for error reporting
+    package_id: String,
 }
 
 impl SourceBuild {
     /// Create a virtual environment in which to build a source distribution, extracting the
     /// contents from an archive if necessary.
+    ///
+    /// `package_id` is for error reporting only.
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
         interpreter_info: &InterpreterInfo,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
+        package_id: &str,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
 
@@ -232,8 +296,14 @@ impl SourceBuild {
         };
 
         if let Some(pep517_backend) = &pep517_backend {
-            create_pep517_build_environment(&source_tree, &venv, pep517_backend, build_context)
-                .await?;
+            create_pep517_build_environment(
+                &source_tree,
+                &venv,
+                pep517_backend,
+                build_context,
+                package_id,
+            )
+            .await?;
         } else {
             if !source_tree.join("setup.py").is_file() {
                 return Err(Error::InvalidSourceDistribution(
@@ -249,6 +319,7 @@ impl SourceBuild {
             pep517_backend,
             venv,
             metadata_directory: None,
+            package_id: package_id.to_string(),
         })
     }
 
@@ -284,7 +355,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
                 &output,
-            ));
+            &self.package_id));
         }
         let message = output
             .stdout
@@ -301,6 +372,7 @@ impl SourceBuild {
                         `prepare_metadata_for_build_wheel`: {err}"
                     ),
                     &output,
+                    &self.package_id,
                 )
             })?;
         if message.is_empty() {
@@ -336,6 +408,7 @@ impl SourceBuild {
                 return Err(Error::from_command_output(
                     "Failed building wheel through setup.py".to_string(),
                     &output,
+                    &self.package_id,
                 ));
             }
             let dist = fs::read_dir(self.source_tree.join("dist"))?;
@@ -346,7 +419,7 @@ impl SourceBuild {
                         "Expected exactly wheel in `dist/` after invoking setup.py, found {dist_dir:?}"
                     ),
                     &output,
-                ));
+                &self.package_id));
             };
             // TODO(konstin): Faster copy such as reflink? Or maybe don't really let the user pick the target dir
             let wheel = wheel_dir.join(dist_wheel.file_name());
@@ -382,6 +455,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 "Build backend failed to build wheel through `build_wheel()` ".to_string(),
                 &output,
+                &self.package_id,
             ));
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -393,6 +467,7 @@ impl SourceBuild {
                 "Build backend did not return the wheel filename through `build_wheel()`"
                     .to_string(),
                 &output,
+                &self.package_id,
             ));
         };
         Ok(distribution_filename.to_string())
@@ -411,6 +486,7 @@ async fn create_pep517_build_environment(
     venv: &Virtualenv,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
+    package_id: &str,
 ) -> Result<(), Error> {
     debug!(
         "Calling `{}.get_requires_for_build_wheel()`",
@@ -438,6 +514,7 @@ async fn create_pep517_build_environment(
             "Build backend failed to determine extras requires with `get_requires_for_build_wheel`"
                 .to_string(),
             &output,
+            package_id,
         ));
     }
     let extra_requires = output
@@ -456,6 +533,7 @@ async fn create_pep517_build_environment(
                         `get_requires_for_build_wheel`: {err}"
             ),
             &output,
+            package_id,
         )
     })?;
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
@@ -540,4 +618,70 @@ fn run_python_script(
         .current_dir(source_tree)
         .output()
         .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))
+}
+
+#[cfg(test)]
+mod test {
+    use std::process::{ExitStatus, Output};
+
+    use crate::Error;
+    use indoc::indoc;
+
+    #[test]
+    fn missing_header() {
+        let output = Output {
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform gated
+            stdout: indoc!(r#"
+                running bdist_wheel
+                running build
+                [...]
+                creating build/temp.linux-x86_64-cpython-39/pygraphviz
+                gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -fPIC -DSWIG_PYTHON_STRICT_BYTE_CHAR -I/tmp/.tmpy6vVes/.venv/include -I/home/konsti/.pyenv/versions/3.9.18/include/python3.9 -c pygraphviz/graphviz_wrap.c -o build/temp.linux-x86_64-cpython-39/pygraphviz/graphviz_wrap.o
+                "#
+            ).as_bytes().to_vec(),
+            stderr: indoc!(r#"
+                warning: no files found matching '*.png' under directory 'doc'
+                warning: no files found matching '*.txt' under directory 'doc'
+                [...]
+                no previously-included directories found matching 'doc/build'
+                pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory
+                 3020 | #include "graphviz/cgraph.h"
+                      |          ^~~~~~~~~~~~~~~~~~~
+                compilation terminated.
+                error: command '/usr/bin/gcc' failed with exit code 1
+                "#
+            ).as_bytes().to_vec(),
+        };
+
+        let err = Error::from_command_output(
+            "Failed building wheel through setup.py".to_string(),
+            &output,
+            "pygraphviz-1.11",
+        );
+        assert!(matches!(err, Error::MissingHeader { .. }));
+        insta::assert_display_snapshot!(err, @r###"
+        Failed building wheel through setup.py:
+        --- stdout:
+        running bdist_wheel
+        running build
+        [...]
+        creating build/temp.linux-x86_64-cpython-39/pygraphviz
+        gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -fPIC -DSWIG_PYTHON_STRICT_BYTE_CHAR -I/tmp/.tmpy6vVes/.venv/include -I/home/konsti/.pyenv/versions/3.9.18/include/python3.9 -c pygraphviz/graphviz_wrap.c -o build/temp.linux-x86_64-cpython-39/pygraphviz/graphviz_wrap.o
+        --- stderr:
+        warning: no files found matching '*.png' under directory 'doc'
+        warning: no files found matching '*.txt' under directory 'doc'
+        [...]
+        no previously-included directories found matching 'doc/build'
+        pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory
+         3020 | #include "graphviz/cgraph.h"
+              |          ^~~~~~~~~~~~~~~~~~~
+        compilation terminated.
+        error: command '/usr/bin/gcc' failed with exit code 1
+        ---
+        "###);
+        insta::assert_display_snapshot!(
+            std::error::Error::source(&err).unwrap(),
+            @r###"This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for pygraphviz-1.11"###
+        );
+    }
 }

@@ -90,6 +90,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
             &distribution.sdist_file,
             distribution.subdirectory.as_deref(),
             &wheel_dir,
+            &distribution.remote.id(),
         )
         .await?;
     let wheel_filename = wheel_dir.join(disk_filename);
