@@ -211,8 +211,9 @@ impl Metadata21 {
 }
 
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
-
 static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
+/// e.g. `>=1.9.*`
+static GREATER_THAN_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r">=(\d+\.\d+)\.\*").unwrap());
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -242,6 +243,17 @@ impl FromStr for LenientRequirement {
                     if let Ok(requirement) = Requirement::from_str(&patched) {
                         warn!(
                         "Adding wildcard after invalid tilde operator (before: `{s}`; after: `{patched}`)",
+                    );
+                        return Ok(Self(requirement));
+                    }
+                }
+
+                // Given `torch (>=1.9.*)`, rewrite to `torch (>=1.9)`
+                let patched = GREATER_THAN_STAR.replace(s, r">=${1}");
+                if patched != s {
+                    if let Ok(requirement) = Requirement::from_str(&patched) {
+                        warn!(
+                        "Removing star after greater equal operator (before: `{s}`; after: `{patched}`)",
                     );
                         return Ok(Self(requirement));
                     }
@@ -337,6 +349,15 @@ mod tests {
             .unwrap()
             .into();
         let expected: Requirement = Requirement::from_str("jupyter-core (!=5.*,>=4.12)").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn greater_than_star() {
+        let actual: Requirement = LenientRequirement::from_str("torch (>=1.9.*)")
+            .unwrap()
+            .into();
+        let expected: Requirement = Requirement::from_str("torch (>=1.9)").unwrap();
         assert_eq!(actual, expected);
     }
 }
