@@ -148,7 +148,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 &sdist_file,
                 subdirectory.as_deref(),
                 &wheel_dir,
-                &distribution.id(),
+                &distribution.to_string(),
             )
             .await?;
 
