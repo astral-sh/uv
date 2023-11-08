@@ -8,7 +8,7 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use tracing::debug;
 
-use puffin_distribution::Distribution;
+use puffin_distribution::{BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution};
 use puffin_traits::BuildContext;
 
 use crate::downloader::{DiskWheel, SourceDistributionDownload, WheelDownload};
@@ -46,8 +46,11 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
         // Sort the distributions by size.
         let mut distributions = distributions;
         distributions.sort_unstable_by_key(|distribution| match &distribution.remote {
-            Distribution::Registry(_package, _version, file) => Reverse(file.size),
-            Distribution::Url(_, _) => Reverse(usize::MIN),
+            Distribution::Built(BuiltDistribution::Registry(wheel)) => Reverse(wheel.file.size),
+            Distribution::Built(BuiltDistribution::DirectUrl(_)) => Reverse(usize::MIN),
+            Distribution::Source(SourceDistribution::Registry(sdist)) => Reverse(sdist.file.size),
+            Distribution::Source(SourceDistribution::DirectUrl(_)) => Reverse(usize::MIN),
+            Distribution::Source(SourceDistribution::Git(_)) => Reverse(usize::MIN),
         });
 
         // Build the distributions serially.
@@ -106,7 +109,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution is built.
-    fn on_progress(&self, wheel: &Distribution);
+    fn on_progress(&self, distribution: &Distribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);

@@ -5,9 +5,11 @@ use anyhow::{anyhow, Result};
 use url::Url;
 
 use crate::traits::DistributionIdentifier;
-use crate::{BuiltDistribution, VersionOrUrl};
+use crate::{BuiltDistribution, Distribution, SourceDistribution, VersionOrUrl};
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
+
+use crate::source::DirectUrl;
 
 /// A built distribution (wheel) that exists in a local cache.
 #[derive(Debug, Clone)]
@@ -70,14 +72,29 @@ impl DistributionIdentifier for CachedDistribution {
 
 impl CachedDistribution {
     /// Initialize a [`CachedDistribution`] from a [`Distribution`].
-    pub fn from_remote(remote: BuiltDistribution, path: PathBuf) -> Self {
+    pub fn from_remote(remote: Distribution, path: PathBuf) -> Self {
         match remote {
-            BuiltDistribution::Registry(dist) => Self::Registry(CachedRegistryDistribution {
+            Distribution::Built(BuiltDistribution::Registry(dist)) => Self::Registry(CachedRegistryDistribution {
                 name: dist.name,
                 version: dist.version,
                 path,
             }),
-            BuiltDistribution::DirectUrl(dist) => Self::Url(CachedDirectUrlDistribution {
+            Distribution::Built(BuiltDistribution::DirectUrl(dist)) => Self::Url(CachedDirectUrlDistribution {
+                name: dist.name,
+                url: dist.url,
+                path,
+            }),
+            Distribution::Source(SourceDistribution::Registry(dist)) => Self::Registry(CachedRegistryDistribution {
+                name: dist.name,
+                version: dist.version,
+                path,
+            }),
+            Distribution::Source(SourceDistribution::DirectUrl(dist)) => Self::Url(CachedDirectUrlDistribution {
+                name: dist.name,
+                url: dist.url,
+                path,
+            }),
+            Distribution::Source(SourceDistribution::Git(dist)) => Self::Url(CachedDirectUrlDistribution {
                 name: dist.name,
                 url: dist.url,
                 path,
@@ -90,6 +107,13 @@ impl CachedDistribution {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
+        }
+    }
+
+    pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
+        match self {
+            CachedDistribution::Registry(_) => Ok(None),
+            CachedDistribution::Url(dist) => DirectUrl::try_from(&dist.url).map(Some),
         }
     }
 }

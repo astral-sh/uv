@@ -171,10 +171,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub(crate) async fn precise(
-        &self,
-        distribution: &Distribution,
-    ) -> Result<Option<Url>> {
+    pub(crate) async fn precise(&self, distribution: &Distribution) -> Result<Option<Url>> {
         // STOPSHIP: Match on Git...
         let source = Source::try_from(distribution)?;
 

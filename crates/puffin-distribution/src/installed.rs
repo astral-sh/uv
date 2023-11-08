@@ -101,7 +101,6 @@ impl InstalledDistribution {
                     version,
                     path: path.to_path_buf(),
                 })));
-
             }
         }
         Ok(None)
@@ -112,6 +111,13 @@ impl InstalledDistribution {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
+        }
+    }
+
+    pub fn version(&self) -> &Version {
+        match self {
+            Self::Registry(dist) => &dist.version,
+            Self::Url(dist) => &dist.version,
         }
     }
 }

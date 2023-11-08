@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use tracing::debug;
 use zip::ZipArchive;
 
-use puffin_distribution::{BuiltDistribution, CachedDistribution, DistributionIdentifier};
+use puffin_distribution::{BuiltDistribution, CachedDistribution, Distribution, DistributionIdentifier};
 
 use crate::cache::WheelCache;
 use crate::downloader::WheelDownload;
@@ -148,7 +148,7 @@ fn unzip_archive<R: Send + Read + Seek + HasLength>(reader: R, target: &Path) ->
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is unzipped.
-    fn on_unzip_progress(&self, wheel: &BuiltDistribution);
+    fn on_unzip_progress(&self, distribution: &Distribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_unzip_complete(&self);

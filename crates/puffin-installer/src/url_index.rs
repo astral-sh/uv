@@ -5,7 +5,7 @@ use tracing::warn;
 use url::Url;
 
 use puffin_distribution::{
-    CachedDistribution, CachedDirectUrlDistribution, DirectUrlBuiltDistribution,
+    CachedDirectUrlDistribution, CachedDistribution, DirectUrlBuiltDistribution,
     DistributionIdentifier, RemoteDistributionRef,
 };
 use puffin_normalize::PackageName;
@@ -52,11 +52,7 @@ impl UrlIndex {
     }
 
     /// Returns a distribution from the index, if it exists.
-    pub(crate) fn get(
-        &self,
-        name: &PackageName,
-        url: &Url,
-    ) -> Option<CachedDirectUrlDistribution> {
+    pub(crate) fn get(&self, name: &PackageName, url: &Url) -> Option<CachedDirectUrlDistribution> {
         let distribution = DirectUrlBuiltDistribution {
             name: name.clone(),
             url: url.clone(),

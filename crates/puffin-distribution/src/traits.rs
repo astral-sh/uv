@@ -1,7 +1,7 @@
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 
-use crate::{AnyDistribution, BuiltDistribution, CachedDistribution, CachedDirectUrlDistribution, CachedRegistryDistribution, DirectUrlBuiltDistribution, DirectUrlSourceDistribution, Distribution, GitSourceDistribution, InstalledDistribution, RegistryBuiltDistribution, RegistrySourceDistribution, SourceDistribution, VersionOrUrl};
+use crate::{AnyDistribution, BuiltDistribution, CachedDirectUrlDistribution, CachedDistribution, CachedRegistryDistribution, DirectUrlBuiltDistribution, DirectUrlSourceDistribution, Distribution, GitSourceDistribution, InstalledDirectUrlDistribution, InstalledDistribution, InstalledRegistryDistribution, RegistryBuiltDistribution, RegistrySourceDistribution, SourceDistribution, VersionOrUrl};
 
 pub trait DistributionIdentifier {
     /// Return the normalized [`PackageName`] of the distribution.
@@ -23,7 +23,6 @@ pub trait DistributionIdentifier {
         }
     }
 }
-
 
 // Implement `Display` for all known types that implement `DistributionIdentifier`.
 impl std::fmt::Display for AnyDistribution {
@@ -86,6 +85,18 @@ impl std::fmt::Display for InstalledDistribution {
     }
 }
 
+impl std::fmt::Display for InstalledDirectUrlDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
+impl std::fmt::Display for InstalledRegistryDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
 impl std::fmt::Display for RegistryBuiltDistribution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
@@ -103,5 +114,4 @@ impl std::fmt::Display for SourceDistribution {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
-
 

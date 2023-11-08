@@ -4,10 +4,9 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::source::Source;
 use puffin_distribution::{CachedDistribution, InstalledDistribution};
+use puffin_distribution::source::DirectUrl;
 use puffin_interpreter::Virtualenv;
-use pypi_types::DirectUrl;
 
 use crate::url_index::UrlIndex;
 use crate::{RegistryIndex, SitePackages};
@@ -63,12 +62,12 @@ impl InstallPlan {
 
                     // If the requirement comes from a direct URL, check by URL.
                     Some(VersionOrUrl::Url(url)) => {
-                        if let Ok(Some(direct_url)) = distribution.direct_url() {
-                            if let Ok(source) = Source::try_from(url) {
-                                if let Ok(target) = DirectUrl::try_from(source) {
+                        if let InstalledDistribution::Url(distribution) = &distribution {
+                            if let Ok(direct_url) = DirectUrl::try_from(url) {
+                                if let Ok(direct_url) = pypi_types::DirectUrl::try_from(&direct_url) {
                                     // TODO(charlie): These don't need to be strictly equal. We only care
                                     // about a subset of the fields.
-                                    if target == direct_url {
+                                    if direct_url == distribution.url {
                                         debug!("Requirement already satisfied: {distribution}");
                                         continue;
                                     }

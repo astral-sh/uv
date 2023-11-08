@@ -23,7 +23,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::{CanonicalUrl, RepositoryUrl};
 use puffin_client::RegistryClient;
-use puffin_distribution::{RemoteDistributionRef, VersionOrUrl};
+use puffin_distribution::{DirectUrlBuiltDistribution, DirectUrlSourceDistribution, Distribution, RegistryBuiltDistribution, RegistrySourceDistribution, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
@@ -868,13 +868,13 @@ enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
     /// A request to fetch wheel metadata from a registry.
-    Wheel(PackageName, WheelFile),
+    Wheel(RegistryBuiltDistribution),
     /// A request to fetch source distribution metadata from a registry.
-    Sdist(PackageName, pep440_rs::Version, SdistFile),
+    Sdist(RegistrySourceDistribution),
     /// A request to fetch wheel metadata from a remote URL.
-    WheelUrl(PackageName, Url),
+    WheelUrl(DirectUrlBuiltDistribution),
     /// A request to fetch source distribution metadata from a remote URL.
-    SdistUrl(PackageName, Url),
+    SdistUrl(DirectUrlSourceDistribution),
 }
 
 #[derive(Debug)]
@@ -891,7 +891,7 @@ enum Response {
     SdistUrl(Url, Option<Url>, Metadata21),
 }
 
-pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistributionFile>;
+pub(crate) type VersionMap = BTreeMap<PubGrubVersion, Distribution>;
 
 /// In-memory index of in-flight network requests. Any request in an [`InFlight`] state will be
 /// eventually be inserted into an [`Index`].

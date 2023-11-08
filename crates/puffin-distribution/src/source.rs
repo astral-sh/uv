@@ -4,6 +4,13 @@ use anyhow::{Context, Error, Result};
 use url::Url;
 
 use puffin_git::GitUrl;
+use crate::Distribution;
+
+#[derive(Debug)]
+pub enum DirectUrl {
+    Git(DirectGitUrl),
+    Archive(DirectArchiveUrl),
+}
 
 #[derive(Debug)]
 pub struct DirectGitUrl {
@@ -40,10 +47,8 @@ impl TryFrom<&Url> for DirectGitUrl {
     }
 }
 
-impl TryFrom<&Url> for DirectArchiveUrl {
-    type Error = Error;
-
-    fn try_from(url: &Url) -> Result<Self, Self::Error> {
+impl From<&Url> for DirectArchiveUrl {
+    fn from(url: &Url) -> Self {
         // If the URL points to a subdirectory, extract it, as in:
         //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
         //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
@@ -54,25 +59,32 @@ impl TryFrom<&Url> for DirectArchiveUrl {
         });
 
         let url = url.clone();
-        Ok(Self { url, subdirectory })
+        Self { url, subdirectory }
     }
 }
 
-impl From<DirectArchiveUrl> for Url {
-    fn from(value: DirectArchiveUrl) -> Self {
-        value.url
+impl TryFrom<&Url> for DirectUrl {
+    type Error = Error;
+
+    fn try_from(url: &Url) -> Result<Self, Self::Error> {
+        if url.scheme().starts_with("git+") {
+            Ok(Self::Git(DirectGitUrl::try_from(url)?))
+        } else {
+            Ok(Self::Archive(DirectArchiveUrl::from(url)))
+        }
     }
 }
 
-// impl From<DirectGitUrl> for Url {
-//     fn try_from(value: &DirectGitUrl) -> Result<Self, Self::Error> {
-//         let mut url = Url::parse(&format!("{}{}", "git+", Url::from(&value.url).as_str()))?;
-//         if let Some(subdirectory) = &value.subdirectory {
-//             url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
-//         }
-//         Ok(url)
-//     }
-// }
+impl TryFrom<&DirectUrl> for pypi_types::DirectUrl {
+    type Error = Error;
+
+    fn try_from(value: &DirectUrl) -> std::result::Result<Self, Self::Error> {
+        match value {
+            DirectUrl::Git(value) => pypi_types::DirectUrl::try_from(value),
+            DirectUrl::Archive(value) => pypi_types::DirectUrl::try_from(value),
+        }
+    }
+}
 
 impl TryFrom<&DirectArchiveUrl> for pypi_types::DirectUrl {
     type Error = Error;
@@ -104,5 +116,3 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
         })
     }
 }
-
-// STOPSHIP(charlie): Add logic for converting to and from URL.

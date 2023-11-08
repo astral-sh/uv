@@ -5,9 +5,8 @@ use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use puffin_distribution::{
-    CachedDistribution, Distribution, RemoteDistributionRef, VersionOrUrl,
-};
+use puffin_distribution::{CachedDistribution, Distribution, RemoteDistributionRef, VersionOrUrl};
+use puffin_installer::Download;
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
 
@@ -108,8 +107,8 @@ impl DownloadReporter {
 }
 
 impl puffin_installer::DownloadReporter for DownloadReporter {
-    fn on_download_progress(&self, wheel: &Distribution) {
-        self.progress.set_message(format!("{wheel}"));
+    fn on_download_progress(&self, download: &Download) {
+        self.progress.set_message(format!("{download}"));
         self.progress.inc(1);
     }
 

@@ -2,6 +2,7 @@ use fxhash::FxHashMap;
 use pubgrub::range::Range;
 
 use pep508_rs::{Requirement, VersionOrUrl};
+use puffin_distribution::Distribution;
 use puffin_normalize::PackageName;
 
 use crate::file::DistributionFile;
@@ -81,13 +82,13 @@ impl CandidateSelector {
         package_name: &PackageName,
         range: &Range<PubGrubVersion>,
         version_map: &VersionMap,
-    ) -> Option<Candidate> {
+    ) -> Option<Distribution> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
         if let Some(version) = self.preferences.get(package_name) {
             if range.contains(version) {
-                if let Some(file) = version_map.get(version) {
-                    return Some(Candidate {
+                if let Some(distribution) = version_map.get(version) {
+                    return Some(Distribution {
                         package_name: package_name.clone(),
                         version: version.clone(),
                         file: file.clone(),
@@ -150,36 +151,32 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over sdists.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a PubGrubVersion, &'a DistributionFile)>,
+        versions: impl Iterator<Item = (&'a PubGrubVersion, &'a Distribution)>,
         package_name: &PackageName,
         range: &Range<PubGrubVersion>,
         allow_prerelease: AllowPreRelease,
-    ) -> Option<Candidate> {
+    ) -> Option<Distribution> {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a PubGrubVersion, &'a DistributionFile),
+            IfNecessary(&'a PubGrubVersion, &'a Distribution),
         }
 
         let mut prerelease = None;
-        for (version, file) in versions {
+        for (version, distribution) in versions {
             if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
                         AllowPreRelease::Yes => {
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            return Some(Candidate {
-                                package_name: package_name.clone(),
-                                version: version.clone(),
-                                file: file.clone(),
-                            });
+                            return Some(distribution.clone());
                         }
                         AllowPreRelease::IfNecessary => {
                             // If pre-releases are allowed as a fallback, store the
                             // first-matching prerelease.
                             if prerelease.is_none() {
-                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, file));
+                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, distribution));
                             }
                         }
                         AllowPreRelease::No => {
@@ -206,21 +203,11 @@ impl CandidateSelector {
         match prerelease {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, file)) => Some(Candidate {
+            Some(PreReleaseCandidate::IfNecessary(version, distribution)) => Some(Candidate {
                 package_name: package_name.clone(),
                 version: version.clone(),
                 file: file.clone(),
             }),
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Candidate {
-    /// The name of the package.
-    pub(crate) package_name: PackageName,
-    /// The version of the package.
-    pub(crate) version: PubGrubVersion,
-    /// The file of the package.
-    pub(crate) file: DistributionFile,
 }
