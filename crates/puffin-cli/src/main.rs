@@ -15,12 +15,14 @@ use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus};
 use crate::index_urls::IndexUrls;
+use crate::python_version::PythonVersion;
 use crate::requirements::RequirementsSource;
 
 mod commands;
 mod index_urls;
 mod logging;
 mod printer;
+mod python_version;
 mod requirements;
 
 #[derive(Parser)]
@@ -116,6 +118,10 @@ struct PipCompileArgs {
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
     no_build: bool,
+
+    /// The minimum Python version that should be supported.
+    #[arg(long, short, value_enum)]
+    python_version: Option<PythonVersion>,
 }
 
 #[derive(Args)]
@@ -249,6 +255,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.upgrade.into(),
                 index_urls,
                 args.no_build,
+                args.python_version,
                 &cache_dir,
                 printer,
             )
