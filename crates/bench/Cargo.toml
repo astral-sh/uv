@@ -1,0 +1,26 @@
+[package]
+name = "bench"
+version = "0.0.0"
+description = "Puffin Micro-benchmarks"
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[lib]
+bench = false
+
+[[bench]]
+name = "distribution-filename"
+path = "benches/distribution_filename.rs"
+harness = false
+
+[dependencies]
+criterion = { version = "0.5.1", default-features = false }
+
+distribution-filename.path = "../distribution-filename"
+platform-tags.path = "../platform-tags"
