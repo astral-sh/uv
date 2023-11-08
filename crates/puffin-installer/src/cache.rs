@@ -2,9 +2,7 @@ use std::path::{Path, PathBuf};
 
 use fs_err as fs;
 
-use puffin_distribution::{
-    BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution,
-};
+use puffin_distribution::{BaseDistribution, BuiltDistribution, Distribution, SourceDistribution};
 
 static WHEEL_CACHE: &str = "wheels-v0";
 
@@ -30,7 +28,7 @@ impl WheelCache {
     pub(crate) fn entry(&self, distribution: &Distribution) -> PathBuf {
         self.root
             .join(CacheShard::from(distribution).segment())
-            .join(distribution.id())
+            .join(distribution.package_id())
     }
 
     /// Returns a handle to the wheel cache directory.

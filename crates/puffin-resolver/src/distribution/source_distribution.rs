@@ -140,7 +140,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             .build_context
             .cache()
             .join(BUILT_WHEELS_CACHE)
-            .join(distribution.id());
+            .join(distribution.distribution_id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Build the wheel.

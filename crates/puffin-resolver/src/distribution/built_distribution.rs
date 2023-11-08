@@ -47,7 +47,10 @@ impl<'a> BuiltDistributionFetcher<'a> {
         let reader = client.stream_external(&distribution.url).await?;
 
         // Create a directory for the wheel.
-        let wheel_dir = self.0.join(REMOTE_WHEELS_CACHE).join(distribution.id());
+        let wheel_dir = self
+            .0
+            .join(REMOTE_WHEELS_CACHE)
+            .join(distribution.distribution_id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Download the wheel.

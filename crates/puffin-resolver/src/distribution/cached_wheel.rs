@@ -28,7 +28,7 @@ impl CachedWheel {
         tags: &Tags,
         cache: impl AsRef<Path>,
     ) -> Option<Self> {
-        let wheel_dir = cache.as_ref().join(distribution.id());
+        let wheel_dir = cache.as_ref().join(distribution.distribution_id());
         let Ok(read_dir) = fs_err::read_dir(wheel_dir) else {
             return None;
         };

@@ -56,7 +56,7 @@ impl Unzipper {
 
             // Unzip the wheel.
             tokio::task::spawn_blocking({
-                let target = staging.path().join(remote.id());
+                let target = staging.path().join(remote.distribution_id());
                 move || unzip_wheel(download, &target)
             })
             .await??;
@@ -66,7 +66,8 @@ impl Unzipper {
             if let Some(parent) = target.parent() {
                 fs_err::create_dir_all(parent)?;
             }
-            let result = fs_err::tokio::rename(staging.path().join(remote.id()), target).await;
+            let result =
+                fs_err::tokio::rename(staging.path().join(remote.distribution_id()), target).await;
 
             if let Err(err) = result {
                 // If the renaming failed because another instance was faster, that's fine

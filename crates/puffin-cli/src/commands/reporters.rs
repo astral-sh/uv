@@ -6,7 +6,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
 use puffin_distribution::{
-    CachedDistribution, Distribution, DistributionIdentifier, SourceDistribution, VersionOrUrl,
+    BaseDistribution, CachedDistribution, Distribution, SourceDistribution, VersionOrUrl,
 };
 use puffin_installer::Download;
 use puffin_normalize::ExtraName;

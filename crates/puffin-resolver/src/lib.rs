@@ -12,6 +12,7 @@ mod distribution;
 mod error;
 mod file;
 mod finder;
+mod locks;
 mod manifest;
 mod prerelease_mode;
 mod pubgrub;

@@ -11,9 +11,7 @@ use waitmap::WaitMap;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::{
-    BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution,
-};
+use puffin_distribution::{BaseDistribution, BuiltDistribution, Distribution, SourceDistribution};
 use puffin_normalize::PackageName;
 use pypi_types::File;
 
@@ -89,7 +87,7 @@ impl Graph {
                     let url = redirects
                         .get(url)
                         .map_or_else(|| url.clone(), |url| url.value().clone());
-                    let pinned_package = Distribution::from_url(package_name.clone(), url.clone());
+                    let pinned_package = Distribution::from_url(package_name.clone(), url);
 
                     let index = graph.add_node(pinned_package);
                     inverse.insert(package_name, index);

@@ -13,7 +13,6 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
-use tokio::sync::Mutex;
 use tracing::{debug, error, trace};
 use url::Url;
 use waitmap::WaitMap;
@@ -24,8 +23,8 @@ use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{
-    BuiltDistribution, DirectUrlSourceDistribution, Distribution, DistributionIdentifier,
-    GitSourceDistribution, RemoteDistribution, SourceDistribution, VersionOrUrl,
+    BaseDistribution, BuiltDistribution, DirectUrlSourceDistribution, Distribution,
+    DistributionIdentifier, GitSourceDistribution, SourceDistribution, VersionOrUrl,
 };
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
@@ -37,6 +36,7 @@ use crate::distribution::{
 };
 use crate::error::ResolveError;
 use crate::file::{DistributionFile, SdistFile, WheelFile};
+use crate::locks::Locks;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
@@ -376,7 +376,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 } else {
                     // Otherwise, assume this is a source distribution.
-                    let entry = self.index.urls.wait(url.as_str()).await.unwrap();
+                    let entry = self
+                        .index
+                        .distributions
+                        .wait(&url.distribution_id())
+                        .await
+                        .unwrap();
                     let metadata = entry.value();
                     let version = PubGrubVersion::from(metadata.version.clone());
                     if range.contains(&version) {
@@ -466,11 +471,20 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
                 let entry = match url {
-                    Some(url) => self.index.urls.wait(url.as_str()).await.unwrap(),
+                    Some(url) => self
+                        .index
+                        .distributions
+                        .wait(&url.distribution_id())
+                        .await
+                        .unwrap(),
                     None => {
                         let versions = pins.get(package_name).unwrap();
                         let file = versions.get(version.into()).unwrap();
-                        self.index.files.wait(&file.hashes.sha256).await.unwrap()
+                        self.index
+                            .distributions
+                            .wait(&file.distribution_id())
+                            .await
+                            .unwrap()
                     }
                 };
                 let metadata = entry.value();
@@ -555,34 +569,26 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .packages
                         .insert(package_name.clone(), version_map);
                 }
-                Response::Wheel(distribution, metadata) => {
+                Response::Distribution(Distribution::Built(distribution), metadata, ..) => {
                     trace!("Received built distribution metadata for: {distribution}");
-                    match distribution {
-                        BuiltDistribution::Registry(wheel) => {
-                            self.index.files.insert(wheel.file.hashes.sha256, metadata);
-                        }
-                        BuiltDistribution::DirectUrl(wheel) => {
-                            self.index.urls.insert(wheel.url.to_string(), metadata);
-                        }
-                    }
+                    self.index
+                        .distributions
+                        .insert(distribution.distribution_id(), metadata);
                 }
-                Response::Sdist(distribution, metadata, precise) => {
+                Response::Distribution(Distribution::Source(distribution), metadata, precise) => {
                     trace!("Received source distribution metadata for: {distribution}");
-                    match distribution {
-                        SourceDistribution::Registry(sdist) => {
-                            self.index.files.insert(sdist.file.hashes.sha256, metadata);
-                        }
-                        SourceDistribution::DirectUrl(sdist) => {
-                            if let Some(precise) = precise {
+                    self.index
+                        .distributions
+                        .insert(distribution.distribution_id(), metadata);
+                    if let Some(precise) = precise {
+                        match distribution {
+                            SourceDistribution::DirectUrl(sdist) => {
                                 self.index.redirects.insert(sdist.url.clone(), precise);
                             }
-                            self.index.urls.insert(sdist.url.to_string(), metadata);
-                        }
-                        SourceDistribution::Git(sdist) => {
-                            if let Some(precise) = precise {
+                            SourceDistribution::Git(sdist) => {
                                 self.index.redirects.insert(sdist.url.clone(), precise);
                             }
-                            self.index.urls.insert(sdist.url.to_string(), metadata);
+                            SourceDistribution::Registry(_) => {}
                         }
                     }
                 }
@@ -653,7 +659,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     });
                 }
 
-                Ok(Response::Wheel(distribution, metadata))
+                Ok(Response::Distribution(
+                    Distribution::Built(distribution),
+                    metadata,
+                    None,
+                ))
             }
 
             // Fetch source distribution metadata.
@@ -674,50 +684,52 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .await
                     .map_err(|err| ResolveError::from_source_distribution(sdist.clone(), err))?;
 
-                // Insert the `precise`, if it exists.
-                let sdist = match sdist {
-                    SourceDistribution::DirectUrl(sdist) => {
-                        SourceDistribution::DirectUrl(DirectUrlSourceDistribution {
-                            url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
-                            ..sdist
-                        })
-                    }
-                    SourceDistribution::Git(sdist) => {
-                        SourceDistribution::Git(GitSourceDistribution {
-                            url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
-                            ..sdist
-                        })
-                    }
-                    sdist @ SourceDistribution::Registry(_) => sdist,
-                };
-
                 let task = self
                     .reporter
                     .as_ref()
                     .map(|reporter| reporter.on_build_start(&sdist));
 
-                let metadata = match fetcher.find_dist_info(&sdist, self.tags) {
-                    Ok(Some(metadata)) => {
-                        debug!("Found source distribution metadata in cache: {sdist}");
-                        metadata
-                    }
-                    Ok(None) => {
-                        debug!("Downloading source distribution: {sdist}");
-                        fetcher
-                            .download_and_build_sdist(&sdist, self.client)
-                            .await
-                            .map_err(|err| {
-                                ResolveError::from_source_distribution(sdist.clone(), err)
-                            })?
-                    }
-                    Err(err) => {
-                        error!("Failed to read source distribution from cache: {err}",);
-                        fetcher
-                            .download_and_build_sdist(&sdist, self.client)
-                            .await
-                            .map_err(|err| {
-                                ResolveError::from_source_distribution(sdist.clone(), err)
-                            })?
+                let metadata = {
+                    // Insert the `precise`, if it exists.
+                    let sdist = match sdist.clone() {
+                        SourceDistribution::DirectUrl(sdist) => {
+                            SourceDistribution::DirectUrl(DirectUrlSourceDistribution {
+                                url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
+                                ..sdist
+                            })
+                        }
+                        SourceDistribution::Git(sdist) => {
+                            SourceDistribution::Git(GitSourceDistribution {
+                                url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
+                                ..sdist
+                            })
+                        }
+                        sdist @ SourceDistribution::Registry(_) => sdist,
+                    };
+
+                    match fetcher.find_dist_info(&sdist, self.tags) {
+                        Ok(Some(metadata)) => {
+                            debug!("Found source distribution metadata in cache: {sdist}");
+                            metadata
+                        }
+                        Ok(None) => {
+                            debug!("Downloading source distribution: {sdist}");
+                            fetcher
+                                .download_and_build_sdist(&sdist, self.client)
+                                .await
+                                .map_err(|err| {
+                                    ResolveError::from_source_distribution(sdist.clone(), err)
+                                })?
+                        }
+                        Err(err) => {
+                            error!("Failed to read source distribution from cache: {err}",);
+                            fetcher
+                                .download_and_build_sdist(&sdist, self.client)
+                                .await
+                                .map_err(|err| {
+                                    ResolveError::from_source_distribution(sdist.clone(), err)
+                                })?
+                        }
                     }
                 };
 
@@ -734,7 +746,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
 
-                Ok(Response::Sdist(sdist, metadata, precise))
+                Ok(Response::Distribution(
+                    Distribution::Source(sdist),
+                    metadata,
+                    precise,
+                ))
             }
         }
     }
@@ -812,13 +828,12 @@ enum Request {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, SimpleJson),
-    /// The returned metadata for a built distribution.
-    Wheel(BuiltDistribution, Metadata21),
-    /// The returned metadata for a source distribution.
-    Sdist(SourceDistribution, Metadata21, Option<Url>),
+    /// The returned metadata for a distribution.
+    Distribution(Distribution, Metadata21, Option<Url>),
 }
 
 pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistributionFile>;
@@ -852,30 +867,13 @@ impl InFlight {
     }
 }
 
-/// A set of locks used to prevent concurrent access to the same resource.
-#[derive(Debug, Default)]
-struct Locks(Mutex<FxHashMap<String, Arc<Mutex<()>>>>);
-
-impl Locks {
-    /// Acquire a lock on the given resource.
-    async fn acquire(&self, distribution: &impl RemoteDistribution) -> Arc<Mutex<()>> {
-        let mut map = self.0.lock().await;
-        map.entry(distribution.resource())
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone()
-    }
-}
-
 /// In-memory index of package metadata.
 struct Index {
     /// A map from package name to the metadata for that package.
     packages: WaitMap<PackageName, VersionMap>,
 
     /// A map from distribution SHA to metadata for that distribution.
-    files: WaitMap<String, Metadata21>,
-
-    /// A map from distribution URL to the metadata for that distribution.
-    urls: WaitMap<String, Metadata21>,
+    distributions: WaitMap<String, Metadata21>,
 
     /// A map from source URL to precise URL.
     redirects: WaitMap<Url, Url>,
@@ -885,8 +883,7 @@ impl Default for Index {
     fn default() -> Self {
         Self {
             packages: WaitMap::new(),
-            files: WaitMap::new(),
-            urls: WaitMap::new(),
+            distributions: WaitMap::new(),
             redirects: WaitMap::new(),
         }
     }

@@ -135,7 +135,7 @@ impl Distribution {
     }
 }
 
-impl DistributionIdentifier for RegistryBuiltDistribution {
+impl BaseDistribution for RegistryBuiltDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -145,7 +145,7 @@ impl DistributionIdentifier for RegistryBuiltDistribution {
     }
 }
 
-impl DistributionIdentifier for DirectUrlBuiltDistribution {
+impl BaseDistribution for DirectUrlBuiltDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -155,7 +155,7 @@ impl DistributionIdentifier for DirectUrlBuiltDistribution {
     }
 }
 
-impl DistributionIdentifier for RegistrySourceDistribution {
+impl BaseDistribution for RegistrySourceDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -165,7 +165,7 @@ impl DistributionIdentifier for RegistrySourceDistribution {
     }
 }
 
-impl DistributionIdentifier for DirectUrlSourceDistribution {
+impl BaseDistribution for DirectUrlSourceDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -175,7 +175,7 @@ impl DistributionIdentifier for DirectUrlSourceDistribution {
     }
 }
 
-impl DistributionIdentifier for GitSourceDistribution {
+impl BaseDistribution for GitSourceDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -185,7 +185,7 @@ impl DistributionIdentifier for GitSourceDistribution {
     }
 }
 
-impl DistributionIdentifier for SourceDistribution {
+impl BaseDistribution for SourceDistribution {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -203,7 +203,7 @@ impl DistributionIdentifier for SourceDistribution {
     }
 }
 
-impl DistributionIdentifier for BuiltDistribution {
+impl BaseDistribution for BuiltDistribution {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -219,7 +219,7 @@ impl DistributionIdentifier for BuiltDistribution {
     }
 }
 
-impl DistributionIdentifier for Distribution {
+impl BaseDistribution for Distribution {
     fn name(&self) -> &PackageName {
         match self {
             Self::Built(dist) => dist.name(),
@@ -243,10 +243,6 @@ impl RemoteDistribution for RegistryBuiltDistribution {
     fn size(&self) -> Option<usize> {
         Some(self.file.size)
     }
-
-    fn resource(&self) -> String {
-        self.file.hashes.sha256.clone()
-    }
 }
 
 impl RemoteDistribution for RegistrySourceDistribution {
@@ -256,10 +252,6 @@ impl RemoteDistribution for RegistrySourceDistribution {
 
     fn size(&self) -> Option<usize> {
         Some(self.file.size)
-    }
-
-    fn resource(&self) -> String {
-        self.file.hashes.sha256.clone()
     }
 }
 
@@ -279,10 +271,6 @@ impl RemoteDistribution for DirectUrlBuiltDistribution {
     fn size(&self) -> Option<usize> {
         None
     }
-
-    fn resource(&self) -> String {
-        puffin_cache::digest(&puffin_cache::RepositoryUrl::new(&self.url))
-    }
 }
 
 impl RemoteDistribution for DirectUrlSourceDistribution {
@@ -300,10 +288,6 @@ impl RemoteDistribution for DirectUrlSourceDistribution {
 
     fn size(&self) -> Option<usize> {
         None
-    }
-
-    fn resource(&self) -> String {
-        puffin_cache::digest(&puffin_cache::RepositoryUrl::new(&self.url))
     }
 }
 
@@ -323,10 +307,6 @@ impl RemoteDistribution for GitSourceDistribution {
     fn size(&self) -> Option<usize> {
         None
     }
-
-    fn resource(&self) -> String {
-        puffin_cache::digest(&puffin_cache::RepositoryUrl::new(&self.url))
-    }
 }
 
 impl RemoteDistribution for SourceDistribution {
@@ -345,14 +325,6 @@ impl RemoteDistribution for SourceDistribution {
             Self::Git(dist) => dist.size(),
         }
     }
-
-    fn resource(&self) -> String {
-        match self {
-            Self::Registry(dist) => dist.resource(),
-            Self::DirectUrl(dist) => dist.resource(),
-            Self::Git(dist) => dist.resource(),
-        }
-    }
 }
 
 impl RemoteDistribution for BuiltDistribution {
@@ -367,13 +339,6 @@ impl RemoteDistribution for BuiltDistribution {
         match self {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
-        }
-    }
-
-    fn resource(&self) -> String {
-        match self {
-            Self::Registry(dist) => dist.resource(),
-            Self::DirectUrl(dist) => dist.resource(),
         }
     }
 }
@@ -392,11 +357,124 @@ impl RemoteDistribution for Distribution {
             Self::Source(dist) => dist.size(),
         }
     }
+}
 
-    fn resource(&self) -> String {
+impl DistributionIdentifier for Url {
+    fn distribution_id(&self) -> String {
+        puffin_cache::digest(&puffin_cache::CanonicalUrl::new(self))
+    }
+
+    fn resource_id(&self) -> String {
+        puffin_cache::digest(&puffin_cache::RepositoryUrl::new(self))
+    }
+}
+
+impl DistributionIdentifier for File {
+    fn distribution_id(&self) -> String {
+        self.hashes.sha256.clone()
+    }
+
+    fn resource_id(&self) -> String {
+        self.hashes.sha256.clone()
+    }
+}
+
+impl DistributionIdentifier for RegistryBuiltDistribution {
+    fn distribution_id(&self) -> String {
+        self.file.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.file.resource_id()
+    }
+}
+
+impl DistributionIdentifier for RegistrySourceDistribution {
+    fn distribution_id(&self) -> String {
+        self.file.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.file.resource_id()
+    }
+}
+
+impl DistributionIdentifier for DirectUrlBuiltDistribution {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl DistributionIdentifier for DirectUrlSourceDistribution {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl DistributionIdentifier for GitSourceDistribution {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl DistributionIdentifier for SourceDistribution {
+    fn distribution_id(&self) -> String {
         match self {
-            Self::Built(dist) => dist.resource(),
-            Self::Source(dist) => dist.resource(),
+            Self::Registry(dist) => dist.distribution_id(),
+            Self::DirectUrl(dist) => dist.distribution_id(),
+            Self::Git(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.resource_id(),
+            Self::DirectUrl(dist) => dist.resource_id(),
+            Self::Git(dist) => dist.resource_id(),
+        }
+    }
+}
+
+impl DistributionIdentifier for BuiltDistribution {
+    fn distribution_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.distribution_id(),
+            Self::DirectUrl(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.resource_id(),
+            Self::DirectUrl(dist) => dist.resource_id(),
+        }
+    }
+}
+
+impl DistributionIdentifier for Distribution {
+    fn distribution_id(&self) -> String {
+        match self {
+            Self::Built(dist) => dist.distribution_id(),
+            Self::Source(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            Self::Built(dist) => dist.resource_id(),
+            Self::Source(dist) => dist.resource_id(),
         }
     }
 }

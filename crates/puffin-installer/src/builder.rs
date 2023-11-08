@@ -8,7 +8,7 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use tracing::debug;
 
-use puffin_distribution::{Distribution, DistributionIdentifier, RemoteDistribution};
+use puffin_distribution::{BaseDistribution, Distribution, RemoteDistribution};
 use puffin_traits::BuildContext;
 
 use crate::downloader::{DiskWheel, SourceDistributionDownload, WheelDownload};
@@ -80,7 +80,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
     let wheel_dir = build_context
         .cache()
         .join(BUILT_WHEELS_CACHE)
-        .join(distribution.remote.id());
+        .join(distribution.remote.package_id());
     fs::create_dir_all(&wheel_dir).await?;
 
     // Build the wheel.

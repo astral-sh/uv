@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use url::Url;
 
-use crate::traits::DistributionIdentifier;
+use crate::traits::BaseDistribution;
 use crate::{BuiltDistribution, Distribution, SourceDistribution, VersionOrUrl};
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
@@ -34,7 +34,7 @@ pub struct CachedDirectUrlDistribution {
     pub path: PathBuf,
 }
 
-impl DistributionIdentifier for CachedRegistryDistribution {
+impl BaseDistribution for CachedRegistryDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -44,7 +44,7 @@ impl DistributionIdentifier for CachedRegistryDistribution {
     }
 }
 
-impl DistributionIdentifier for CachedDirectUrlDistribution {
+impl BaseDistribution for CachedDirectUrlDistribution {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -54,7 +54,7 @@ impl DistributionIdentifier for CachedDirectUrlDistribution {
     }
 }
 
-impl DistributionIdentifier for CachedDistribution {
+impl BaseDistribution for CachedDistribution {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -120,11 +120,18 @@ impl CachedDistribution {
         }
     }
 
+    /// Return the [`DirectUrl`] of the distribution, if it exists.
     pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
         match self {
             CachedDistribution::Registry(_) => Ok(None),
             CachedDistribution::Url(dist) => DirectUrl::try_from(&dist.url).map(Some),
         }
+    }
+}
+
+impl CachedDirectUrlDistribution {
+    pub fn from_url(name: PackageName, url: Url, path: PathBuf) -> Self {
+        Self { name, url, path }
     }
 }
 
@@ -137,7 +144,7 @@ impl CachedRegistryDistribution {
         let Some(file_name) = file_name.to_str() else {
             return Ok(None);
         };
-        let Some((name, version)) = file_name.split_once('-') else {
+        let Some((name, version)) = file_name.rsplit_once('-') else {
             return Ok(None);
         };
 

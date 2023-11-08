@@ -66,8 +66,13 @@ impl TryFrom<&Url> for DirectUrl {
     type Error = Error;
 
     fn try_from(url: &Url) -> Result<Self, Self::Error> {
-        if url.scheme().starts_with("git+") {
-            Ok(Self::Git(DirectGitUrl::try_from(url)?))
+        if let Some((prefix, ..)) = url.scheme().split_once('+') {
+            match prefix {
+                "git" => Ok(Self::Git(DirectGitUrl::try_from(url)?)),
+                _ => Err(Error::msg(format!(
+                    "Unsupported URL prefix `{prefix}` in URL: {url}",
+                ))),
+            }
         } else {
             Ok(Self::Archive(DirectArchiveUrl::from(url)))
         }

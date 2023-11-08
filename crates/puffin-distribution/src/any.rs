@@ -2,10 +2,10 @@ use puffin_normalize::PackageName;
 
 use crate::cached::CachedDistribution;
 use crate::installed::InstalledDistribution;
-use crate::traits::DistributionIdentifier;
+use crate::traits::BaseDistribution;
 use crate::{Distribution, VersionOrUrl};
 
-/// A built distribution (wheel), which either exists remotely or locally.
+/// A distribution which either exists remotely or locally.
 #[derive(Debug, Clone)]
 pub enum AnyDistribution {
     Remote(Distribution),
@@ -13,7 +13,7 @@ pub enum AnyDistribution {
     Installed(InstalledDistribution),
 }
 
-impl DistributionIdentifier for AnyDistribution {
+impl BaseDistribution for AnyDistribution {
     fn name(&self) -> &PackageName {
         match self {
             Self::Remote(dist) => dist.name(),
