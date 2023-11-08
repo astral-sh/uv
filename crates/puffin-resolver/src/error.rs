@@ -1,4 +1,7 @@
+use std::fmt::Formatter;
+
 use pubgrub::range::Range;
+use pubgrub::report::Reporter;
 use thiserror::Error;
 use url::Url;
 
@@ -6,6 +9,7 @@ use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
+use crate::ResolutionFailureReporter;
 
 #[derive(Error, Debug)]
 pub enum ResolveError {
@@ -25,7 +29,7 @@ pub enum ResolveError {
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
-    PubGrub(#[from] pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>),
+    PubGrub(#[from] RichPubGrubError),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
@@ -62,5 +66,30 @@ pub enum ResolveError {
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
     fn from(value: futures::channel::mpsc::TrySendError<T>) -> Self {
         value.into_send_error().into()
+    }
+}
+
+/// A wrapper around [`pubgrub::error::PubGrubError`] that displays a resolution failure report.
+#[derive(Debug)]
+pub struct RichPubGrubError {
+    source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+}
+
+impl std::error::Error for RichPubGrubError {}
+
+impl std::fmt::Display for RichPubGrubError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
+            let report = ResolutionFailureReporter::report(derivation_tree);
+            write!(f, "{report}")
+        } else {
+            write!(f, "{}", self.source)
+        }
+    }
+}
+
+impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
+    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+        ResolveError::PubGrub(RichPubGrubError { source: value })
     }
 }

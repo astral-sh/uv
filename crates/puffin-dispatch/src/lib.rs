@@ -85,7 +85,7 @@ impl BuildContext for BuildDispatch {
                 self,
             );
             let resolution_graph = resolver.resolve().await.context(
-                "No solution found when resolving build dependencies for source distribution build",
+                "No solution found when resolving build dependencies for source distribution:",
             )?;
             Ok(resolution_graph.requirements())
         })

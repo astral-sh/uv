@@ -2,4 +2,4 @@
 source: crates/puffin-resolver/tests/resolver.rs
 expression: resolution
 ---
-No solution
+Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.
