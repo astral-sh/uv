@@ -31,9 +31,6 @@ with a minimal barrier to adoption. Try it today in lieu of `pip` and `pip-tools
 
 Puffin does not yet support:
 
-- Source distributions
-- VCS dependencies
-- URL dependencies
 - Windows
 - ...
 
@@ -58,18 +55,26 @@ cargo run -p puffin-cli -- pip-sync requirements.txt
 For more, see `cargo run -p puffin-cli -- --help`:
 
 ```text
-Usage: puffin-cli <COMMAND>
+Usage: puffin [OPTIONS] <COMMAND>
 
 Commands:
-  compile  Compile a `requirements.in` file to a `requirements.txt` file
-  sync     Sync dependencies from a `requirements.txt` file
-  clean    Clear the cache
-  freeze   Enumerate the installed packages in the current environment
-  help     Print this message or the help of the given subcommand(s)
+  pip-compile    Compile a `requirements.in` file to a `requirements.txt` file
+  pip-sync       Sync dependencies from a `requirements.txt` file
+  pip-uninstall  Uninstall packages from the current environment
+  clean          Clear the cache
+  freeze         Enumerate the installed packages in the current environment
+  venv           Create a virtual environment
+  add            Add a dependency to the workspace
+  remove         Remove a dependency from the workspace
+  help           Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -q, --quiet                  Do not print any output
+  -v, --verbose                Use verbose output
+  -n, --no-cache               Avoid reading from or writing to the cache
+      --cache-dir <CACHE_DIR>  Path to the cache directory [env: PUFFIN_CACHE_DIR=]
+  -h, --help                   Print help
+  -V, --version                Print version
 ```
 
 ## License
