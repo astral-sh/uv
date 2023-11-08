@@ -41,7 +41,7 @@ pub(crate) async fn pip_compile(
     upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
     no_build: bool,
-    target_version: Option<PythonVersion>,
+    python_version: Option<PythonVersion>,
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -121,9 +121,9 @@ pub(crate) async fn pip_compile(
     )?;
 
     // Determine the markers to use for resolution.
-    let markers = target_version.map_or_else(
+    let markers = python_version.map_or_else(
         || Cow::Borrowed(venv.interpreter_info().markers()),
-        |target_version| Cow::Owned(target_version.markers(venv.interpreter_info().markers())),
+        |python_version| Cow::Owned(python_version.markers(venv.interpreter_info().markers())),
     );
 
     // Instantiate a client.

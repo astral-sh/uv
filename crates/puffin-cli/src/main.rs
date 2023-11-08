@@ -120,8 +120,8 @@ struct PipCompileArgs {
     no_build: bool,
 
     /// The minimum Python version that should be supported.
-    #[arg(long, value_enum)]
-    target_version: Option<PythonVersion>,
+    #[arg(long, short, value_enum)]
+    python_version: Option<PythonVersion>,
 }
 
 #[derive(Args)]
@@ -255,7 +255,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.upgrade.into(),
                 index_urls,
                 args.no_build,
-                args.target_version,
+                args.python_version,
                 &cache_dir,
                 printer,
             )
