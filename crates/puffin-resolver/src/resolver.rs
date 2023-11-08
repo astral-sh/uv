@@ -21,15 +21,20 @@ use waitmap::WaitMap;
 use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_cache::{CanonicalUrl, RepositoryUrl};
+use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DirectUrlBuiltDistribution, DirectUrlSourceDistribution, Distribution, RegistryBuiltDistribution, RegistrySourceDistribution, VersionOrUrl};
+use puffin_distribution::{
+    BuiltDistribution, DirectUrlSourceDistribution, Distribution, DistributionIdentifier,
+    GitSourceDistribution, RemoteDistribution, SourceDistribution, VersionOrUrl,
+};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{SourceDistributionFetcher, SourceDistributionReporter, WheelFetcher};
+use crate::distribution::{
+    BuiltDistributionFetcher, SourceDistributionFetcher, SourceDistributionReporter,
+};
 use crate::error::ResolveError;
 use crate::file::{DistributionFile, SdistFile, WheelFile};
 use crate::manifest::Manifest;
@@ -285,18 +290,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                // Emit a request to fetch the metadata for this package.
+                // Emit a request to fetch the metadata for this distribution.
                 if in_flight.insert_url(url) {
                     priorities.add(package_name.clone());
-                    if WheelFilename::try_from(url).is_ok() {
-                        // Kick off a request to download the wheel.
-                        request_sink
-                            .unbounded_send(Request::WheelUrl(package_name.clone(), url.clone()))?;
-                    } else {
-                        // Otherwise, assume this is a source distribution.
-                        request_sink
-                            .unbounded_send(Request::SdistUrl(package_name.clone(), url.clone()))?;
-                    }
+                    let distribution = Distribution::from_url(package_name.clone(), url.clone());
+                    request_sink.unbounded_send(Request::Distribution(distribution))?;
                 }
             }
         }
@@ -332,24 +330,13 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             };
 
             // Emit a request to fetch the metadata for this version.
-            match candidate.file {
-                DistributionFile::Wheel(file) => {
-                    if in_flight.insert_file(&file) {
-                        request_sink.unbounded_send(Request::Wheel(
-                            candidate.package_name.clone(),
-                            file.clone(),
-                        ))?;
-                    }
-                }
-                DistributionFile::Sdist(file) => {
-                    if in_flight.insert_file(&file) {
-                        request_sink.unbounded_send(Request::Sdist(
-                            candidate.package_name.clone(),
-                            candidate.version.clone().into(),
-                            file.clone(),
-                        ))?;
-                    }
-                }
+            if in_flight.insert_file(&candidate.file) {
+                let distribution = Distribution::from_registry(
+                    candidate.package_name.clone(),
+                    candidate.version.clone().into(),
+                    candidate.file.clone().into(),
+                );
+                request_sink.unbounded_send(Request::Distribution(distribution))?;
             }
         }
         Ok(())
@@ -389,7 +376,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 } else {
                     // Otherwise, assume this is a source distribution.
-                    let entry = self.index.versions.wait(url.as_str()).await.unwrap();
+                    let entry = self.index.urls.wait(url.as_str()).await.unwrap();
                     let metadata = entry.value();
                     let version = PubGrubVersion::from(metadata.version.clone());
                     if range.contains(&version) {
@@ -430,24 +417,13 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     );
 
                 // Emit a request to fetch the metadata for this version.
-                match candidate.file {
-                    DistributionFile::Wheel(file) => {
-                        if in_flight.insert_file(&file) {
-                            request_sink.unbounded_send(Request::Wheel(
-                                candidate.package_name.clone(),
-                                file.clone(),
-                            ))?;
-                        }
-                    }
-                    DistributionFile::Sdist(file) => {
-                        if in_flight.insert_file(&file) {
-                            request_sink.unbounded_send(Request::Sdist(
-                                candidate.package_name.clone(),
-                                candidate.version.clone().into(),
-                                file.clone(),
-                            ))?;
-                        }
-                    }
+                if in_flight.insert_file(&candidate.file) {
+                    let distribution = Distribution::from_registry(
+                        candidate.package_name.clone(),
+                        candidate.version.clone().into(),
+                        candidate.file.clone().into(),
+                    );
+                    request_sink.unbounded_send(Request::Distribution(distribution))?;
                 }
 
                 let version = candidate.version.clone();
@@ -490,11 +466,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
                 let entry = match url {
-                    Some(url) => self.index.versions.wait(url.as_str()).await.unwrap(),
+                    Some(url) => self.index.urls.wait(url.as_str()).await.unwrap(),
                     None => {
                         let versions = pins.get(package_name).unwrap();
                         let file = versions.get(version.into()).unwrap();
-                        self.index.versions.wait(&file.hashes.sha256).await.unwrap()
+                        self.index.files.wait(&file.hashes.sha256).await.unwrap()
                     }
                 };
                 let metadata = entry.value();
@@ -555,15 +531,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                                     std::collections::btree_map::Entry::Occupied(mut entry) => {
                                         if matches!(entry.get(), DistributionFile::Sdist(_)) {
                                             // Wheels get precedence over source distributions.
-                                            entry.insert(DistributionFile::from(WheelFile(
-                                                file, filename,
-                                            )));
+                                            entry.insert(DistributionFile::from(WheelFile(file)));
                                         }
                                     }
                                     std::collections::btree_map::Entry::Vacant(entry) => {
-                                        entry.insert(DistributionFile::from(WheelFile(
-                                            file, filename,
-                                        )));
+                                        entry.insert(DistributionFile::from(WheelFile(file)));
                                     }
                                 }
                             }
@@ -574,7 +546,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             if let std::collections::btree_map::Entry::Vacant(entry) =
                                 version_map.entry(version)
                             {
-                                entry.insert(DistributionFile::from(SdistFile(file, filename)));
+                                entry.insert(DistributionFile::from(SdistFile(file)));
                             }
                         }
                     }
@@ -583,30 +555,35 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .packages
                         .insert(package_name.clone(), version_map);
                 }
-                Response::Wheel(file, metadata) => {
-                    trace!("Received wheel metadata for: {}", file.filename);
-                    self.index
-                        .versions
-                        .insert(file.hashes.sha256.clone(), metadata);
-                }
-                Response::Sdist(file, metadata) => {
-                    trace!("Received sdist metadata for: {}", file.filename);
-                    self.index
-                        .versions
-                        .insert(file.hashes.sha256.clone(), metadata);
-                }
-                Response::WheelUrl(url, precise, metadata) => {
-                    trace!("Received remote wheel metadata for: {url}");
-                    self.index.versions.insert(url.to_string(), metadata);
-                    if let Some(precise) = precise {
-                        self.index.redirects.insert(url, precise);
+                Response::Wheel(distribution, metadata) => {
+                    trace!("Received built distribution metadata for: {distribution}");
+                    match distribution {
+                        BuiltDistribution::Registry(wheel) => {
+                            self.index.files.insert(wheel.file.hashes.sha256, metadata);
+                        }
+                        BuiltDistribution::DirectUrl(wheel) => {
+                            self.index.urls.insert(wheel.url.to_string(), metadata);
+                        }
                     }
                 }
-                Response::SdistUrl(url, precise, metadata) => {
-                    trace!("Received remote source distribution metadata for: {url}");
-                    self.index.versions.insert(url.to_string(), metadata);
-                    if let Some(precise) = precise {
-                        self.index.redirects.insert(url, precise);
+                Response::Sdist(distribution, metadata, precise) => {
+                    trace!("Received source distribution metadata for: {distribution}");
+                    match distribution {
+                        SourceDistribution::Registry(sdist) => {
+                            self.index.files.insert(sdist.file.hashes.sha256, metadata);
+                        }
+                        SourceDistribution::DirectUrl(sdist) => {
+                            if let Some(precise) = precise {
+                                self.index.redirects.insert(sdist.url.clone(), precise);
+                            }
+                            self.index.urls.insert(sdist.url.to_string(), metadata);
+                        }
+                        SourceDistribution::Git(sdist) => {
+                            if let Some(precise) = precise {
+                                self.index.redirects.insert(sdist.url.clone(), precise);
+                            }
+                            self.index.urls.insert(sdist.url.to_string(), metadata);
+                        }
                     }
                 }
             }
@@ -625,63 +602,63 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .map_err(ResolveError::Client)
                     .await
             }
-            // Fetch wheel metadata from the registry.
-            Request::Wheel(package_name, file) => {
-                let metadata = self
-                    .client
-                    .wheel_metadata(file.0.clone(), file.1.clone())
-                    .map_err(ResolveError::Client)
-                    .await?;
 
-                if metadata.name != package_name {
+            // Fetch wheel metadata.
+            Request::Distribution(Distribution::Built(distribution)) => {
+                let metadata =
+                    match &distribution {
+                        BuiltDistribution::Registry(wheel) => {
+                            self.client
+                                .wheel_metadata(wheel.file.clone())
+                                .map_err(ResolveError::Client)
+                                .await?
+                        }
+                        BuiltDistribution::DirectUrl(wheel) => {
+                            let fetcher = BuiltDistributionFetcher::new(self.build_context.cache());
+                            match fetcher.find_dist_info(wheel, self.tags) {
+                                Ok(Some(metadata)) => {
+                                    debug!("Found wheel metadata in cache: {wheel}");
+                                    metadata
+                                }
+                                Ok(None) => {
+                                    debug!("Downloading wheel: {wheel}");
+                                    fetcher.download_wheel(wheel, self.client).await.map_err(
+                                        |err| {
+                                            ResolveError::from_built_distribution(
+                                                distribution.clone(),
+                                                err,
+                                            )
+                                        },
+                                    )?
+                                }
+                                Err(err) => {
+                                    error!("Failed to read wheel from cache: {err}");
+                                    fetcher.download_wheel(wheel, self.client).await.map_err(
+                                        |err| {
+                                            ResolveError::from_built_distribution(
+                                                distribution.clone(),
+                                                err,
+                                            )
+                                        },
+                                    )?
+                                }
+                            }
+                        }
+                    };
+
+                if metadata.name != *distribution.name() {
                     return Err(ResolveError::NameMismatch {
                         metadata: metadata.name,
-                        given: package_name,
+                        given: distribution.name().clone(),
                     });
                 }
 
-                Ok(Response::Wheel(file, metadata))
+                Ok(Response::Wheel(distribution, metadata))
             }
-            // Build a source distribution from the registry, returning its metadata.
-            Request::Sdist(package_name, version, file) => {
-                let builder = SourceDistributionFetcher::new(self.build_context);
-                let distribution =
-                    RemoteDistributionRef::from_registry(&package_name, &version, &file);
-                let metadata = match builder.find_dist_info(&distribution, self.tags) {
-                    Ok(Some(metadata)) => metadata,
-                    Ok(None) => builder
-                        .download_and_build_sdist(&distribution, self.client)
-                        .await
-                        .map_err(|err| ResolveError::RegistryDistribution {
-                            filename: file.filename.clone(),
-                            err,
-                        })?,
-                    Err(err) => {
-                        error!(
-                            "Failed to read source distribution {distribution} from cache: {err}",
-                        );
-                        builder
-                            .download_and_build_sdist(&distribution, self.client)
-                            .await
-                            .map_err(|err| ResolveError::RegistryDistribution {
-                                filename: file.filename.clone(),
-                                err,
-                            })?
-                    }
-                };
 
-                if metadata.name != package_name {
-                    return Err(ResolveError::NameMismatch {
-                        metadata: metadata.name,
-                        given: package_name,
-                    });
-                }
-
-                Ok(Response::Sdist(file, metadata))
-            }
-            // Build a source distribution from a remote URL, returning its metadata.
-            Request::SdistUrl(package_name, url) => {
-                let lock = self.locks.acquire(&url).await;
+            // Fetch source distribution metadata.
+            Request::Distribution(Distribution::Source(sdist)) => {
+                let lock = self.locks.acquire(&sdist).await;
                 let _guard = lock.lock().await;
 
                 let fetcher = if let Some(reporter) = &self.reporter {
@@ -693,109 +670,71 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 };
 
                 let precise = fetcher
-                    .precise(&RemoteDistributionRef::from_url(&package_name, &url))
+                    .precise(&sdist)
                     .await
-                    .map_err(|err| ResolveError::UrlDistribution {
-                        url: url.clone(),
-                        err,
-                    })?;
+                    .map_err(|err| ResolveError::from_source_distribution(sdist.clone(), err))?;
 
-                let distribution = RemoteDistributionRef::from_url(
-                    &package_name,
-                    precise.as_ref().unwrap_or(&url),
-                );
+                // Insert the `precise`, if it exists.
+                let sdist = match sdist {
+                    SourceDistribution::DirectUrl(sdist) => {
+                        SourceDistribution::DirectUrl(DirectUrlSourceDistribution {
+                            url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
+                            ..sdist
+                        })
+                    }
+                    SourceDistribution::Git(sdist) => {
+                        SourceDistribution::Git(GitSourceDistribution {
+                            url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
+                            ..sdist
+                        })
+                    }
+                    sdist @ SourceDistribution::Registry(_) => sdist,
+                };
 
                 let task = self
                     .reporter
                     .as_ref()
-                    .map(|reporter| reporter.on_build_start(&distribution));
+                    .map(|reporter| reporter.on_build_start(&sdist));
 
-                let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
+                let metadata = match fetcher.find_dist_info(&sdist, self.tags) {
                     Ok(Some(metadata)) => {
-                        debug!("Found source distribution metadata in cache: {url}");
+                        debug!("Found source distribution metadata in cache: {sdist}");
                         metadata
                     }
                     Ok(None) => {
-                        debug!("Downloading source distribution from: {url}");
+                        debug!("Downloading source distribution: {sdist}");
                         fetcher
-                            .download_and_build_sdist(&distribution, self.client)
+                            .download_and_build_sdist(&sdist, self.client)
                             .await
-                            .map_err(|err| ResolveError::UrlDistribution {
-                                url: url.clone(),
-                                err,
+                            .map_err(|err| {
+                                ResolveError::from_source_distribution(sdist.clone(), err)
                             })?
                     }
                     Err(err) => {
-                        error!(
-                            "Failed to read source distribution {distribution} from cache: {err}",
-                        );
+                        error!("Failed to read source distribution from cache: {err}",);
                         fetcher
-                            .download_and_build_sdist(&distribution, self.client)
+                            .download_and_build_sdist(&sdist, self.client)
                             .await
-                            .map_err(|err| ResolveError::UrlDistribution {
-                                url: url.clone(),
-                                err,
+                            .map_err(|err| {
+                                ResolveError::from_source_distribution(sdist.clone(), err)
                             })?
                     }
                 };
 
-                if metadata.name != package_name {
+                if metadata.name != *sdist.name() {
                     return Err(ResolveError::NameMismatch {
                         metadata: metadata.name,
-                        given: package_name,
+                        given: sdist.name().clone(),
                     });
                 }
 
                 if let Some(task) = task {
                     if let Some(reporter) = self.reporter.as_ref() {
-                        reporter.on_build_complete(&distribution, task);
+                        reporter.on_build_complete(&sdist, task);
                     }
                 }
 
-                Ok(Response::SdistUrl(url, precise, metadata))
-            }
-            // Fetch wheel metadata from a remote URL.
-            Request::WheelUrl(package_name, url) => {
-                let lock = self.locks.acquire(&url).await;
-                let _guard = lock.lock().await;
-
-                let fetcher = WheelFetcher::new(self.build_context.cache());
-                let distribution = RemoteDistributionRef::from_url(&package_name, &url);
-                let metadata = match fetcher.find_dist_info(&distribution, self.tags) {
-                    Ok(Some(metadata)) => {
-                        debug!("Found wheel metadata in cache: {url}");
-                        metadata
-                    }
-                    Ok(None) => {
-                        debug!("Downloading wheel from: {url}");
-                        fetcher
-                            .download_wheel(&distribution, self.client)
-                            .await
-                            .map_err(|err| ResolveError::UrlDistribution {
-                                url: url.clone(),
-                                err,
-                            })?
-                    }
-                    Err(err) => {
-                        error!("Failed to read wheel {distribution} from cache: {err}",);
-                        fetcher
-                            .download_wheel(&distribution, self.client)
-                            .await
-                            .map_err(|err| ResolveError::UrlDistribution {
-                                url: url.clone(),
-                                err,
-                            })?
-                    }
-                };
-
-                if metadata.name != package_name {
-                    return Err(ResolveError::NameMismatch {
-                        metadata: metadata.name,
-                        given: package_name,
-                    });
-                }
-
-                Ok(Response::WheelUrl(url, None, metadata))
+                Ok(Response::Sdist(sdist, metadata, precise))
             }
         }
     }
@@ -835,10 +774,10 @@ pub trait Reporter: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> usize;
+    fn on_build_start(&self, distribution: &SourceDistribution) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, id: usize);
+    fn on_build_complete(&self, distribution: &SourceDistribution, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -864,34 +803,25 @@ impl SourceDistributionReporter for Facade {
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
-    /// A request to fetch wheel metadata from a registry.
-    Wheel(RegistryBuiltDistribution),
-    /// A request to fetch source distribution metadata from a registry.
-    Sdist(RegistrySourceDistribution),
-    /// A request to fetch wheel metadata from a remote URL.
-    WheelUrl(DirectUrlBuiltDistribution),
-    /// A request to fetch source distribution metadata from a remote URL.
-    SdistUrl(DirectUrlSourceDistribution),
+    /// A request to fetch the metadata for a built or source distribution.
+    Distribution(Distribution),
 }
 
 #[derive(Debug)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, SimpleJson),
-    /// The returned metadata for a wheel hosted on a registry.
-    Wheel(WheelFile, Metadata21),
-    /// The returned metadata for a source distribution hosted on a registry.
-    Sdist(SdistFile, Metadata21),
-    /// The returned metadata for a wheel hosted on a remote URL.
-    WheelUrl(Url, Option<Url>, Metadata21),
-    /// The returned metadata for a source distribution hosted on a remote URL.
-    SdistUrl(Url, Option<Url>, Metadata21),
+    /// The returned metadata for a built distribution.
+    Wheel(BuiltDistribution, Metadata21),
+    /// The returned metadata for a source distribution.
+    Sdist(SourceDistribution, Metadata21, Option<Url>),
 }
 
-pub(crate) type VersionMap = BTreeMap<PubGrubVersion, Distribution>;
+pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistributionFile>;
 
 /// In-memory index of in-flight network requests. Any request in an [`InFlight`] state will be
 /// eventually be inserted into an [`Index`].
@@ -910,8 +840,11 @@ impl InFlight {
         self.packages.insert(package_name.clone())
     }
 
-    fn insert_file(&mut self, file: &File) -> bool {
-        self.files.insert(file.hashes.sha256.clone())
+    fn insert_file(&mut self, file: &DistributionFile) -> bool {
+        match file {
+            DistributionFile::Wheel(file) => self.files.insert(file.hashes.sha256.clone()),
+            DistributionFile::Sdist(file) => self.files.insert(file.hashes.sha256.clone()),
+        }
     }
 
     fn insert_url(&mut self, url: &Url) -> bool {
@@ -925,9 +858,9 @@ struct Locks(Mutex<FxHashMap<String, Arc<Mutex<()>>>>);
 
 impl Locks {
     /// Acquire a lock on the given resource.
-    async fn acquire(&self, url: &Url) -> Arc<Mutex<()>> {
+    async fn acquire(&self, distribution: &impl RemoteDistribution) -> Arc<Mutex<()>> {
         let mut map = self.0.lock().await;
-        map.entry(puffin_cache::digest(&RepositoryUrl::new(url)))
+        map.entry(distribution.resource())
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
     }
@@ -938,8 +871,11 @@ struct Index {
     /// A map from package name to the metadata for that package.
     packages: WaitMap<PackageName, VersionMap>,
 
-    /// A map from wheel SHA or URL to the metadata for that wheel.
-    versions: WaitMap<String, Metadata21>,
+    /// A map from distribution SHA to metadata for that distribution.
+    files: WaitMap<String, Metadata21>,
+
+    /// A map from distribution URL to the metadata for that distribution.
+    urls: WaitMap<String, Metadata21>,
 
     /// A map from source URL to precise URL.
     redirects: WaitMap<Url, Url>,
@@ -949,7 +885,8 @@ impl Default for Index {
     fn default() -> Self {
         Self {
             packages: WaitMap::new(),
-            versions: WaitMap::new(),
+            files: WaitMap::new(),
+            urls: WaitMap::new(),
             redirects: WaitMap::new(),
         }
     }

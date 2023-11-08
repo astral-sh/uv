@@ -5,8 +5,7 @@ use tracing::warn;
 use url::Url;
 
 use puffin_distribution::{
-    CachedDirectUrlDistribution, CachedDistribution, DirectUrlBuiltDistribution,
-    DistributionIdentifier, RemoteDistributionRef,
+    CachedDirectUrlDistribution, DirectUrlBuiltDistribution, DistributionIdentifier,
 };
 use puffin_normalize::PackageName;
 

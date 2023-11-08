@@ -49,7 +49,7 @@ impl DistributionIdentifier for InstalledDirectUrlDistribution {
     }
 
     fn version_or_url(&self) -> VersionOrUrl {
-        // STOPSHIP(charlie): Convert a DirectUrl to a Url.
+        // TODO(charlie): Convert a `DirectUrl` to `Url`.
         VersionOrUrl::Version(&self.version)
     }
 }
@@ -88,20 +88,20 @@ impl InstalledDistribution {
 
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
-            if let Some(direct_url) = direct_url(&path)? {
-                return Ok(Some(Self::Url(InstalledDirectUrlDistribution {
+            return if let Some(direct_url) = Self::direct_url(path)? {
+                Ok(Some(Self::Url(InstalledDirectUrlDistribution {
                     name,
                     version,
                     url: direct_url,
                     path: path.to_path_buf(),
-                })));
+                })))
             } else {
-                return Ok(Some(Self::Registry(InstalledRegistryDistribution {
+                Ok(Some(Self::Registry(InstalledRegistryDistribution {
                     name,
                     version,
                     path: path.to_path_buf(),
-                })));
-            }
+                })))
+            };
         }
         Ok(None)
     }
@@ -120,13 +120,14 @@ impl InstalledDistribution {
             Self::Url(dist) => &dist.version,
         }
     }
-}
 
-fn direct_url(path: &Path) -> Result<Option<DirectUrl>> {
-    let path = path.join("direct_url.json");
-    let Ok(file) = fs_err::File::open(path) else {
-        return Ok(None);
-    };
-    let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
-    Ok(Some(direct_url))
+    /// Read the `direct_url.json` file from a `.dist-info` directory.
+    fn direct_url(path: &Path) -> Result<Option<DirectUrl>> {
+        let path = path.join("direct_url.json");
+        let Ok(file) = fs_err::File::open(path) else {
+            return Ok(None);
+        };
+        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
+        Ok(Some(direct_url))
+    }
 }

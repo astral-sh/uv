@@ -5,7 +5,9 @@ use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use puffin_distribution::{CachedDistribution, Distribution, RemoteDistributionRef, VersionOrUrl};
+use puffin_distribution::{
+    CachedDistribution, Distribution, DistributionIdentifier, SourceDistribution, VersionOrUrl,
+};
 use puffin_installer::Download;
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
@@ -246,7 +248,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, distribution: &RemoteDistributionRef<'_>) -> usize {
+    fn on_build_start(&self, distribution: &SourceDistribution) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -264,7 +266,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, distribution: &RemoteDistributionRef<'_>, index: usize) {
+    fn on_build_complete(&self, distribution: &SourceDistribution, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
@@ -311,15 +313,10 @@ trait ColorDisplay {
     fn to_color_string(&self) -> String;
 }
 
-impl ColorDisplay for &RemoteDistributionRef<'_> {
+impl ColorDisplay for &SourceDistribution {
     fn to_color_string(&self) -> String {
-        match self {
-            RemoteDistributionRef::Registry(name, version, _file) => {
-                format!("{}{}", name, format!("=={version}").dimmed())
-            }
-            RemoteDistributionRef::Url(name, url) => {
-                format!("{}{}", name, format!(" @ {url}").dimmed())
-            }
-        }
+        let name = self.name();
+        let version_or_url = self.version_or_url();
+        format!("{}{}", name, version_or_url.to_string().dimmed())
     }
 }

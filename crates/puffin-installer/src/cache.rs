@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use fs_err as fs;
 
-use puffin_distribution::{BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution};
+use puffin_distribution::{
+    BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution,
+};
 
 static WHEEL_CACHE: &str = "wheels-v0";
 

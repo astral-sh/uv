@@ -11,7 +11,9 @@ use waitmap::WaitMap;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::Distribution;
+use puffin_distribution::{
+    BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution,
+};
 use puffin_normalize::PackageName;
 use pypi_types::File;
 
@@ -143,18 +145,38 @@ impl Graph {
         self.0
             .node_indices()
             .map(|node| match &self.0[node] {
-                Distribution::Registry(name, version, _file) => Requirement {
-                    name: name.clone(),
+                Distribution::Built(BuiltDistribution::Registry(wheel)) => Requirement {
+                    name: wheel.name.clone(),
                     extras: None,
                     version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-                        VersionSpecifier::equals_version(version.clone()),
+                        VersionSpecifier::equals_version(wheel.version.clone()),
                     ))),
                     marker: None,
                 },
-                Distribution::Url(name, url) => Requirement {
-                    name: name.clone(),
+                Distribution::Built(BuiltDistribution::DirectUrl(wheel)) => Requirement {
+                    name: wheel.name.clone(),
                     extras: None,
-                    version_or_url: Some(VersionOrUrl::Url(url.clone())),
+                    version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
+                    marker: None,
+                },
+                Distribution::Source(SourceDistribution::Registry(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+                        VersionSpecifier::equals_version(sdist.version.clone()),
+                    ))),
+                    marker: None,
+                },
+                Distribution::Source(SourceDistribution::DirectUrl(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
+                    marker: None,
+                },
+                Distribution::Source(SourceDistribution::Git(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
                     marker: None,
                 },
             })

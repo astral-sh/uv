@@ -1,7 +1,14 @@
+use anyhow::Result;
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 
-use crate::{AnyDistribution, BuiltDistribution, CachedDirectUrlDistribution, CachedDistribution, CachedRegistryDistribution, DirectUrlBuiltDistribution, DirectUrlSourceDistribution, Distribution, GitSourceDistribution, InstalledDirectUrlDistribution, InstalledDistribution, InstalledRegistryDistribution, RegistryBuiltDistribution, RegistrySourceDistribution, SourceDistribution, VersionOrUrl};
+use crate::{
+    AnyDistribution, BuiltDistribution, CachedDirectUrlDistribution, CachedDistribution,
+    CachedRegistryDistribution, DirectUrlBuiltDistribution, DirectUrlSourceDistribution,
+    Distribution, GitSourceDistribution, InstalledDirectUrlDistribution, InstalledDistribution,
+    InstalledRegistryDistribution, RegistryBuiltDistribution, RegistrySourceDistribution,
+    SourceDistribution, VersionOrUrl,
+};
 
 pub trait DistributionIdentifier {
     /// Return the normalized [`PackageName`] of the distribution.
@@ -11,7 +18,7 @@ pub trait DistributionIdentifier {
     /// distributions.
     fn version_or_url(&self) -> VersionOrUrl;
 
-    /// Returns a unique identifier for this distribution.
+    /// Returns a unique identifier for the distribution.
     fn id(&self) -> String {
         match self.version_or_url() {
             VersionOrUrl::Version(version) => {
@@ -22,6 +29,17 @@ pub trait DistributionIdentifier {
             VersionOrUrl::Url(url) => puffin_cache::digest(&CanonicalUrl::new(url)),
         }
     }
+}
+
+pub trait RemoteDistribution {
+    /// Return an appropriate filename for the distribution.
+    fn filename(&self) -> Result<&str>;
+
+    /// Return the size of the distribution, if known.
+    fn size(&self) -> Option<usize>;
+
+    /// Return a unique resource identifier for the distribution.
+    fn resource(&self) -> String;
 }
 
 // Implement `Display` for all known types that implement `DistributionIdentifier`.
@@ -114,4 +132,3 @@ impl std::fmt::Display for SourceDistribution {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
-

@@ -6,6 +6,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep508_rs::Requirement;
+use puffin_distribution::{BuiltDistribution, SourceDistribution};
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
@@ -46,16 +47,32 @@ pub enum ResolveError {
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, Url),
 
-    #[error("Failed to build distribution: {filename}")]
-    RegistryDistribution {
+    #[error("Failed to fetch wheel metadata from: {filename}")]
+    RegistryBuiltDistribution {
         filename: String,
         // TODO(konstin): Gives this a proper error type
         #[source]
         err: anyhow::Error,
     },
 
-    #[error("Failed to build distribution: {url}")]
-    UrlDistribution {
+    #[error("Failed to fetch wheel metadata from: {url}")]
+    UrlBuiltDistribution {
+        url: Url,
+        // TODO(konstin): Gives this a proper error type
+        #[source]
+        err: anyhow::Error,
+    },
+
+    #[error("Failed to build distribution: {filename}")]
+    RegistrySourceDistribution {
+        filename: String,
+        // TODO(konstin): Gives this a proper error type
+        #[source]
+        err: anyhow::Error,
+    },
+
+    #[error("Failed to build distribution from URL: {url}")]
+    UrlSourceDistribution {
         url: Url,
         // TODO(konstin): Gives this a proper error type
         #[source]
@@ -91,5 +108,37 @@ impl std::fmt::Display for RichPubGrubError {
 impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
     fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
         ResolveError::PubGrub(RichPubGrubError { source: value })
+    }
+}
+
+impl ResolveError {
+    pub fn from_source_distribution(distribution: SourceDistribution, err: anyhow::Error) -> Self {
+        match distribution {
+            SourceDistribution::Registry(sdist) => Self::RegistrySourceDistribution {
+                filename: sdist.file.filename.clone(),
+                err,
+            },
+            SourceDistribution::DirectUrl(sdist) => Self::UrlSourceDistribution {
+                url: sdist.url.clone(),
+                err,
+            },
+            SourceDistribution::Git(sdist) => Self::UrlSourceDistribution {
+                url: sdist.url.clone(),
+                err,
+            },
+        }
+    }
+
+    pub fn from_built_distribution(distribution: BuiltDistribution, err: anyhow::Error) -> Self {
+        match distribution {
+            BuiltDistribution::Registry(wheel) => Self::RegistryBuiltDistribution {
+                filename: wheel.file.filename.clone(),
+                err,
+            },
+            BuiltDistribution::DirectUrl(wheel) => Self::UrlBuiltDistribution {
+                url: wheel.url.clone(),
+                err,
+            },
+        }
     }
 }

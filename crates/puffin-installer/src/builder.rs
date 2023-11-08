@@ -8,7 +8,7 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use tracing::debug;
 
-use puffin_distribution::{BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution};
+use puffin_distribution::{Distribution, DistributionIdentifier, RemoteDistribution};
 use puffin_traits::BuildContext;
 
 use crate::downloader::{DiskWheel, SourceDistributionDownload, WheelDownload};
@@ -45,12 +45,8 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
     ) -> Result<Vec<WheelDownload>> {
         // Sort the distributions by size.
         let mut distributions = distributions;
-        distributions.sort_unstable_by_key(|distribution| match &distribution.remote {
-            Distribution::Built(BuiltDistribution::Registry(wheel)) => Reverse(wheel.file.size),
-            Distribution::Built(BuiltDistribution::DirectUrl(_)) => Reverse(usize::MIN),
-            Distribution::Source(SourceDistribution::Registry(sdist)) => Reverse(sdist.file.size),
-            Distribution::Source(SourceDistribution::DirectUrl(_)) => Reverse(usize::MIN),
-            Distribution::Source(SourceDistribution::Git(_)) => Reverse(usize::MIN),
+        distributions.sort_unstable_by_key(|distribution| {
+            Reverse(distribution.remote.size().unwrap_or(usize::MAX))
         });
 
         // Build the distributions serially.

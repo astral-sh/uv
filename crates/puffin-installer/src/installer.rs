@@ -47,7 +47,12 @@ impl<'a> Installer<'a> {
                 install_wheel_rs::linker::install_wheel(
                     &location,
                     wheel.path(),
-                    wheel.direct_url()?.as_ref().map(pypi_types::DirectUrl::try_from).transpose()?.as_ref(),
+                    wheel
+                        .direct_url()?
+                        .as_ref()
+                        .map(pypi_types::DirectUrl::try_from)
+                        .transpose()?
+                        .as_ref(),
                     self.link_mode,
                 )
                 .with_context(|| format!("Failed to install: {wheel}"))?;

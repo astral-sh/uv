@@ -10,9 +10,9 @@ use tracing::debug;
 use url::Url;
 
 use puffin_client::RegistryClient;
-use puffin_distribution::source::{DirectArchiveUrl, DirectGitUrl};
+use puffin_distribution::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use puffin_distribution::{
-    BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution,
+    BuiltDistribution, Distribution, RemoteDistribution, SourceDistribution,
 };
 use puffin_git::GitSource;
 
@@ -60,12 +60,8 @@ impl<'a> Downloader<'a> {
     pub async fn download(&self, distributions: Vec<Distribution>) -> Result<Vec<Download>> {
         // Sort the distributions by size.
         let mut distributions = distributions;
-        distributions.sort_unstable_by_key(|distribution| match distribution {
-            Distribution::Built(BuiltDistribution::Registry(wheel)) => Reverse(wheel.file.size),
-            Distribution::Built(BuiltDistribution::DirectUrl(_)) => Reverse(usize::MIN),
-            Distribution::Source(SourceDistribution::Registry(sdist)) => Reverse(sdist.file.size),
-            Distribution::Source(SourceDistribution::DirectUrl(_)) => Reverse(usize::MIN),
-            Distribution::Source(SourceDistribution::Git(_)) => Reverse(usize::MIN),
+        distributions.sort_unstable_by_key(|distribution| {
+            Reverse(distribution.size().unwrap_or(usize::MAX))
         });
 
         // Fetch the distributions in parallel.
@@ -112,8 +108,7 @@ async fn fetch_distribution(
     cache: PathBuf,
     locks: Arc<Locks>,
 ) -> Result<Download> {
-    let url = distribution.url()?;
-    let lock = locks.acquire(&url).await;
+    let lock = locks.acquire(&distribution).await;
     let _guard = lock.lock().await;
 
     match &distribution {
@@ -129,8 +124,8 @@ async fn fetch_distribution(
 
                 // Download the wheel to a temporary file.
                 let temp_dir = tempfile::tempdir_in(cache)?.into_path();
-                let wheel_filename = distribution.filename()?;
-                let wheel_file = temp_dir.join(wheel_filename.as_ref());
+                let wheel_filename = &wheel.file.filename;
+                let wheel_file = temp_dir.join(wheel_filename);
                 let mut writer = tokio::fs::File::create(&wheel_file).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
@@ -161,8 +156,8 @@ async fn fetch_distribution(
 
             // Download the wheel to a temporary file.
             let temp_dir = tempfile::tempdir_in(cache)?.into_path();
-            let wheel_filename = distribution.filename()?;
-            let wheel_file = temp_dir.join(wheel_filename.as_ref());
+            let wheel_filename = wheel.filename()?;
+            let wheel_file = temp_dir.join(wheel_filename);
             let mut writer = tokio::fs::File::create(&wheel_file).await?;
             tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
@@ -178,15 +173,15 @@ async fn fetch_distribution(
                 &sdist.file.url
             );
 
-            let reader = client.stream_external(&sdist.file.url).await?;
-            let mut reader = tokio::io::BufReader::new(reader.compat());
+            let url = Url::parse(&sdist.file.url)?;
+            let reader = client.stream_external(&url).await?;
 
             // Download the source distribution.
             let temp_dir = tempfile::tempdir_in(cache)?.into_path();
-            let sdist_filename = distribution.filename()?;
-            let sdist_file = temp_dir.join(sdist_filename.as_ref());
+            let sdist_filename = sdist.filename()?;
+            let sdist_file = temp_dir.join(sdist_filename);
             let mut writer = tokio::fs::File::create(&sdist_file).await?;
-            tokio::io::copy(&mut reader, &mut writer).await?;
+            tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
             Ok(Download::SourceDistribution(SourceDistributionDownload {
                 remote: distribution,
@@ -205,8 +200,8 @@ async fn fetch_distribution(
 
             // Download the source distribution.
             let temp_dir = tempfile::tempdir_in(cache)?.into_path();
-            let sdist_filename = distribution.filename()?;
-            let sdist_file = temp_dir.join(sdist_filename.as_ref());
+            let sdist_filename = sdist.filename()?;
+            let sdist_file = temp_dir.join(sdist_filename);
             let mut writer = tokio::fs::File::create(&sdist_file).await?;
             tokio::io::copy(&mut reader, &mut writer).await?;
 
@@ -218,7 +213,7 @@ async fn fetch_distribution(
         }
 
         Distribution::Source(SourceDistribution::Git(sdist)) => {
-            debug!("Fetching source distribution from Git: {git}");
+            debug!("Fetching source distribution from Git: {}", sdist.url);
 
             let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(&sdist.url)?;
 
@@ -301,8 +296,8 @@ pub enum Download {
 impl std::fmt::Display for Download {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Download::Wheel(wheel) => write!(f, "{}", wheel),
-            Download::SourceDistribution(sdist) => write!(f, "{}", sdist),
+            Download::Wheel(wheel) => write!(f, "{wheel}"),
+            Download::SourceDistribution(sdist) => write!(f, "{sdist}"),
         }
     }
 }

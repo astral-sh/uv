@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use pep508_rs::{Requirement, VersionOrUrl};
+use puffin_distribution::direct_url::DirectUrl;
 use puffin_distribution::{CachedDistribution, InstalledDistribution};
-use puffin_distribution::source::DirectUrl;
 use puffin_interpreter::Virtualenv;
 
 use crate::url_index::UrlIndex;
@@ -64,7 +64,8 @@ impl InstallPlan {
                     Some(VersionOrUrl::Url(url)) => {
                         if let InstalledDistribution::Url(distribution) = &distribution {
                             if let Ok(direct_url) = DirectUrl::try_from(url) {
-                                if let Ok(direct_url) = pypi_types::DirectUrl::try_from(&direct_url) {
+                                if let Ok(direct_url) = pypi_types::DirectUrl::try_from(&direct_url)
+                                {
                                     // TODO(charlie): These don't need to be strictly equal. We only care
                                     // about a subset of the fields.
                                     if direct_url == distribution.url {

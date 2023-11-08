@@ -13,7 +13,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_distribution::AnyDistribution;
+use puffin_distribution::{AnyDistribution, DistributionIdentifier};
 use puffin_installer::{Builder, InstallPlan};
 use puffin_interpreter::Virtualenv;
 

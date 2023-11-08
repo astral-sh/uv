@@ -4,7 +4,6 @@ use anyhow::{Context, Error, Result};
 use url::Url;
 
 use puffin_git::GitUrl;
-use crate::Distribution;
 
 #[derive(Debug)]
 pub enum DirectUrl {
@@ -114,5 +113,71 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
             },
             subdirectory: value.subdirectory.clone(),
         })
+    }
+}
+
+impl From<DirectUrl> for Url {
+    fn from(value: DirectUrl) -> Self {
+        match value {
+            DirectUrl::Git(value) => value.into(),
+            DirectUrl::Archive(value) => value.into(),
+        }
+    }
+}
+
+impl From<DirectArchiveUrl> for Url {
+    fn from(value: DirectArchiveUrl) -> Self {
+        let mut url = value.url;
+        if let Some(subdirectory) = value.subdirectory {
+            url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+        }
+        url
+    }
+}
+
+impl From<DirectGitUrl> for Url {
+    fn from(value: DirectGitUrl) -> Self {
+        let mut url = Url::parse(&format!("{}{}", "git+", Url::from(value.url).as_str()))
+            .expect("Git URL is invalid");
+        if let Some(subdirectory) = value.subdirectory {
+            url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+        }
+        url
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use url::Url;
+
+    use crate::direct_url::DirectUrl;
+
+    #[test]
+    fn direct_url_from_url() -> Result<()> {
+        let expected = Url::parse("git+https://github.com/pallets/flask.git")?;
+        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        assert_eq!(expected, actual);
+
+        let expected = Url::parse("git+https://github.com/pallets/flask.git#subdirectory=pkg_dir")?;
+        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        assert_eq!(expected, actual);
+
+        let expected = Url::parse("git+https://github.com/pallets/flask.git@2.0.0")?;
+        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        assert_eq!(expected, actual);
+
+        let expected =
+            Url::parse("git+https://github.com/pallets/flask.git@2.0.0#subdirectory=pkg_dir")?;
+        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        assert_eq!(expected, actual);
+
+        // TODO(charlie): Preserve other fragments.
+        let expected =
+            Url::parse("git+https://github.com/pallets/flask.git#egg=flask&subdirectory=pkg_dir")?;
+        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        assert_ne!(expected, actual);
+
+        Ok(())
     }
 }

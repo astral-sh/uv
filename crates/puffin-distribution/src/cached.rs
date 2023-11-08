@@ -9,7 +9,7 @@ use crate::{BuiltDistribution, Distribution, SourceDistribution, VersionOrUrl};
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
 
-use crate::source::DirectUrl;
+use crate::direct_url::DirectUrl;
 
 /// A built distribution (wheel) that exists in a local cache.
 #[derive(Debug, Clone)]
@@ -74,31 +74,41 @@ impl CachedDistribution {
     /// Initialize a [`CachedDistribution`] from a [`Distribution`].
     pub fn from_remote(remote: Distribution, path: PathBuf) -> Self {
         match remote {
-            Distribution::Built(BuiltDistribution::Registry(dist)) => Self::Registry(CachedRegistryDistribution {
-                name: dist.name,
-                version: dist.version,
-                path,
-            }),
-            Distribution::Built(BuiltDistribution::DirectUrl(dist)) => Self::Url(CachedDirectUrlDistribution {
-                name: dist.name,
-                url: dist.url,
-                path,
-            }),
-            Distribution::Source(SourceDistribution::Registry(dist)) => Self::Registry(CachedRegistryDistribution {
-                name: dist.name,
-                version: dist.version,
-                path,
-            }),
-            Distribution::Source(SourceDistribution::DirectUrl(dist)) => Self::Url(CachedDirectUrlDistribution {
-                name: dist.name,
-                url: dist.url,
-                path,
-            }),
-            Distribution::Source(SourceDistribution::Git(dist)) => Self::Url(CachedDirectUrlDistribution {
-                name: dist.name,
-                url: dist.url,
-                path,
-            }),
+            Distribution::Built(BuiltDistribution::Registry(dist)) => {
+                Self::Registry(CachedRegistryDistribution {
+                    name: dist.name,
+                    version: dist.version,
+                    path,
+                })
+            }
+            Distribution::Built(BuiltDistribution::DirectUrl(dist)) => {
+                Self::Url(CachedDirectUrlDistribution {
+                    name: dist.name,
+                    url: dist.url,
+                    path,
+                })
+            }
+            Distribution::Source(SourceDistribution::Registry(dist)) => {
+                Self::Registry(CachedRegistryDistribution {
+                    name: dist.name,
+                    version: dist.version,
+                    path,
+                })
+            }
+            Distribution::Source(SourceDistribution::DirectUrl(dist)) => {
+                Self::Url(CachedDirectUrlDistribution {
+                    name: dist.name,
+                    url: dist.url,
+                    path,
+                })
+            }
+            Distribution::Source(SourceDistribution::Git(dist)) => {
+                Self::Url(CachedDirectUrlDistribution {
+                    name: dist.name,
+                    url: dist.url,
+                    path,
+                })
+            }
         }
     }
 
