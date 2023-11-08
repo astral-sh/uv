@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
-use pubgrub::report::Reporter;
+
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -17,7 +17,7 @@ use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionFailureReporter, ResolutionMode};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode};
 use std::str::FromStr;
 
 use crate::commands::reporters::ResolverReporter;
@@ -149,14 +149,11 @@ pub(crate) async fn pip_compile(
     )
     .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
-        Err(puffin_resolver::ResolveError::PubGrub(pubgrub::error::PubGrubError::NoSolution(
-            derivation_tree,
-        ))) => {
+        Err(puffin_resolver::ResolveError::PubGrub(err)) => {
             #[allow(clippy::print_stderr)]
             {
-                let report =
-                    miette::Report::msg(ResolutionFailureReporter::report(&derivation_tree))
-                        .context("No solution found when resolving dependencies:");
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
                 eprint!("{report:?}");
             }
             return Ok(ExitStatus::Failure);
