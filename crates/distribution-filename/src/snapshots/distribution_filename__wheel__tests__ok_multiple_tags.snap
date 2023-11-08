@@ -1,0 +1,39 @@
+---
+source: crates/distribution-filename/src/wheel.rs
+expression: "WheelFilename::from_str(\"foo-1.2.3-ab.cd.ef-gh-ij.kl.mn.op.qr.st.whl\")"
+---
+Ok(
+    WheelFilename {
+        distribution: PackageName(
+            "foo",
+        ),
+        version: Version {
+            epoch: 0,
+            release: [
+                1,
+                2,
+                3,
+            ],
+            pre: None,
+            post: None,
+            dev: None,
+            local: None,
+        },
+        python_tag: [
+            "ab",
+            "cd",
+            "ef",
+        ],
+        abi_tag: [
+            "gh",
+        ],
+        platform_tag: [
+            "ij",
+            "kl",
+            "mn",
+            "op",
+            "qr",
+            "st",
+        ],
+    },
+)

@@ -39,12 +39,9 @@ impl FromStr for WheelFilename {
         // if this is a problem in practice.
         let mut parts = basename.split('-');
 
-        let Some(distribution) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a distribution name".to_string(),
-            ));
-        };
+        let distribution = parts
+            .next()
+            .expect("split always yields 1 or more elements");
 
         let Some(version) = parts.next() else {
             return Err(WheelFilenameError::InvalidWheelFileName(
@@ -175,4 +172,76 @@ pub enum WheelFilenameError {
     InvalidVersion(String, String),
     #[error("The wheel filename \"{0}\" has an invalid package name")]
     InvalidPackageName(String, InvalidNameError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn err_not_whl_extension() {
+        let err = WheelFilename::from_str("foo.rs").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo.rs" is invalid: Must end with .whl"###);
+    }
+
+    #[test]
+    fn err_1_part_empty() {
+        let err = WheelFilename::from_str(".whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename ".whl" is invalid: Must have a version"###);
+    }
+
+    #[test]
+    fn err_1_part_no_version() {
+        let err = WheelFilename::from_str("foo.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo.whl" is invalid: Must have a version"###);
+    }
+
+    #[test]
+    fn err_2_part_no_pythontag() {
+        let err = WheelFilename::from_str("foo-version.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version.whl" is invalid: Must have a Python tag"###);
+    }
+
+    #[test]
+    fn err_3_part_no_abitag() {
+        let err = WheelFilename::from_str("foo-version-python.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version-python.whl" is invalid: Must have an ABI tag"###);
+    }
+
+    #[test]
+    fn err_4_part_no_platformtag() {
+        let err = WheelFilename::from_str("foo-version-python-abi.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version-python-abi.whl" is invalid: Must have a platform tag"###);
+    }
+
+    #[test]
+    fn err_invalid_package_name() {
+        let err = WheelFilename::from_str("f!oo-1.2.3-python-abi-platform.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "f!oo-1.2.3-python-abi-platform.whl" has an invalid package name"###);
+    }
+
+    #[test]
+    fn err_invalid_version() {
+        let err = WheelFilename::from_str("foo-x.y.z-python-abi-platform.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: Version `x.y.z` doesn't match PEP 440 rules"###);
+    }
+
+    #[test]
+    fn ok_single_tags() {
+        insta::assert_debug_snapshot!(WheelFilename::from_str("foo-1.2.3-foo-bar-baz.whl"));
+    }
+
+    #[test]
+    fn ok_multiple_tags() {
+        insta::assert_debug_snapshot!(WheelFilename::from_str(
+            "foo-1.2.3-ab.cd.ef-gh-ij.kl.mn.op.qr.st.whl"
+        ));
+    }
+
+    #[test]
+    fn ok_build_tag() {
+        insta::assert_debug_snapshot!(WheelFilename::from_str(
+            "foo-1.2.3-build-python-abi-platform.whl"
+        ));
+    }
 }

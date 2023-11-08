@@ -857,6 +857,7 @@ dependencies = [
 name = "distribution-filename"
 version = "0.0.1"
 dependencies = [
+ "insta",
  "pep440_rs 0.3.12",
  "platform-tags",
  "puffin-normalize",
