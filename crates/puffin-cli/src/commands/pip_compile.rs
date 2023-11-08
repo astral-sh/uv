@@ -1,13 +1,14 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
+use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{anyhow, Result};
 use colored::Colorize;
 use fs_err::File;
 use itertools::Itertools;
-
 use tracing::debug;
 
 use pep508_rs::Requirement;
@@ -18,12 +19,12 @@ use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode};
-use std::str::FromStr;
 
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
+use crate::python_version::PythonVersion;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -40,6 +41,7 @@ pub(crate) async fn pip_compile(
     upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
     no_build: bool,
+    target_version: Option<PythonVersion>,
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -118,6 +120,12 @@ pub(crate) async fn pip_compile(
         venv.interpreter_info().simple_version(),
     )?;
 
+    // Determine the markers to use for resolution.
+    let markers = target_version.map_or_else(
+        || Cow::Borrowed(venv.interpreter_info().markers()),
+        |target_version| Cow::Owned(target_version.markers(venv.interpreter_info().markers())),
+    );
+
     // Instantiate a client.
     let client = {
         let mut builder = RegistryClientBuilder::default();
@@ -142,14 +150,9 @@ pub(crate) async fn pip_compile(
     );
 
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(
-        manifest,
-        venv.interpreter_info().markers(),
-        &tags,
-        &client,
-        &build_dispatch,
-    )
-    .with_reporter(ResolverReporter::from(printer));
+    let resolver =
+        puffin_resolver::Resolver::new(manifest, &markers, &tags, &client, &build_dispatch)
+            .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(err)) => {
             #[allow(clippy::print_stderr)]
