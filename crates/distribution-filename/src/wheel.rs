@@ -73,6 +73,12 @@ impl FromStr for WheelFilename {
 
         let (distribution, version, python_tag, abi_tag, platform_tag) =
             if let Some(platform_tag) = parts.next() {
+                if parts.next().is_some() {
+                    return Err(WheelFilenameError::InvalidWheelFileName(
+                        filename.to_string(),
+                        "Must have 5 or 6 components, but has more".to_string(),
+                    ));
+                }
                 (
                     distribution,
                     version,
@@ -212,6 +218,13 @@ mod tests {
     fn err_4_part_no_platformtag() {
         let err = WheelFilename::from_str("foo-version-python-abi.whl").unwrap_err();
         insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version-python-abi.whl" is invalid: Must have a platform tag"###);
+    }
+
+    #[test]
+    fn err_too_many_parts() {
+        let err =
+            WheelFilename::from_str("foo-1.2.3-build-python-abi-platform-oops.whl").unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-1.2.3-build-python-abi-platform-oops.whl" is invalid: Must have 5 or 6 components, but has more"###);
     }
 
     #[test]
