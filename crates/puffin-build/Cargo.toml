@@ -21,7 +21,9 @@ anyhow = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
+once_cell = { workspace = true }
 pyproject-toml = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tar = { workspace = true }
@@ -32,3 +34,6 @@ toml = { workspace = true }
 tracing = { workspace = true }
 which = { workspace = true}
 zip = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.34.0" }

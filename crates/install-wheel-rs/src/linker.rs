@@ -61,7 +61,7 @@ pub fn install_wheel(
     let wheel_file_path = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
-    let wheel_text = std::fs::read_to_string(&wheel_file_path)?;
+    let wheel_text = std::fs::read_to_string(wheel_file_path)?;
     parse_wheel_version(&wheel_text)?;
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).

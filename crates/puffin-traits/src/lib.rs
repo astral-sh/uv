@@ -81,10 +81,13 @@ pub trait BuildContext {
     /// Build a source distribution into a wheel from an archive.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
+    ///
+    /// `package_id` is for error reporting only.
     fn build_source<'a>(
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
+        package_id: &'a str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
 }

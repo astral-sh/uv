@@ -91,9 +91,12 @@ impl BuildContext for BuildDispatch {
                 &self.client,
                 self,
             );
-            let resolution_graph = resolver.resolve().await.context(
-                "No solution found when resolving build dependencies for source distribution:",
-            )?;
+            let resolution_graph = resolver.resolve().await.with_context(|| {
+                format!(
+                    "No solution found when resolving build dependencies for source distribution: {}",
+                    requirements.iter().map(ToString::to_string).join(", "),
+                )
+            })?;
             Ok(resolution_graph.requirements())
         })
     }
@@ -236,6 +239,7 @@ impl BuildContext for BuildDispatch {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
+        package_id: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
             if self.no_build {
@@ -247,6 +251,7 @@ impl BuildContext for BuildDispatch {
                 &self.interpreter_info,
                 self,
                 self.source_build_context.clone(),
+                package_id,
             )
             .await?;
             Ok(builder.build(wheel_dir)?)
