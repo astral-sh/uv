@@ -125,15 +125,7 @@ impl Display for WheelFilename {
 impl WheelFilename {
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
-        for tag in compatible_tags.iter() {
-            if self.python_tag.contains(&tag.0)
-                && self.abi_tag.contains(&tag.1)
-                && self.platform_tag.contains(&tag.2)
-            {
-                return true;
-            }
-        }
-        false
+        compatible_tags.is_compatible(&self.python_tag, &self.abi_tag, &self.platform_tag)
     }
 
     /// Get the tag for this wheel.

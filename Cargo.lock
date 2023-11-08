@@ -2142,6 +2142,7 @@ dependencies = [
 name = "platform-tags"
 version = "0.0.1"
 dependencies = [
+ "fxhash",
  "platform-host",
 ]
 
