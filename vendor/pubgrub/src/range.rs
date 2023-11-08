@@ -195,7 +195,7 @@ impl<V: Ord> Range<V> {
                 .segments
                 .last()
                 .expect("if there is a first element, there must be a last element");
-            (bound_as_ref(start), bound_as_ref(&end.1))
+            (start.as_ref(), end.1.as_ref())
         })
     }
 
@@ -264,15 +264,6 @@ impl<V: Ord> Range<V> {
     }
 }
 
-/// Implementation of [`Bound::as_ref`] which is currently marked as unstable.
-fn bound_as_ref<V>(bound: &Bound<V>) -> Bound<&V> {
-    match bound {
-        Included(v) => Included(v),
-        Excluded(v) => Excluded(v),
-        Unbounded => Unbounded,
-    }
-}
-
 fn valid_segment<T: PartialOrd>(start: &Bound<T>, end: &Bound<T>) -> bool {
     match (start, end) {
         (Included(s), Included(e)) => s <= e,
@@ -307,7 +298,7 @@ impl<V: Ord + Clone> Range<V> {
 
                 (Included(i), Excluded(e)) | (Excluded(e), Included(i)) if i <= e => Excluded(e),
                 (Included(i), Excluded(e)) | (Excluded(e), Included(i)) if e < i => Included(i),
-                (s, Unbounded) | (Unbounded, s) => bound_as_ref(s),
+                (s, Unbounded) | (Unbounded, s) => s.as_ref(),
                 _ => unreachable!(),
             }
             .cloned();
@@ -317,7 +308,7 @@ impl<V: Ord + Clone> Range<V> {
 
                 (Included(i), Excluded(e)) | (Excluded(e), Included(i)) if i >= e => Excluded(e),
                 (Included(i), Excluded(e)) | (Excluded(e), Included(i)) if e > i => Included(i),
-                (s, Unbounded) | (Unbounded, s) => bound_as_ref(s),
+                (s, Unbounded) | (Unbounded, s) => s.as_ref(),
                 _ => unreachable!(),
             }
             .cloned();
@@ -373,7 +364,7 @@ impl<V: Display + Eq> Display for Range<V> {
         } else {
             for (idx, segment) in self.segments.iter().enumerate() {
                 if idx > 0 {
-                    write!(f, ", ")?;
+                    write!(f, " | ")?;
                 }
                 match segment {
                     (Unbounded, Unbounded) => write!(f, "*")?,
@@ -382,9 +373,9 @@ impl<V: Display + Eq> Display for Range<V> {
                     (Included(v), Unbounded) => write!(f, ">={v}")?,
                     (Included(v), Included(b)) => {
                         if v == b {
-                            write!(f, "=={v}")?
+                            write!(f, "{v}")?
                         } else {
-                            write!(f, ">={v},<={b}")?
+                            write!(f, ">={v}, <={b}")?
                         }
                     }
                     (Included(v), Excluded(b)) => write!(f, ">={v}, <{b}")?,
