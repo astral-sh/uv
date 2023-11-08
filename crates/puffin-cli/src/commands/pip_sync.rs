@@ -30,6 +30,7 @@ pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     link_mode: LinkMode,
     index_urls: Option<IndexUrls>,
+    no_build: bool,
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -46,7 +47,15 @@ pub(crate) async fn pip_sync(
         return Ok(ExitStatus::Success);
     }
 
-    sync_requirements(&requirements, link_mode, index_urls, cache, printer).await
+    sync_requirements(
+        &requirements,
+        link_mode,
+        index_urls,
+        no_build,
+        cache,
+        printer,
+    )
+    .await
 }
 
 /// Install a set of locked requirements into the current Python environment.
@@ -54,6 +63,7 @@ pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     link_mode: LinkMode,
     index_urls: Option<IndexUrls>,
+    no_build: bool,
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -145,7 +155,8 @@ pub(crate) async fn sync_requirements(
         let start = std::time::Instant::now();
 
         let downloader = puffin_installer::Downloader::new(&client, cache)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64))
+            .with_no_build(no_build);
 
         let downloads = downloader
             .download(remote)
@@ -186,6 +197,7 @@ pub(crate) async fn sync_requirements(
             cache.to_path_buf(),
             venv.interpreter_info().clone(),
             fs::canonicalize(venv.python_executable())?,
+            no_build,
         );
 
         let builder = Builder::new(&build_dispatch)

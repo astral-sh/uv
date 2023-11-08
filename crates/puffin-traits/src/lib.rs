@@ -57,6 +57,13 @@ pub trait BuildContext {
     /// The system (or conda) python interpreter to create venvs.
     fn base_python(&self) -> &Path;
 
+    /// Whether source distribution building is disabled. This [`BuildContext::build_source`] calls
+    /// will fail in this case. This method exists to avoid fetching source distributions if we know
+    /// we can't build them
+    fn no_build(&self) -> bool {
+        false
+    }
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
         &'a self,

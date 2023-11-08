@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use bytesize::ByteSize;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -23,6 +23,8 @@ pub struct Downloader<'a> {
     cache: &'a Path,
     locks: Arc<Locks>,
     reporter: Option<Box<dyn Reporter>>,
+    /// Block building source distributions by not downloading them
+    no_build: bool,
 }
 
 impl<'a> Downloader<'a> {
@@ -33,6 +35,7 @@ impl<'a> Downloader<'a> {
             cache,
             locks: Arc::new(Locks::default()),
             reporter: None,
+            no_build: false,
         }
     }
 
@@ -43,6 +46,12 @@ impl<'a> Downloader<'a> {
             reporter: Some(Box::new(reporter)),
             ..self
         }
+    }
+
+    /// Optionally, block downloading source distributions
+    #[must_use]
+    pub fn with_no_build(self, no_build: bool) -> Self {
+        Self { no_build, ..self }
     }
 
     /// Download a set of distributions.
@@ -58,6 +67,13 @@ impl<'a> Downloader<'a> {
         let mut fetches = JoinSet::new();
         let mut downloads = Vec::with_capacity(distributions.len());
         for distribution in distributions {
+            if self.no_build && !distribution.is_wheel() {
+                bail!(
+                    "Building source distributions is disabled, not downloading {}",
+                    distribution
+                );
+            }
+
             fetches.spawn(fetch_distribution(
                 distribution.clone(),
                 self.client.clone(),

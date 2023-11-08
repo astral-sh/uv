@@ -68,6 +68,7 @@ enum Commands {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     #[clap(required(true))]
@@ -110,6 +111,11 @@ struct PipCompileArgs {
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[clap(long)]
     upgrade: bool,
+
+    /// Don't build source distributions. This means resolving will not run arbitrary code. The
+    /// cached wheels of already built source distributions will be reused.
+    #[clap(long)]
+    no_build: bool,
 }
 
 #[derive(Args)]
@@ -133,6 +139,11 @@ struct PipSyncArgs {
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Don't build source distributions. This means resolving will not run arbitrary code. The
+    /// cached wheels of already built source distributions will be reused.
+    #[clap(long)]
+    no_build: bool,
 }
 
 #[derive(Args)]
@@ -237,6 +248,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.prerelease.unwrap_or_default(),
                 args.upgrade.into(),
                 index_urls,
+                args.no_build,
                 &cache_dir,
                 printer,
             )
@@ -254,6 +266,7 @@ async fn inner() -> Result<ExitStatus> {
                 &sources,
                 args.link_mode.unwrap_or_default(),
                 index_urls,
+                args.no_build,
                 &cache_dir,
                 printer,
             )

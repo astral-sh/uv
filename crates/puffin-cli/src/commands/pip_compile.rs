@@ -39,6 +39,7 @@ pub(crate) async fn pip_compile(
     prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
+    no_build: bool,
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -137,6 +138,7 @@ pub(crate) async fn pip_compile(
         cache.to_path_buf(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
+        no_build,
     );
 
     // Resolve the dependencies.
