@@ -155,7 +155,8 @@ pub(crate) async fn sync_requirements(
         let start = std::time::Instant::now();
 
         let downloader = puffin_installer::Downloader::new(&client, cache)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64))
+            .with_no_build(no_build);
 
         let downloads = downloader
             .download(remote)

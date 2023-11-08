@@ -148,6 +148,7 @@ impl BuildContext for BuildDispatch {
                     remote.iter().map(ToString::to_string).join(", ")
                 );
                 Downloader::new(&self.client, &self.cache)
+                    .with_no_build(self.no_build)
                     .download(remote)
                     .await
                     .context("Failed to download build dependencies")?
