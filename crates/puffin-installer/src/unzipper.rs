@@ -8,10 +8,10 @@ use rayon::iter::ParallelIterator;
 use tracing::debug;
 use zip::ZipArchive;
 
-use puffin_distribution::{CachedDistribution, RemoteDistribution};
+use puffin_distribution::{BuiltDistribution, CachedDistribution, DistributionIdentifier};
 
 use crate::cache::WheelCache;
-use crate::downloader::Wheel;
+use crate::downloader::WheelDownload;
 use crate::vendor::{CloneableSeekableReader, HasLength};
 
 #[derive(Default)]
@@ -31,7 +31,7 @@ impl Unzipper {
     /// Unzip a set of downloaded wheels.
     pub async fn unzip(
         &self,
-        downloads: Vec<Wheel>,
+        downloads: Vec<WheelDownload>,
         target: &Path,
     ) -> Result<Vec<CachedDistribution>> {
         // Create the wheel cache subdirectory, if necessary.
@@ -41,8 +41,8 @@ impl Unzipper {
         // Sort the wheels by size.
         let mut downloads = downloads;
         downloads.sort_unstable_by_key(|wheel| match wheel {
-            Wheel::Disk(_) => Reverse(usize::MIN),
-            Wheel::InMemory(wheel) => Reverse(wheel.buffer.len()),
+            WheelDownload::Disk(_) => Reverse(usize::MIN),
+            WheelDownload::InMemory(wheel) => Reverse(wheel.buffer.len()),
         });
 
         let staging = tempfile::tempdir_in(wheel_cache.root())?;
@@ -93,10 +93,10 @@ impl Unzipper {
 }
 
 /// Unzip a wheel into the target directory.
-fn unzip_wheel(wheel: Wheel, target: &Path) -> Result<()> {
+fn unzip_wheel(wheel: WheelDownload, target: &Path) -> Result<()> {
     match wheel {
-        Wheel::InMemory(wheel) => unzip_archive(std::io::Cursor::new(wheel.buffer), target),
-        Wheel::Disk(wheel) => unzip_archive(fs_err::File::open(wheel.path)?, target),
+        WheelDownload::InMemory(wheel) => unzip_archive(std::io::Cursor::new(wheel.buffer), target),
+        WheelDownload::Disk(wheel) => unzip_archive(fs_err::File::open(wheel.path)?, target),
     }
 }
 
@@ -148,7 +148,7 @@ fn unzip_archive<R: Send + Read + Seek + HasLength>(reader: R, target: &Path) ->
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is unzipped.
-    fn on_unzip_progress(&self, wheel: &RemoteDistribution);
+    fn on_unzip_progress(&self, wheel: &BuiltDistribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_unzip_complete(&self);

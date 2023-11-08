@@ -11,7 +11,9 @@ use url::Url;
 
 use puffin_client::RegistryClient;
 use puffin_distribution::source::Source;
-use puffin_distribution::{RemoteDistribution, RemoteDistributionRef};
+use puffin_distribution::{
+    BuiltDistribution, Distribution, DistributionIdentifier, SourceDistribution,
+};
 use puffin_git::GitSource;
 
 use crate::locks::Locks;
@@ -55,12 +57,12 @@ impl<'a> Downloader<'a> {
     }
 
     /// Download a set of distributions.
-    pub async fn download(&self, distributions: Vec<RemoteDistribution>) -> Result<Vec<Download>> {
+    pub async fn download(&self, distributions: Vec<Distribution>) -> Result<Vec<Download>> {
         // Sort the distributions by size.
         let mut distributions = distributions;
         distributions.sort_unstable_by_key(|wheel| match wheel {
-            RemoteDistribution::Registry(_package, _version, file) => Reverse(file.size),
-            RemoteDistribution::Url(_, _) => Reverse(usize::MIN),
+            Distribution::Registry(_package, _version, file) => Reverse(file.size),
+            Distribution::Url(_, _) => Reverse(usize::MIN),
         });
 
         // Fetch the distributions in parallel.
@@ -102,7 +104,7 @@ impl<'a> Downloader<'a> {
 
 /// Download a built distribution (wheel) or source distribution (sdist).
 async fn fetch_distribution(
-    distribution: RemoteDistribution,
+    distribution: Distribution,
     client: RegistryClient,
     cache: PathBuf,
     locks: Arc<Locks>,
@@ -111,9 +113,70 @@ async fn fetch_distribution(
     let lock = locks.acquire(&url).await;
     let _guard = lock.lock().await;
 
+    match distribution {
+        Distribution::Built(remote @ BuiltDistribution::Registry(wheel)) => {
+            // Fetch the wheel.
+            let url = Url::parse(&wheel.file.url)?;
+            let reader = client.stream_external(&url).await?;
+
+            // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
+            let file_size = ByteSize::b(wheel.file.size as u64);
+            if file_size >= ByteSize::mb(5) {
+                debug!("Fetching disk-based wheel from registry: {distribution} ({file_size})");
+
+                // Download the wheel to a temporary file.
+                let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+                let wheel_filename = distribution.filename()?;
+                let wheel_file = temp_dir.join(wheel_filename.as_ref());
+                let mut writer = tokio::fs::File::create(&wheel_file).await?;
+                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+
+                Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
+                    remote,
+                    path: wheel_file,
+                })))
+            } else {
+                debug!("Fetching in-memory wheel from registry: {distribution} ({file_size})");
+
+                // Read into a buffer.
+                let mut buffer = Vec::with_capacity(wheel.file.size);
+                let mut reader = tokio::io::BufReader::new(reader.compat());
+                tokio::io::copy(&mut reader, &mut buffer).await?;
+
+                Ok(Download::Wheel(WheelDownload::InMemory(InMemoryWheel {
+                    remote,
+                    buffer,
+                })))
+            }
+        }
+
+        Distribution::Built(remote @ BuiltDistribution::DirectUrl(wheel)) => {
+            debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
+
+            // Fetch the wheel.
+            let reader = client.stream_external(url).await?;
+
+            // Download the wheel to a temporary file.
+            let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+            let wheel_filename = distribution.filename()?;
+            let wheel_file = temp_dir.join(wheel_filename.as_ref());
+            let mut writer = tokio::fs::File::create(&wheel_file).await?;
+            tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+
+            Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
+                remote,
+                path: wheel_file,
+            })))
+        }
+
+        Distribution::Source(remote @ SourceDistribution::DirectUrl(sdist)) => {
+            //
+        }
+    }
+
     if distribution.is_wheel() {
         match &distribution {
-            RemoteDistribution::Registry(.., file) => {
+            Distribution::Registry(.., file) => {
                 // Fetch the wheel.
                 let url = Url::parse(&file.url)?;
                 let reader = client.stream_external(&url).await?;
@@ -130,7 +193,7 @@ async fn fetch_distribution(
                     let mut writer = tokio::fs::File::create(&wheel_file).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                    Ok(Download::Wheel(Wheel::Disk(DiskWheel {
+                    Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                         remote: distribution,
                         path: wheel_file,
                     })))
@@ -142,13 +205,13 @@ async fn fetch_distribution(
                     let mut reader = tokio::io::BufReader::new(reader.compat());
                     tokio::io::copy(&mut reader, &mut buffer).await?;
 
-                    Ok(Download::Wheel(Wheel::InMemory(InMemoryWheel {
+                    Ok(Download::Wheel(WheelDownload::InMemory(InMemoryWheel {
                         remote: distribution,
                         buffer,
                     })))
                 }
             }
-            RemoteDistribution::Url(.., url) => {
+            Distribution::Url(.., url) => {
                 debug!("Fetching disk-based wheel from URL: {url}");
 
                 // Fetch the wheel.
@@ -161,7 +224,7 @@ async fn fetch_distribution(
                 let mut writer = tokio::fs::File::create(&wheel_file).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                Ok(Download::Wheel(Wheel::Disk(DiskWheel {
+                Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                     remote: distribution,
                     path: wheel_file,
                 })))
@@ -217,7 +280,7 @@ async fn fetch_distribution(
             }
         };
 
-        Ok(Download::SourceDistribution(SourceDistribution {
+        Ok(Download::SourceDistribution(SourceDistributionDownload {
             remote: distribution,
             sdist_file,
             subdirectory,
@@ -227,7 +290,7 @@ async fn fetch_distribution(
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is downloaded.
-    fn on_download_progress(&self, wheel: &RemoteDistribution);
+    fn on_download_progress(&self, wheel: &Distribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_download_complete(&self);
@@ -237,7 +300,7 @@ pub trait Reporter: Send + Sync {
 #[derive(Debug)]
 pub struct InMemoryWheel {
     /// The remote file from which this wheel was downloaded.
-    pub(crate) remote: RemoteDistribution,
+    pub(crate) remote: BuiltDistribution,
     /// The contents of the wheel.
     pub(crate) buffer: Vec<u8>,
 }
@@ -246,29 +309,29 @@ pub struct InMemoryWheel {
 #[derive(Debug)]
 pub struct DiskWheel {
     /// The remote file from which this wheel was downloaded.
-    pub(crate) remote: RemoteDistribution,
+    pub(crate) remote: BuiltDistribution,
     /// The path to the downloaded wheel.
     pub(crate) path: PathBuf,
 }
 
 /// A downloaded wheel.
 #[derive(Debug)]
-pub enum Wheel {
+pub enum WheelDownload {
     InMemory(InMemoryWheel),
     Disk(DiskWheel),
 }
 
-impl Wheel {
-    /// Return the [`RemoteDistribution`] from which this wheel was downloaded.
-    pub fn remote(&self) -> &RemoteDistribution {
+impl WheelDownload {
+    /// Return the [`Distribution`] from which this wheel was downloaded.
+    pub fn remote(&self) -> &BuiltDistribution {
         match self {
-            Wheel::InMemory(wheel) => &wheel.remote,
-            Wheel::Disk(wheel) => &wheel.remote,
+            WheelDownload::InMemory(wheel) => &wheel.remote,
+            WheelDownload::Disk(wheel) => &wheel.remote,
         }
     }
 }
 
-impl std::fmt::Display for Wheel {
+impl std::fmt::Display for WheelDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.remote())
     }
@@ -276,16 +339,16 @@ impl std::fmt::Display for Wheel {
 
 /// A downloaded source distribution.
 #[derive(Debug, Clone)]
-pub struct SourceDistribution {
+pub struct SourceDistributionDownload {
     /// The remote file from which this wheel was downloaded.
-    pub(crate) remote: RemoteDistribution,
+    pub(crate) remote: SourceDistribution,
     /// The path to the downloaded archive or directory.
     pub(crate) sdist_file: PathBuf,
     /// The subdirectory within the archive or directory.
     pub(crate) subdirectory: Option<PathBuf>,
 }
 
-impl std::fmt::Display for SourceDistribution {
+impl std::fmt::Display for SourceDistributionDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.remote)
     }
@@ -294,13 +357,13 @@ impl std::fmt::Display for SourceDistribution {
 /// A downloaded distribution, either a wheel or a source distribution.
 #[derive(Debug)]
 pub enum Download {
-    Wheel(Wheel),
-    SourceDistribution(SourceDistribution),
+    Wheel(WheelDownload),
+    SourceDistribution(SourceDistributionDownload),
 }
 
 impl Download {
-    /// Return the [`RemoteDistribution`] from which this distribution was downloaded.
-    pub fn remote(&self) -> &RemoteDistribution {
+    /// Return the [`Distribution`] from which this distribution was downloaded.
+    pub fn remote(&self) -> &Distribution {
         match self {
             Download::Wheel(distribution) => distribution.remote(),
             Download::SourceDistribution(distribution) => &distribution.remote,

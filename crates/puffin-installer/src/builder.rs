@@ -8,10 +8,10 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use tracing::debug;
 
-use puffin_distribution::RemoteDistribution;
+use puffin_distribution::Distribution;
 use puffin_traits::BuildContext;
 
-use crate::downloader::{DiskWheel, SourceDistribution, Wheel};
+use crate::downloader::{DiskWheel, SourceDistributionDownload, WheelDownload};
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
@@ -39,12 +39,15 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
     }
 
     /// Build a set of source distributions.
-    pub async fn build(&self, distributions: Vec<SourceDistribution>) -> Result<Vec<Wheel>> {
+    pub async fn build(
+        &self,
+        distributions: Vec<SourceDistributionDownload>,
+    ) -> Result<Vec<WheelDownload>> {
         // Sort the distributions by size.
         let mut distributions = distributions;
         distributions.sort_unstable_by_key(|distribution| match &distribution.remote {
-            RemoteDistribution::Registry(_package, _version, file) => Reverse(file.size),
-            RemoteDistribution::Url(_, _) => Reverse(usize::MIN),
+            Distribution::Registry(_package, _version, file) => Reverse(file.size),
+            Distribution::Url(_, _) => Reverse(usize::MIN),
         });
 
         // Build the distributions serially.
@@ -71,9 +74,9 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
 
 /// Build a source distribution into a wheel.
 async fn build_sdist<T: BuildContext + Send + Sync>(
-    distribution: SourceDistribution,
+    distribution: SourceDistributionDownload,
     build_context: &T,
-) -> Result<Wheel> {
+) -> Result<WheelDownload> {
     // Create a directory for the wheel.
     let wheel_dir = build_context
         .cache()
@@ -95,7 +98,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
         .await?;
     let wheel_filename = wheel_dir.join(disk_filename);
 
-    Ok(Wheel::Disk(DiskWheel {
+    Ok(WheelDownload::Disk(DiskWheel {
         remote: distribution.remote,
         path: wheel_filename,
     }))
@@ -103,7 +106,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution is built.
-    fn on_progress(&self, wheel: &RemoteDistribution);
+    fn on_progress(&self, wheel: &Distribution);
 
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);

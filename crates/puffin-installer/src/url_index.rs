@@ -4,7 +4,10 @@ use fxhash::FxHashMap;
 use tracing::warn;
 use url::Url;
 
-use puffin_distribution::{CachedDistribution, RemoteDistributionRef};
+use puffin_distribution::{
+    CachedDistribution, CachedDirectUrlDistribution, DirectUrlBuiltDistribution,
+    DistributionIdentifier, RemoteDistributionRef,
+};
 use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
@@ -49,13 +52,20 @@ impl UrlIndex {
     }
 
     /// Returns a distribution from the index, if it exists.
-    pub(crate) fn get(&self, name: &PackageName, url: &Url) -> Option<CachedDistribution> {
-        let distribution = RemoteDistributionRef::from_url(name, url);
+    pub(crate) fn get(
+        &self,
+        name: &PackageName,
+        url: &Url,
+    ) -> Option<CachedDirectUrlDistribution> {
+        let distribution = DirectUrlBuiltDistribution {
+            name: name.clone(),
+            url: url.clone(),
+        };
         let path = self.0.get(&distribution.id())?;
-        Some(CachedDistribution::Url(
-            name.clone(),
-            url.clone(),
-            path.clone(),
-        ))
+        Some(CachedDirectUrlDistribution {
+            name: name.clone(),
+            url: url.clone(),
+            path: path.clone(),
+        })
     }
 }

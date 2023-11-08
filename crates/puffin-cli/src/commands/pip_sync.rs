@@ -13,7 +13,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_distribution::Distribution;
+use puffin_distribution::AnyDistribution;
 use puffin_installer::{Builder, InstallPlan};
 use puffin_interpreter::Virtualenv;
 
@@ -308,11 +308,11 @@ pub(crate) async fn sync_requirements(
     for event in extraneous
         .into_iter()
         .map(|distribution| ChangeEvent {
-            distribution: Distribution::from(distribution),
+            distribution: AnyDistribution::from(distribution),
             kind: ChangeEventKind::Remove,
         })
         .chain(wheels.into_iter().map(|distribution| ChangeEvent {
-            distribution: Distribution::from(distribution),
+            distribution: AnyDistribution::from(distribution),
             kind: ChangeEventKind::Add,
         }))
         .sorted_unstable_by_key(|event| event.distribution.name().clone())
@@ -352,6 +352,6 @@ enum ChangeEventKind {
 
 #[derive(Debug)]
 struct ChangeEvent {
-    distribution: Distribution,
+    distribution: AnyDistribution,
     kind: ChangeEventKind,
 }

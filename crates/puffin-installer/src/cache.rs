@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
-use puffin_distribution::RemoteDistribution;
+
+use puffin_distribution::{BuiltDistribution, Distribution, DistributionIdentifier};
 
 static WHEEL_CACHE: &str = "wheels-v0";
 
@@ -23,8 +24,8 @@ impl WheelCache {
         fs::create_dir_all(&self.root)
     }
 
-    /// Return the path at which a given [`RemoteDistribution`] would be stored.
-    pub(crate) fn entry(&self, distribution: &RemoteDistribution) -> PathBuf {
+    /// Return the path at which a given [`Distribution`] would be stored.
+    pub(crate) fn entry(&self, distribution: &BuiltDistribution) -> PathBuf {
         self.root
             .join(CacheShard::from(distribution).segment())
             .join(distribution.id())
@@ -57,11 +58,11 @@ impl CacheShard {
     }
 }
 
-impl From<&RemoteDistribution> for CacheShard {
-    fn from(distribution: &RemoteDistribution) -> Self {
+impl From<&BuiltDistribution> for CacheShard {
+    fn from(distribution: &BuiltDistribution) -> Self {
         match distribution {
-            RemoteDistribution::Registry(_, _, _) => Self::Registry,
-            RemoteDistribution::Url(_, _) => Self::Url,
+            BuiltDistribution::Registry(_) => Self::Registry,
+            BuiltDistribution::DirectUrl(_) => Self::Url,
         }
     }
 }

@@ -58,3 +58,4 @@ pub enum VcsKind {
     Bzr,
     Svn,
 }
+

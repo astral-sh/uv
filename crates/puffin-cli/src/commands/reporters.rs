@@ -6,7 +6,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
 use puffin_distribution::{
-    CachedDistribution, RemoteDistribution, RemoteDistributionRef, VersionOrUrl,
+    CachedDistribution, Distribution, RemoteDistributionRef, VersionOrUrl,
 };
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
@@ -38,7 +38,7 @@ impl FinderReporter {
 }
 
 impl puffin_resolver::FinderReporter for FinderReporter {
-    fn on_progress(&self, wheel: &RemoteDistribution) {
+    fn on_progress(&self, wheel: &Distribution) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -73,7 +73,7 @@ impl UnzipReporter {
 }
 
 impl puffin_installer::UnzipReporter for UnzipReporter {
-    fn on_unzip_progress(&self, wheel: &RemoteDistribution) {
+    fn on_unzip_progress(&self, wheel: &Distribution) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -108,7 +108,7 @@ impl DownloadReporter {
 }
 
 impl puffin_installer::DownloadReporter for DownloadReporter {
-    fn on_download_progress(&self, wheel: &RemoteDistribution) {
+    fn on_download_progress(&self, wheel: &Distribution) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -178,7 +178,7 @@ impl BuildReporter {
 }
 
 impl puffin_installer::BuildReporter for BuildReporter {
-    fn on_progress(&self, wheel: &RemoteDistribution) {
+    fn on_progress(&self, wheel: &Distribution) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }

@@ -84,23 +84,19 @@ impl InstallPlan {
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                    if let Some(distribution) =
-                        registry_index.get(&requirement.name).filter(|dist| {
-                            let CachedDistribution::Registry(_name, version, _path) = dist else {
-                                return false;
-                            };
-                            requirement.is_satisfied_by(version)
-                        })
+                    if let Some(distribution) = registry_index
+                        .get(&requirement.name)
+                        .filter(|dist| requirement.is_satisfied_by(&dist.version))
                     {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(distribution.clone());
+                        local.push(CachedDistribution::Registry(distribution.clone()));
                         continue;
                     }
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     if let Some(distribution) = url_index.get(&requirement.name, url) {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(distribution.clone());
+                        local.push(CachedDistribution::Url(distribution.clone()));
                         continue;
                     }
                 }

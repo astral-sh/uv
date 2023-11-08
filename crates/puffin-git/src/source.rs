@@ -11,12 +11,12 @@ use url::Url;
 use puffin_cache::{digest, RepositoryUrl};
 
 use crate::git::GitRemote;
-use crate::{FetchStrategy, Git};
+use crate::{FetchStrategy, GitUrl};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
     /// The Git reference from the manifest file.
-    git: Git,
+    git: GitUrl,
     /// The HTTP client to use for fetching.
     client: Client,
     /// The fetch strategy to use when cloning.
@@ -29,7 +29,7 @@ pub struct GitSource {
 
 impl GitSource {
     /// Initialize a new Git source.
-    pub fn new(git: Git, cache: impl Into<PathBuf>) -> Self {
+    pub fn new(git: GitUrl, cache: impl Into<PathBuf>) -> Self {
         Self {
             git,
             client: Client::new(),
@@ -51,10 +51,10 @@ impl GitSource {
     /// Fetch the underlying Git repository at the given revision.
     pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
-        let ident = digest(&RepositoryUrl::new(&self.git.url));
+        let ident = digest(&RepositoryUrl::new(&self.git.repository));
         let db_path = self.cache.join("db").join(&ident);
 
-        let remote = GitRemote::new(&self.git.url);
+        let remote = GitRemote::new(&self.git.repository);
         let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
@@ -65,7 +65,7 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!("Updating git source `{:?}`", self.git.url);
+                debug!("Updating git source `{:?}`", self.git.repository);
 
                 // Report the checkout operation to the reporter.
                 let task = self.reporter.as_ref().map(|reporter| {
@@ -114,13 +114,13 @@ impl GitSource {
 }
 
 pub struct Fetch {
-    /// The [`Git`] reference that was fetched.
-    git: Git,
+    /// The [`GitUrl`] reference that was fetched.
+    git: GitUrl,
     /// The path to the checked out repository.
     path: PathBuf,
 }
 
-impl From<Fetch> for Git {
+impl From<Fetch> for GitUrl {
     fn from(fetch: Fetch) -> Self {
         fetch.git
     }

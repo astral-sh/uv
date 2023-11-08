@@ -17,8 +17,8 @@ use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::source::Source;
-use puffin_distribution::RemoteDistributionRef;
-use puffin_git::{Git, GitSource};
+use puffin_distribution::{Distribution, RemoteDistributionRef};
+use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
@@ -55,7 +55,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Read the [`Metadata21`] from a built source distribution, if it exists in the cache.
     pub(crate) fn find_dist_info(
         &self,
-        distribution: &RemoteDistributionRef<'_>,
+        distribution: &Distribution,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
         CachedWheel::find_in_cache(
@@ -71,7 +71,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Download and build a source distribution, storing the built wheel in the cache.
     pub(crate) async fn download_and_build_sdist(
         &self,
-        distribution: &RemoteDistributionRef<'_>,
+        distribution: &Distribution,
         client: &RegistryClient,
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
@@ -173,9 +173,13 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// prefix kinds.
     pub(crate) async fn precise(
         &self,
-        distribution: &RemoteDistributionRef<'_>,
+        distribution: &Distribution,
     ) -> Result<Option<Url>> {
+        // STOPSHIP: Match on Git...
         let source = Source::try_from(distribution)?;
+
+        // Generate a DirectGitUrl from the Url.
+
         let Source::Git(git, subdirectory) = source else {
             return Ok(None);
         };
@@ -194,7 +198,9 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             GitSource::new(git, git_dir)
         };
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
-        let git = Git::from(precise);
+        let git = GitUrl::from(precise);
+
+        // Convert DirectGitUrl back to a Url.
 
         // Re-encode as a URL.
         let source = Source::Git(git, subdirectory);
