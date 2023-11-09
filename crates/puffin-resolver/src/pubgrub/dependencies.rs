@@ -12,7 +12,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 use crate::ResolveError;
 
 #[derive(Debug)]
-pub struct PubGrubDependencies(FxHashMap<PubGrubPackage, Range<PubGrubVersion>>);
+pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<PubGrubVersion>)>);
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
@@ -23,7 +23,7 @@ impl PubGrubDependencies {
         source: Option<&'a PackageName>,
         env: &'a MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
-        let mut dependencies = FxHashMap::<PubGrubPackage, Range<PubGrubVersion>>::default();
+        let mut dependencies = Vec::new();
 
         // Iterate over all declared requirements.
         for requirement in requirements {
@@ -56,20 +56,22 @@ impl PubGrubDependencies {
             ) {
                 let (package, version) = result?;
 
-                if let Some(entry) = dependencies.get_key_value(&package) {
-                    // Merge the versions.
-                    let version = merge_versions(entry.1, &version);
+                dependencies.push((package.clone(), version.clone()));
 
-                    // Merge the package.
-                    if let Some(package) = merge_package(entry.0, &package)? {
-                        dependencies.remove(&package);
-                        dependencies.insert(package, version);
-                    } else {
-                        dependencies.insert(package, version);
-                    }
-                } else {
-                    dependencies.insert(package.clone(), version.clone());
-                }
+                // if let Some(entry) = dependencies.get_key_value(&package) {
+                //     // Merge the versions.
+                //     let version = merge_versions(entry.1, &version);
+
+                //     // Merge the package.
+                //     if let Some(package) = merge_package(entry.0, &package)? {
+                //         dependencies.remove(&package);
+                //         dependencies.insert(package, version);
+                //     } else {
+                //         dependencies.insert(package, version);
+                //     }
+                // } else {
+                //     dependencies.insert(package.clone(), version.clone());
+                // }
             }
         }
 
@@ -104,40 +106,38 @@ impl PubGrubDependencies {
             ) {
                 let (package, version) = result?;
 
-                if let Some(entry) = dependencies.get_key_value(&package) {
-                    // Merge the versions.
-                    let version = merge_versions(entry.1, &version);
+                dependencies.push((package.clone(), version.clone()));
 
-                    // Merge the package.
-                    if let Some(package) = merge_package(entry.0, &package)? {
-                        dependencies.insert(package, version);
-                    } else {
-                        dependencies.insert(package, version);
-                    }
-                }
+                // if let Some(entry) = dependencies.get_key_value(&package) {
+                //     // Merge the versions.
+                //     let version = merge_versions(entry.1, &version);
+
+                //     // Merge the package.
+                //     if let Some(package) = merge_package(entry.0, &package)? {
+                //         dependencies.insert(package, version);
+                //     } else {
+                //         dependencies.insert(package, version);
+                //     }
+                // }
             }
         }
 
         Ok(Self(dependencies))
     }
 
-    /// Insert a [`PubGrubPackage`] and [`PubGrubVersion`] range into the set of dependencies.
-    pub(crate) fn insert(
-        &mut self,
-        package: PubGrubPackage,
-        version: Range<PubGrubVersion>,
-    ) -> Option<Range<PubGrubVersion>> {
-        self.0.insert(package, version)
+    // Insert a [`PubGrubPackage`] and [`PubGrubVersion`] range into the set of dependencies.
+    pub(crate) fn insert(&mut self, package: PubGrubPackage, version: Range<PubGrubVersion>) {
+        self.0.push((package, version))
     }
 
     /// Iterate over the dependencies.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&PubGrubPackage, &Range<PubGrubVersion>)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<PubGrubVersion>)> {
         self.0.iter()
     }
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for FxHashMap<PubGrubPackage, Range<PubGrubVersion>> {
+impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<PubGrubVersion>)> {
     fn from(dependencies: PubGrubDependencies) -> Self {
         dependencies.0
     }

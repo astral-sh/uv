@@ -981,5 +981,5 @@ enum Dependencies {
     /// Package dependencies are unavailable.
     Unknown,
     /// Container for all available package versions.
-    Known(FxHashMap<PubGrubPackage, Range<PubGrubVersion>>),
+    Known(Vec<(PubGrubPackage, Range<PubGrubVersion>)>),
 }
