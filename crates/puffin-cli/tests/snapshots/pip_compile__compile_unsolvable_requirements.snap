@@ -6,9 +6,9 @@ info:
     - pip-compile
     - pyproject.toml
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpN531dN
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpRAI4mN
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp99w9dK/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpvNCp98/.venv
 ---
 success: false
 exit_code: 1
@@ -16,5 +16,6 @@ exit_code: 1
 
 ----- stderr -----
   × No solution found when resolving dependencies:
-  ╰─▶ my-project depends on django∅
+  ╰─▶ Because my-project depends on django==5.0b1 and my-project depends on
+      django==5.0a1, version solving failed.
 

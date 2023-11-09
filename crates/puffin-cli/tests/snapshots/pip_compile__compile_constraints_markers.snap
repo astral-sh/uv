@@ -8,9 +8,9 @@ info:
     - "--constraint"
     - constraints.txt
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp1Ts53o
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp6Agh9o
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp1vzBQa/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp2l1dM3/.venv
 ---
 success: true
 exit_code: 0
@@ -21,7 +21,9 @@ anyio==4.0.0
 idna==3.4
     # via anyio
 sniffio==1.3.0
-    # via anyio
+    # via
+    #   anyio
+    #   idna
 
 ----- stderr -----
 Resolved 3 packages in [TIME]

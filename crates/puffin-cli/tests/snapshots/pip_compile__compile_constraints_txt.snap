@@ -8,9 +8,9 @@ info:
     - "--constraint"
     - constraints.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpvjdHOb
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpVzXpee
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpSAaWi3/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpYmxcVz/.venv
 ---
 success: true
 exit_code: 0
@@ -21,7 +21,9 @@ asgiref==3.7.2
     # via django
 django==5.0b1
 sqlparse==0.4.3
-    # via django
+    # via
+    #   asgiref
+    #   django
 
 ----- stderr -----
 Resolved 3 packages in [TIME]
