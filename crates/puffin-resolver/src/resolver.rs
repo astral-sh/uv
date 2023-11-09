@@ -140,6 +140,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         // Keep track of the packages for which we've requested metadata.
         let mut in_flight = InFlight::default();
         let mut pins = FxHashMap::default();
+        let mut url_versions = FxHashMap::default();
         let mut priorities = PubGrubPriorities::default();
 
         // Start the solve.
@@ -226,6 +227,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         package,
                         &version,
                         &mut pins,
+                        &mut url_versions,
                         &mut priorities,
                         &mut in_flight,
                         request_sink,
@@ -464,7 +466,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
 
             PubGrubPackage::Url(_) => {
-                // TODO(zanieb): Determine the proper return value here
+                // TODO(zanieb): This should always be true but it's not enforced by the types
                 let Some((Bound::Included(v), Bound::Included(_))) = range.bounding_range() else {
                     return Ok(None);
                 };
@@ -479,6 +481,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         package: &PubGrubPackage,
         version: &PubGrubVersion,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        url_versions: &mut FxHashMap<Url, pep440_rs::Version>,
         priorities: &mut PubGrubPriorities,
         in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
@@ -524,20 +527,24 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     self.markers,
                 )?;
 
-                if let Some(url) = url {
-                    let package = PubGrubPackage::Url(url.clone());
-                    let version =
-                        Range::singleton(PubGrubVersion::from(Version::from_str("99.99").unwrap()));
-
-                    // debug!("Adding dummy dependency: {package} {version}");
-                    constraints.push(package, version);
-                }
-
                 for (package, version) in constraints.iter() {
                     debug!("Adding transitive dependency: {package} {version}");
 
                     // Emit a request to fetch the metadata for this package.
                     Self::visit_package(package, priorities, in_flight, request_sink)?;
+                }
+
+                if let Some(url) = url {
+                    let package = PubGrubPackage::Url(url.clone());
+                    let length = url_versions.len();
+                    let version = url_versions
+                        .entry(url.clone())
+                        .or_insert(Version::from_release(vec![length]));
+
+                    debug!(
+                        "Adding dummy dependency to {package_name} @ {package} with url-version{version}"
+                    );
+                    constraints.push(package, Range::singleton(version.clone()));
                 }
 
                 if let Some(extra) = extra {
