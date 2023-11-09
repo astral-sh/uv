@@ -206,19 +206,14 @@ impl RegistryClient {
         if file.data_dist_info_metadata.is_available() {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            // TODO(konstin): Add support for plain urls in this method
-            let cache_file = self
-                .cache
-                .join(WHEEL_METADATA_FROM_ZIP_CACHE)
-                .join("pypi")
-                .join(filename.to_string())
-                .with_extension("json");
+            let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
+            let cache_file = format!("{}.json", filename.get_tag());
 
             let transform_response = |response: Response| async move {
                 Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
             };
             self.cached_client
-                .get_transformed_cached(url, &cache_file, transform_response)
+                .get_transformed_cached(url, &cache_dir, &cache_file, transform_response)
                 .await
         // If we lack PEP 658 support, try using HTTP range requests to read only the
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
@@ -235,12 +230,8 @@ impl RegistryClient {
         filename: &WheelFilename,
         url: &Url,
     ) -> Result<Metadata21, Error> {
-        let cache_file = self
-            .cache
-            .join(WHEEL_METADATA_FROM_ZIP_CACHE)
-            .join("pypi")
-            .join(filename.to_string())
-            .with_extension("json");
+        let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
+        let cache_file = format!("{}.json", filename.get_tag());
 
         // This transform callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
@@ -259,6 +250,7 @@ impl RegistryClient {
             .cached_client
             .get_transformed_cached(
                 url.clone(),
+                &cache_dir,
                 &cache_file,
                 read_metadata_from_initial_response,
             )

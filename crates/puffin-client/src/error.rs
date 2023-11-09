@@ -61,6 +61,10 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
 
+    /// An [`io::Error`] with a filename attached
+    #[error(transparent)]
+    Persist(#[from] tempfile::PersistError),
+
     #[error("Failed to serialize response to cache")]
     SerdeJson(#[from] serde_json::Error),
 }

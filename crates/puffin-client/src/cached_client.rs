@@ -6,6 +6,7 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use reqwest::{Client, Request, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 use tracing::{trace, warn};
 use url::Url;
 
@@ -49,13 +50,15 @@ impl CachedClient {
     >(
         &self,
         url: Url,
-        cache_file: &Path,
+        cache_dir: &Path,
+        filename: &str,
         transform_response: Callback,
     ) -> Result<Payload, Error>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, Error>>,
     {
+        let cache_file = cache_dir.join(filename);
         let cached = if let Ok(cached) = fs_err::tokio::read(&cache_file).await {
             match serde_json::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
                 Ok(data) => Some(data),
@@ -78,19 +81,21 @@ impl CachedClient {
         match cached_response {
             CachedResponse::FreshCache(data) => Ok(data),
             CachedResponse::NotModified(data_with_cache_policy) => {
-                fs_err::tokio::write(cache_file, &serde_json::to_vec(&data_with_cache_policy)?)
+                let temp_file = NamedTempFile::new_in(cache_dir)?;
+                fs_err::tokio::write(&temp_file, &serde_json::to_vec(&data_with_cache_policy)?)
                     .await?;
+                temp_file.persist(cache_file)?;
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
                 let data = transform_response(res).await?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
-                    if let Some(parent) = cache_file.parent() {
-                        fs_err::tokio::create_dir_all(parent).await?;
-                    }
-                    fs_err::tokio::write(cache_file, &serde_json::to_vec(&data_with_cache_policy)?)
+                    fs_err::tokio::create_dir_all(cache_dir).await?;
+                    let temp_file = NamedTempFile::new_in(cache_dir)?;
+                    fs_err::tokio::write(&temp_file, &serde_json::to_vec(&data_with_cache_policy)?)
                         .await?;
+                    temp_file.persist(cache_file)?;
                     Ok(data_with_cache_policy.data)
                 } else {
                     Ok(data)
@@ -120,11 +125,15 @@ impl CachedClient {
                     CachedResponse::FreshCache(cached.data)
                 }
                 BeforeRequest::Stale { request, matches } => {
-                    debug_assert!(
-                        matches,
-                        "cache doesn't match previous request for {}",
-                        req.url()
-                    );
+                    if !matches {
+                        // This should not happen
+                        warn!(
+                            "Cached request doesn't match current request for {}",
+                            req.url()
+                        );
+                        // This will override the bogus cache
+                        return self.fresh_request(req, converted_req).await;
+                    }
                     trace!("Revalidation request for {}", req.url());
                     for header in &request.headers {
                         req.headers_mut().insert(header.0.clone(), header.1.clone());
@@ -164,20 +173,31 @@ impl CachedClient {
             }
         } else {
             // No reusable cache
-            trace!("{} {}", req.method(), req.url());
-            let res = self.0.execute(req).await?.error_for_status()?;
-            let mut converted_res = http::Response::new(());
-            *converted_res.status_mut() = res.status();
-            for header in res.headers() {
-                converted_res.headers_mut().insert(
-                    http::HeaderName::from(header.0),
-                    http::HeaderValue::from(header.1),
-                );
-            }
-            let cache_policy =
-                CachePolicy::new(&converted_req.into_parts().0, &converted_res.into_parts().0);
-            CachedResponse::ModifiedOrNew(res, cache_policy.is_storable().then_some(cache_policy))
+            self.fresh_request(req, converted_req).await?
         };
         Ok(cached_response)
+    }
+
+    async fn fresh_request<T: Serialize>(
+        &self,
+        req: Request,
+        converted_req: http::Request<reqwest::Body>,
+    ) -> Result<CachedResponse<T>, Error> {
+        trace!("{} {}", req.method(), req.url());
+        let res = self.0.execute(req).await?.error_for_status()?;
+        let mut converted_res = http::Response::new(());
+        *converted_res.status_mut() = res.status();
+        for header in res.headers() {
+            converted_res.headers_mut().insert(
+                http::HeaderName::from(header.0),
+                http::HeaderValue::from(header.1),
+            );
+        }
+        let cache_policy =
+            CachePolicy::new(&converted_req.into_parts().0, &converted_res.into_parts().0);
+        Ok(CachedResponse::ModifiedOrNew(
+            res,
+            cache_policy.is_storable().then_some(cache_policy),
+        ))
     }
 }
