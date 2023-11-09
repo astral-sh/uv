@@ -70,7 +70,7 @@ impl Graph {
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         for (package, version) in selection {
             match package {
-                PubGrubPackage::Package(package_name, None) => {
+                PubGrubPackage::Package(package_name, None, None) => {
                     let version = Version::from(version.clone());
                     let file = pins
                         .get(package_name)
@@ -83,7 +83,7 @@ impl Graph {
                     let index = graph.add_node(pinned_package);
                     inverse.insert(package_name, index);
                 }
-                PubGrubPackage::UrlPackage(package_name, None, url) => {
+                PubGrubPackage::Package(package_name, None, Some(url)) => {
                     let url = redirects
                         .get(url)
                         .map_or_else(|| url.clone(), |url| url.value().clone());
@@ -103,13 +103,10 @@ impl Graph {
                 if let Kind::FromDependencyOf(self_package, self_version, dependency_package, _) =
                     &state.incompatibility_store[*id].kind
                 {
-                    let (PubGrubPackage::Package(self_package, None)
-                    | PubGrubPackage::UrlPackage(self_package, None, _)) = self_package
-                    else {
+                    let PubGrubPackage::Package(self_package, None, _) = self_package else {
                         continue;
                     };
-                    let (PubGrubPackage::Package(dependency_package, None)
-                    | PubGrubPackage::UrlPackage(dependency_package, None, _)) = dependency_package
+                    let PubGrubPackage::Package(dependency_package, None, _) = dependency_package
                     else {
                         continue;
                     };

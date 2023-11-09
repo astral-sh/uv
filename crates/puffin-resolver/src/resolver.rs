@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::collections::BTreeMap;
+use std::ops::Bound;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -8,8 +9,8 @@ use anyhow::Result;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
 use fxhash::{FxHashMap, FxHashSet};
+use pep440_rs::Version;
 use pubgrub::error::PubGrubError;
-
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use tokio::select;
@@ -284,14 +285,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
-            PubGrubPackage::Package(package_name, _extra) => {
+            PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
                 if in_flight.insert_package(package_name) {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
                 }
             }
-            PubGrubPackage::UrlPackage(package_name, _extra, url) => {
+            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this package.
                 if in_flight.insert_url(url) {
                     priorities.add(package_name.clone());
@@ -306,6 +307,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
             }
+            PubGrubPackage::Url(_) => {}
         }
         Ok(())
     }
@@ -321,7 +323,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, _extra) = package else {
+            let PubGrubPackage::Package(package_name, _extra, None) = package else {
                 continue;
             };
 
@@ -375,7 +377,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         return match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
-            PubGrubPackage::UrlPackage(package_name, _extra, url) => {
+            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 debug!("Searching for a compatible version of {package_name} @ {url} ({range})",);
 
                 // If the URL wasn't declared in the direct dependencies or constraints, reject it.
@@ -407,7 +409,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
             }
 
-            PubGrubPackage::Package(package_name, _extra) => {
+            PubGrubPackage::Package(package_name, _extra, None) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await.unwrap();
                 let version_map = entry.value();
@@ -460,6 +462,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let version = candidate.version.clone();
                 Ok(Some(version))
             }
+
+            PubGrubPackage::Url(_) => {
+                // TODO(zanieb): Determine the proper return value here
+                let Some((Bound::Included(v), Bound::Included(_))) = range.bounding_range() else {
+                    return Ok(None);
+                };
+                Ok(Some(v.clone()))
+            }
         };
     }
 
@@ -473,7 +483,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
-        let (package_name, extra, entry) = match package {
+        match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.
                 let constraints = PubGrubDependencies::try_from_requirements(
@@ -491,53 +501,65 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     Self::visit_package(package, priorities, in_flight, request_sink)?;
                 }
 
-                return Ok(Dependencies::Known(constraints.into()));
+                Ok(Dependencies::Known(constraints.into()))
             }
-            PubGrubPackage::Package(package_name, extra) => {
+
+            PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
-                let versions = pins.get(package_name).unwrap();
-                let file = versions.get(version.into()).unwrap();
-                let entry = self.index.versions.wait(&file.hashes.sha256).await.unwrap();
-                (package_name, extra, entry)
+                let entry = match url {
+                    Some(url) => self.index.versions.wait(url.as_str()).await.unwrap(),
+                    None => {
+                        let versions = pins.get(package_name).unwrap();
+                        let file = versions.get(version.into()).unwrap();
+                        self.index.versions.wait(&file.hashes.sha256).await.unwrap()
+                    }
+                };
+                let metadata = entry.value();
+
+                let mut constraints = PubGrubDependencies::try_from_requirements(
+                    &metadata.requires_dist,
+                    &self.constraints,
+                    extra.as_ref(),
+                    Some(package_name),
+                    self.markers,
+                )?;
+
+                if let Some(url) = url {
+                    let package = PubGrubPackage::Url(url.clone());
+                    let version =
+                        Range::singleton(PubGrubVersion::from(Version::from_str("99.99").unwrap()));
+
+                    // debug!("Adding dummy dependency: {package} {version}");
+                    constraints.push(package, version);
+                }
+
+                for (package, version) in constraints.iter() {
+                    debug!("Adding transitive dependency: {package} {version}");
+
+                    // Emit a request to fetch the metadata for this package.
+                    Self::visit_package(package, priorities, in_flight, request_sink)?;
+                }
+
+                if let Some(extra) = extra {
+                    if !metadata
+                        .provides_extras
+                        .iter()
+                        .any(|provided_extra| provided_extra == extra)
+                    {
+                        return Ok(Dependencies::Unknown);
+                    }
+                    constraints.push(
+                        PubGrubPackage::Package(package_name.clone(), None, None),
+                        Range::singleton(version.clone()),
+                    );
+                }
+
+                Ok(Dependencies::Known(constraints.into()))
             }
-            PubGrubPackage::UrlPackage(package_name, extra, url) => {
-                let entry = self.index.versions.wait(url.as_str()).await.unwrap();
-                (package_name, extra, entry)
-            }
-        };
-
-        let metadata = entry.value();
-
-        let mut constraints = PubGrubDependencies::try_from_requirements(
-            &metadata.requires_dist,
-            &self.constraints,
-            extra.as_ref(),
-            Some(package_name),
-            self.markers,
-        )?;
-
-        for (package, version) in constraints.iter() {
-            debug!("Adding transitive dependency: {package} {version}");
-
-            // Emit a request to fetch the metadata for this package.
-            Self::visit_package(package, priorities, in_flight, request_sink)?;
+            // TODO(zanieb): Improve documentation here
+            // Return an empty set for dummy url packages
+            PubGrubPackage::Url(_) => Ok(Dependencies::Known(Vec::new())),
         }
-
-        if let Some(extra) = extra {
-            if !metadata
-                .provides_extras
-                .iter()
-                .any(|provided_extra| provided_extra == extra)
-            {
-                return Ok(Dependencies::Unknown);
-            }
-            constraints.push(
-                PubGrubPackage::Package(package_name.clone(), None),
-                Range::singleton(version.clone()),
-            );
-        }
-
-        Ok(Dependencies::Known(constraints.into()))
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -811,16 +833,18 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         if let Some(reporter) = self.reporter.as_ref() {
             match package {
                 PubGrubPackage::Root(_) => {}
-                PubGrubPackage::UrlPackage(package_name, extra, url) => {
+                PubGrubPackage::Package(package_name, extra, Some(url)) => {
                     reporter.on_progress(package_name, extra.as_ref(), VersionOrUrl::Url(url));
                 }
-                PubGrubPackage::Package(package_name, extra) => {
+                PubGrubPackage::Package(package_name, extra, None) => {
                     reporter.on_progress(
                         package_name,
                         extra.as_ref(),
                         VersionOrUrl::Version(version.into()),
                     );
                 }
+                // TODO(zanieb): Determine if progress should be reported here
+                PubGrubPackage::Url(_) => {}
             }
         }
     }

@@ -54,7 +54,6 @@ impl PubGrubDependencies {
                     .map(|extra| to_pubgrub(requirement, Some(extra))),
             ) {
                 let (package, version) = result?;
-
                 dependencies.push((package.clone(), version.clone()));
             }
         }
@@ -89,7 +88,6 @@ impl PubGrubDependencies {
                     .map(|extra| to_pubgrub(constraint, Some(extra))),
             ) {
                 let (package, version) = result?;
-
                 dependencies.push((package.clone(), version.clone()));
             }
         }
@@ -123,12 +121,12 @@ fn to_pubgrub(
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::Package(requirement.name.clone(), extra),
+            PubGrubPackage::Package(requirement.name.clone(), extra, None),
             Range::full(),
         )),
         // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
         Some(VersionOrUrl::Url(url)) => Ok((
-            PubGrubPackage::UrlPackage(requirement.name.clone(), extra, url.clone()),
+            PubGrubPackage::Package(requirement.name.clone(), extra, Some(url.clone())),
             Range::full(),
         )),
         // The requirement has a specifier (e.g., `flask>=1.0`).
@@ -140,7 +138,7 @@ fn to_pubgrub(
                     range.intersection(&specifier.into())
                 })?;
             Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra),
+                PubGrubPackage::Package(requirement.name.clone(), extra, None),
                 version,
             ))
         }
