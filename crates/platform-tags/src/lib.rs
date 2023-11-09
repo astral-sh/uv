@@ -1,14 +1,29 @@
+use fxhash::{FxHashMap, FxHashSet};
+
 use platform_host::{Arch, Os, Platform, PlatformError};
 
-/// A set of compatible tags for a given Python version and platform, in
-/// (`python_tag`, `abi_tag`, `platform_tag`) format.
+/// A set of compatible tags for a given Python version and platform.
+///
+/// Its principle function is to determine whether the tags for a particular
+/// wheel are compatible with the current environment.
 #[derive(Debug)]
-pub struct Tags(Vec<(String, String, String)>);
+pub struct Tags {
+    /// python_tag |--> abi_tag |--> {platform_tag}
+    map: FxHashMap<String, FxHashMap<String, FxHashSet<String>>>,
+}
 
 impl Tags {
     /// Create a new set of tags.
     pub fn new(tags: Vec<(String, String, String)>) -> Self {
-        Self(tags)
+        let mut map = FxHashMap::default();
+        for (py, abi, platform) in tags {
+            map.entry(py.to_string())
+                .or_insert(FxHashMap::default())
+                .entry(abi.to_string())
+                .or_insert(FxHashSet::default())
+                .insert(platform.to_string());
+        }
+        Self { map }
     }
 
     /// Returns the compatible tags for the given Python version and platform.
@@ -79,11 +94,41 @@ impl Tags {
             "any".to_string(),
         ));
         tags.sort();
-        Ok(Self(tags))
+        Ok(Self::new(tags))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &(String, String, String)> {
-        self.0.iter()
+    /// Returns true when there exists at least one tag for this platform
+    /// whose individal components all appear in each of the slices given.
+    pub fn is_compatible(
+        &self,
+        wheel_python_tags: &[String],
+        wheel_abi_tags: &[String],
+        wheel_platform_tags: &[String],
+    ) -> bool {
+        // NOTE: A typical work-load is a context in which the platform tags
+        // are quite large, but the tags of a wheel are quite small. It is
+        // common, for example, for the lengths of the slices given to all be
+        // 1. So while the looping here might look slow, the key thing we want
+        // to avoid is looping over all of the platform tags. We avoid that
+        // with hashmap lookups.
+
+        let pythons = &self.map;
+        for wheel_py in wheel_python_tags {
+            let Some(abis) = pythons.get(wheel_py) else {
+                continue;
+            };
+            for wheel_abi in wheel_abi_tags {
+                let Some(platforms) = abis.get(wheel_abi) else {
+                    continue;
+                };
+                for wheel_platform in wheel_platform_tags {
+                    if platforms.contains(wheel_platform) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 }
 

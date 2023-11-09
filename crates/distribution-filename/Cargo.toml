@@ -16,3 +16,6 @@ puffin-normalize = { path = "../puffin-normalize" }
 
 thiserror = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.34.0" }
