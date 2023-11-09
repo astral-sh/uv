@@ -32,6 +32,9 @@ pub(crate) struct ResolveManyArgs {
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
     no_build: bool,
+    /// Run this many tasks in parallel
+    #[clap(long, default_value = "50")]
+    num_tasks: usize,
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
@@ -66,7 +69,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
 
     let build_dispatch_arc = Arc::new(build_dispatch);
     let mut tasks = FuturesUnordered::new();
-    let semaphore = Arc::new(Semaphore::new(50));
+    let semaphore = Arc::new(Semaphore::new(args.num_tasks));
 
     let header_span = info_span!("resolve many");
     header_span.pb_set_style(&ProgressStyle::default_bar());
