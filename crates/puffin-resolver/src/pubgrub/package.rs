@@ -14,7 +14,8 @@ use puffin_normalize::{ExtraName, PackageName};
 #[derivative(PartialEq, Hash)]
 pub enum PubGrubPackage {
     Root(Option<PackageName>),
-    Package(
+    Package(PackageName, Option<ExtraName>),
+    UrlPackage(
         PackageName,
         Option<ExtraName>,
         /// The URL of the package, if it was specified in the requirement.
@@ -66,7 +67,7 @@ pub enum PubGrubPackage {
         #[derivative(PartialEq = "ignore")]
         #[derivative(PartialOrd = "ignore")]
         #[derivative(Hash = "ignore")]
-        Option<Url>,
+        Url,
     ),
 }
 
@@ -80,8 +81,13 @@ impl std::fmt::Display for PubGrubPackage {
                     write!(f, "root")
                 }
             }
-            PubGrubPackage::Package(name, None, ..) => write!(f, "{name}"),
-            PubGrubPackage::Package(name, Some(extra), ..) => {
+            PubGrubPackage::Package(name, None) => write!(f, "{name}"),
+            PubGrubPackage::Package(name, Some(extra)) => {
+                write!(f, "{name}[{extra}]")
+            }
+
+            PubGrubPackage::UrlPackage(name, None, ..) => write!(f, "{name}"),
+            PubGrubPackage::UrlPackage(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")
             }
         }

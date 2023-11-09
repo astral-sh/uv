@@ -1,10 +1,9 @@
-use fxhash::FxHashMap;
 use itertools::Itertools;
 use pubgrub::range::Range;
 use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
-use puffin_cache::CanonicalUrl;
+
 use puffin_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
@@ -57,21 +56,6 @@ impl PubGrubDependencies {
                 let (package, version) = result?;
 
                 dependencies.push((package.clone(), version.clone()));
-
-                // if let Some(entry) = dependencies.get_key_value(&package) {
-                //     // Merge the versions.
-                //     let version = merge_versions(entry.1, &version);
-
-                //     // Merge the package.
-                //     if let Some(package) = merge_package(entry.0, &package)? {
-                //         dependencies.remove(&package);
-                //         dependencies.insert(package, version);
-                //     } else {
-                //         dependencies.insert(package, version);
-                //     }
-                // } else {
-                //     dependencies.insert(package.clone(), version.clone());
-                // }
             }
         }
 
@@ -107,18 +91,6 @@ impl PubGrubDependencies {
                 let (package, version) = result?;
 
                 dependencies.push((package.clone(), version.clone()));
-
-                // if let Some(entry) = dependencies.get_key_value(&package) {
-                //     // Merge the versions.
-                //     let version = merge_versions(entry.1, &version);
-
-                //     // Merge the package.
-                //     if let Some(package) = merge_package(entry.0, &package)? {
-                //         dependencies.insert(package, version);
-                //     } else {
-                //         dependencies.insert(package, version);
-                //     }
-                // }
             }
         }
 
@@ -151,12 +123,12 @@ fn to_pubgrub(
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::Package(requirement.name.clone(), extra, None),
+            PubGrubPackage::Package(requirement.name.clone(), extra),
             Range::full(),
         )),
         // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
         Some(VersionOrUrl::Url(url)) => Ok((
-            PubGrubPackage::Package(requirement.name.clone(), extra, Some(url.clone())),
+            PubGrubPackage::UrlPackage(requirement.name.clone(), extra, url.clone()),
             Range::full(),
         )),
         // The requirement has a specifier (e.g., `flask>=1.0`).
@@ -168,67 +140,9 @@ fn to_pubgrub(
                     range.intersection(&specifier.into())
                 })?;
             Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, None),
+                PubGrubPackage::Package(requirement.name.clone(), extra),
                 version,
             ))
-        }
-    }
-}
-
-/// Merge two [`PubGrubVersion`] ranges.
-fn merge_versions(
-    left: &Range<PubGrubVersion>,
-    right: &Range<PubGrubVersion>,
-) -> Range<PubGrubVersion> {
-    left.intersection(right)
-}
-
-/// Merge two [`PubGrubPackage`] instances.
-fn merge_package(
-    left: &PubGrubPackage,
-    right: &PubGrubPackage,
-) -> Result<Option<PubGrubPackage>, ResolveError> {
-    match (left, right) {
-        // Either package is `root`.
-        (PubGrubPackage::Root(_), _) | (_, PubGrubPackage::Root(_)) => Ok(None),
-
-        // Left package has a URL. Propagate the URL.
-        (PubGrubPackage::Package(name, extra, Some(url)), PubGrubPackage::Package(.., None)) => {
-            Ok(Some(PubGrubPackage::Package(
-                name.clone(),
-                extra.clone(),
-                Some(url.clone()),
-            )))
-        }
-
-        // Right package has a URL.
-        (PubGrubPackage::Package(.., None), PubGrubPackage::Package(name, extra, Some(url))) => {
-            Ok(Some(PubGrubPackage::Package(
-                name.clone(),
-                extra.clone(),
-                Some(url.clone()),
-            )))
-        }
-
-        // Neither package has a URL.
-        (PubGrubPackage::Package(_name, _extra, None), PubGrubPackage::Package(.., None)) => {
-            Ok(None)
-        }
-
-        // Both packages have a URL.
-        (
-            PubGrubPackage::Package(name, _extra, Some(left)),
-            PubGrubPackage::Package(.., Some(right)),
-        ) => {
-            if CanonicalUrl::new(left) == CanonicalUrl::new(right) {
-                Ok(None)
-            } else {
-                Err(ResolveError::ConflictingUrls(
-                    name.clone(),
-                    left.to_string(),
-                    right.to_string(),
-                ))
-            }
         }
     }
 }

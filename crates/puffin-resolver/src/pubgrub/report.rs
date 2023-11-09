@@ -269,10 +269,16 @@ impl ResolutionFailureReporter {
         let terms_vec: Vec<_> = terms.iter().collect();
         match terms_vec.as_slice() {
             [] | [(PubGrubPackage::Root(_), _)] => "version solving failed".into(),
-            [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
+            [(
+                package @ (PubGrubPackage::Package(..) | PubGrubPackage::UrlPackage(..)),
+                Term::Positive(range),
+            )] => {
                 format!("{package}{range} is forbidden")
             }
-            [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
+            [(
+                package @ (PubGrubPackage::Package(..) | PubGrubPackage::UrlPackage(..)),
+                Term::Negative(range),
+            )] => {
                 format!("{package}{range} is mandatory")
             }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => {
