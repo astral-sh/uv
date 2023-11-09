@@ -143,6 +143,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
         // Start the solve.
         let mut state = State::init(root.clone(), MIN_VERSION.clone());
+        // TODO(zanieb): Determine if we should change this to a collection that allows duplicate packages
+        //               as in 210b481
         let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<PubGrubVersion>> =
             FxHashMap::default();
         let mut next = root;
