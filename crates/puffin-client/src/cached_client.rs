@@ -58,7 +58,7 @@ impl CachedClient {
     ///
     /// If a new response was received (no prior cached response or modified on the remote), the
     /// response through `response_callback` and only the result is cached and returned
-    pub(crate) async fn get_transformed_cached<
+    pub(crate) async fn get_cached_with_callback<
         Payload: Serialize + DeserializeOwned,
         Callback,
         CallbackReturn,

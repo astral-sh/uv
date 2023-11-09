@@ -209,11 +209,11 @@ impl RegistryClient {
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
             let cache_file = format!("{}.json", filename.get_tag());
 
-            let transform_response = |response: Response| async move {
+            let response_callback = |response: Response| async move {
                 Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
             };
             self.cached_client
-                .get_transformed_cached(url, &cache_dir, &cache_file, transform_response)
+                .get_cached_with_callback(url, &cache_dir, &cache_file, response_callback)
                 .await
         // If we lack PEP 658 support, try using HTTP range requests to read only the
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
@@ -233,7 +233,7 @@ impl RegistryClient {
         let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
         let cache_file = format!("{}.json", filename.get_tag());
 
-        // This transform callback is special, we actually make a number of subsequent requests to
+        // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
         let client = self.client_raw.clone();
         let url_ = url.clone();
@@ -248,7 +248,7 @@ impl RegistryClient {
 
         let result = self
             .cached_client
-            .get_transformed_cached(
+            .get_cached_with_callback(
                 url.clone(),
                 &cache_dir,
                 &cache_file,
