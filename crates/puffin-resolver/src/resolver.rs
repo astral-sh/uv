@@ -529,7 +529,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             {
                 return Ok(Dependencies::Unknown);
             }
-            constraints.insert(
+            constraints.push(
                 PubGrubPackage::Package(package_name.clone(), None),
                 Range::singleton(version.clone()),
             );

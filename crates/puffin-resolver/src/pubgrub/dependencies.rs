@@ -14,7 +14,7 @@ use crate::ResolveError;
 pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<PubGrubVersion>)>);
 
 impl PubGrubDependencies {
-    /// Generate a set of `PubGrub` dependencies from a set of requirements.
+    /// Generate a collection of `PubGrub` dependencies from a collection of requirements.
     pub(crate) fn try_from_requirements<'a>(
         requirements: &[Requirement],
         constraints: &[Requirement],
@@ -97,8 +97,8 @@ impl PubGrubDependencies {
         Ok(Self(dependencies))
     }
 
-    // Insert a [`PubGrubPackage`] and [`PubGrubVersion`] range into the set of dependencies.
-    pub(crate) fn insert(&mut self, package: PubGrubPackage, version: Range<PubGrubVersion>) {
+    // Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
+    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<PubGrubVersion>) {
         self.0.push((package, version))
     }
 
@@ -108,7 +108,7 @@ impl PubGrubDependencies {
     }
 }
 
-/// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
+/// Convert a [`PubGrubDependencies`] to a [`Vec`].
 impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<PubGrubVersion>)> {
     fn from(dependencies: PubGrubDependencies) -> Self {
         dependencies.0
