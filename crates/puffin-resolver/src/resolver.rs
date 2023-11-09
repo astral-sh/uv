@@ -11,7 +11,6 @@ use fxhash::{FxHashMap, FxHashSet};
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
-use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
 use tokio::sync::Mutex;
 use tracing::{debug, error, trace};
@@ -236,7 +235,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         ));
                         continue;
                     }
-                    Dependencies::Known(constraints) if constraints.contains_key(package) => {
+                    Dependencies::Known(constraints)
+                        if constraints
+                            .clone()
+                            .into_iter()
+                            .any(|(dependency, _)| &dependency == package) =>
+                    {
                         return Err(PubGrubError::SelfDependency {
                             package: package.clone(),
                             version: version.clone(),
@@ -250,7 +254,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let dep_incompats = state.add_incompatibility_from_dependencies(
                     package.clone(),
                     version.clone(),
-                    &dependencies,
+                    dependencies,
                 );
 
                 state.partial_solution.add_version(
@@ -977,5 +981,5 @@ enum Dependencies {
     /// Package dependencies are unavailable.
     Unknown,
     /// Container for all available package versions.
-    Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
+    Known(FxHashMap<PubGrubPackage, Range<PubGrubVersion>>),
 }

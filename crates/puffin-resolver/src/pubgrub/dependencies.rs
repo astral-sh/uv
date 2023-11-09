@@ -1,6 +1,6 @@
+use fxhash::FxHashMap;
 use itertools::Itertools;
 use pubgrub::range::Range;
-use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
@@ -12,7 +12,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 use crate::ResolveError;
 
 #[derive(Debug)]
-pub struct PubGrubDependencies(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>);
+pub struct PubGrubDependencies(FxHashMap<PubGrubPackage, Range<PubGrubVersion>>);
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
@@ -23,8 +23,7 @@ impl PubGrubDependencies {
         source: Option<&'a PackageName>,
         env: &'a MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
-        let mut dependencies =
-            DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
+        let mut dependencies = FxHashMap::<PubGrubPackage, Range<PubGrubVersion>>::default();
 
         // Iterate over all declared requirements.
         for requirement in requirements {
@@ -138,7 +137,7 @@ impl PubGrubDependencies {
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>> {
+impl From<PubGrubDependencies> for FxHashMap<PubGrubPackage, Range<PubGrubVersion>> {
     fn from(dependencies: PubGrubDependencies) -> Self {
         dependencies.0
     }
