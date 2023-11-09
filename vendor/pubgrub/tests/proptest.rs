@@ -34,7 +34,8 @@ impl<P: Package, VS: VersionSet> DependencyProvider<P, VS>
         &self,
         p: &P,
         v: &VS::V,
-    ) -> Result<Dependencies<P, VS>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Dependencies<impl IntoIterator<Item = (P, VS)> + Clone>, Box<dyn Error + Send + Sync>>
+    {
         self.0.get_dependencies(p, v)
     }
 
@@ -86,7 +87,8 @@ impl<P: Package, VS: VersionSet, DP: DependencyProvider<P, VS>> DependencyProvid
         &self,
         p: &P,
         v: &VS::V,
-    ) -> Result<Dependencies<P, VS>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Dependencies<impl IntoIterator<Item = (P, VS)> + Clone>, Box<dyn Error + Send + Sync>>
+    {
         self.dp.get_dependencies(p, v)
     }
 
@@ -345,8 +347,8 @@ fn retain_dependencies<N: Package + Ord, VS: VersionSet>(
             smaller_dependency_provider.add_dependencies(
                 n.clone(),
                 v.clone(),
-                deps.iter().filter_map(|(dep, range)| {
-                    if !retain(n, v, dep) {
+                deps.into_iter().filter_map(|(dep, range)| {
+                    if !retain(n, v, &dep) {
                         None
                     } else {
                         Some((dep.clone(), range.clone()))

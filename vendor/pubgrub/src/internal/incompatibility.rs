@@ -31,14 +31,14 @@ use crate::version_set::VersionSet;
 #[derive(Debug, Clone)]
 pub struct Incompatibility<P: Package, VS: VersionSet> {
     package_terms: SmallMap<P, Term<VS>>,
-    pub kind: Kind<P, VS>,
+    kind: Kind<P, VS>,
 }
 
 /// Type alias of unique identifiers for incompatibilities.
 pub type IncompId<P, VS> = Id<Incompatibility<P, VS>>;
 
 #[derive(Debug, Clone)]
-pub enum Kind<P: Package, VS: VersionSet> {
+enum Kind<P: Package, VS: VersionSet> {
     /// Initial incompatibility aiming at picking the root package for the first decision.
     NotRoot(P, VS::V),
     /// There are no versions in the given range for this package.
@@ -105,11 +105,11 @@ impl<P: Package, VS: VersionSet> Incompatibility<P, VS> {
     }
 
     /// Build an incompatibility from a given dependency.
-    pub fn from_dependency(package: P, version: VS::V, dep: (&P, &VS)) -> Self {
+    pub fn from_dependency(package: P, version: VS::V, dep: (P, VS)) -> Self {
         let set1 = VS::singleton(version);
         let (p2, set2) = dep;
         Self {
-            package_terms: if set2 == &VS::empty() {
+            package_terms: if set2 == VS::empty() {
                 SmallMap::One([(package.clone(), Term::Positive(set1.clone()))])
             } else {
                 SmallMap::Two([
@@ -117,7 +117,7 @@ impl<P: Package, VS: VersionSet> Incompatibility<P, VS> {
                     (p2.clone(), Term::Negative(set2.clone())),
                 ])
             },
-            kind: Kind::FromDependencyOf(package, set1, p2.clone(), set2.clone()),
+            kind: Kind::FromDependencyOf(package, set1, p2, set2),
         }
     }
 

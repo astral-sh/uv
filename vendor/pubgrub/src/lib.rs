@@ -102,8 +102,10 @@
 //!         &self,
 //!         package: &String,
 //!         version: &SemanticVersion,
-//!     ) -> Result<Dependencies<String, SemVS>, Box<dyn Error + Send + Sync>> {
-//!         unimplemented!()
+//!     ) -> Result<Dependencies<impl IntoIterator<Item = (String, SemVS)> + Clone>, Box<dyn Error + Send + Sync>>
+//!     {
+//!         unimplemented!();
+//!         Ok(Dependencies::Known([]))
 //!     }
 //! }
 //! ```
@@ -217,7 +219,8 @@
 //! with a cache, you may want to know that some versions
 //! do not exist in your cache.
 
-#![allow(clippy::all, unreachable_pub)]
+#![allow(clippy::rc_buffer)]
+#![warn(missing_docs)]
 
 pub mod error;
 pub mod package;
