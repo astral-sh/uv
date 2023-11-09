@@ -2,7 +2,7 @@ use std::hash::Hasher;
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
-/// Compute a hex string hash of a [`CacheKey`] object.
+/// Compute a hex string hash of a `CacheKey` object.
 ///
 /// The value returned by [`digest`] should be stable across releases and platforms.
 pub fn digest<H: CacheKey>(hashable: &H) -> String {

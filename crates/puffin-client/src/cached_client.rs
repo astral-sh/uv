@@ -31,6 +31,21 @@ struct DataWithCachePolicy<Payload: Serialize> {
     cache_policy: CachePolicy,
 }
 
+/// Custom caching layer over [`reqwest::Client`] using `http-cache-semantics`.
+///
+/// This effective middleware takes inspiration from the `http-cache` crate, but unlike this crate,
+/// we allow running an async callback on the response before caching. We use this to e.g. store a
+/// parsed version of the wheel metadata and for our remote zip reader. In the latter case, we want
+/// to read a single file from a remote zip using range requests (so we don't have to download the
+/// entire file). We send a HEAD request in the caching layer to check if the remote file has
+/// changed (and if range requests are supported), and in the callback we make the actual range
+/// requests if required.
+///
+/// Unlike `http-cache`, all outputs must be serde-able. Currently everything is json, but we can
+/// transparently switch to a faster/smaller format.
+///
+/// Again unlike `http-cache`, the caller gets full control over the cache key with the assumption
+/// that it's a file. TODO(konstin): Centralize the cache bucket management.
 #[derive(Debug, Clone)]
 pub(crate) struct CachedClient(Client);
 
@@ -39,10 +54,10 @@ impl CachedClient {
         Self(client)
     }
 
-    /// Makes a cached request with a custom data transformation
+    /// Makes a cached request with a custom response transformation
     ///
-    /// If a new response was received (no prior cached response or modified on the serde), the
-    /// response through `transform_response` and only the result is cached and returned
+    /// If a new response was received (no prior cached response or modified on the remote), the
+    /// response through `response_callback` and only the result is cached and returned
     pub(crate) async fn get_transformed_cached<
         Payload: Serialize + DeserializeOwned,
         Callback,
@@ -52,7 +67,7 @@ impl CachedClient {
         url: Url,
         cache_dir: &Path,
         filename: &str,
-        transform_response: Callback,
+        response_callback: Callback,
     ) -> Result<Payload, Error>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
@@ -88,7 +103,7 @@ impl CachedClient {
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
-                let data = transform_response(res).await?;
+                let data = response_callback(res).await?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
                     fs_err::tokio::create_dir_all(cache_dir).await?;
@@ -104,6 +119,7 @@ impl CachedClient {
         }
     }
 
+    /// `http-cache-semantics` to `reqwest` wrapper
     async fn send_cached<T: Serialize + DeserializeOwned>(
         &self,
         mut req: Request,
