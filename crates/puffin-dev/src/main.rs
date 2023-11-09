@@ -23,6 +23,7 @@ mod resolve_cli;
 mod resolve_many;
 mod wheel_metadata;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Parser)]
 enum Cli {
     /// Build a source distribution into a wheel
