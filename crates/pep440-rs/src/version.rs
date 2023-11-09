@@ -8,7 +8,7 @@ use regex::Captures;
 use regex::Regex;
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::Ordering;
+use std::cmp::{max, Ordering};
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Display, Formatter};
@@ -538,20 +538,22 @@ impl Display for Version {
 pub(crate) fn compare_release(this: &[usize], other: &[usize]) -> Ordering {
     // "When comparing release segments with different numbers of components, the shorter segment
     // is padded out with additional zeros as necessary"
-    let iterator: Vec<(&usize, &usize)> = if this.len() < other.len() {
-        this.iter().chain(iter::repeat(&0)).zip(other).collect()
-    } else {
-        this.iter()
-            .zip(other.iter().chain(iter::repeat(&0)))
-            .collect()
-    };
-
-    for (a, b) in iterator {
-        if a != b {
-            return a.cmp(b);
+    for (this, other) in this.iter().chain(iter::repeat(&0)).zip(
+        other
+            .iter()
+            .chain(iter::repeat(&0))
+            .take(max(this.len(), other.len())),
+    ) {
+        match this.cmp(other) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
         }
     }
-
     Ordering::Equal
 }
 
@@ -568,23 +570,17 @@ pub(crate) fn compare_release(this: &[usize], other: &[usize]) -> Ordering {
 /// correct default Ord implementation
 fn sortable_tuple(
     version: &Version,
-) -> (
-    usize,
-    usize,
-    Option<usize>,
-    usize,
-    Option<Vec<LocalSegment>>,
-) {
+) -> (usize, usize, Option<usize>, usize, Option<&[LocalSegment]>) {
     match (&version.pre, &version.post, &version.dev) {
         // dev release
-        (None, None, Some(n)) => (0, 0, None, *n, version.local.clone()),
+        (None, None, Some(n)) => (0, 0, None, *n, version.local.as_deref()),
         // alpha release
         (Some((PreRelease::Alpha, n)), post, dev) => (
             1,
             *n,
             *post,
             dev.unwrap_or(usize::MAX),
-            version.local.clone(),
+            version.local.as_deref(),
         ),
         // beta release
         (Some((PreRelease::Beta, n)), post, dev) => (
@@ -592,7 +588,7 @@ fn sortable_tuple(
             *n,
             *post,
             dev.unwrap_or(usize::MAX),
-            version.local.clone(),
+            version.local.as_deref(),
         ),
         // alpha release
         (Some((PreRelease::Rc, n)), post, dev) => (
@@ -600,17 +596,17 @@ fn sortable_tuple(
             *n,
             *post,
             dev.unwrap_or(usize::MAX),
-            version.local.clone(),
+            version.local.as_deref(),
         ),
         // final release
-        (None, None, None) => (4, 0, None, 0, version.local.clone()),
+        (None, None, None) => (4, 0, None, 0, version.local.as_deref()),
         // post release
         (None, Some(post), dev) => (
             5,
             0,
             Some(*post),
             dev.unwrap_or(usize::MAX),
-            version.local.clone(),
+            version.local.as_deref(),
         ),
     }
 }
@@ -649,8 +645,14 @@ impl Ord for Version {
     /// < 1.0b2.post345.dev456 < 1.0b2.post345 < 1.0b2-346 < 1.0c1.dev456 < 1.0c1 < 1.0rc2 < 1.0c3
     /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.epoch != other.epoch {
-            return self.epoch.cmp(&other.epoch);
+        match self.epoch.cmp(&other.epoch) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
         }
 
         match compare_release(&self.release, &other.release) {
@@ -662,6 +664,7 @@ impl Ord for Version {
                 return Ordering::Greater;
             }
         }
+
         // release is equal, so compare the other parts
         sortable_tuple(self).cmp(&sortable_tuple(other))
     }
