@@ -1,4 +1,4 @@
-use std::{cmp::Reverse};
+use std::cmp::Reverse;
 
 use fxhash::FxHashMap;
 
@@ -26,7 +26,7 @@ impl PubGrubPriorities {
                 .copied()
                 .map(|priority| priority + 1)
                 .map(Reverse),
-            PubGrubPackage::Url(_) => None,
+            PubGrubPackage::Url(..) => None,
         }
     }
 }

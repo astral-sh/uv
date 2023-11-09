@@ -68,7 +68,13 @@ pub enum PubGrubPackage {
         #[derivative(Hash = "ignore")]
         Option<Url>,
     ),
-    Url(Url),
+    Url(
+        PackageName,
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(PartialOrd = "ignore")]
+        #[derivative(Hash = "ignore")]
+        Url,
+    ),
 }
 
 impl std::fmt::Display for PubGrubPackage {
@@ -85,7 +91,7 @@ impl std::fmt::Display for PubGrubPackage {
             PubGrubPackage::Package(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")
             }
-            PubGrubPackage::Url(url) => write!(f, "{url}"),
+            PubGrubPackage::Url(name, url) => write!(f, "{name} @ {url}"),
         }
     }
 }

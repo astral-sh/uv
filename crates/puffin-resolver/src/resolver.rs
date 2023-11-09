@@ -309,7 +309,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
             }
-            PubGrubPackage::Url(_) => {}
+            PubGrubPackage::Url(..) => {}
         }
         Ok(())
     }
@@ -465,7 +465,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 Ok(Some(version))
             }
 
-            PubGrubPackage::Url(_) => {
+            PubGrubPackage::Url(..) => {
                 // TODO(zanieb): This should always be true but it's not enforced by the types
                 let Some((Bound::Included(v), Bound::Included(_))) = range.bounding_range() else {
                     return Ok(None);
@@ -489,7 +489,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.
-                let constraints = PubGrubDependencies::try_from_requirements(
+                let mut constraints = PubGrubDependencies::try_from_requirements(
                     &self.requirements,
                     &self.constraints,
                     None,
@@ -497,11 +497,30 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     self.markers,
                 )?;
 
+                let mut urls = Vec::new();
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package:?} {version:?}");
 
+                    if let PubGrubPackage::Package(package_name, _, Some(url)) = package {
+                        let package = PubGrubPackage::Url(package_name.clone(), url.clone());
+                        let length = url_versions.len();
+                        let version = url_versions
+                            .entry(url.clone())
+                            .or_insert(Version::from_release(vec![length]));
+
+                        debug!(
+                            "Adding dummy dependency to root for {package} with unique key {version}"
+                        );
+                        urls.push((package, Range::singleton(version.clone())));
+                    }
+
                     // Emit a request to fetch the metadata for this package.
                     Self::visit_package(package, priorities, in_flight, request_sink)?;
+                }
+
+                for item in urls {
+                    let (package, version) = item;
+                    constraints.push(package, version);
                 }
 
                 Ok(Dependencies::Known(constraints.into()))
@@ -534,19 +553,6 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     Self::visit_package(package, priorities, in_flight, request_sink)?;
                 }
 
-                if let Some(url) = url {
-                    let package = PubGrubPackage::Url(url.clone());
-                    let length = url_versions.len();
-                    let version = url_versions
-                        .entry(url.clone())
-                        .or_insert(Version::from_release(vec![length]));
-
-                    debug!(
-                        "Adding dummy dependency to {package_name} @ {package} with url-version{version}"
-                    );
-                    constraints.push(package, Range::singleton(version.clone()));
-                }
-
                 if let Some(extra) = extra {
                     if !metadata
                         .provides_extras
@@ -565,7 +571,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
             // TODO(zanieb): Improve documentation here
             // Return an empty set for dummy url packages
-            PubGrubPackage::Url(_) => Ok(Dependencies::Known(Vec::new())),
+            PubGrubPackage::Url(..) => Ok(Dependencies::Known(Vec::new())),
         }
     }
 
@@ -851,7 +857,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     );
                 }
                 // TODO(zanieb): Determine if progress should be reported here
-                PubGrubPackage::Url(_) => {}
+                PubGrubPackage::Url(..) => {}
             }
         }
     }
