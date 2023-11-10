@@ -61,9 +61,9 @@ impl<'a> BuiltDistFetcher<'a> {
 
         // Read the metadata from the wheel.
         let wheel = CachedWheel::new(wheel_file, WheelFilename::from_str(wheel_filename)?);
-        let metadata21 = wheel.read_dist_info()?;
+        let metadata = wheel.read_dist_info()?;
 
         debug!("Finished downloading: {dist}");
-        Ok(metadata21)
+        Ok(metadata)
     }
 }

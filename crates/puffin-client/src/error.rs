@@ -3,6 +3,7 @@ use std::io;
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use thiserror::Error;
+use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 
@@ -23,8 +24,8 @@ pub enum Error {
     PackageNotFound(String),
 
     /// The metadata file could not be parsed.
-    #[error(transparent)]
-    MetadataParseError(#[from] pypi_types::Error),
+    #[error("Couldn't parse metadata in {0} ({1})")]
+    MetadataParseError(WheelFilename, Url, #[source] pypi_types::Error),
 
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry at {1}.")]

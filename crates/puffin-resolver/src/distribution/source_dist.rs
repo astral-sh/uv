@@ -159,10 +159,10 @@ impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
             wheel_dir.join(&disk_filename),
             WheelFilename::from_str(&disk_filename)?,
         );
-        let metadata21 = wheel.read_dist_info()?;
+        let metadata = wheel.read_dist_info()?;
 
         debug!("Finished building: {dist}");
-        Ok(metadata21)
+        Ok(metadata)
     }
 
     /// Given a remote source distribution, return a precise variant, if possible.
