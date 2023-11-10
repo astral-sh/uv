@@ -457,7 +457,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 )?;
 
                 for (package, version) in constraints.iter() {
-                    debug!("Adding direct dependency: {package:?} {version:?}");
+                    debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
                     Self::visit_package(package, priorities, in_flight, request_sink)?;
@@ -496,7 +496,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 )?;
 
                 for (package, version) in constraints.iter() {
-                    debug!("Adding transitive dependency: {package} {version}");
+                    debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
                     Self::visit_package(package, priorities, in_flight, request_sink)?;
