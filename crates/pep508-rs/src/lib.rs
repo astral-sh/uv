@@ -1120,10 +1120,10 @@ mod tests {
     #[test]
     fn error_parenthesized_parenthesis() {
         assert_err(
-            "numpy ( >=1.19 ",
+            "numpy ( >=1.19",
             indoc! {"
                 Missing closing parenthesis (expected ')', found end of dependency specification)
-                numpy ( >=1.19\x20
+                numpy ( >=1.19
                       ^"
             },
         );
@@ -1211,11 +1211,11 @@ mod tests {
     #[test]
     fn error_marker_incomplete2() {
         assert_err(
-            r#"numpy; sys_platform == "#,
+            r#"numpy; sys_platform =="#,
             indoc! {"\
                 Expected marker value, found end of dependency specification
-                numpy; sys_platform ==\x20
-                                       ^"
+                numpy; sys_platform ==
+                                      ^"
             },
         );
     }
@@ -1223,11 +1223,11 @@ mod tests {
     #[test]
     fn error_marker_incomplete3() {
         assert_err(
-            r#"numpy; sys_platform == "win32" or "#,
+            r#"numpy; sys_platform == "win32" or"#,
             indoc! {"
                 Expected marker value, found end of dependency specification
-                numpy; sys_platform == \"win32\" or\x20
-                                                  ^"},
+                numpy; sys_platform == \"win32\" or
+                                                 ^"},
         );
     }
 
@@ -1245,11 +1245,11 @@ mod tests {
     #[test]
     fn error_marker_incomplete5() {
         assert_err(
-            r#"numpy; sys_platform == "win32" or (os_name == "linux" and "#,
+            r#"numpy; sys_platform == "win32" or (os_name == "linux" and"#,
             indoc! {"
                 Expected marker value, found end of dependency specification
-                numpy; sys_platform == \"win32\" or (os_name == \"linux\" and\x20
-                                                                          ^"},
+                numpy; sys_platform == \"win32\" or (os_name == \"linux\" and
+                                                                         ^"},
         );
     }
 
@@ -1328,11 +1328,11 @@ mod tests {
     #[test]
     fn error_name_at_nothing() {
         assert_err(
-            r#"name @ "#,
+            r#"name @"#,
             indoc! {"
                 Expected URL
-                name @\x20
-                       ^"
+                name @
+                      ^"
             },
         );
     }
