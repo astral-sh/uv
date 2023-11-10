@@ -15,7 +15,7 @@ use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
-use puffin_distribution::BaseDist;
+use puffin_distribution::Metadata;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};

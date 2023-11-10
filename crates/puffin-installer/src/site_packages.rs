@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use fs_err as fs;
 
-use puffin_distribution::{BaseDist, InstalledDist};
+use puffin_distribution::{InstalledDist, Metadata};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 

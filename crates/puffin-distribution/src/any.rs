@@ -2,7 +2,7 @@ use puffin_normalize::PackageName;
 
 use crate::cached::CachedDist;
 use crate::installed::InstalledDist;
-use crate::traits::BaseDist;
+use crate::traits::Metadata;
 use crate::{Dist, VersionOrUrl};
 
 /// A distribution which either exists remotely or locally.
@@ -13,7 +13,7 @@ pub enum AnyDist {
     Installed(InstalledDist),
 }
 
-impl BaseDist for AnyDist {
+impl Metadata for AnyDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Remote(dist) => dist.name(),

@@ -8,7 +8,7 @@ use crate::{
     InstalledRegistryDist, RegistryBuiltDist, RegistrySourceDist, SourceDist, VersionOrUrl,
 };
 
-pub trait BaseDist {
+pub trait Metadata {
     /// Return the normalized [`PackageName`] of the distribution.
     fn name(&self) -> &PackageName;
 
@@ -33,7 +33,7 @@ pub trait BaseDist {
     }
 }
 
-pub trait RemoteDist {
+pub trait RemoteSource {
     /// Return an appropriate filename for the distribution.
     fn filename(&self) -> Result<&str>;
 
@@ -41,7 +41,7 @@ pub trait RemoteDist {
     fn size(&self) -> Option<usize>;
 }
 
-pub trait DistIdentifier {
+pub trait Identifier {
     /// Return a unique resource identifier for the distribution, like a SHA-256 hash of the
     /// distribution's contents.
     fn distribution_id(&self) -> String;

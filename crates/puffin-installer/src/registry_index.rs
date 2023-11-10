@@ -4,7 +4,7 @@ use std::path::Path;
 use fs_err as fs;
 use tracing::warn;
 
-use puffin_distribution::{BaseDist, CachedRegistryDist};
+use puffin_distribution::{CachedRegistryDist, Metadata};
 use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};

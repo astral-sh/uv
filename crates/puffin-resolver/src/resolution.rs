@@ -11,7 +11,7 @@ use waitmap::WaitMap;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::{BaseDist, BuiltDist, Dist, SourceDist};
+use puffin_distribution::{BuiltDist, Dist, Metadata, SourceDist};
 use puffin_normalize::PackageName;
 use pypi_types::File;
 

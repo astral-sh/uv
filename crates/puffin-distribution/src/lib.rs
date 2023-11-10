@@ -129,7 +129,7 @@ impl Dist {
     }
 }
 
-impl BaseDist for RegistryBuiltDist {
+impl Metadata for RegistryBuiltDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -139,7 +139,7 @@ impl BaseDist for RegistryBuiltDist {
     }
 }
 
-impl BaseDist for DirectUrlBuiltDist {
+impl Metadata for DirectUrlBuiltDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -149,7 +149,7 @@ impl BaseDist for DirectUrlBuiltDist {
     }
 }
 
-impl BaseDist for RegistrySourceDist {
+impl Metadata for RegistrySourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -159,7 +159,7 @@ impl BaseDist for RegistrySourceDist {
     }
 }
 
-impl BaseDist for DirectUrlSourceDist {
+impl Metadata for DirectUrlSourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -169,7 +169,7 @@ impl BaseDist for DirectUrlSourceDist {
     }
 }
 
-impl BaseDist for GitSourceDist {
+impl Metadata for GitSourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -179,7 +179,7 @@ impl BaseDist for GitSourceDist {
     }
 }
 
-impl BaseDist for SourceDist {
+impl Metadata for SourceDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -197,7 +197,7 @@ impl BaseDist for SourceDist {
     }
 }
 
-impl BaseDist for BuiltDist {
+impl Metadata for BuiltDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -213,7 +213,7 @@ impl BaseDist for BuiltDist {
     }
 }
 
-impl BaseDist for Dist {
+impl Metadata for Dist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Built(dist) => dist.name(),
@@ -229,7 +229,7 @@ impl BaseDist for Dist {
     }
 }
 
-impl RemoteDist for RegistryBuiltDist {
+impl RemoteSource for RegistryBuiltDist {
     fn filename(&self) -> Result<&str> {
         Ok(&self.file.filename)
     }
@@ -239,7 +239,7 @@ impl RemoteDist for RegistryBuiltDist {
     }
 }
 
-impl RemoteDist for RegistrySourceDist {
+impl RemoteSource for RegistrySourceDist {
     fn filename(&self) -> Result<&str> {
         Ok(&self.file.filename)
     }
@@ -249,7 +249,7 @@ impl RemoteDist for RegistrySourceDist {
     }
 }
 
-impl RemoteDist for DirectUrlBuiltDist {
+impl RemoteSource for DirectUrlBuiltDist {
     fn filename(&self) -> Result<&str> {
         self.url
             .path_segments()
@@ -267,7 +267,7 @@ impl RemoteDist for DirectUrlBuiltDist {
     }
 }
 
-impl RemoteDist for DirectUrlSourceDist {
+impl RemoteSource for DirectUrlSourceDist {
     fn filename(&self) -> Result<&str> {
         self.url
             .path_segments()
@@ -285,7 +285,7 @@ impl RemoteDist for DirectUrlSourceDist {
     }
 }
 
-impl RemoteDist for GitSourceDist {
+impl RemoteSource for GitSourceDist {
     fn filename(&self) -> Result<&str> {
         self.url
             .path_segments()
@@ -303,7 +303,7 @@ impl RemoteDist for GitSourceDist {
     }
 }
 
-impl RemoteDist for SourceDist {
+impl RemoteSource for SourceDist {
     fn filename(&self) -> Result<&str> {
         match self {
             Self::Registry(dist) => dist.filename(),
@@ -321,7 +321,7 @@ impl RemoteDist for SourceDist {
     }
 }
 
-impl RemoteDist for BuiltDist {
+impl RemoteSource for BuiltDist {
     fn filename(&self) -> Result<&str> {
         match self {
             Self::Registry(dist) => dist.filename(),
@@ -337,7 +337,7 @@ impl RemoteDist for BuiltDist {
     }
 }
 
-impl RemoteDist for Dist {
+impl RemoteSource for Dist {
     fn filename(&self) -> Result<&str> {
         match self {
             Self::Built(dist) => dist.filename(),
@@ -353,7 +353,7 @@ impl RemoteDist for Dist {
     }
 }
 
-impl DistIdentifier for Url {
+impl Identifier for Url {
     fn distribution_id(&self) -> String {
         puffin_cache::digest(&puffin_cache::CanonicalUrl::new(self))
     }
@@ -363,7 +363,7 @@ impl DistIdentifier for Url {
     }
 }
 
-impl DistIdentifier for File {
+impl Identifier for File {
     fn distribution_id(&self) -> String {
         self.hashes.sha256.clone()
     }
@@ -373,7 +373,7 @@ impl DistIdentifier for File {
     }
 }
 
-impl DistIdentifier for RegistryBuiltDist {
+impl Identifier for RegistryBuiltDist {
     fn distribution_id(&self) -> String {
         self.file.distribution_id()
     }
@@ -383,7 +383,7 @@ impl DistIdentifier for RegistryBuiltDist {
     }
 }
 
-impl DistIdentifier for RegistrySourceDist {
+impl Identifier for RegistrySourceDist {
     fn distribution_id(&self) -> String {
         self.file.distribution_id()
     }
@@ -393,7 +393,7 @@ impl DistIdentifier for RegistrySourceDist {
     }
 }
 
-impl DistIdentifier for DirectUrlBuiltDist {
+impl Identifier for DirectUrlBuiltDist {
     fn distribution_id(&self) -> String {
         self.url.distribution_id()
     }
@@ -403,7 +403,7 @@ impl DistIdentifier for DirectUrlBuiltDist {
     }
 }
 
-impl DistIdentifier for DirectUrlSourceDist {
+impl Identifier for DirectUrlSourceDist {
     fn distribution_id(&self) -> String {
         self.url.distribution_id()
     }
@@ -413,7 +413,7 @@ impl DistIdentifier for DirectUrlSourceDist {
     }
 }
 
-impl DistIdentifier for GitSourceDist {
+impl Identifier for GitSourceDist {
     fn distribution_id(&self) -> String {
         self.url.distribution_id()
     }
@@ -423,7 +423,7 @@ impl DistIdentifier for GitSourceDist {
     }
 }
 
-impl DistIdentifier for SourceDist {
+impl Identifier for SourceDist {
     fn distribution_id(&self) -> String {
         match self {
             Self::Registry(dist) => dist.distribution_id(),
@@ -441,7 +441,7 @@ impl DistIdentifier for SourceDist {
     }
 }
 
-impl DistIdentifier for BuiltDist {
+impl Identifier for BuiltDist {
     fn distribution_id(&self) -> String {
         match self {
             Self::Registry(dist) => dist.distribution_id(),
@@ -457,7 +457,7 @@ impl DistIdentifier for BuiltDist {
     }
 }
 
-impl DistIdentifier for Dist {
+impl Identifier for Dist {
     fn distribution_id(&self) -> String {
         match self {
             Self::Built(dist) => dist.distribution_id(),

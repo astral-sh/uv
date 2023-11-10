@@ -7,7 +7,7 @@ use pep440_rs::Version;
 use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
-use crate::{BaseDist, VersionOrUrl};
+use crate::{Metadata, VersionOrUrl};
 
 /// A built distribution (wheel) that exists in a virtual environment.
 #[derive(Debug, Clone)]
@@ -33,7 +33,7 @@ pub struct InstalledDirectUrlDist {
     pub path: PathBuf,
 }
 
-impl BaseDist for InstalledRegistryDist {
+impl Metadata for InstalledRegistryDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -43,7 +43,7 @@ impl BaseDist for InstalledRegistryDist {
     }
 }
 
-impl BaseDist for InstalledDirectUrlDist {
+impl Metadata for InstalledDirectUrlDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -54,7 +54,7 @@ impl BaseDist for InstalledDirectUrlDist {
     }
 }
 
-impl BaseDist for InstalledDist {
+impl Metadata for InstalledDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),

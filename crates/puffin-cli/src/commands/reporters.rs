@@ -5,7 +5,7 @@ use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use puffin_distribution::{BaseDist, CachedDist, Dist, SourceDist, VersionOrUrl};
+use puffin_distribution::{CachedDist, Dist, Metadata, SourceDist, VersionOrUrl};
 use puffin_installer::Download;
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;

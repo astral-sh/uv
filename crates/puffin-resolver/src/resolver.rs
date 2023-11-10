@@ -23,7 +23,7 @@ use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{
-    BaseDist, BuiltDist, DirectUrlSourceDist, Dist, DistIdentifier, GitSourceDist, SourceDist,
+    BuiltDist, DirectUrlSourceDist, Dist, GitSourceDist, Identifier, Metadata, SourceDist,
     VersionOrUrl,
 };
 use puffin_normalize::{ExtraName, PackageName};

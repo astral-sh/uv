@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use url::Url;
 
-use crate::traits::BaseDist;
+use crate::traits::Metadata;
 use crate::{BuiltDist, Dist, SourceDist, VersionOrUrl};
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
@@ -34,7 +34,7 @@ pub struct CachedDirectUrlDist {
     pub path: PathBuf,
 }
 
-impl BaseDist for CachedRegistryDist {
+impl Metadata for CachedRegistryDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -44,7 +44,7 @@ impl BaseDist for CachedRegistryDist {
     }
 }
 
-impl BaseDist for CachedDirectUrlDist {
+impl Metadata for CachedDirectUrlDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -54,7 +54,7 @@ impl BaseDist for CachedDirectUrlDist {
     }
 }
 
-impl BaseDist for CachedDist {
+impl Metadata for CachedDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),

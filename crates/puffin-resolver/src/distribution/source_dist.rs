@@ -15,7 +15,7 @@ use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use puffin_distribution::{DistIdentifier, RemoteDist, SourceDist};
+use puffin_distribution::{Identifier, RemoteSource, SourceDist};
 use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;

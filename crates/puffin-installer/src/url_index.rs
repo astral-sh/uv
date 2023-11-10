@@ -4,7 +4,7 @@ use fxhash::FxHashMap;
 use tracing::warn;
 use url::Url;
 
-use puffin_distribution::{CachedDirectUrlDist, DistIdentifier};
+use puffin_distribution::{CachedDirectUrlDist, Identifier};
 use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
