@@ -207,7 +207,7 @@ impl RegistryClient {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
-            let cache_file = format!("{}.json", filename.get_tag());
+            let cache_file = format!("{}.json", file.filename);
 
             let response_callback = |response: Response| async move {
                 Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
