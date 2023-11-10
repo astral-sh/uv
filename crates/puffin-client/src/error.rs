@@ -28,7 +28,7 @@ pub enum Error {
 
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry at {1}.")]
-    FileNotFound(String, #[source] reqwest_middleware::Error),
+    FileNotFound(String, #[source] reqwest::Error),
 
     /// A generic request error happened while making a request. Refer to the
     /// error message for more details.
@@ -60,6 +60,13 @@ pub enum Error {
 
     #[error(transparent)]
     IO(#[from] io::Error),
+
+    /// An [`io::Error`] with a filename attached
+    #[error(transparent)]
+    Persist(#[from] tempfile::PersistError),
+
+    #[error("Failed to serialize response to cache")]
+    SerdeJson(#[from] serde_json::Error),
 }
 
 impl Error {

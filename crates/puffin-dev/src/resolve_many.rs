@@ -60,7 +60,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, Some(&cache))?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::default().cache(Some(&cache)).build(),
+        RegistryClientBuilder::new(cache.clone()).build(),
         cache.clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,

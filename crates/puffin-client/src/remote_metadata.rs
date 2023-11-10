@@ -1,57 +1,19 @@
-use std::io;
-use std::path::Path;
-
 use async_http_range_reader::AsyncHttpRangeReader;
 use async_zip::tokio::read::seek::ZipFileReader;
-use fs_err::tokio as fs;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use url::Url;
 
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
-use puffin_cache::CanonicalUrl;
-use pypi_types::Metadata21;
 
 use crate::Error;
 
-const WHEEL_METADATA_FROM_ZIP_CACHE: &str = "wheel-metadata-v0";
-
-/// Try to read the cached METADATA previously extracted from a remote zip, if it exists
-pub(crate) async fn wheel_metadata_get_cached(
-    url: &Url,
-    cache: Option<&Path>,
-) -> Option<Metadata21> {
-    // TODO(konstin): Actual good cache layout
-    let path = cache?
-        .join(WHEEL_METADATA_FROM_ZIP_CACHE)
-        .join(puffin_cache::digest(&CanonicalUrl::new(url)));
-    if !path.is_file() {
-        return None;
-    }
-    let data = fs::read(path).await.ok()?;
-    serde_json::from_slice(&data).ok()
-}
-
-/// Write the cached METADATA extracted from a remote zip to the cache
-pub(crate) async fn wheel_metadata_write_cache(
-    url: &Url,
-    cache: Option<&Path>,
-    metadata: &Metadata21,
-) -> io::Result<()> {
-    let Some(cache) = cache else {
-        return Ok(());
-    };
-    // TODO(konstin): Actual good cache layout
-    let dir = cache.join(WHEEL_METADATA_FROM_ZIP_CACHE);
-    fs::create_dir_all(&dir).await?;
-    let path = dir.join(puffin_cache::digest(&CanonicalUrl::new(url)));
-    fs::write(path, serde_json::to_vec(metadata)?).await
-}
+pub(crate) const WHEEL_METADATA_FROM_INDEX: &str = "wheel-metadat-index-v0";
+pub(crate) const WHEEL_METADATA_FROM_ZIP_CACHE: &str = "wheel-metadata-remote-v0";
 
 /// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
 /// entire wheel just for the one file.
 ///
-/// This method is derived from `prefix-div/rip`, which is available under the following BSD-3
+/// This method is derived from `prefix-dev/rip`, which is available under the following BSD-3
 /// Clause license:
 ///
 /// ```text

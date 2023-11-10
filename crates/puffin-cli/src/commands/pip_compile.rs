@@ -128,8 +128,7 @@ pub(crate) async fn pip_compile(
 
     // Instantiate a client.
     let client = {
-        let mut builder = RegistryClientBuilder::default();
-        builder = builder.cache(Some(cache));
+        let mut builder = RegistryClientBuilder::new(cache);
         if let Some(IndexUrls { index, extra_index }) = index_urls {
             if let Some(index) = index {
                 builder = builder.index(index);
@@ -142,7 +141,7 @@ pub(crate) async fn pip_compile(
     };
 
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::default().build(),
+        client.clone(),
         cache.to_path_buf(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,

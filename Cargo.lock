@@ -225,8 +225,8 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.3.0"
-source = "git+https://github.com/baszalmstra/async_http_range_reader#4cafe5afda889d53060e0565c949d4ffd6ef3786"
+version = "0.4.0"
+source = "git+https://github.com/baszalmstra/async_http_range_reader?rev=8dab2c08ac864fec1df014465264f9a7c8eae905#8dab2c08ac864fec1df014465264f9a7c8eae905"
 dependencies = [
  "bisection",
  "futures",
@@ -2370,9 +2370,10 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "futures",
+ "http",
  "http-cache-reqwest",
+ "http-cache-semantics",
  "install-wheel-rs",
- "puffin-cache",
  "puffin-normalize",
  "pypi-types",
  "reqwest",

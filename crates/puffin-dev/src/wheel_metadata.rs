@@ -1,8 +1,10 @@
-use std::path::PathBuf;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::Parser;
 use directories::ProjectDirs;
+use tempfile::tempdir;
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -21,14 +23,17 @@ pub(crate) struct WheelMetadataArgs {
 
 pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> anyhow::Result<()> {
     let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache_dir = (!args.no_cache)
-        .then(|| {
-            args.cache_dir
-                .as_deref()
-                .or_else(|| project_dirs.as_ref().map(ProjectDirs::cache_dir))
-        })
-        .flatten();
-    let client = RegistryClientBuilder::default().cache(cache_dir).build();
+    // https://github.com/astral-sh/puffin/issues/366
+    let cache_dir = if args.no_cache {
+        Cow::Owned(tempdir()?.into_path())
+    } else if let Some(cache_dir) = args.cache_dir {
+        Cow::Owned(cache_dir)
+    } else if let Some(project_dirs) = project_dirs.as_ref() {
+        Cow::Borrowed(project_dirs.cache_dir())
+    } else {
+        Cow::Borrowed(Path::new(".puffin_cache"))
+    };
+    let client = RegistryClientBuilder::new(cache_dir).build();
 
     let filename = WheelFilename::from_str(
         args.url
