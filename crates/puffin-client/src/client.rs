@@ -210,7 +210,7 @@ impl RegistryClient {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_INDEX).join("pypi");
-            let cache_file = format!("{}.json", filename.get_tag());
+            let cache_file = format!("{}.json", filename.stem());
 
             let response_callback = |response: Response| async move {
                 Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
@@ -234,7 +234,7 @@ impl RegistryClient {
         url: &Url,
     ) -> Result<Metadata21, Error> {
         let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
-        let cache_file = format!("{}.json", filename.get_tag());
+        let cache_file = format!("{}.json", filename.stem());
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.

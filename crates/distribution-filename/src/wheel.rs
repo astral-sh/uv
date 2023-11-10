@@ -137,6 +137,11 @@ impl WheelFilename {
             self.platform_tag.join(".")
         )
     }
+
+    /// The wheel filename without the extension
+    pub fn stem(&self) -> String {
+        format!("{}-{}-{}", self.distribution, self.version, self.get_tag())
+    }
 }
 
 impl TryFrom<&Url> for WheelFilename {

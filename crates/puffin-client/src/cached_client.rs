@@ -143,7 +143,7 @@ impl CachedClient {
                         // This should not happen
                         warn!(
                             "Cached request doesn't match current request for {}",
-                            req.url()
+                            req.url(),
                         );
                         // This will override the bogus cache
                         return self.fresh_request(req, converted_req).await;
