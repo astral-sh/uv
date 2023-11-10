@@ -1,10 +1,11 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::BIN_NAME;
+use common::{BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
@@ -122,6 +123,65 @@ dependencies = ["flask==1.0.x"]
         .arg("-r")
         .arg("pyproject.toml")
         .current_dir(&tempdir));
+
+    Ok(())
+}
+
+#[test]
+fn uninstall() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-sync")
+        .arg("requirements.txt")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import markupsafe")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-uninstall")
+            .arg("MarkupSafe")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import markupsafe")
+        .current_dir(&temp_dir)
+        .assert()
+        .failure();
 
     Ok(())
 }

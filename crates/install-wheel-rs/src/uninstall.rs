@@ -64,6 +64,19 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
                 break;
             }
 
+            // If the directory contains a `__pycache__` directory, always remove it. `__pycache__`
+            // may or may not be listed in the RECORD, but installers are expected to be smart
+            // enough to remove it either way.
+            let pycache = path.join("__pycache__");
+            match fs::remove_dir_all(&pycache) {
+                Ok(()) => {
+                    debug!("Removed directory: {}", pycache.display());
+                    dir_count += 1;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+
             // Try to read from the directory. If it doesn't exist, assume we deleted it in a
             // previous iteration.
             let mut read_dir = match fs::read_dir(path) {
