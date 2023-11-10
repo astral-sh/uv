@@ -355,17 +355,17 @@ impl PyVersion {
     #[getter]
     #[allow(clippy::get_first)]
     pub fn major(&self) -> u32 {
-        self.release().get(0).copied().unwrap_or_default()
+        self.0.release.get(0).copied().unwrap_or_default()
     }
     /// The second item of release or 0 if unavailable.
     #[getter]
     pub fn minor(&self) -> u32 {
-        self.release().get(1).copied().unwrap_or_default()
+        self.0.release.get(1).copied().unwrap_or_default()
     }
     /// The third item of release or 0 if unavailable.
     #[getter]
     pub fn micro(&self) -> u32 {
-        self.release().get(2).copied().unwrap_or_default()
+        self.0.release.get(2).copied().unwrap_or_default()
     }
 
     /// Parses a PEP 440 version string
