@@ -8,9 +8,9 @@ info:
     - "--python-version"
     - py37
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpQwHoBA
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpzwzUVe
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp1TmUIW/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpqFv4YL/.venv
 ---
 success: true
 exit_code: 0
@@ -28,7 +28,7 @@ packaging==23.2
     # via black
 pathspec==0.11.2
     # via black
-platformdirs==3.11.0
+platformdirs==4.0.0
     # via black
 tomli==2.0.1
     # via black

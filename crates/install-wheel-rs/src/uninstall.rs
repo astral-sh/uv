@@ -30,13 +30,19 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             Ok(()) => {
                 debug!("Removed file: {}", path.display());
                 file_count += 1;
+                if let Some(parent) = path.parent() {
+                    visited.insert(normalize_path(parent));
+                }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err.into()),
-        }
-
-        if let Some(parent) = path.parent() {
-            visited.insert(normalize_path(parent));
+            Err(err) => match fs::remove_dir_all(&path) {
+                Ok(()) => {
+                    debug!("Removed directory: {}", path.display());
+                    dir_count += 1;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err(err.into()),
+            },
         }
     }
 
