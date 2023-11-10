@@ -14,6 +14,7 @@ use flate2::read::GzDecoder;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use indoc::formatdoc;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use pyproject_toml::{BuildSystem, Project};
 use regex::Regex;
@@ -146,11 +147,35 @@ struct Pep517Backend {
 
 impl Pep517Backend {
     fn backend_import(&self) -> String {
-        if let Some((path, object)) = self.backend.split_once(':') {
-            format!("from {path} import {object}")
+        let import = if let Some((path, object)) = self.backend.split_once(':') {
+            format!("from {path} import {object} as backend")
         } else {
-            format!("import {}", self.backend)
-        }
+            format!("import {} as backend", self.backend)
+        };
+
+        let backend_path_encoded = self
+            .backend_path
+            .clone()
+            .unwrap_or_default()
+            .iter()
+            .map(|path| {
+                // Turn into properly escaped python string
+                '"'.to_string()
+                    + &path.replace('\\', "\\\\").replace('"', "\\\"")
+                    + &'"'.to_string()
+            })
+            .join(", ");
+
+        // > Projects can specify that their backend code is hosted in-tree by including the
+        // > backend-path key in pyproject.toml. This key contains a list of directories, which the
+        // > frontend will add to the start of sys.path when loading the backend, and running the
+        // > backend hooks.
+        formatdoc! {r#"
+            import sys
+            sys.path = [{backend_path}] + sys.path
+
+            {import} 
+        "#, backend_path = backend_path_encoded}
     }
 }
 
@@ -341,7 +366,7 @@ impl SourceBuild {
             pep517_backend.backend
         );
         let script = formatdoc! {
-            r#"{} as backend
+            r#"{}
             import json
             
             if prepare_metadata_for_build_wheel := getattr(backend, "prepare_metadata_for_build_wheel", None):
@@ -446,14 +471,14 @@ impl SourceBuild {
         );
         let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
-            r#"{} as backend
+            r#"{}
             print(backend.build_wheel("{}", metadata_directory={}))
             "#, pep517_backend.backend_import(), escaped_wheel_dir, metadata_directory 
         };
         let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
         if !output.status.success() {
             return Err(Error::from_command_output(
-                "Build backend failed to build wheel through `build_wheel()` ".to_string(),
+                "Build backend failed to build wheel through `build_wheel()`".to_string(),
                 &output,
                 &self.package_id,
             ));
@@ -492,13 +517,9 @@ async fn create_pep517_build_environment(
         "Calling `{}.get_requires_for_build_wheel()`",
         pep517_backend.backend
     );
-    if pep517_backend.backend_path.is_some() {
-        return Err(Error::InvalidSourceDistribution(
-            "backend-path is not supported yet".to_string(),
-        ));
-    }
     let script = formatdoc! {
-        r#"{} as backend
+        r#"
+            {}
             import json
             
             if get_requires_for_build_wheel := getattr(backend, "get_requires_for_build_wheel", None):
@@ -624,8 +645,9 @@ fn run_python_script(
 mod test {
     use std::process::{ExitStatus, Output};
 
-    use crate::Error;
     use indoc::indoc;
+
+    use crate::Error;
 
     #[test]
     fn missing_header() {

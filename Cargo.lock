@@ -2282,6 +2282,7 @@ dependencies = [
  "gourgeist",
  "indoc",
  "insta",
+ "itertools 0.11.0",
  "once_cell",
  "pep508_rs",
  "platform-host",
