@@ -8,6 +8,7 @@ use regex::Captures;
 use regex::Regex;
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use smallvec::SmallVec;
 use std::cmp::{max, Ordering};
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
@@ -269,7 +270,7 @@ pub struct Version {
     /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
     ///
     /// Note that we drop the * placeholder by moving it to `Operator`
-    pub release: Vec<u32>,
+    pub release: SmallVec<[u32; 8]>,
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
     ///
@@ -328,7 +329,7 @@ impl PyVersion {
     /// Note that we drop the * placeholder by moving it to `Operator`
     #[getter]
     pub fn release(&self) -> Vec<u32> {
-        self.0.release.clone()
+        self.0.release.to_vec()
     }
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
@@ -445,7 +446,7 @@ impl Version {
     pub fn from_release(release: Vec<u32>) -> Self {
         Self {
             epoch: 0,
-            release,
+            release: SmallVec::from(release),
             pre: None,
             post: None,
             dev: None,
@@ -785,7 +786,7 @@ impl Version {
             .as_str()
             .split('.')
             .map(|segment| segment.parse::<u32>().map_err(|err| err.to_string()))
-            .collect::<Result<Vec<u32>, String>>()?;
+            .collect::<Result<SmallVec<[u32; 8]>, String>>()?;
 
         let star = captures.name("trailing_dot_star").is_some();
         if star {

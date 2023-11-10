@@ -20,6 +20,7 @@ crate-type = ["rlib", "cdylib"]
 once_cell = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
+smallvec = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 

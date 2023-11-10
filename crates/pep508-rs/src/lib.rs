@@ -888,6 +888,7 @@ mod tests {
     use std::str::FromStr;
 
     use indoc::indoc;
+    use smallvec::smallvec;
     use url::Url;
 
     use pep440_rs::{Operator, Version, VersionSpecifier};
@@ -956,7 +957,7 @@ mod tests {
                         Operator::GreaterThanEqual,
                         Version {
                             epoch: 0,
-                            release: vec![2, 8, 1],
+                            release: smallvec![2, 8, 1],
                             pre: None,
                             post: None,
                             dev: None,
@@ -969,7 +970,7 @@ mod tests {
                         Operator::Equal,
                         Version {
                             epoch: 0,
-                            release: vec![2, 8],
+                            release: smallvec![2, 8],
                             pre: None,
                             post: None,
                             dev: None,

@@ -2034,6 +2034,7 @@ dependencies = [
  "pyo3",
  "regex",
  "serde",
+ "smallvec",
  "tracing",
  "unicode-width",
 ]
@@ -2064,6 +2065,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "smallvec",
  "testing_logger",
  "thiserror",
  "tracing",
@@ -3275,9 +3277,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.11.1"
+version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
+checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
 
 [[package]]
 name = "smawk"

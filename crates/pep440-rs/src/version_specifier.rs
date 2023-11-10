@@ -566,6 +566,7 @@ pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep
 mod test {
     use crate::{Operator, Version, VersionSpecifier, VersionSpecifiers};
     use indoc::indoc;
+    use smallvec::smallvec;
     use std::cmp::Ordering;
     use std::str::FromStr;
 
@@ -1060,7 +1061,7 @@ mod test {
                     operator: Operator::TildeEqual,
                     version: Version {
                         epoch: 0,
-                        release: vec![0, 9],
+                        release: smallvec![0, 9],
                         pre: None,
                         post: None,
                         dev: None,
@@ -1071,7 +1072,7 @@ mod test {
                     operator: Operator::GreaterThanEqual,
                     version: Version {
                         epoch: 0,
-                        release: vec![1, 0],
+                        release: smallvec![1, 0],
                         pre: None,
                         post: None,
                         dev: None,
@@ -1082,7 +1083,7 @@ mod test {
                     operator: Operator::NotEqualStar,
                     version: Version {
                         epoch: 0,
-                        release: vec![1, 3, 4],
+                        release: smallvec![1, 3, 4],
                         pre: None,
                         post: None,
                         dev: None,
@@ -1093,7 +1094,7 @@ mod test {
                     operator: Operator::LessThan,
                     version: Version {
                         epoch: 0,
-                        release: vec![2, 0],
+                        release: smallvec![2, 0],
                         pre: None,
                         post: None,
                         dev: None,

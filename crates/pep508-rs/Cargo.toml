@@ -37,6 +37,7 @@ indoc = "2.0.4"
 log = "0.4.20"
 testing_logger = "0.1.1"
 serde_json = "1.0.108"
+smallvec = { workspace = true }
 
 [features]
 pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log"]
