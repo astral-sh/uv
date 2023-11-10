@@ -367,14 +367,20 @@ fn hardlink_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
 ) -> Result<usize, Error> {
-    let mut count = 0usize;
-
     // Hard linking might not be supported but we (afaik) can't detect this ahead of time, so we'll
     // try hard linking the first file, if this succeeds we'll know later hard linking errors are
     // not due to lack of os/fs support, if it fails we'll switch to copying for the rest of the
     // install
-    let mut first_try_hard_linking = true;
-    let mut use_copy_fallback = false;
+    #[derive(Debug, Default, Clone, Copy)]
+    enum Attempt {
+        #[default]
+        Initial,
+        Subsequent,
+        UseCopyFallback,
+    }
+
+    let mut attempt = Attempt::default();
+    let mut count = 0usize;
 
     // Walk over the directory.
     for entry in walkdir::WalkDir::new(&wheel) {
@@ -387,23 +393,30 @@ fn hardlink_wheel_files(
             continue;
         }
 
-        // Hardlink the file, unless it's the `RECORD` file, which we modify during installation.
+        // The `RECORD` file is modified during installation, so we copy it instead of hard-linking.
         if entry.path().ends_with("RECORD") {
             fs::copy(entry.path(), &out_path)?;
-        } else if use_copy_fallback {
-            fs::copy(entry.path(), &out_path)?;
-        } else {
-            let hard_link_result = fs::hard_link(entry.path(), &out_path);
-            // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that
-            if let Err(err) = hard_link_result {
-                if first_try_hard_linking {
+            count += 1;
+            continue;
+        }
+
+        // Fallback to copying if hardlinks aren't supported for this installation.
+        match attempt {
+            Attempt::Initial => {
+                // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that
+                if fs::hard_link(entry.path(), &out_path).is_err() {
                     fs::copy(entry.path(), &out_path)?;
-                    use_copy_fallback = true;
+                    attempt = Attempt::UseCopyFallback;
                 } else {
-                    return Err(err.into());
+                    attempt = Attempt::Subsequent;
                 }
             }
-            first_try_hard_linking = false;
+            Attempt::Subsequent => {
+                fs::hard_link(entry.path(), &out_path)?;
+            }
+            Attempt::UseCopyFallback => {
+                fs::copy(entry.path(), &out_path)?;
+            }
         }
 
         count += 1;
