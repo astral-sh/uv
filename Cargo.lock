@@ -1647,6 +1647,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3979b5c37ece694f1f5e51e7ecc871fdb0f517ed04ee45f88d15d6d553cb9664"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "libredox"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1803,6 +1813,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa01922b5ea280a911e323e4d2fd24b7fe5cc4042e0d2cda3c40775cdc4bdc9c"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]
@@ -2332,6 +2351,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.11.0",
  "miette",
+ "mimalloc",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",
@@ -2351,6 +2371,7 @@ dependencies = [
  "requirements-txt",
  "tempfile",
  "thiserror",
+ "tikv-jemallocator",
  "tokio",
  "toml 0.8.8",
  "tracing",
@@ -2403,6 +2424,7 @@ dependencies = [
  "gourgeist",
  "indicatif",
  "itertools 0.11.0",
+ "mimalloc",
  "pep508_rs",
  "platform-host",
  "platform-tags",
@@ -2413,6 +2435,7 @@ dependencies = [
  "puffin-traits",
  "pypi-types",
  "tempfile",
+ "tikv-jemallocator",
  "tokio",
  "tracing",
  "tracing-indicatif",
@@ -3533,6 +3556,26 @@ checksum = "3fdd6f064ccff2d6567adcb3873ca630700f00b5ad3f060c25b5dcfd9a4ce152"
 dependencies = [
  "cfg-if 1.0.0",
  "once_cell",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.5.4+5.3.0-patched"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
 ]
 
 [[package]]
