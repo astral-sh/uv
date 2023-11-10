@@ -10,7 +10,7 @@ use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct WheelFilename {
-    pub distribution: PackageName,
+    pub name: PackageName,
     pub version: Version,
     pub python_tag: Vec<String>,
     pub abi_tag: Vec<String>,
@@ -39,7 +39,7 @@ impl FromStr for WheelFilename {
         // if this is a problem in practice.
         let mut parts = basename.split('-');
 
-        let distribution = parts
+        let name = parts
             .next()
             .expect("split always yields 1 or more elements");
 
@@ -71,7 +71,7 @@ impl FromStr for WheelFilename {
             ));
         };
 
-        let (distribution, version, python_tag, abi_tag, platform_tag) =
+        let (name, version, python_tag, abi_tag, platform_tag) =
             if let Some(platform_tag) = parts.next() {
                 if parts.next().is_some() {
                     return Err(WheelFilenameError::InvalidWheelFileName(
@@ -80,7 +80,7 @@ impl FromStr for WheelFilename {
                     ));
                 }
                 (
-                    distribution,
+                    name,
                     version,
                     python_tag_or_abi_tag,
                     abi_tag_or_platform_tag,
@@ -88,7 +88,7 @@ impl FromStr for WheelFilename {
                 )
             } else {
                 (
-                    distribution,
+                    name,
                     version,
                     build_tag_or_python_tag,
                     python_tag_or_abi_tag,
@@ -96,12 +96,12 @@ impl FromStr for WheelFilename {
                 )
             };
 
-        let distribution = PackageName::from_str(distribution)
+        let name = PackageName::from_str(name)
             .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
         Ok(WheelFilename {
-            distribution,
+            name,
             version,
             python_tag: python_tag.split('.').map(String::from).collect(),
             abi_tag: abi_tag.split('.').map(String::from).collect(),
@@ -112,13 +112,7 @@ impl FromStr for WheelFilename {
 
 impl Display for WheelFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}-{}-{}.whl",
-            self.distribution,
-            self.version,
-            self.get_tag()
-        )
+        write!(f, "{}-{}-{}.whl", self.name, self.version, self.get_tag())
     }
 }
 

@@ -3,14 +3,12 @@ use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 
 use crate::{
-    AnyDistribution, BuiltDistribution, CachedDirectUrlDistribution, CachedDistribution,
-    CachedRegistryDistribution, DirectUrlBuiltDistribution, DirectUrlSourceDistribution,
-    Distribution, GitSourceDistribution, InstalledDirectUrlDistribution, InstalledDistribution,
-    InstalledRegistryDistribution, RegistryBuiltDistribution, RegistrySourceDistribution,
-    SourceDistribution, VersionOrUrl,
+    AnyDist, BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
+    DirectUrlSourceDist, Dist, GitSourceDist, InstalledDirectUrlDist, InstalledDist,
+    InstalledRegistryDist, RegistryBuiltDist, RegistrySourceDist, SourceDist, VersionOrUrl,
 };
 
-pub trait BaseDistribution {
+pub trait BaseDist {
     /// Return the normalized [`PackageName`] of the distribution.
     fn name(&self) -> &PackageName;
 
@@ -35,7 +33,7 @@ pub trait BaseDistribution {
     }
 }
 
-pub trait RemoteDistribution {
+pub trait RemoteDist {
     /// Return an appropriate filename for the distribution.
     fn filename(&self) -> Result<&str>;
 
@@ -43,7 +41,7 @@ pub trait RemoteDistribution {
     fn size(&self) -> Option<usize>;
 }
 
-pub trait DistributionIdentifier {
+pub trait DistIdentifier {
     /// Return a unique resource identifier for the distribution, like a SHA-256 hash of the
     /// distribution's contents.
     fn distribution_id(&self) -> String;
@@ -58,91 +56,91 @@ pub trait DistributionIdentifier {
 }
 
 // Implement `Display` for all known types that implement `DistributionIdentifier`.
-impl std::fmt::Display for AnyDistribution {
+impl std::fmt::Display for AnyDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for BuiltDistribution {
+impl std::fmt::Display for BuiltDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for CachedDistribution {
+impl std::fmt::Display for CachedDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for CachedDirectUrlDistribution {
+impl std::fmt::Display for CachedDirectUrlDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for CachedRegistryDistribution {
+impl std::fmt::Display for CachedRegistryDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for DirectUrlBuiltDistribution {
+impl std::fmt::Display for DirectUrlBuiltDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for DirectUrlSourceDistribution {
+impl std::fmt::Display for DirectUrlSourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for Distribution {
+impl std::fmt::Display for Dist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for GitSourceDistribution {
+impl std::fmt::Display for GitSourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for InstalledDistribution {
+impl std::fmt::Display for InstalledDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for InstalledDirectUrlDistribution {
+impl std::fmt::Display for InstalledDirectUrlDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for InstalledRegistryDistribution {
+impl std::fmt::Display for InstalledRegistryDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for RegistryBuiltDistribution {
+impl std::fmt::Display for RegistryBuiltDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for RegistrySourceDistribution {
+impl std::fmt::Display for RegistrySourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
 
-impl std::fmt::Display for SourceDistribution {
+impl std::fmt::Display for SourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

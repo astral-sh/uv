@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use tracing::debug;
 use zip::ZipArchive;
 
-use puffin_distribution::{CachedDistribution, Distribution, DistributionIdentifier};
+use puffin_distribution::{CachedDist, Dist, DistIdentifier};
 
 use crate::cache::WheelCache;
 use crate::downloader::WheelDownload;
@@ -33,7 +33,7 @@ impl Unzipper {
         &self,
         downloads: Vec<WheelDownload>,
         target: &Path,
-    ) -> Result<Vec<CachedDistribution>> {
+    ) -> Result<Vec<CachedDist>> {
         // Create the wheel cache subdirectory, if necessary.
         let wheel_cache = WheelCache::new(target);
         wheel_cache.init()?;
@@ -82,7 +82,7 @@ impl Unzipper {
             }
 
             let path = wheel_cache.entry(&remote);
-            wheels.push(CachedDistribution::from_remote(remote, path));
+            wheels.push(CachedDist::from_remote(remote, path));
         }
 
         if let Some(reporter) = self.reporter.as_ref() {
@@ -149,7 +149,7 @@ fn unzip_archive<R: Send + Read + Seek + HasLength>(reader: R, target: &Path) ->
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is unzipped.
-    fn on_unzip_progress(&self, distribution: &Distribution);
+    fn on_unzip_progress(&self, dist: &Dist);
 
     /// Callback to invoke when the operation is complete.
     fn on_unzip_complete(&self);

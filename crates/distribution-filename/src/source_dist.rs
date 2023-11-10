@@ -7,37 +7,33 @@ use pep440_rs::Version;
 use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SourceDistributionExtension {
+pub enum SourceDistExtension {
     Zip,
     TarGz,
 }
 
-impl FromStr for SourceDistributionExtension {
-    type Err = SourceDistributionFilenameError;
+impl FromStr for SourceDistExtension {
+    type Err = SourceDistFilenameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "zip" => Self::Zip,
             "tar.gz" => Self::TarGz,
-            other => {
-                return Err(SourceDistributionFilenameError::InvalidExtension(
-                    other.to_string(),
-                ))
-            }
+            other => return Err(SourceDistFilenameError::InvalidExtension(other.to_string())),
         })
     }
 }
 
-impl Display for SourceDistributionExtension {
+impl Display for SourceDistExtension {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceDistributionExtension::Zip => f.write_str("zip"),
-            SourceDistributionExtension::TarGz => f.write_str("tar.gz"),
+            SourceDistExtension::Zip => f.write_str("zip"),
+            SourceDistExtension::TarGz => f.write_str("tar.gz"),
         }
     }
 }
 
-impl SourceDistributionExtension {
+impl SourceDistExtension {
     pub fn from_filename(filename: &str) -> Option<(&str, Self)> {
         if let Some(stem) = filename.strip_suffix(".zip") {
             return Some((stem, Self::Zip));
@@ -52,37 +48,37 @@ impl SourceDistributionExtension {
 /// Note that this is a normalized and not an exact representation, keep the original string if you
 /// need the latter.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SourceDistributionFilename {
+pub struct SourceDistFilename {
     pub name: PackageName,
     pub version: Version,
-    pub extension: SourceDistributionExtension,
+    pub extension: SourceDistExtension,
 }
 
-impl SourceDistributionFilename {
+impl SourceDistFilename {
     /// No `FromStr` impl since we need to know the package name to be able to reasonable parse
     /// these (consider e.g. `a-1-1.zip`)
     pub fn parse(
         filename: &str,
         package_name: &PackageName,
-    ) -> Result<Self, SourceDistributionFilenameError> {
-        let Some((stem, extension)) = SourceDistributionExtension::from_filename(filename) else {
-            return Err(SourceDistributionFilenameError::InvalidExtension(
+    ) -> Result<Self, SourceDistFilenameError> {
+        let Some((stem, extension)) = SourceDistExtension::from_filename(filename) else {
+            return Err(SourceDistFilenameError::InvalidExtension(
                 filename.to_string(),
             ));
         };
 
         if stem.len() <= package_name.as_ref().len() + "-".len() {
-            return Err(SourceDistributionFilenameError::InvalidFilename {
+            return Err(SourceDistFilenameError::InvalidFilename {
                 filename: filename.to_string(),
                 package_name: package_name.to_string(),
             });
         }
         let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
             .map_err(|err| {
-                SourceDistributionFilenameError::InvalidPackageName(filename.to_string(), err)
+                SourceDistFilenameError::InvalidPackageName(filename.to_string(), err)
             })?;
         if &actual_package_name != package_name {
-            return Err(SourceDistributionFilenameError::InvalidFilename {
+            return Err(SourceDistFilenameError::InvalidFilename {
                 filename: filename.to_string(),
                 package_name: package_name.to_string(),
             });
@@ -90,7 +86,7 @@ impl SourceDistributionFilename {
 
         // We checked the length above
         let version = Version::from_str(&stem[package_name.as_ref().len() + "-".len()..])
-            .map_err(SourceDistributionFilenameError::InvalidVersion)?;
+            .map_err(SourceDistFilenameError::InvalidVersion)?;
 
         Ok(Self {
             name: package_name.clone(),
@@ -100,14 +96,14 @@ impl SourceDistributionFilename {
     }
 }
 
-impl Display for SourceDistributionFilename {
+impl Display for SourceDistFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}-{}.{}", self.name, self.version, self.extension)
     }
 }
 
 #[derive(Error, Debug, Clone)]
-pub enum SourceDistributionFilenameError {
+pub enum SourceDistFilenameError {
     #[error("Source distribution name {filename} doesn't start with package name {package_name}")]
     InvalidFilename {
         filename: String,
@@ -126,7 +122,7 @@ mod tests {
     use puffin_normalize::PackageName;
     use std::str::FromStr;
 
-    use crate::SourceDistributionFilename;
+    use crate::SourceDistFilename;
 
     /// Only test already normalized names since the parsing is lossy
     #[test]
@@ -137,12 +133,9 @@ mod tests {
             "foo-lib-1.2.3.tar.gz",
         ] {
             assert_eq!(
-                SourceDistributionFilename::parse(
-                    normalized,
-                    &PackageName::from_str("foo_lib").unwrap()
-                )
-                .unwrap()
-                .to_string(),
+                SourceDistFilename::parse(normalized, &PackageName::from_str("foo_lib").unwrap())
+                    .unwrap()
+                    .to_string(),
                 normalized
             );
         }
@@ -151,20 +144,17 @@ mod tests {
     #[test]
     fn errors() {
         for invalid in ["b-1.2.3.zip", "a-1.2.3-gamma.3.zip", "a-1.2.3.tar.zstd"] {
-            assert!(SourceDistributionFilename::parse(
-                invalid,
-                &PackageName::from_str("a").unwrap()
-            )
-            .is_err());
+            assert!(
+                SourceDistFilename::parse(invalid, &PackageName::from_str("a").unwrap()).is_err()
+            );
         }
     }
 
     #[test]
     fn name_to_long() {
-        assert!(SourceDistributionFilename::parse(
-            "foo.zip",
-            &PackageName::from_str("foo-lib").unwrap()
-        )
-        .is_err());
+        assert!(
+            SourceDistFilename::parse("foo.zip", &PackageName::from_str("foo-lib").unwrap())
+                .is_err()
+        );
     }
 }

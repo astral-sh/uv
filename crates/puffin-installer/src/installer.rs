@@ -1,7 +1,7 @@
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use puffin_distribution::CachedDistribution;
+use puffin_distribution::CachedDist;
 use puffin_interpreter::Virtualenv;
 
 pub struct Installer<'a> {
@@ -36,7 +36,7 @@ impl<'a> Installer<'a> {
     }
 
     /// Install a set of wheels into a Python virtual environment.
-    pub fn install(self, wheels: &[CachedDistribution]) -> Result<()> {
+    pub fn install(self, wheels: &[CachedDist]) -> Result<()> {
         tokio::task::block_in_place(|| {
             wheels.par_iter().try_for_each(|wheel| {
                 let location = install_wheel_rs::InstallLocation::new(
@@ -69,7 +69,7 @@ impl<'a> Installer<'a> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_install_progress(&self, wheel: &CachedDistribution);
+    fn on_install_progress(&self, wheel: &CachedDist);
 
     /// Callback to invoke when the resolution is complete.
     fn on_install_complete(&self);

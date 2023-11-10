@@ -5,7 +5,7 @@ use tracing::debug;
 
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_distribution::direct_url::DirectUrl;
-use puffin_distribution::{CachedDistribution, InstalledDistribution};
+use puffin_distribution::{CachedDist, InstalledDist};
 use puffin_interpreter::Virtualenv;
 
 use crate::url_index::UrlIndex;
@@ -15,7 +15,7 @@ use crate::{RegistryIndex, SitePackages};
 pub struct InstallPlan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
-    pub local: Vec<CachedDistribution>,
+    pub local: Vec<CachedDist>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
@@ -23,7 +23,7 @@ pub struct InstallPlan {
 
     /// The distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
-    pub extraneous: Vec<InstalledDistribution>,
+    pub extraneous: Vec<InstalledDist>,
 }
 
 impl InstallPlan {
@@ -62,7 +62,7 @@ impl InstallPlan {
 
                     // If the requirement comes from a direct URL, check by URL.
                     Some(VersionOrUrl::Url(url)) => {
-                        if let InstalledDistribution::Url(distribution) = &distribution {
+                        if let InstalledDist::Url(distribution) = &distribution {
                             if let Ok(direct_url) = DirectUrl::try_from(url) {
                                 if let Ok(direct_url) = pypi_types::DirectUrl::try_from(&direct_url)
                                 {
@@ -89,14 +89,14 @@ impl InstallPlan {
                         .filter(|dist| requirement.is_satisfied_by(&dist.version))
                     {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDistribution::Registry(distribution.clone()));
+                        local.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     if let Some(distribution) = url_index.get(&requirement.name, url) {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDistribution::Url(distribution.clone()));
+                        local.push(CachedDist::Url(distribution.clone()));
                         continue;
                     }
                 }

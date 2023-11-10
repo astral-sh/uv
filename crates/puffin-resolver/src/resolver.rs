@@ -17,25 +17,23 @@ use tracing::{debug, error, trace};
 use url::Url;
 use waitmap::WaitMap;
 
-use distribution_filename::{SourceDistributionFilename, WheelFilename};
+use distribution_filename::{SourceDistFilename, WheelFilename};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{
-    BaseDistribution, BuiltDistribution, DirectUrlSourceDistribution, Distribution,
-    DistributionIdentifier, GitSourceDistribution, SourceDistribution, VersionOrUrl,
+    BaseDist, BuiltDist, DirectUrlSourceDist, Dist, DistIdentifier, GitSourceDist, SourceDist,
+    VersionOrUrl,
 };
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{
-    BuiltDistributionFetcher, SourceDistributionFetcher, SourceDistributionReporter,
-};
+use crate::distribution::{BuiltDistFetcher, SourceDistFetcher, SourceDistributionReporter};
 use crate::error::ResolveError;
-use crate::file::{DistributionFile, SdistFile, WheelFile};
+use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::locks::Locks;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
@@ -293,8 +291,8 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 // Emit a request to fetch the metadata for this distribution.
                 if in_flight.insert_url(url) {
                     priorities.add(package_name.clone());
-                    let distribution = Distribution::from_url(package_name.clone(), url.clone());
-                    request_sink.unbounded_send(Request::Distribution(distribution))?;
+                    let distribution = Dist::from_url(package_name.clone(), url.clone());
+                    request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
             }
         }
@@ -331,12 +329,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
             // Emit a request to fetch the metadata for this version.
             if in_flight.insert_file(&candidate.file) {
-                let distribution = Distribution::from_registry(
+                let distribution = Dist::from_registry(
                     candidate.package_name.clone(),
                     candidate.version.clone().into(),
                     candidate.file.clone().into(),
                 );
-                request_sink.unbounded_send(Request::Distribution(distribution))?;
+                request_sink.unbounded_send(Request::Dist(distribution))?;
             }
         }
         Ok(())
@@ -423,12 +421,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                 // Emit a request to fetch the metadata for this version.
                 if in_flight.insert_file(&candidate.file) {
-                    let distribution = Distribution::from_registry(
+                    let distribution = Dist::from_registry(
                         candidate.package_name.clone(),
                         candidate.version.clone().into(),
                         candidate.file.clone().into(),
                     );
-                    request_sink.unbounded_send(Request::Distribution(distribution))?;
+                    request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
 
                 let version = candidate.version.clone();
@@ -543,24 +541,24 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                                 let version = PubGrubVersion::from(filename.version.clone());
                                 match version_map.entry(version) {
                                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                                        if matches!(entry.get(), DistributionFile::Sdist(_)) {
+                                        if matches!(entry.get(), DistFile::Sdist(_)) {
                                             // Wheels get precedence over source distributions.
-                                            entry.insert(DistributionFile::from(WheelFile(file)));
+                                            entry.insert(DistFile::from(WheelFile(file)));
                                         }
                                     }
                                     std::collections::btree_map::Entry::Vacant(entry) => {
-                                        entry.insert(DistributionFile::from(WheelFile(file)));
+                                        entry.insert(DistFile::from(WheelFile(file)));
                                     }
                                 }
                             }
                         } else if let Ok(filename) =
-                            SourceDistributionFilename::parse(file.filename.as_str(), &package_name)
+                            SourceDistFilename::parse(file.filename.as_str(), &package_name)
                         {
                             let version = PubGrubVersion::from(filename.version.clone());
                             if let std::collections::btree_map::Entry::Vacant(entry) =
                                 version_map.entry(version)
                             {
-                                entry.insert(DistributionFile::from(SdistFile(file)));
+                                entry.insert(DistFile::from(SdistFile(file)));
                             }
                         }
                     }
@@ -569,26 +567,26 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .packages
                         .insert(package_name.clone(), version_map);
                 }
-                Response::Distribution(Distribution::Built(distribution), metadata, ..) => {
+                Response::Dist(Dist::Built(distribution), metadata, ..) => {
                     trace!("Received built distribution metadata for: {distribution}");
                     self.index
                         .distributions
                         .insert(distribution.distribution_id(), metadata);
                 }
-                Response::Distribution(Distribution::Source(distribution), metadata, precise) => {
+                Response::Dist(Dist::Source(distribution), metadata, precise) => {
                     trace!("Received source distribution metadata for: {distribution}");
                     self.index
                         .distributions
                         .insert(distribution.distribution_id(), metadata);
                     if let Some(precise) = precise {
                         match distribution {
-                            SourceDistribution::DirectUrl(sdist) => {
+                            SourceDist::DirectUrl(sdist) => {
                                 self.index.redirects.insert(sdist.url.clone(), precise);
                             }
-                            SourceDistribution::Git(sdist) => {
+                            SourceDist::Git(sdist) => {
                                 self.index.redirects.insert(sdist.url.clone(), precise);
                             }
-                            SourceDistribution::Registry(_) => {}
+                            SourceDist::Registry(_) => {}
                         }
                     }
                 }
@@ -610,17 +608,17 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             }
 
             // Fetch wheel metadata.
-            Request::Distribution(Distribution::Built(distribution)) => {
+            Request::Dist(Dist::Built(distribution)) => {
                 let metadata =
                     match &distribution {
-                        BuiltDistribution::Registry(wheel) => {
+                        BuiltDist::Registry(wheel) => {
                             self.client
                                 .wheel_metadata(wheel.file.clone())
                                 .map_err(ResolveError::Client)
                                 .await?
                         }
-                        BuiltDistribution::DirectUrl(wheel) => {
-                            let fetcher = BuiltDistributionFetcher::new(self.build_context.cache());
+                        BuiltDist::DirectUrl(wheel) => {
+                            let fetcher = BuiltDistFetcher::new(self.build_context.cache());
                             match fetcher.find_dist_info(wheel, self.tags) {
                                 Ok(Some(metadata)) => {
                                     debug!("Found wheel metadata in cache: {wheel}");
@@ -630,10 +628,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                                     debug!("Downloading wheel: {wheel}");
                                     fetcher.download_wheel(wheel, self.client).await.map_err(
                                         |err| {
-                                            ResolveError::from_built_distribution(
-                                                distribution.clone(),
-                                                err,
-                                            )
+                                            ResolveError::from_built_dist(distribution.clone(), err)
                                         },
                                     )?
                                 }
@@ -641,10 +636,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                                     error!("Failed to read wheel from cache: {err}");
                                     fetcher.download_wheel(wheel, self.client).await.map_err(
                                         |err| {
-                                            ResolveError::from_built_distribution(
-                                                distribution.clone(),
-                                                err,
-                                            )
+                                            ResolveError::from_built_dist(distribution.clone(), err)
                                         },
                                     )?
                                 }
@@ -659,30 +651,26 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     });
                 }
 
-                Ok(Response::Distribution(
-                    Distribution::Built(distribution),
-                    metadata,
-                    None,
-                ))
+                Ok(Response::Dist(Dist::Built(distribution), metadata, None))
             }
 
             // Fetch source distribution metadata.
-            Request::Distribution(Distribution::Source(sdist)) => {
+            Request::Dist(Dist::Source(sdist)) => {
                 let lock = self.locks.acquire(&sdist).await;
                 let _guard = lock.lock().await;
 
                 let fetcher = if let Some(reporter) = &self.reporter {
-                    SourceDistributionFetcher::new(self.build_context).with_reporter(Facade {
+                    SourceDistFetcher::new(self.build_context).with_reporter(Facade {
                         reporter: reporter.clone(),
                     })
                 } else {
-                    SourceDistributionFetcher::new(self.build_context)
+                    SourceDistFetcher::new(self.build_context)
                 };
 
                 let precise = fetcher
                     .precise(&sdist)
                     .await
-                    .map_err(|err| ResolveError::from_source_distribution(sdist.clone(), err))?;
+                    .map_err(|err| ResolveError::from_source_dist(sdist.clone(), err))?;
 
                 let task = self
                     .reporter
@@ -692,19 +680,17 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 let metadata = {
                     // Insert the `precise`, if it exists.
                     let sdist = match sdist.clone() {
-                        SourceDistribution::DirectUrl(sdist) => {
-                            SourceDistribution::DirectUrl(DirectUrlSourceDistribution {
+                        SourceDist::DirectUrl(sdist) => {
+                            SourceDist::DirectUrl(DirectUrlSourceDist {
                                 url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
                                 ..sdist
                             })
                         }
-                        SourceDistribution::Git(sdist) => {
-                            SourceDistribution::Git(GitSourceDistribution {
-                                url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
-                                ..sdist
-                            })
-                        }
-                        sdist @ SourceDistribution::Registry(_) => sdist,
+                        SourceDist::Git(sdist) => SourceDist::Git(GitSourceDist {
+                            url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
+                            ..sdist
+                        }),
+                        sdist @ SourceDist::Registry(_) => sdist,
                     };
 
                     match fetcher.find_dist_info(&sdist, self.tags) {
@@ -717,18 +703,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                             fetcher
                                 .download_and_build_sdist(&sdist, self.client)
                                 .await
-                                .map_err(|err| {
-                                    ResolveError::from_source_distribution(sdist.clone(), err)
-                                })?
+                                .map_err(|err| ResolveError::from_source_dist(sdist.clone(), err))?
                         }
                         Err(err) => {
                             error!("Failed to read source distribution from cache: {err}",);
                             fetcher
                                 .download_and_build_sdist(&sdist, self.client)
                                 .await
-                                .map_err(|err| {
-                                    ResolveError::from_source_distribution(sdist.clone(), err)
-                                })?
+                                .map_err(|err| ResolveError::from_source_dist(sdist.clone(), err))?
                         }
                     }
                 };
@@ -746,11 +728,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     }
                 }
 
-                Ok(Response::Distribution(
-                    Distribution::Source(sdist),
-                    metadata,
-                    precise,
-                ))
+                Ok(Response::Dist(Dist::Source(sdist), metadata, precise))
             }
         }
     }
@@ -790,10 +768,10 @@ pub trait Reporter: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, distribution: &SourceDistribution) -> usize;
+    fn on_build_start(&self, dist: &SourceDist) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, distribution: &SourceDistribution, id: usize);
+    fn on_build_complete(&self, dist: &SourceDist, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -824,7 +802,7 @@ enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
     /// A request to fetch the metadata for a built or source distribution.
-    Distribution(Distribution),
+    Dist(Dist),
 }
 
 #[derive(Debug)]
@@ -833,10 +811,10 @@ enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, SimpleJson),
     /// The returned metadata for a distribution.
-    Distribution(Distribution, Metadata21, Option<Url>),
+    Dist(Dist, Metadata21, Option<Url>),
 }
 
-pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistributionFile>;
+pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistFile>;
 
 /// In-memory index of in-flight network requests. Any request in an [`InFlight`] state will be
 /// eventually be inserted into an [`Index`].
@@ -855,10 +833,10 @@ impl InFlight {
         self.packages.insert(package_name.clone())
     }
 
-    fn insert_file(&mut self, file: &DistributionFile) -> bool {
+    fn insert_file(&mut self, file: &DistFile) -> bool {
         match file {
-            DistributionFile::Wheel(file) => self.files.insert(file.hashes.sha256.clone()),
-            DistributionFile::Sdist(file) => self.files.insert(file.hashes.sha256.clone()),
+            DistFile::Wheel(file) => self.files.insert(file.hashes.sha256.clone()),
+            DistFile::Sdist(file) => self.files.insert(file.hashes.sha256.clone()),
         }
     }
 

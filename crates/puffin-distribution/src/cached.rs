@@ -4,8 +4,8 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use url::Url;
 
-use crate::traits::BaseDistribution;
-use crate::{BuiltDistribution, Distribution, SourceDistribution, VersionOrUrl};
+use crate::traits::BaseDist;
+use crate::{BuiltDist, Dist, SourceDist, VersionOrUrl};
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
 
@@ -13,28 +13,28 @@ use crate::direct_url::DirectUrl;
 
 /// A built distribution (wheel) that exists in a local cache.
 #[derive(Debug, Clone)]
-pub enum CachedDistribution {
+pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.
-    Registry(CachedRegistryDistribution),
+    Registry(CachedRegistryDist),
     /// The distribution exists at an arbitrary URL.
-    Url(CachedDirectUrlDistribution),
+    Url(CachedDirectUrlDist),
 }
 
 #[derive(Debug, Clone)]
-pub struct CachedRegistryDistribution {
+pub struct CachedRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
-pub struct CachedDirectUrlDistribution {
+pub struct CachedDirectUrlDist {
     pub name: PackageName,
     pub url: Url,
     pub path: PathBuf,
 }
 
-impl BaseDistribution for CachedRegistryDistribution {
+impl BaseDist for CachedRegistryDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -44,7 +44,7 @@ impl BaseDistribution for CachedRegistryDistribution {
     }
 }
 
-impl BaseDistribution for CachedDirectUrlDistribution {
+impl BaseDist for CachedDirectUrlDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -54,7 +54,7 @@ impl BaseDistribution for CachedDirectUrlDistribution {
     }
 }
 
-impl BaseDistribution for CachedDistribution {
+impl BaseDist for CachedDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -70,45 +70,35 @@ impl BaseDistribution for CachedDistribution {
     }
 }
 
-impl CachedDistribution {
-    /// Initialize a [`CachedDistribution`] from a [`Distribution`].
-    pub fn from_remote(remote: Distribution, path: PathBuf) -> Self {
+impl CachedDist {
+    /// Initialize a [`CachedDist`] from a [`Dist`].
+    pub fn from_remote(remote: Dist, path: PathBuf) -> Self {
         match remote {
-            Distribution::Built(BuiltDistribution::Registry(dist)) => {
-                Self::Registry(CachedRegistryDistribution {
-                    name: dist.name,
-                    version: dist.version,
-                    path,
-                })
-            }
-            Distribution::Built(BuiltDistribution::DirectUrl(dist)) => {
-                Self::Url(CachedDirectUrlDistribution {
-                    name: dist.name,
-                    url: dist.url,
-                    path,
-                })
-            }
-            Distribution::Source(SourceDistribution::Registry(dist)) => {
-                Self::Registry(CachedRegistryDistribution {
-                    name: dist.name,
-                    version: dist.version,
-                    path,
-                })
-            }
-            Distribution::Source(SourceDistribution::DirectUrl(dist)) => {
-                Self::Url(CachedDirectUrlDistribution {
-                    name: dist.name,
-                    url: dist.url,
-                    path,
-                })
-            }
-            Distribution::Source(SourceDistribution::Git(dist)) => {
-                Self::Url(CachedDirectUrlDistribution {
-                    name: dist.name,
-                    url: dist.url,
-                    path,
-                })
-            }
+            Dist::Built(BuiltDist::Registry(dist)) => Self::Registry(CachedRegistryDist {
+                name: dist.name,
+                version: dist.version,
+                path,
+            }),
+            Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
+                name: dist.name,
+                url: dist.url,
+                path,
+            }),
+            Dist::Source(SourceDist::Registry(dist)) => Self::Registry(CachedRegistryDist {
+                name: dist.name,
+                version: dist.version,
+                path,
+            }),
+            Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
+                name: dist.name,
+                url: dist.url,
+                path,
+            }),
+            Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+                name: dist.name,
+                url: dist.url,
+                path,
+            }),
         }
     }
 
@@ -123,19 +113,19 @@ impl CachedDistribution {
     /// Return the [`DirectUrl`] of the distribution, if it exists.
     pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
         match self {
-            CachedDistribution::Registry(_) => Ok(None),
-            CachedDistribution::Url(dist) => DirectUrl::try_from(&dist.url).map(Some),
+            CachedDist::Registry(_) => Ok(None),
+            CachedDist::Url(dist) => DirectUrl::try_from(&dist.url).map(Some),
         }
     }
 }
 
-impl CachedDirectUrlDistribution {
+impl CachedDirectUrlDist {
     pub fn from_url(name: PackageName, url: Url, path: PathBuf) -> Self {
         Self { name, url, path }
     }
 }
 
-impl CachedRegistryDistribution {
+impl CachedRegistryDist {
     /// Try to parse a distribution from a cached directory name (like `django-5.0a1`).
     pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
         let Some(file_name) = path.file_name() else {

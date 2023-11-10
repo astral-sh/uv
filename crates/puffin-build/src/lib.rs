@@ -47,7 +47,7 @@ pub enum Error {
     #[error("Unsupported archive format (extension not recognized): {0}")]
     UnsupportedArchiveType(String),
     #[error("Invalid source distribution: {0}")]
-    InvalidSourceDistribution(String),
+    InvalidSourceDist(String),
     #[error("Invalid pyproject.toml")]
     InvalidPyprojectToml(#[from] toml::de::Error),
     #[error("Failed to install requirements from {0}")]
@@ -331,7 +331,7 @@ impl SourceBuild {
             .await?;
         } else {
             if !source_tree.join("setup.py").is_file() {
-                return Err(Error::InvalidSourceDistribution(
+                return Err(Error::InvalidSourceDist(
                     "The archive contains neither a pyproject.toml or a setup.py at the top level"
                         .to_string(),
                 ));
@@ -517,6 +517,11 @@ async fn create_pep517_build_environment(
         "Calling `{}.get_requires_for_build_wheel()`",
         pep517_backend.backend
     );
+    if pep517_backend.backend_path.is_some() {
+        return Err(Error::InvalidSourceDist(
+            "backend-path is not supported yet".to_string(),
+        ));
+    }
     let script = formatdoc! {
         r#"
             {}
@@ -621,7 +626,7 @@ fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> 
     // TODO(konstin): Verify the name of the directory
     let top_level = fs::read_dir(extracted)?.collect::<io::Result<Vec<DirEntry>>>()?;
     let [root] = top_level.as_slice() else {
-        return Err(Error::InvalidSourceDistribution(format!(
+        return Err(Error::InvalidSourceDist(format!(
             "The top level of the archive must only contain a list directory, but it contains {top_level:?}"
         )));
     };

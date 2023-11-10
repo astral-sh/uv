@@ -7,7 +7,7 @@ use zip::ZipArchive;
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
 use platform_tags::Tags;
-use puffin_distribution::DistributionIdentifier;
+use puffin_distribution::DistIdentifier;
 use pypi_types::Metadata21;
 
 /// A cached wheel built from a remote source.
@@ -23,12 +23,12 @@ impl CachedWheel {
     }
 
     /// Search for a wheel matching the tags that was built from the given distribution.
-    pub(super) fn find_in_cache<T: DistributionIdentifier>(
-        distribution: &T,
+    pub(super) fn find_in_cache<T: DistIdentifier>(
+        dist: &T,
         tags: &Tags,
         cache: impl AsRef<Path>,
     ) -> Option<Self> {
-        let wheel_dir = cache.as_ref().join(distribution.distribution_id());
+        let wheel_dir = cache.as_ref().join(dist.distribution_id());
         let Ok(read_dir) = fs_err::read_dir(wheel_dir) else {
             return None;
         };

@@ -15,7 +15,7 @@ use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use puffin_distribution::{DistributionIdentifier, RemoteDistribution, SourceDistribution};
+use puffin_distribution::{DistIdentifier, RemoteDist, SourceDist};
 use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
@@ -27,13 +27,13 @@ const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 const GIT_CACHE: &str = "git-v0";
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
-pub(crate) struct SourceDistributionFetcher<'a, T: BuildContext> {
+pub(crate) struct SourceDistFetcher<'a, T: BuildContext> {
     build_context: &'a T,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
-    /// Initialize a [`SourceDistributionFetcher`] from a [`BuildContext`].
+impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
+    /// Initialize a [`SourceDistFetcher`] from a [`BuildContext`].
     pub(crate) fn new(build_context: &'a T) -> Self {
         Self {
             build_context,
@@ -53,11 +53,11 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Read the [`Metadata21`] from a built source distribution, if it exists in the cache.
     pub(crate) fn find_dist_info(
         &self,
-        distribution: &SourceDistribution,
+        dist: &SourceDist,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
         CachedWheel::find_in_cache(
-            distribution,
+            dist,
             tags,
             self.build_context.cache().join(BUILT_WHEELS_CACHE),
         )
@@ -69,17 +69,17 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Download and build a source distribution, storing the built wheel in the cache.
     pub(crate) async fn download_and_build_sdist(
         &self,
-        distribution: &SourceDistribution,
+        dist: &SourceDist,
         client: &RegistryClient,
     ) -> Result<Metadata21> {
-        debug!("Building: {distribution}");
+        debug!("Building: {dist}");
 
         if self.build_context.no_build() {
             bail!("Building source distributions is disabled");
         }
 
-        let (sdist_file, subdirectory) = match distribution {
-            SourceDistribution::Registry(sdist) => {
+        let (sdist_file, subdirectory) = match dist {
+            SourceDist::Registry(sdist) => {
                 debug!(
                     "Fetching source distribution from registry: {}",
                     sdist.file.url
@@ -98,7 +98,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 (sdist_file, None)
             }
 
-            SourceDistribution::DirectUrl(sdist) => {
+            SourceDist::DirectUrl(sdist) => {
                 debug!("Fetching source distribution from URL: {}", sdist.url);
 
                 let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(&sdist.url);
@@ -116,7 +116,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 (sdist_file, subdirectory)
             }
 
-            SourceDistribution::Git(sdist) => {
+            SourceDist::Git(sdist) => {
                 debug!("Fetching source distribution from Git: {}", sdist.url);
 
                 let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(&sdist.url)?;
@@ -140,7 +140,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             .build_context
             .cache()
             .join(BUILT_WHEELS_CACHE)
-            .join(distribution.distribution_id());
+            .join(dist.distribution_id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Build the wheel.
@@ -150,7 +150,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
                 &sdist_file,
                 subdirectory.as_deref(),
                 &wheel_dir,
-                &distribution.to_string(),
+                &dist.to_string(),
             )
             .await?;
 
@@ -161,7 +161,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         );
         let metadata21 = wheel.read_dist_info()?;
 
-        debug!("Finished building: {distribution}");
+        debug!("Finished building: {dist}");
         Ok(metadata21)
     }
 
@@ -173,8 +173,8 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub(crate) async fn precise(&self, distribution: &SourceDistribution) -> Result<Option<Url>> {
-        let SourceDistribution::Git(sdist) = distribution else {
+    pub(crate) async fn precise(&self, dist: &SourceDist) -> Result<Option<Url>> {
+        let SourceDist::Git(sdist) = dist else {
             return Ok(None);
         };
 

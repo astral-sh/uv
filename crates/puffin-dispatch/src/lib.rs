@@ -15,10 +15,10 @@ use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
-use puffin_distribution::BaseDistribution;
+use puffin_distribution::BaseDist;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{DistributionFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
+use puffin_resolver::{DistFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -135,7 +135,7 @@ impl BuildContext for BuildDispatch {
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
-                let resolution = DistributionFinder::new(&tags, &self.client)
+                let resolution = DistFinder::new(&tags, &self.client)
                     .resolve(&remote)
                     .await
                     .context("Failed to resolve build dependencies")?;
@@ -163,9 +163,7 @@ impl BuildContext for BuildDispatch {
                     .into_iter()
                     .partition_map(|download| match download {
                         puffin_installer::Download::Wheel(wheel) => Either::Left(wheel),
-                        puffin_installer::Download::SourceDistribution(sdist) => {
-                            Either::Right(sdist)
-                        }
+                        puffin_installer::Download::SourceDist(sdist) => Either::Right(sdist),
                     });
 
             // Build any missing source distributions.

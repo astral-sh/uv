@@ -1,7 +1,5 @@
-pub use source_distribution::{
-    SourceDistributionExtension, SourceDistributionFilename, SourceDistributionFilenameError,
-};
+pub use source_dist::{SourceDistExtension, SourceDistFilename, SourceDistFilenameError};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
-mod source_distribution;
+mod source_dist;
 mod wheel;
