@@ -212,8 +212,10 @@ impl RegistryClient {
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_INDEX).join("pypi");
             let cache_file = format!("{}.json", filename.stem());
 
+            let url_ = url.clone();
             let response_callback = |response: Response| async move {
-                Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
+                Metadata21::parse(response.bytes().await?.as_ref())
+                    .map_err(|err| Error::MetadataParseError(filename, url_, err))
             };
             let req = self.client_raw.get(url.clone()).build()?;
             self.cached_client
@@ -243,7 +245,8 @@ impl RegistryClient {
             let mut reader = AsyncHttpRangeReader::from_head_response(client, response).await?;
             trace!("Getting metadata for {filename} by range request");
             let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-            let metadata = Metadata21::parse(text.as_bytes())?;
+            let metadata = Metadata21::parse(text.as_bytes())
+                .map_err(|err| Error::MetadataParseError(filename.clone(), url.clone(), err))?;
             Ok(metadata)
         };
 
@@ -308,7 +311,9 @@ impl RegistryClient {
             .await
             .map_err(|err| Error::Zip(filename.clone(), err))?;
 
-        Ok(Metadata21::parse(&contents)?)
+        let metadata = Metadata21::parse(&contents)
+            .map_err(|err| Error::MetadataParseError(filename.clone(), url.clone(), err))?;
+        Ok(metadata)
     }
 
     /// Stream a file from an external URL.

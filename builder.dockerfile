@@ -7,6 +7,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         autoconf \
         build-essential \
+        cmake \
         curl \
         make \
         pkg-config \
