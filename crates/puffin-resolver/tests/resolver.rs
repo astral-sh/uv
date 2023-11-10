@@ -4,7 +4,7 @@
 //! `PyPI` directly.
 
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 
@@ -17,10 +17,12 @@ use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver};
+use puffin_resolver::{Graph, Manifest, PreReleaseMode, ResolutionMode, Resolver};
 use puffin_traits::BuildContext;
 
-struct DummyContext;
+struct DummyContext {
+    interpreter_info: InterpreterInfo,
+}
 
 impl BuildContext for DummyContext {
     fn cache(&self) -> &Path {
@@ -28,7 +30,7 @@ impl BuildContext for DummyContext {
     }
 
     fn interpreter_info(&self) -> &InterpreterInfo {
-        panic!("The test should not need to build source distributions")
+        &self.interpreter_info
     }
 
     fn base_python(&self) -> &Path {
@@ -61,12 +63,28 @@ impl BuildContext for DummyContext {
     }
 }
 
+async fn resolve(
+    manifest: Manifest,
+    markers: &'static MarkerEnvironment,
+    tags: &Tags,
+) -> Result<Graph> {
+    let tempdir = tempdir()?;
+    let client = RegistryClientBuilder::new(tempdir.path()).build();
+    let build_context = DummyContext {
+        interpreter_info: InterpreterInfo::artificial(
+            Platform::current()?,
+            markers.clone(),
+            PathBuf::from("/dev/null"),
+            PathBuf::from("/dev/null"),
+        ),
+    };
+    let resolver = Resolver::new(manifest, markers, tags, &client, &build_context);
+    Ok(resolver.resolve().await?)
+}
+
 #[tokio::test]
 async fn black() -> Result<()> {
     colored::control::set_override(false);
-
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
@@ -77,8 +95,7 @@ async fn black() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -89,9 +106,6 @@ async fn black() -> Result<()> {
 async fn black_colorama() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
         vec![],
@@ -101,8 +115,7 @@ async fn black_colorama() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -113,9 +126,6 @@ async fn black_colorama() -> Result<()> {
 async fn black_python_310() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
@@ -125,8 +135,7 @@ async fn black_python_310() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_310, &TAGS_310, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_310, &TAGS_310).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -139,9 +148,6 @@ async fn black_python_310() -> Result<()> {
 async fn black_mypy_extensions() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions<0.4.4").unwrap()],
@@ -151,8 +157,7 @@ async fn black_mypy_extensions() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -165,9 +170,6 @@ async fn black_mypy_extensions() -> Result<()> {
 async fn black_mypy_extensions_extra() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap()],
@@ -177,8 +179,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -191,9 +192,6 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 async fn black_flake8() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("flake8<1").unwrap()],
@@ -203,8 +201,7 @@ async fn black_flake8() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -215,9 +212,6 @@ async fn black_flake8() -> Result<()> {
 async fn black_lowest() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
         vec![],
@@ -227,8 +221,7 @@ async fn black_lowest() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -239,9 +232,6 @@ async fn black_lowest() -> Result<()> {
 async fn black_lowest_direct() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
         vec![],
@@ -251,8 +241,7 @@ async fn black_lowest_direct() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -263,9 +252,6 @@ async fn black_lowest_direct() -> Result<()> {
 async fn black_respect_preference() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
@@ -275,8 +261,7 @@ async fn black_respect_preference() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -287,9 +272,6 @@ async fn black_respect_preference() -> Result<()> {
 async fn black_ignore_preference() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
@@ -299,8 +281,7 @@ async fn black_ignore_preference() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -311,9 +292,6 @@ async fn black_ignore_preference() -> Result<()> {
 async fn black_disallow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=20.0").unwrap()],
         vec![],
@@ -323,8 +301,9 @@ async fn black_disallow_prerelease() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let err = resolver.resolve().await.unwrap_err();
+    let err = resolve(manifest, &MARKERS_311, &TAGS_311)
+        .await
+        .unwrap_err();
 
     insta::assert_display_snapshot!(err);
 
@@ -335,9 +314,6 @@ async fn black_disallow_prerelease() -> Result<()> {
 async fn black_allow_prerelease_if_necessary() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=20.0").unwrap()],
         vec![],
@@ -347,10 +323,11 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await.unwrap_err();
+    let err = resolve(manifest, &MARKERS_311, &TAGS_311)
+        .await
+        .unwrap_err();
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(err);
 
     Ok(())
 }
@@ -358,9 +335,6 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
 #[tokio::test]
 async fn pylint_disallow_prerelease() -> Result<()> {
     colored::control::set_override(false);
-
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("pylint==2.3.0").unwrap()],
@@ -371,8 +345,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -383,9 +356,6 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 async fn pylint_allow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("pylint==2.3.0").unwrap()],
         vec![],
@@ -395,8 +365,7 @@ async fn pylint_allow_prerelease() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -406,9 +375,6 @@ async fn pylint_allow_prerelease() -> Result<()> {
 #[tokio::test]
 async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
     colored::control::set_override(false);
-
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![
@@ -422,8 +388,7 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -433,9 +398,6 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 #[tokio::test]
 async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     colored::control::set_override(false);
-
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
 
     let manifest = Manifest::new(
         vec![
@@ -449,8 +411,7 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
         None,
     );
 
-    let resolver = Resolver::new(manifest, &MARKERS_311, &TAGS_311, &client, &DummyContext);
-    let resolution = resolver.resolve().await?;
+    let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 

@@ -125,6 +125,11 @@ pub(crate) async fn pip_compile(
         || Cow::Borrowed(venv.interpreter_info().markers()),
         |python_version| Cow::Owned(python_version.markers(venv.interpreter_info().markers())),
     );
+    // Inject the fake python version if necessary
+    let interpreter_info = venv
+        .interpreter_info()
+        .clone()
+        .patch_markers(markers.clone().into_owned());
 
     // Instantiate a client.
     let client = {
@@ -143,7 +148,7 @@ pub(crate) async fn pip_compile(
     let build_dispatch = BuildDispatch::new(
         client.clone(),
         cache.to_path_buf(),
-        venv.interpreter_info().clone(),
+        interpreter_info,
         fs::canonicalize(venv.python_executable())?,
         no_build,
     );

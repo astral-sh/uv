@@ -128,8 +128,9 @@ pub(crate) async fn sync_requirements(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::DistFinder::new(&tags, &client)
-            .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder =
+            puffin_resolver::DistFinder::new(&tags, &client, venv.interpreter_info())
+                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };

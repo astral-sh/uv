@@ -1,4 +1,8 @@
-use serde::{Deserialize, Serialize};
+use pep440_rs::VersionSpecifiers;
+use serde::{de, Deserialize, Deserializer, Serialize};
+use std::str::FromStr;
+
+use crate::lenient_requirement::LenientVersionSpecifiers;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleJson {
@@ -15,11 +19,28 @@ pub struct File {
     pub data_dist_info_metadata: Metadata,
     pub filename: String,
     pub hashes: Hashes,
-    pub requires_python: Option<String>,
+    /// Note: Deserialized with [`LenientVersionSpecifiers`] since there are a number of invalid
+    /// versions on pypi
+    #[serde(deserialize_with = "deserialize_version_specifiers_lenient")]
+    pub requires_python: Option<VersionSpecifiers>,
     pub size: usize,
     pub upload_time: String,
     pub url: String,
     pub yanked: Yanked,
+}
+
+fn deserialize_version_specifiers_lenient<'de, D>(
+    deserializer: D,
+) -> Result<Option<VersionSpecifiers>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let maybe_string: Option<String> = Option::deserialize(deserializer)?;
+    let Some(string) = maybe_string else {
+        return Ok(None);
+    };
+    let lenient = LenientVersionSpecifiers::from_str(&string).map_err(de::Error::custom)?;
+    Ok(Some(lenient.into()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -12,8 +12,8 @@ pub trait Metadata {
     /// Return the normalized [`PackageName`] of the distribution.
     fn name(&self) -> &PackageName;
 
-    /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
-    /// distributions.
+    /// Return a [`pep440_rs::Version`], for registry-based distributions, or a [`url::Url`],
+    /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrl;
 
     /// Returns a unique identifier for the package.

@@ -13,3 +13,6 @@ target/
 
 # Use e.g. `--cache-dir cache-docker` to keep a cache across container invocations
 cache-*
+
+# python tmp files
+__pycache__

@@ -554,11 +554,22 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         } else if let Ok(filename) =
                             SourceDistFilename::parse(file.filename.as_str(), &package_name)
                         {
-                            let version = PubGrubVersion::from(filename.version.clone());
-                            if let std::collections::btree_map::Entry::Vacant(entry) =
-                                version_map.entry(version)
+                            // Only add source dists compatible with the python version
+                            // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
+                            if file
+                                .requires_python
+                                .as_ref()
+                                .map_or(true, |requires_python| {
+                                    requires_python
+                                        .contains(self.build_context.interpreter_info().version())
+                                })
                             {
-                                entry.insert(DistFile::from(SdistFile(file)));
+                                let version = PubGrubVersion::from(filename.version.clone());
+                                if let std::collections::btree_map::Entry::Vacant(entry) =
+                                    version_map.entry(version)
+                                {
+                                    entry.insert(DistFile::from(SdistFile(file)));
+                                }
                             }
                         }
                     }

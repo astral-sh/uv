@@ -48,6 +48,10 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+      # TODO(konstin): Mock the venv in the installer test so we don't need this anymore
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.7'
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:
