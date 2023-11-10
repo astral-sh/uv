@@ -907,9 +907,9 @@ mod tests {
     fn error_empty() {
         assert_err(
             "",
-            indoc! {"
+            indoc! {"\
             Empty field is not allowed for PEP508
-            
+
             ^"
             },
         );
@@ -1123,7 +1123,7 @@ mod tests {
             "numpy ( >=1.19 ",
             indoc! {"
                 Missing closing parenthesis (expected ')', found end of dependency specification)
-                numpy ( >=1.19 
+                numpy ( >=1.19\x20
                       ^"
             },
         );
@@ -1212,9 +1212,9 @@ mod tests {
     fn error_marker_incomplete2() {
         assert_err(
             r#"numpy; sys_platform == "#,
-            indoc! {"
+            indoc! {"\
                 Expected marker value, found end of dependency specification
-                numpy; sys_platform == 
+                numpy; sys_platform ==\x20
                                        ^"
             },
         );
@@ -1224,10 +1224,10 @@ mod tests {
     fn error_marker_incomplete3() {
         assert_err(
             r#"numpy; sys_platform == "win32" or "#,
-            indoc! {r#"
+            indoc! {"
                 Expected marker value, found end of dependency specification
-                numpy; sys_platform == "win32" or 
-                                                  ^"#},
+                numpy; sys_platform == \"win32\" or\x20
+                                                  ^"},
         );
     }
 
@@ -1246,10 +1246,10 @@ mod tests {
     fn error_marker_incomplete5() {
         assert_err(
             r#"numpy; sys_platform == "win32" or (os_name == "linux" and "#,
-            indoc! {r#"
+            indoc! {"
                 Expected marker value, found end of dependency specification
-                numpy; sys_platform == "win32" or (os_name == "linux" and 
-                                                                          ^"#},
+                numpy; sys_platform == \"win32\" or (os_name == \"linux\" and\x20
+                                                                          ^"},
         );
     }
 
@@ -1331,7 +1331,7 @@ mod tests {
             r#"name @ "#,
             indoc! {"
                 Expected URL
-                name @ 
+                name @\x20
                        ^"
             },
         );
