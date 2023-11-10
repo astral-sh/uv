@@ -403,16 +403,32 @@ fn hardlink_wheel_files(
         // Fallback to copying if hardlinks aren't supported for this installation.
         match attempt {
             Attempt::Initial => {
-                // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that
-                if fs::hard_link(entry.path(), &out_path).is_err() {
-                    fs::copy(entry.path(), &out_path)?;
-                    attempt = Attempt::UseCopyFallback;
-                } else {
-                    attempt = Attempt::Subsequent;
+                // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that.
+                attempt = Attempt::Subsequent;
+                if let Err(err) = fs::hard_link(entry.path(), &out_path) {
+                    // If the file already exists, remove it and try again.
+                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                        fs::remove_file(&out_path)?;
+                        if fs::hard_link(entry.path(), &out_path).is_err() {
+                            fs::copy(entry.path(), &out_path)?;
+                            attempt = Attempt::UseCopyFallback;
+                        }
+                    } else {
+                        fs::copy(entry.path(), &out_path)?;
+                        attempt = Attempt::UseCopyFallback;
+                    }
                 }
             }
             Attempt::Subsequent => {
-                fs::hard_link(entry.path(), &out_path)?;
+                if let Err(err) = fs::hard_link(entry.path(), &out_path) {
+                    // If the file already exists, remove it and try again.
+                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                        fs::remove_file(&out_path)?;
+                        fs::hard_link(entry.path(), &out_path)?;
+                    } else {
+                        return Err(err.into());
+                    }
+                }
             }
             Attempt::UseCopyFallback => {
                 fs::copy(entry.path(), &out_path)?;
