@@ -23,7 +23,9 @@ use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::cached_client::CachedClient;
 use crate::error::Error;
-use crate::remote_metadata::{wheel_metadata_from_remote_zip, WHEEL_METADATA_FROM_ZIP_CACHE};
+use crate::remote_metadata::{
+    wheel_metadata_from_remote_zip, WHEEL_METADATA_FROM_INDEX, WHEEL_METADATA_FROM_ZIP_CACHE,
+};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -207,14 +209,15 @@ impl RegistryClient {
         if file.data_dist_info_metadata.is_available() {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
+            let cache_dir = self.cache.join(WHEEL_METADATA_FROM_INDEX).join("pypi");
             let cache_file = format!("{}.json", filename.get_tag());
 
             let response_callback = |response: Response| async move {
                 Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
             };
+            let req = self.client_raw.get(url.clone()).build()?;
             self.cached_client
-                .get_cached_with_callback(url, &cache_dir, &cache_file, response_callback)
+                .get_cached_with_callback(req, &cache_dir, &cache_file, response_callback)
                 .await
         // If we lack PEP 658 support, try using HTTP range requests to read only the
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
@@ -246,10 +249,11 @@ impl RegistryClient {
             Ok(metadata)
         };
 
+        let req = self.client_raw.head(url.clone()).build()?;
         let result = self
             .cached_client
             .get_cached_with_callback(
-                url.clone(),
+                req,
                 &cache_dir,
                 &cache_file,
                 read_metadata_from_initial_response,

@@ -8,7 +8,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use tracing::{trace, warn};
-use url::Url;
 
 use crate::error::Error;
 
@@ -64,7 +63,7 @@ impl CachedClient {
         CallbackReturn,
     >(
         &self,
-        url: Url,
+        req: Request,
         cache_dir: &Path,
         filename: &str,
         response_callback: Callback,
@@ -90,7 +89,6 @@ impl CachedClient {
             None
         };
 
-        let req = self.0.get(url.clone()).build()?;
         let cached_response = self.send_cached(req, cached).await?;
 
         match cached_response {
