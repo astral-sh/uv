@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 anyhow = { version = "1.0.75" }
-async_http_range_reader = { git = "https://github.com/konstin/async_http_range_reader", branch = "caching" }
+async_http_range_reader = { git = "https://github.com/konstin/async_http_range_reader", rev = "2db4792b182b17c97def08ef6f77c9b029dabad6" }
 async_zip = { version = "0.0.15", features = ["tokio", "deflate"] }
 bitflags = { version = "2.4.1" }
 bytesize = { version = "1.3.0" }

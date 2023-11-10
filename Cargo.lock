@@ -226,7 +226,7 @@ dependencies = [
 [[package]]
 name = "async_http_range_reader"
 version = "0.4.0"
-source = "git+https://github.com/konstin/async_http_range_reader?branch=caching#fa7cd6d96cf54ddc7ed74bb43bedcf48f3f3295b"
+source = "git+https://github.com/konstin/async_http_range_reader?rev=2db4792b182b17c97def08ef6f77c9b029dabad6#2db4792b182b17c97def08ef6f77c9b029dabad6"
 dependencies = [
  "bisection",
  "futures",

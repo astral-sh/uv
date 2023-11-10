@@ -239,10 +239,8 @@ impl RegistryClient {
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
         let client = self.client_raw.clone();
-        let url_ = url.clone();
         let read_metadata_from_initial_response = |response: Response| async {
-            let mut reader =
-                AsyncHttpRangeReader::new_head_response(client, url_, response).await?;
+            let mut reader = AsyncHttpRangeReader::from_head_response(client, response).await?;
             trace!("Getting metadata for {filename} by range request");
             let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
             let metadata = Metadata21::parse(text.as_bytes())?;
