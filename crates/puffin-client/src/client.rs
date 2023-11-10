@@ -203,11 +203,12 @@ impl RegistryClient {
 
         // If the metadata file is available at its own url (PEP 658), download it from there
         let url = Url::parse(&file.url)?;
+        let filename = WheelFilename::from_str(&file.filename)?;
         if file.data_dist_info_metadata.is_available() {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
-            let cache_file = format!("{}.json", file.filename);
+            let cache_file = format!("{}.json", filename.get_tag());
 
             let response_callback = |response: Response| async move {
                 Ok(Metadata21::parse(response.bytes().await?.as_ref())?)
@@ -219,7 +220,6 @@ impl RegistryClient {
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
         // into the cache and read from there
         } else {
-            let filename = WheelFilename::from_str(&file.filename)?;
             self.wheel_metadata_no_index(&filename, &url).await
         }
     }
