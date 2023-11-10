@@ -6,7 +6,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep508_rs::Requirement;
-use puffin_distribution::{BuiltDistribution, SourceDistribution};
+use puffin_distribution::{BuiltDist, SourceDist};
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
@@ -48,7 +48,7 @@ pub enum ResolveError {
     DisallowedUrl(PackageName, Url),
 
     #[error("Failed to fetch wheel metadata from: {filename}")]
-    RegistryBuiltDistribution {
+    RegistryBuiltDist {
         filename: String,
         // TODO(konstin): Gives this a proper error type
         #[source]
@@ -56,7 +56,7 @@ pub enum ResolveError {
     },
 
     #[error("Failed to fetch wheel metadata from: {url}")]
-    UrlBuiltDistribution {
+    UrlBuiltDist {
         url: Url,
         // TODO(konstin): Gives this a proper error type
         #[source]
@@ -64,7 +64,7 @@ pub enum ResolveError {
     },
 
     #[error("Failed to build distribution: {filename}")]
-    RegistrySourceDistribution {
+    RegistrySourceDist {
         filename: String,
         // TODO(konstin): Gives this a proper error type
         #[source]
@@ -72,7 +72,7 @@ pub enum ResolveError {
     },
 
     #[error("Failed to build distribution from URL: {url}")]
-    UrlSourceDistribution {
+    UrlSourceDist {
         url: Url,
         // TODO(konstin): Gives this a proper error type
         #[source]
@@ -112,30 +112,30 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> f
 }
 
 impl ResolveError {
-    pub fn from_source_distribution(distribution: SourceDistribution, err: anyhow::Error) -> Self {
-        match distribution {
-            SourceDistribution::Registry(sdist) => Self::RegistrySourceDistribution {
+    pub fn from_source_dist(dist: SourceDist, err: anyhow::Error) -> Self {
+        match dist {
+            SourceDist::Registry(sdist) => Self::RegistrySourceDist {
                 filename: sdist.file.filename.clone(),
                 err,
             },
-            SourceDistribution::DirectUrl(sdist) => Self::UrlSourceDistribution {
+            SourceDist::DirectUrl(sdist) => Self::UrlSourceDist {
                 url: sdist.url.clone(),
                 err,
             },
-            SourceDistribution::Git(sdist) => Self::UrlSourceDistribution {
+            SourceDist::Git(sdist) => Self::UrlSourceDist {
                 url: sdist.url.clone(),
                 err,
             },
         }
     }
 
-    pub fn from_built_distribution(distribution: BuiltDistribution, err: anyhow::Error) -> Self {
-        match distribution {
-            BuiltDistribution::Registry(wheel) => Self::RegistryBuiltDistribution {
+    pub fn from_built_dist(dist: BuiltDist, err: anyhow::Error) -> Self {
+        match dist {
+            BuiltDist::Registry(wheel) => Self::RegistryBuiltDist {
                 filename: wheel.file.filename.clone(),
                 err,
             },
-            BuiltDistribution::DirectUrl(wheel) => Self::UrlBuiltDistribution {
+            BuiltDist::DirectUrl(wheel) => Self::UrlBuiltDist {
                 url: wheel.url.clone(),
                 err,
             },

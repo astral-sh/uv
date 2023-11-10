@@ -8,10 +8,10 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use tracing::debug;
 
-use puffin_distribution::{BaseDistribution, Distribution, RemoteDistribution};
+use puffin_distribution::{Dist, Metadata, RemoteSource};
 use puffin_traits::BuildContext;
 
-use crate::downloader::{DiskWheel, SourceDistributionDownload, WheelDownload};
+use crate::downloader::{DiskWheel, SourceDistDownload, WheelDownload};
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
@@ -39,22 +39,19 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
     }
 
     /// Build a set of source distributions.
-    pub async fn build(
-        &self,
-        distributions: Vec<SourceDistributionDownload>,
-    ) -> Result<Vec<WheelDownload>> {
+    pub async fn build(&self, dists: Vec<SourceDistDownload>) -> Result<Vec<WheelDownload>> {
         // Sort the distributions by size.
-        let mut distributions = distributions;
-        distributions.sort_unstable_by_key(|distribution| {
-            Reverse(distribution.remote.size().unwrap_or(usize::MAX))
+        let mut dists = dists;
+        dists.sort_unstable_by_key(|distribution| {
+            Reverse(distribution.dist.size().unwrap_or(usize::MAX))
         });
 
         // Build the distributions serially.
-        let mut builds = Vec::with_capacity(distributions.len());
-        for distribution in distributions {
-            debug!("Building source distribution: {distribution}");
+        let mut builds = Vec::with_capacity(dists.len());
+        for dist in dists {
+            debug!("Building source distribution: {dist}");
 
-            let result = build_sdist(distribution, self.build_context).await?;
+            let result = build_sdist(dist, self.build_context).await?;
 
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_progress(result.remote());
@@ -73,14 +70,14 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
 
 /// Build a source distribution into a wheel.
 async fn build_sdist<T: BuildContext + Send + Sync>(
-    distribution: SourceDistributionDownload,
+    dist: SourceDistDownload,
     build_context: &T,
 ) -> Result<WheelDownload> {
     // Create a directory for the wheel.
     let wheel_dir = build_context
         .cache()
         .join(BUILT_WHEELS_CACHE)
-        .join(distribution.remote.package_id());
+        .join(dist.dist.package_id());
     fs::create_dir_all(&wheel_dir).await?;
 
     // Build the wheel.
@@ -89,23 +86,23 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
     // point to the wrong commit.
     let disk_filename = build_context
         .build_source(
-            &distribution.sdist_file,
-            distribution.subdirectory.as_deref(),
+            &dist.sdist_file,
+            dist.subdirectory.as_deref(),
             &wheel_dir,
-            &distribution.remote.to_string(),
+            &dist.dist.to_string(),
         )
         .await?;
     let wheel_filename = wheel_dir.join(disk_filename);
 
     Ok(WheelDownload::Disk(DiskWheel {
-        remote: distribution.remote,
+        dist: dist.dist,
         path: wheel_filename,
     }))
 }
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution is built.
-    fn on_progress(&self, distribution: &Distribution);
+    fn on_progress(&self, dist: &Dist);
 
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);

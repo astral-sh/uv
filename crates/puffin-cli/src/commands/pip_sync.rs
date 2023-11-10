@@ -13,7 +13,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_distribution::{AnyDistribution, BaseDistribution};
+use puffin_distribution::{AnyDist, Metadata};
 use puffin_installer::{Builder, InstallPlan};
 use puffin_interpreter::Virtualenv;
 
@@ -128,7 +128,7 @@ pub(crate) async fn sync_requirements(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::DistributionFinder::new(&tags, &client)
+        let wheel_finder = puffin_resolver::DistFinder::new(&tags, &client)
             .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
@@ -182,7 +182,7 @@ pub(crate) async fn sync_requirements(
             .into_iter()
             .partition_map(|download| match download {
                 puffin_installer::Download::Wheel(wheel) => Either::Left(wheel),
-                puffin_installer::Download::SourceDistribution(sdist) => Either::Right(sdist),
+                puffin_installer::Download::SourceDist(sdist) => Either::Right(sdist),
             });
 
     // Build any missing source distributions.
@@ -307,14 +307,14 @@ pub(crate) async fn sync_requirements(
     for event in extraneous
         .into_iter()
         .map(|distribution| ChangeEvent {
-            distribution: AnyDistribution::from(distribution),
+            dist: AnyDist::from(distribution),
             kind: ChangeEventKind::Remove,
         })
         .chain(wheels.into_iter().map(|distribution| ChangeEvent {
-            distribution: AnyDistribution::from(distribution),
+            dist: AnyDist::from(distribution),
             kind: ChangeEventKind::Add,
         }))
-        .sorted_unstable_by_key(|event| event.distribution.name().clone())
+        .sorted_unstable_by_key(|event| event.dist.name().clone())
     {
         match event.kind {
             ChangeEventKind::Add => {
@@ -322,8 +322,8 @@ pub(crate) async fn sync_requirements(
                     printer,
                     " {} {}{}",
                     "+".green(),
-                    event.distribution.name().as_ref().white().bold(),
-                    event.distribution.version_or_url().to_string().dimmed()
+                    event.dist.name().as_ref().white().bold(),
+                    event.dist.version_or_url().to_string().dimmed()
                 )?;
             }
             ChangeEventKind::Remove => {
@@ -331,8 +331,8 @@ pub(crate) async fn sync_requirements(
                     printer,
                     " {} {}{}",
                     "-".red(),
-                    event.distribution.name().as_ref().white().bold(),
-                    event.distribution.version_or_url().to_string().dimmed()
+                    event.dist.name().as_ref().white().bold(),
+                    event.dist.version_or_url().to_string().dimmed()
                 )?;
             }
         }
@@ -351,6 +351,6 @@ enum ChangeEventKind {
 
 #[derive(Debug)]
 struct ChangeEvent {
-    distribution: AnyDistribution,
+    dist: AnyDist,
     kind: ChangeEventKind,
 }

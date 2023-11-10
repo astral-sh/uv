@@ -9,24 +9,24 @@ use anyhow::Result;
 use futures::{StreamExt, TryFutureExt};
 use fxhash::FxHashMap;
 
-use distribution_filename::{SourceDistributionFilename, WheelFilename};
+use distribution_filename::{SourceDistFilename, WheelFilename};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
-use puffin_distribution::Distribution;
+use puffin_distribution::Dist;
 use puffin_normalize::PackageName;
 use pypi_types::{File, SimpleJson};
 
 use crate::error::ResolveError;
 use crate::resolution::Resolution;
 
-pub struct DistributionFinder<'a> {
+pub struct DistFinder<'a> {
     tags: &'a Tags,
     client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
 }
 
-impl<'a> DistributionFinder<'a> {
+impl<'a> DistFinder<'a> {
     /// Initialize a new distribution finder.
     pub fn new(tags: &'a Tags, client: &'a RegistryClient) -> Self {
         Self {
@@ -66,7 +66,7 @@ impl<'a> DistributionFinder<'a> {
             .ready_chunks(32);
 
         // Resolve the requirements.
-        let mut resolution: FxHashMap<PackageName, Distribution> =
+        let mut resolution: FxHashMap<PackageName, Dist> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         // Push all the requirements into the package sink.
@@ -77,7 +77,7 @@ impl<'a> DistributionFinder<'a> {
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     let package_name = requirement.name.clone();
-                    let package = Distribution::from_url(package_name.clone(), url.clone());
+                    let package = Dist::from_url(package_name.clone(), url.clone());
                     resolution.insert(package_name, package);
                 }
             }
@@ -126,7 +126,7 @@ impl<'a> DistributionFinder<'a> {
     }
 
     /// select a version that satisfies the requirement, preferring wheels to source distributions.
-    fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<Distribution> {
+    fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<Dist> {
         let mut fallback = None;
         for file in files.into_iter().rev() {
             if let Ok(wheel) = WheelFilename::from_str(file.filename.as_str()) {
@@ -134,17 +134,13 @@ impl<'a> DistributionFinder<'a> {
                     continue;
                 }
                 if requirement.is_satisfied_by(&wheel.version) {
-                    return Some(Distribution::from_registry(
-                        wheel.distribution,
-                        wheel.version,
-                        file,
-                    ));
+                    return Some(Dist::from_registry(wheel.name, wheel.version, file));
                 }
             } else if let Ok(sdist) =
-                SourceDistributionFilename::parse(file.filename.as_str(), &requirement.name)
+                SourceDistFilename::parse(file.filename.as_str(), &requirement.name)
             {
                 if requirement.is_satisfied_by(&sdist.version) {
-                    fallback = Some(Distribution::from_registry(sdist.name, sdist.version, file));
+                    fallback = Some(Dist::from_registry(sdist.name, sdist.version, file));
                 }
             }
         }
@@ -166,7 +162,7 @@ enum Response {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a package is resolved to a specific distribution.
-    fn on_progress(&self, wheel: &Distribution);
+    fn on_progress(&self, wheel: &Dist);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

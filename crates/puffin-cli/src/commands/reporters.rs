@@ -5,9 +5,7 @@ use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use puffin_distribution::{
-    BaseDistribution, CachedDistribution, Distribution, SourceDistribution, VersionOrUrl,
-};
+use puffin_distribution::{CachedDist, Dist, Metadata, SourceDist, VersionOrUrl};
 use puffin_installer::Download;
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
@@ -39,7 +37,7 @@ impl FinderReporter {
 }
 
 impl puffin_resolver::FinderReporter for FinderReporter {
-    fn on_progress(&self, wheel: &Distribution) {
+    fn on_progress(&self, wheel: &Dist) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -74,7 +72,7 @@ impl UnzipReporter {
 }
 
 impl puffin_installer::UnzipReporter for UnzipReporter {
-    fn on_unzip_progress(&self, wheel: &Distribution) {
+    fn on_unzip_progress(&self, wheel: &Dist) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -144,7 +142,7 @@ impl InstallReporter {
 }
 
 impl puffin_installer::InstallReporter for InstallReporter {
-    fn on_install_progress(&self, wheel: &CachedDistribution) {
+    fn on_install_progress(&self, wheel: &CachedDist) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -179,7 +177,7 @@ impl BuildReporter {
 }
 
 impl puffin_installer::BuildReporter for BuildReporter {
-    fn on_progress(&self, wheel: &Distribution) {
+    fn on_progress(&self, wheel: &Dist) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
     }
@@ -248,7 +246,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, distribution: &SourceDistribution) -> usize {
+    fn on_build_start(&self, dist: &SourceDist) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -258,7 +256,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.set_message(format!(
             "{} {}",
             "Building".bold().green(),
-            distribution.to_color_string()
+            dist.to_color_string()
         ));
 
         let mut bars = self.bars.lock().unwrap();
@@ -266,13 +264,13 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, distribution: &SourceDistribution, index: usize) {
+    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
             "{} {}",
             "Built".bold().green(),
-            distribution.to_color_string()
+            dist.to_color_string()
         ));
     }
 
@@ -313,7 +311,7 @@ trait ColorDisplay {
     fn to_color_string(&self) -> String;
 }
 
-impl ColorDisplay for &SourceDistribution {
+impl ColorDisplay for &SourceDist {
     fn to_color_string(&self) -> String {
         let name = self.name();
         let version_or_url = self.version_or_url();

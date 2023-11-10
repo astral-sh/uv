@@ -904,7 +904,7 @@ pub fn install_wheel(
     _extras: &[String],
     sys_executable: impl AsRef<Path>,
 ) -> Result<String, Error> {
-    let name = &filename.distribution;
+    let name = &filename.name;
     let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_ref());
 
     let base_location = location.venv_root();

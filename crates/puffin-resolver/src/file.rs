@@ -10,7 +10,7 @@ pub(crate) struct WheelFile(pub(crate) File);
 pub(crate) struct SdistFile(pub(crate) File);
 
 #[derive(Debug, Clone)]
-pub(crate) enum DistributionFile {
+pub(crate) enum DistFile {
     Wheel(WheelFile),
     Sdist(SdistFile),
 }
@@ -43,19 +43,19 @@ impl From<SdistFile> for File {
     }
 }
 
-impl From<WheelFile> for DistributionFile {
+impl From<WheelFile> for DistFile {
     fn from(wheel: WheelFile) -> Self {
         Self::Wheel(wheel)
     }
 }
 
-impl From<SdistFile> for DistributionFile {
+impl From<SdistFile> for DistFile {
     fn from(sdist: SdistFile) -> Self {
         Self::Sdist(sdist)
     }
 }
 
-impl DistributionFile {
+impl DistFile {
     pub(crate) fn filename(&self) -> &str {
         match self {
             Self::Wheel(wheel) => wheel.filename.as_str(),
@@ -64,11 +64,11 @@ impl DistributionFile {
     }
 }
 
-impl From<DistributionFile> for File {
-    fn from(file: DistributionFile) -> Self {
+impl From<DistFile> for File {
+    fn from(file: DistFile) -> Self {
         match file {
-            DistributionFile::Wheel(wheel) => wheel.into(),
-            DistributionFile::Sdist(sdist) => sdist.into(),
+            DistFile::Wheel(wheel) => wheel.into(),
+            DistFile::Sdist(sdist) => sdist.into(),
         }
     }
 }

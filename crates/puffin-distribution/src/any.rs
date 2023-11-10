@@ -1,19 +1,19 @@
 use puffin_normalize::PackageName;
 
-use crate::cached::CachedDistribution;
-use crate::installed::InstalledDistribution;
-use crate::traits::BaseDistribution;
-use crate::{Distribution, VersionOrUrl};
+use crate::cached::CachedDist;
+use crate::installed::InstalledDist;
+use crate::traits::Metadata;
+use crate::{Dist, VersionOrUrl};
 
 /// A distribution which either exists remotely or locally.
 #[derive(Debug, Clone)]
-pub enum AnyDistribution {
-    Remote(Distribution),
-    Cached(CachedDistribution),
-    Installed(InstalledDistribution),
+pub enum AnyDist {
+    Remote(Dist),
+    Cached(CachedDist),
+    Installed(InstalledDist),
 }
 
-impl BaseDistribution for AnyDistribution {
+impl Metadata for AnyDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Remote(dist) => dist.name(),
@@ -31,20 +31,20 @@ impl BaseDistribution for AnyDistribution {
     }
 }
 
-impl From<Distribution> for AnyDistribution {
-    fn from(dist: Distribution) -> Self {
+impl From<Dist> for AnyDist {
+    fn from(dist: Dist) -> Self {
         Self::Remote(dist)
     }
 }
 
-impl From<CachedDistribution> for AnyDistribution {
-    fn from(dist: CachedDistribution) -> Self {
+impl From<CachedDist> for AnyDist {
+    fn from(dist: CachedDist) -> Self {
         Self::Cached(dist)
     }
 }
 
-impl From<InstalledDistribution> for AnyDistribution {
-    fn from(dist: InstalledDistribution) -> Self {
+impl From<InstalledDist> for AnyDist {
+    fn from(dist: InstalledDist) -> Self {
         Self::Installed(dist)
     }
 }

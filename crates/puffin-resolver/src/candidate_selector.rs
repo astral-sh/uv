@@ -4,7 +4,7 @@ use pubgrub::range::Range;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 
-use crate::file::DistributionFile;
+use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
@@ -150,7 +150,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over sdists.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a PubGrubVersion, &'a DistributionFile)>,
+        versions: impl Iterator<Item = (&'a PubGrubVersion, &'a DistFile)>,
         package_name: &PackageName,
         range: &Range<PubGrubVersion>,
         allow_prerelease: AllowPreRelease,
@@ -158,7 +158,7 @@ impl CandidateSelector {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a PubGrubVersion, &'a DistributionFile),
+            IfNecessary(&'a PubGrubVersion, &'a DistFile),
         }
 
         let mut prerelease = None;
@@ -222,5 +222,5 @@ pub(crate) struct Candidate {
     /// The version of the package.
     pub(crate) version: PubGrubVersion,
     /// The file of the package.
-    pub(crate) file: DistributionFile,
+    pub(crate) file: DistFile,
 }

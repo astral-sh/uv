@@ -90,7 +90,7 @@ pub fn find_dist_info<'a, T: Copy>(
             let (dist_info_dir, file) = path.split_once('/')?;
             let dir_stem = dist_info_dir.strip_suffix(".dist-info")?;
             let (name, version) = dir_stem.rsplit_once('-')?;
-            if PackageName::from_str(name).ok()? == filename.distribution
+            if PackageName::from_str(name).ok()? == filename.name
                 && Version::from_str(version).ok()? == filename.version
                 && file == "METADATA"
             {

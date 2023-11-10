@@ -7,33 +7,33 @@ use pep440_rs::Version;
 use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
-use crate::{BaseDistribution, VersionOrUrl};
+use crate::{Metadata, VersionOrUrl};
 
 /// A built distribution (wheel) that exists in a virtual environment.
 #[derive(Debug, Clone)]
-pub enum InstalledDistribution {
+pub enum InstalledDist {
     /// The distribution was derived from a registry, like `PyPI`.
-    Registry(InstalledRegistryDistribution),
+    Registry(InstalledRegistryDist),
     /// The distribution was derived from an arbitrary URL.
-    Url(InstalledDirectUrlDistribution),
+    Url(InstalledDirectUrlDist),
 }
 
 #[derive(Debug, Clone)]
-pub struct InstalledRegistryDistribution {
+pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
-pub struct InstalledDirectUrlDistribution {
+pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
     pub url: DirectUrl,
     pub path: PathBuf,
 }
 
-impl BaseDistribution for InstalledRegistryDistribution {
+impl Metadata for InstalledRegistryDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -43,7 +43,7 @@ impl BaseDistribution for InstalledRegistryDistribution {
     }
 }
 
-impl BaseDistribution for InstalledDirectUrlDistribution {
+impl Metadata for InstalledDirectUrlDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -54,7 +54,7 @@ impl BaseDistribution for InstalledDirectUrlDistribution {
     }
 }
 
-impl BaseDistribution for InstalledDistribution {
+impl Metadata for InstalledDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -70,7 +70,7 @@ impl BaseDistribution for InstalledDistribution {
     }
 }
 
-impl InstalledDistribution {
+impl InstalledDist {
     /// Try to parse a distribution from a `.dist-info` directory name (like `django-5.0a1.dist-info`).
     ///
     /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
@@ -89,14 +89,14 @@ impl InstalledDistribution {
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
             return if let Some(direct_url) = Self::direct_url(path)? {
-                Ok(Some(Self::Url(InstalledDirectUrlDistribution {
+                Ok(Some(Self::Url(InstalledDirectUrlDist {
                     name,
                     version,
                     url: direct_url,
                     path: path.to_path_buf(),
                 })))
             } else {
-                Ok(Some(Self::Registry(InstalledRegistryDistribution {
+                Ok(Some(Self::Registry(InstalledRegistryDist {
                     name,
                     version,
                     path: path.to_path_buf(),

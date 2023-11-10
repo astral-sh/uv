@@ -6,7 +6,7 @@ use colored::Colorize;
 use tracing::debug;
 
 use platform_host::Platform;
-use puffin_distribution::BaseDistribution;
+use puffin_distribution::Metadata;
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::{elapsed, ExitStatus};

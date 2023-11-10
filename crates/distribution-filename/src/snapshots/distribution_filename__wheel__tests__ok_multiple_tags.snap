@@ -4,7 +4,7 @@ expression: "WheelFilename::from_str(\"foo-1.2.3-ab.cd.ef-gh-ij.kl.mn.op.qr.st.w
 ---
 Ok(
     WheelFilename {
-        distribution: PackageName(
+        name: PackageName(
             "foo",
         ),
         version: Version {
