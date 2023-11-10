@@ -2,10 +2,7 @@
 # A small set of pure-Python packages.
 ###
 packaging>=23.1
-pygls>=1.0.1
-lsprotocol>=2023.0.0a1
 ruff>=0.0.274
-flask @ git+https://github.com/pallets/flask.git@d92b64a
 typing_extensions
 scipy
 numpy
@@ -23,10 +20,8 @@ trio<0.20
 trio-websocket
 trio-asyncio
 trio-typing
-trio-protocol
 fastapi
 typer
 pydantic
 uvicorn
 traitlets
-

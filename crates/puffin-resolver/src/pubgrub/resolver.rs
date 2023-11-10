@@ -30,14 +30,14 @@ use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
 
-use crate::candidate_selector::CandidateSelector;
 use crate::distribution::{BuiltDistFetcher, SourceDistFetcher, SourceDistributionReporter};
 use crate::error::ResolveError;
 use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::locks::Locks;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
-    PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
+    CandidateSelector, PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion,
+    MIN_VERSION,
 };
 use crate::resolution::Graph;
 

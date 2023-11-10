@@ -217,7 +217,7 @@ impl From<Printer> for ResolverReporter {
     }
 }
 
-impl puffin_resolver::ResolverReporter for ResolverReporter {
+impl puffin_resolver::pubgrub::ResolverReporter for ResolverReporter {
     fn on_progress(
         &self,
         name: &PackageName,

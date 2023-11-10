@@ -18,7 +18,7 @@ use puffin_client::RegistryClient;
 use puffin_distribution::Metadata;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{DistFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
+use puffin_resolver::{pubgrub, DistFinder, Manifest, PreReleaseMode, ResolutionMode};
 use puffin_traits::BuildContext;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -78,7 +78,7 @@ impl BuildContext for BuildDispatch {
                 self.interpreter_info.platform(),
                 self.interpreter_info.simple_version(),
             )?;
-            let resolver = Resolver::new(
+            let resolver = pubgrub::Resolver::new(
                 Manifest::new(
                     requirements.to_vec(),
                     Vec::default(),

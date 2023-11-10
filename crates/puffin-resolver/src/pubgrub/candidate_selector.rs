@@ -6,9 +6,9 @@ use puffin_normalize::PackageName;
 
 use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
+use crate::pubgrub::resolver::VersionMap;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::resolver::VersionMap;
 use crate::Manifest;
 
 #[derive(Debug)]

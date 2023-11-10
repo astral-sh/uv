@@ -2,6 +2,7 @@ use std::hash::BuildHasherDefault;
 
 use colored::Colorize;
 use fxhash::FxHashMap;
+use itertools::Itertools;
 use petgraph::visit::EdgeRef;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
@@ -45,6 +46,26 @@ impl Resolution {
     /// Return `true` if there are no pinned packages in this resolution.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+impl std::fmt::Display for Resolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for dist in self.0.values().sorted_unstable_by_key(|dist| dist.name()) {
+            writeln!(f, "{dist}")?;
+        }
+        Ok(())
+    }
+}
+
+impl From<Graph> for Resolution {
+    fn from(value: Graph) -> Self {
+        let mut packages =
+            FxHashMap::with_capacity_and_hasher(value.len(), BuildHasherDefault::default());
+        for package in value.0.node_indices().map(|node| &value.0[node]) {
+            packages.insert(package.name().clone(), package.clone());
+        }
+        Self(packages)
     }
 }
 

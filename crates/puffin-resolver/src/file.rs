@@ -1,3 +1,4 @@
+use puffin_distribution::Identifier;
 use std::ops::Deref;
 
 use pypi_types::File;
@@ -69,6 +70,22 @@ impl From<DistFile> for File {
         match file {
             DistFile::Wheel(wheel) => wheel.into(),
             DistFile::Sdist(sdist) => sdist.into(),
+        }
+    }
+}
+
+impl Identifier for DistFile {
+    fn distribution_id(&self) -> String {
+        match self {
+            DistFile::Wheel(file) => file.distribution_id(),
+            DistFile::Sdist(file) => file.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            DistFile::Wheel(file) => file.resource_id(),
+            DistFile::Sdist(file) => file.resource_id(),
         }
     }
 }

@@ -29,12 +29,15 @@ anyhow = { workspace = true }
 bitflags = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 colored = { workspace = true }
+derivative = { version = "2.2.0" }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 fxhash = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
+resolvo = { version = "0.2.0" }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -43,8 +46,6 @@ tracing = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 zip = { workspace = true }
-derivative = { version = "2.2.0" }
-sha2 = { workspace = true }
 
 [dev-dependencies]
 gourgeist = { path = "../gourgeist" }

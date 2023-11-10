@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 use std::io::{stdout, BufWriter};
 use std::path::Path;
@@ -41,6 +40,7 @@ pub(crate) async fn pip_compile(
     upgrade_mode: UpgradeMode,
     index_urls: Option<IndexUrls>,
     no_build: bool,
+    resolver: Resolver,
     python_version: Option<PythonVersion>,
     cache: &Path,
     mut printer: Printer,
@@ -122,8 +122,8 @@ pub(crate) async fn pip_compile(
 
     // Determine the markers to use for resolution.
     let markers = python_version.map_or_else(
-        || Cow::Borrowed(venv.interpreter_info().markers()),
-        |python_version| Cow::Owned(python_version.markers(venv.interpreter_info().markers())),
+        || venv.interpreter_info().markers().clone(),
+        |python_version| python_version.markers(venv.interpreter_info().markers()),
     );
 
     // Instantiate a client.
@@ -149,21 +149,35 @@ pub(crate) async fn pip_compile(
     );
 
     // Resolve the dependencies.
-    let resolver =
-        puffin_resolver::Resolver::new(manifest, &markers, &tags, &client, &build_dispatch)
+    let resolution = match resolver {
+        Resolver::Pubgrub => {
+            let resolver = puffin_resolver::pubgrub::Resolver::new(
+                manifest,
+                &markers,
+                &tags,
+                &client,
+                &build_dispatch,
+            )
             .with_reporter(ResolverReporter::from(printer));
-    let resolution = match resolver.resolve().await {
-        Err(puffin_resolver::ResolveError::PubGrub(err)) => {
-            #[allow(clippy::print_stderr)]
-            {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
-                eprint!("{report:?}");
-            }
-            return Ok(ExitStatus::Failure);
+            let resolution = match resolver.resolve().await {
+                Err(puffin_resolver::ResolveError::PubGrub(err)) => {
+                    #[allow(clippy::print_stderr)]
+                    {
+                        let report = miette::Report::msg(format!("{err}"))
+                            .context("No solution found when resolving dependencies:");
+                        eprint!("{report:?}");
+                    }
+                    return Ok(ExitStatus::Failure);
+                }
+                result => result,
+            }?;
+            resolution.into()
         }
-        result => result,
-    }?;
+        Resolver::Resolvo => {
+            puffin_resolver::resolvo::resolve(manifest, markers, tags, client, build_dispatch)
+                .await?
+        }
+    };
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
@@ -230,6 +244,13 @@ impl From<bool> for UpgradeMode {
             Self::PreferPinned
         }
     }
+}
+
+/// Whether to allow package upgrades.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum Resolver {
+    Pubgrub,
+    Resolvo,
 }
 
 pub(crate) fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {

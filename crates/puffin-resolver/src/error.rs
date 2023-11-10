@@ -9,8 +9,7 @@ use pep508_rs::Requirement;
 use puffin_distribution::{BuiltDist, SourceDist};
 use puffin_normalize::PackageName;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
-use crate::ResolutionFailureReporter;
+use crate::pubgrub::{PubGrubPackage, PubGrubVersion, ResolutionFailureReporter};
 
 #[derive(Error, Debug)]
 pub enum ResolveError {
@@ -31,6 +30,9 @@ pub enum ResolveError {
 
     #[error(transparent)]
     PubGrub(#[from] RichPubGrubError),
+
+    #[error(transparent)]
+    Resolvo(anyhow::Error),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {

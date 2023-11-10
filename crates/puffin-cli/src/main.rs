@@ -13,7 +13,7 @@ use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use requirements::ExtrasSpecification;
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, Resolver};
 use crate::index_urls::IndexUrls;
 use crate::python_version::PythonVersion;
 use crate::requirements::RequirementsSource;
@@ -134,6 +134,10 @@ struct PipCompileArgs {
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
     no_build: bool,
+
+    /// The resolver to use when resolving dependencies.
+    #[arg(long, value_enum)]
+    resolver: Resolver,
 
     /// The minimum Python version that should be supported.
     #[arg(long, short, value_enum)]
@@ -271,6 +275,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.upgrade.into(),
                 index_urls,
                 args.no_build,
+                args.resolver,
                 args.python_version,
                 &cache_dir,
                 printer,

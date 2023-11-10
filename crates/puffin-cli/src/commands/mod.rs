@@ -4,7 +4,7 @@ use std::time::Duration;
 pub(crate) use add::add;
 pub(crate) use clean::clean;
 pub(crate) use freeze::freeze;
-pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile};
+pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Resolver};
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
 pub(crate) use remove::remove;
