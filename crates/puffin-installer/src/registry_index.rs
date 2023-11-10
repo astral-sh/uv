@@ -4,14 +4,14 @@ use std::path::Path;
 use fs_err as fs;
 use tracing::warn;
 
-use puffin_distribution::CachedDistribution;
+use puffin_distribution::{BaseDistribution, CachedRegistryDistribution};
 use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug, Default)]
-pub struct RegistryIndex(HashMap<PackageName, CachedDistribution>);
+pub struct RegistryIndex(HashMap<PackageName, CachedRegistryDistribution>);
 
 impl RegistryIndex {
     /// Build an index of cached distributions from a directory.
@@ -37,7 +37,7 @@ impl RegistryIndex {
                     }
                 };
             if file_type.is_dir() {
-                match CachedDistribution::try_from_path(&path) {
+                match CachedRegistryDistribution::try_from_path(&path) {
                     Ok(None) => {}
                     Ok(Some(dist_info)) => {
                         index.insert(dist_info.name().clone(), dist_info);
@@ -60,7 +60,7 @@ impl RegistryIndex {
     }
 
     /// Returns a distribution from the index, if it exists.
-    pub fn get(&self, name: &PackageName) -> Option<&CachedDistribution> {
+    pub fn get(&self, name: &PackageName) -> Option<&CachedRegistryDistribution> {
         self.0.get(name)
     }
 }

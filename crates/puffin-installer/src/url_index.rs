@@ -4,7 +4,7 @@ use fxhash::FxHashMap;
 use tracing::warn;
 use url::Url;
 
-use puffin_distribution::{CachedDistribution, RemoteDistributionRef};
+use puffin_distribution::{CachedDirectUrlDistribution, DistributionIdentifier};
 use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
@@ -49,10 +49,12 @@ impl UrlIndex {
     }
 
     /// Returns a distribution from the index, if it exists.
-    pub(crate) fn get(&self, name: &PackageName, url: &Url) -> Option<CachedDistribution> {
-        let distribution = RemoteDistributionRef::from_url(name, url);
-        let path = self.0.get(&distribution.id())?;
-        Some(CachedDistribution::Url(
+    pub(crate) fn get(&self, name: &PackageName, url: &Url) -> Option<CachedDirectUrlDistribution> {
+        // TODO(charlie): This takes advantage of the fact that for URL dependencies, the package ID
+        // and distribution ID are identical. We should either change the cache layout to use
+        // distribution IDs, or implement package ID for URL.
+        let path = self.0.get(&url.distribution_id())?;
+        Some(CachedDirectUrlDistribution::from_url(
             name.clone(),
             url.clone(),
             path.clone(),

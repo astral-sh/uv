@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use async_http_range_reader::{
     AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod,
@@ -199,11 +200,7 @@ impl RegistryClient {
     }
 
     /// Fetch the metadata from a wheel file.
-    pub async fn wheel_metadata(
-        &self,
-        file: File,
-        filename: WheelFilename,
-    ) -> Result<Metadata21, Error> {
+    pub async fn wheel_metadata(&self, file: File) -> Result<Metadata21, Error> {
         if self.no_index {
             return Err(Error::NoIndex(file.filename));
         }
@@ -226,6 +223,7 @@ impl RegistryClient {
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
         // into the cache and read from there
         } else {
+            let filename = WheelFilename::from_str(&file.filename)?;
             self.wheel_metadata_no_index(&filename, &url).await
         }
     }

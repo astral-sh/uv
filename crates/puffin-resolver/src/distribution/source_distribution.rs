@@ -7,8 +7,6 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use fs_err::tokio as fs;
-
-use tempfile::tempdir_in;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 use url::Url;
@@ -16,9 +14,9 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
-use puffin_distribution::source::Source;
-use puffin_distribution::RemoteDistributionRef;
-use puffin_git::{Git, GitSource};
+use puffin_distribution::direct_url::{DirectArchiveUrl, DirectGitUrl};
+use puffin_distribution::{DistributionIdentifier, RemoteDistribution, SourceDistribution};
+use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
@@ -55,7 +53,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Read the [`Metadata21`] from a built source distribution, if it exists in the cache.
     pub(crate) fn find_dist_info(
         &self,
-        distribution: &RemoteDistributionRef<'_>,
+        distribution: &SourceDistribution,
         tags: &Tags,
     ) -> Result<Option<Metadata21>> {
         CachedWheel::find_in_cache(
@@ -71,7 +69,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// Download and build a source distribution, storing the built wheel in the cache.
     pub(crate) async fn download_and_build_sdist(
         &self,
-        distribution: &RemoteDistributionRef<'_>,
+        distribution: &SourceDistribution,
         client: &RegistryClient,
     ) -> Result<Metadata21> {
         debug!("Building: {distribution}");
@@ -80,50 +78,54 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             bail!("Building source distributions is disabled");
         }
 
-        // This could extract the subdirectory.
-        let source = Source::try_from(distribution)?;
-        let (sdist_file, subdirectory) = match source {
-            Source::RegistryUrl(url) => {
-                debug!("Fetching source distribution from registry: {url}");
+        let (sdist_file, subdirectory) = match distribution {
+            SourceDistribution::Registry(sdist) => {
+                debug!(
+                    "Fetching source distribution from registry: {}",
+                    sdist.file.url
+                );
+
+                let url = Url::parse(&sdist.file.url)?;
+                let reader = client.stream_external(&url).await?;
+
+                // Download the source distribution.
+                let temp_dir = tempfile::tempdir_in(self.build_context.cache())?.into_path();
+                let sdist_filename = sdist.filename()?;
+                let sdist_file = temp_dir.join(sdist_filename);
+                let mut writer = tokio::fs::File::create(&sdist_file).await?;
+                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+
+                (sdist_file, None)
+            }
+
+            SourceDistribution::DirectUrl(sdist) => {
+                debug!("Fetching source distribution from URL: {}", sdist.url);
+
+                let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(&sdist.url);
 
                 let reader = client.stream_external(&url).await?;
                 let mut reader = tokio::io::BufReader::new(reader.compat());
 
                 // Download the source distribution.
-                let temp_dir = tempdir_in(self.build_context.cache())?.into_path();
-                let sdist_filename = distribution.filename()?;
-                let sdist_file = temp_dir.join(sdist_filename.as_ref());
-                let mut writer = tokio::fs::File::create(&sdist_file).await?;
-                tokio::io::copy(&mut reader, &mut writer).await?;
-
-                // Registry dependencies can't specify a subdirectory.
-                let subdirectory = None;
-
-                (sdist_file, subdirectory)
-            }
-            Source::RemoteUrl(url, subdirectory) => {
-                debug!("Fetching source distribution from URL: {url}");
-
-                let reader = client.stream_external(url).await?;
-                let mut reader = tokio::io::BufReader::new(reader.compat());
-
-                // Download the source distribution.
-                let temp_dir = tempdir_in(self.build_context.cache())?.into_path();
-                let sdist_filename = distribution.filename()?;
-                let sdist_file = temp_dir.join(sdist_filename.as_ref());
+                let temp_dir = tempfile::tempdir_in(self.build_context.cache())?.into_path();
+                let sdist_filename = sdist.filename()?;
+                let sdist_file = temp_dir.join(sdist_filename);
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
                 tokio::io::copy(&mut reader, &mut writer).await?;
 
                 (sdist_file, subdirectory)
             }
-            Source::Git(git, subdirectory) => {
-                debug!("Fetching source distribution from Git: {git}");
+
+            SourceDistribution::Git(sdist) => {
+                debug!("Fetching source distribution from Git: {}", sdist.url);
+
+                let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(&sdist.url)?;
 
                 let git_dir = self.build_context.cache().join(GIT_CACHE);
                 let source = if let Some(reporter) = &self.reporter {
-                    GitSource::new(git, git_dir).with_reporter(Facade::from(reporter.clone()))
+                    GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
                 } else {
-                    GitSource::new(git, git_dir)
+                    GitSource::new(url, git_dir)
                 };
                 let sdist_file = tokio::task::spawn_blocking(move || source.fetch())
                     .await??
@@ -138,7 +140,7 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
             .build_context
             .cache()
             .join(BUILT_WHEELS_CACHE)
-            .join(distribution.id());
+            .join(distribution.distribution_id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Build the wheel.
@@ -171,17 +173,15 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub(crate) async fn precise(
-        &self,
-        distribution: &RemoteDistributionRef<'_>,
-    ) -> Result<Option<Url>> {
-        let source = Source::try_from(distribution)?;
-        let Source::Git(git, subdirectory) = source else {
+    pub(crate) async fn precise(&self, distribution: &SourceDistribution) -> Result<Option<Url>> {
+        let SourceDistribution::Git(sdist) = distribution else {
             return Ok(None);
         };
 
+        let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(&sdist.url)?;
+
         // If the commit already contains a complete SHA, short-circuit.
-        if git.precise().is_some() {
+        if url.precise().is_some() {
             return Ok(None);
         }
 
@@ -189,16 +189,15 @@ impl<'a, T: BuildContext> SourceDistributionFetcher<'a, T> {
         // commit, etc.).
         let git_dir = self.build_context.cache().join(GIT_CACHE);
         let source = if let Some(reporter) = &self.reporter {
-            GitSource::new(git, git_dir).with_reporter(Facade::from(reporter.clone()))
+            GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
         } else {
-            GitSource::new(git, git_dir)
+            GitSource::new(url, git_dir)
         };
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
-        let git = Git::from(precise);
+        let url = GitUrl::from(precise);
 
         // Re-encode as a URL.
-        let source = Source::Git(git, subdirectory);
-        Ok(Some(source.into()))
+        Ok(Some(DirectGitUrl { url, subdirectory }.into()))
     }
 }
 

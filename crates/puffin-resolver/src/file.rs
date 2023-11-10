@@ -1,14 +1,13 @@
-use distribution_filename::{SourceDistributionFilename, WheelFilename};
 use std::ops::Deref;
 
 use pypi_types::File;
 
 /// A distribution can either be a wheel or a source distribution.
 #[derive(Debug, Clone)]
-pub(crate) struct WheelFile(pub(crate) File, pub(crate) WheelFilename);
+pub(crate) struct WheelFile(pub(crate) File);
 
 #[derive(Debug, Clone)]
-pub(crate) struct SdistFile(pub(crate) File, pub(crate) SourceDistributionFilename);
+pub(crate) struct SdistFile(pub(crate) File);
 
 #[derive(Debug, Clone)]
 pub(crate) enum DistributionFile {

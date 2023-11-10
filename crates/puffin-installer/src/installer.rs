@@ -1,10 +1,8 @@
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use puffin_distribution::source::Source;
 use puffin_distribution::CachedDistribution;
 use puffin_interpreter::Virtualenv;
-use pypi_types::DirectUrl;
 
 pub struct Installer<'a> {
     venv: &'a Virtualenv,
@@ -49,7 +47,12 @@ impl<'a> Installer<'a> {
                 install_wheel_rs::linker::install_wheel(
                     &location,
                     wheel.path(),
-                    direct_url(wheel)?.as_ref(),
+                    wheel
+                        .direct_url()?
+                        .as_ref()
+                        .map(pypi_types::DirectUrl::try_from)
+                        .transpose()?
+                        .as_ref(),
                     self.link_mode,
                 )
                 .with_context(|| format!("Failed to install: {wheel}"))?;
@@ -62,17 +65,6 @@ impl<'a> Installer<'a> {
             })
         })
     }
-}
-
-/// Return the [`DirectUrl`] for a wheel, if applicable.
-///
-/// TODO(charlie): This shouldn't be in `puffin-installer`.
-fn direct_url(wheel: &CachedDistribution) -> Result<Option<DirectUrl>> {
-    let CachedDistribution::Url(_, url, _) = wheel else {
-        return Ok(None);
-    };
-    let source = Source::try_from(url)?;
-    DirectUrl::try_from(source).map(Some)
 }
 
 pub trait Reporter: Send + Sync {

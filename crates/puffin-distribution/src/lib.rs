@@ -1,63 +1,22 @@
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use url::Url;
 
 use pep440_rs::Version;
-use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
-use pypi_types::{DirectUrl, File};
+use pypi_types::File;
 
-pub mod source;
+pub use crate::any::*;
+pub use crate::cached::*;
+pub use crate::installed::*;
+pub use crate::traits::*;
 
-/// A built distribution (wheel), which either exists remotely or locally.
-#[derive(Debug, Clone)]
-pub enum Distribution {
-    Remote(RemoteDistribution),
-    Cached(CachedDistribution),
-    Installed(InstalledDistribution),
-}
-
-impl Distribution {
-    /// Return the normalized [`PackageName`] of the distribution.
-    pub fn name(&self) -> &PackageName {
-        match self {
-            Self::Remote(dist) => dist.name(),
-            Self::Cached(dist) => dist.name(),
-            Self::Installed(dist) => dist.name(),
-        }
-    }
-
-    /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
-    /// distributions.
-    pub fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Remote(dist) => dist.version_or_url(),
-            Self::Cached(dist) => dist.version_or_url(),
-            Self::Installed(dist) => dist.version_or_url(),
-        }
-    }
-}
-
-impl From<RemoteDistribution> for Distribution {
-    fn from(dist: RemoteDistribution) -> Self {
-        Self::Remote(dist)
-    }
-}
-
-impl From<CachedDistribution> for Distribution {
-    fn from(dist: CachedDistribution) -> Self {
-        Self::Cached(dist)
-    }
-}
-
-impl From<InstalledDistribution> for Distribution {
-    fn from(dist: InstalledDistribution) -> Self {
-        Self::Installed(dist)
-    }
-}
+mod any;
+mod cached;
+pub mod direct_url;
+mod installed;
+mod traits;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrl<'a> {
@@ -76,361 +35,446 @@ impl std::fmt::Display for VersionOrUrl<'_> {
     }
 }
 
-/// A built distribution (wheel) that exists as a remote file (e.g., on `PyPI`).
+#[derive(Debug, Clone)]
+pub enum Distribution {
+    Built(BuiltDistribution),
+    Source(SourceDistribution),
+}
+
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
-pub enum RemoteDistribution {
-    /// The distribution exists in a registry, like `PyPI`.
-    Registry(PackageName, Version, File),
-    /// The distribution exists at an arbitrary URL.
-    Url(PackageName, Url),
+pub enum BuiltDistribution {
+    Registry(RegistryBuiltDistribution),
+    DirectUrl(DirectUrlBuiltDistribution),
 }
 
-impl RemoteDistribution {
-    /// Create a [`RemoteDistribution`] for a registry-based distribution.
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub enum SourceDistribution {
+    Registry(RegistrySourceDistribution),
+    DirectUrl(DirectUrlSourceDistribution),
+    Git(GitSourceDistribution),
+}
+
+/// A built distribution (wheel) that exists in a registry, like `PyPI`.
+#[derive(Debug, Clone)]
+pub struct RegistryBuiltDistribution {
+    pub name: PackageName,
+    pub version: Version,
+    pub file: File,
+}
+
+/// A built distribution (wheel) that exists at an arbitrary URL.
+#[derive(Debug, Clone)]
+pub struct DirectUrlBuiltDistribution {
+    pub name: PackageName,
+    pub url: Url,
+}
+
+/// A source distribution that exists in a registry, like `PyPI`.
+#[derive(Debug, Clone)]
+pub struct RegistrySourceDistribution {
+    pub name: PackageName,
+    pub version: Version,
+    pub file: File,
+}
+
+/// A source distribution that exists at an arbitrary URL.
+#[derive(Debug, Clone)]
+pub struct DirectUrlSourceDistribution {
+    pub name: PackageName,
+    pub url: Url,
+}
+
+/// A source distribution that exists in a Git repository.
+#[derive(Debug, Clone)]
+pub struct GitSourceDistribution {
+    pub name: PackageName,
+    pub url: Url,
+}
+
+impl Distribution {
+    /// Create a [`Distribution`] for a registry-based distribution.
     pub fn from_registry(name: PackageName, version: Version, file: File) -> Self {
-        Self::Registry(name, version, file)
-    }
-
-    /// Create a [`RemoteDistribution`] for a URL-based distribution.
-    pub fn from_url(name: PackageName, url: Url) -> Self {
-        Self::Url(name, url)
-    }
-
-    /// Return the URL of the distribution.
-    pub fn url(&self) -> Result<Cow<'_, Url>> {
-        match self {
-            Self::Registry(_, _, file) => {
-                let url = Url::parse(&file.url)?;
-                Ok(Cow::Owned(url))
-            }
-            Self::Url(_, url) => Ok(Cow::Borrowed(url)),
-        }
-    }
-
-    /// Return the filename of the distribution.
-    pub fn filename(&self) -> Result<Cow<'_, str>> {
-        match self {
-            Self::Registry(_, _, file) => Ok(Cow::Borrowed(&file.filename)),
-            Self::Url(_, url) => {
-                let filename = url
-                    .path_segments()
-                    .and_then(Iterator::last)
-                    .ok_or_else(|| anyhow!("Could not parse filename from URL: {}", url))?;
-                Ok(Cow::Owned(filename.to_owned()))
-            }
-        }
-    }
-
-    /// Return the normalized [`PackageName`] of the distribution.
-    pub fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(name, _, _) => name,
-            Self::Url(name, _) => name,
-        }
-    }
-
-    /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
-    /// distributions.
-    pub fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Registry(_, version, _) => VersionOrUrl::Version(version),
-            Self::Url(_, url) => VersionOrUrl::Url(url),
-        }
-    }
-
-    /// Returns a unique identifier for this distribution.
-    pub fn id(&self) -> String {
-        match self {
-            Self::Registry(name, version, _) => {
-                // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
-                // `version` is normalized by its `ToString` impl
-                format!(
-                    "{}-{}",
-                    PackageName::from(name).as_dist_info_name(),
-                    version
-                )
-            }
-            Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
-        }
-    }
-
-    /// Returns `true` if this distribution is a wheel.
-    pub fn is_wheel(&self) -> bool {
-        let filename = match self {
-            Self::Registry(_name, _version, file) => &file.filename,
-            Self::Url(_name, url) => url.path(),
-        };
-        Path::new(filename)
+        if Path::new(&file.filename)
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-    }
-}
-
-impl std::fmt::Display for RemoteDistribution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Registry(name, version, _file) => {
-                write!(f, "{name}=={version}")
-            }
-            Self::Url(name, url) => {
-                write!(f, "{name} @ {url}")
-            }
-        }
-    }
-}
-
-/// A built distribution (wheel) that exists in a local cache.
-#[derive(Debug, Clone)]
-pub enum CachedDistribution {
-    /// The distribution exists in a registry, like `PyPI`.
-    Registry(PackageName, Version, PathBuf),
-    /// The distribution exists at an arbitrary URL.
-    Url(PackageName, Url, PathBuf),
-}
-
-impl CachedDistribution {
-    /// Initialize a [`CachedDistribution`] from a [`RemoteDistribution`].
-    pub fn from_remote(remote: RemoteDistribution, path: PathBuf) -> Self {
-        match remote {
-            RemoteDistribution::Registry(name, version, _file) => {
-                Self::Registry(name, version, path)
-            }
-            RemoteDistribution::Url(name, url) => Self::Url(name, url, path),
-        }
-    }
-
-    /// Try to parse a distribution from a cached directory name (like `django-5.0a1`).
-    pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
-        let Some(file_name) = path.file_name() else {
-            return Ok(None);
-        };
-        let Some(file_name) = file_name.to_str() else {
-            return Ok(None);
-        };
-        let Some((name, version)) = file_name.split_once('-') else {
-            return Ok(None);
-        };
-
-        let name = PackageName::from_str(name)?;
-        let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
-        let path = path.to_path_buf();
-
-        Ok(Some(Self::Registry(name, version, path)))
-    }
-
-    /// Return the normalized [`PackageName`] of the distribution.
-    pub fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(name, _, _) => name,
-            Self::Url(name, _, _) => name,
-        }
-    }
-
-    /// Return the [`Path`] at which the distribution is stored on-disk.
-    pub fn path(&self) -> &Path {
-        match self {
-            Self::Registry(_, _, path) => path,
-            Self::Url(_, _, path) => path,
-        }
-    }
-
-    /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
-    /// distributions.
-    pub fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Registry(_, version, _) => VersionOrUrl::Version(version),
-            Self::Url(_, url, _) => VersionOrUrl::Url(url),
-        }
-    }
-}
-
-impl std::fmt::Display for CachedDistribution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Registry(name, version, _file) => {
-                write!(f, "{name}=={version}")
-            }
-            Self::Url(name, url, _path) => {
-                write!(f, "{name} @ {url}")
-            }
-        }
-    }
-}
-
-/// A built distribution (wheel) that exists in a virtual environment.
-#[derive(Debug, Clone)]
-pub struct InstalledDistribution {
-    name: PackageName,
-    version: Version,
-    path: PathBuf,
-}
-
-impl InstalledDistribution {
-    /// Try to parse a distribution from a `.dist-info` directory name (like `django-5.0a1.dist-info`).
-    ///
-    /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
-    pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
-        if path.extension().is_some_and(|ext| ext == "dist-info") {
-            let Some(file_stem) = path.file_stem() else {
-                return Ok(None);
-            };
-            let Some(file_stem) = file_stem.to_str() else {
-                return Ok(None);
-            };
-            let Some((name, version)) = file_stem.split_once('-') else {
-                return Ok(None);
-            };
-
-            let name = PackageName::from_str(name)?;
-            let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
-            let path = path.to_path_buf();
-
-            return Ok(Some(Self {
+        {
+            Self::Built(BuiltDistribution::Registry(RegistryBuiltDistribution {
                 name,
                 version,
-                path,
-            }));
+                file,
+            }))
+        } else {
+            Self::Source(SourceDistribution::Registry(RegistrySourceDistribution {
+                name,
+                version,
+                file,
+            }))
         }
-
-        Ok(None)
     }
 
-    /// Return the normalized [`PackageName`] of the distribution.
-    pub fn name(&self) -> &PackageName {
+    /// Create a [`Distribution`] for a URL-based distribution.
+    pub fn from_url(name: PackageName, url: Url) -> Self {
+        if url.scheme().starts_with("git+") {
+            Self::Source(SourceDistribution::Git(GitSourceDistribution { name, url }))
+        } else if Path::new(url.path())
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            Self::Built(BuiltDistribution::DirectUrl(DirectUrlBuiltDistribution {
+                name,
+                url,
+            }))
+        } else {
+            Self::Source(SourceDistribution::DirectUrl(DirectUrlSourceDistribution {
+                name,
+                url,
+            }))
+        }
+    }
+}
+
+impl BaseDistribution for RegistryBuiltDistribution {
+    fn name(&self) -> &PackageName {
         &self.name
     }
 
-    /// Return the [`Version`] of the distribution.
-    pub fn version(&self) -> &Version {
-        &self.version
-    }
-
-    /// Return the [`Path`] at which the distribution is stored on-disk.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
-    /// distributions.
-    pub fn version_or_url(&self) -> VersionOrUrl {
-        // TODO(charlie): If this dependency was installed via a direct URL, return it here, rather
-        // than the version.
+    fn version_or_url(&self) -> VersionOrUrl {
         VersionOrUrl::Version(&self.version)
     }
+}
 
-    /// Return the [`DirectUrl`] metadata for this distribution, if it exists.
-    pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
-        let path = self.path.join("direct_url.json");
-        let Ok(file) = fs_err::File::open(path) else {
-            return Ok(None);
-        };
-        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
-        Ok(Some(direct_url))
+impl BaseDistribution for DirectUrlBuiltDistribution {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
     }
 }
 
-impl std::fmt::Display for InstalledDistribution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}=={}", self.name(), self.version())
+impl BaseDistribution for RegistrySourceDistribution {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Version(&self.version)
     }
 }
 
-/// Unowned reference to a [`RemoteDistribution`].
-#[derive(Debug, Clone)]
-pub enum RemoteDistributionRef<'a> {
-    /// The distribution exists in a registry, like `PyPI`.
-    Registry(&'a PackageName, &'a Version, &'a File),
-    /// The distribution exists at an arbitrary URL.
-    Url(&'a PackageName, &'a Url),
+impl BaseDistribution for DirectUrlSourceDistribution {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
 }
 
-impl<'a> RemoteDistributionRef<'a> {
-    /// Create a [`RemoteDistribution`] for a registry-based distribution.
-    pub fn from_registry(name: &'a PackageName, version: &'a Version, file: &'a File) -> Self {
-        Self::Registry(name, version, file)
+impl BaseDistribution for GitSourceDistribution {
+    fn name(&self) -> &PackageName {
+        &self.name
     }
 
-    /// Create a [`RemoteDistribution`] for a URL-based distribution.
-    pub fn from_url(name: &'a PackageName, url: &'a Url) -> Self {
-        Self::Url(name, url)
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
     }
+}
 
-    /// Return the URL of the distribution.
-    pub fn url(&self) -> Result<Cow<'_, Url>> {
+impl BaseDistribution for SourceDistribution {
+    fn name(&self) -> &PackageName {
         match self {
-            Self::Registry(_, _, file) => {
-                let url = Url::parse(&file.url)?;
-                Ok(Cow::Owned(url))
-            }
-            Self::Url(_, url) => Ok(Cow::Borrowed(url)),
+            Self::Registry(dist) => dist.name(),
+            Self::DirectUrl(dist) => dist.name(),
+            Self::Git(dist) => dist.name(),
         }
     }
 
-    /// Return the filename of the distribution.
-    pub fn filename(&self) -> Result<Cow<'_, str>> {
+    fn version_or_url(&self) -> VersionOrUrl {
         match self {
-            Self::Registry(_, _, file) => Ok(Cow::Borrowed(&file.filename)),
-            Self::Url(_, url) => {
-                let filename = url
-                    .path_segments()
-                    .and_then(std::iter::Iterator::last)
-                    .ok_or_else(|| anyhow!("Could not parse filename from URL: {}", url))?;
-                Ok(Cow::Owned(filename.to_owned()))
-            }
-        }
-    }
-
-    /// Return the normalized [`PackageName`] of the distribution.
-    pub fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(name, _, _) => name,
-            Self::Url(name, _) => name,
-        }
-    }
-
-    /// Return a [`Version`], for registry-based distributions, or a [`Url`], for URL-based
-    /// distributions.
-    pub fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Registry(_, version, _) => VersionOrUrl::Version(version),
-            Self::Url(_, url) => VersionOrUrl::Url(url),
-        }
-    }
-
-    /// Returns a unique identifier for this distribution.
-    pub fn id(&self) -> String {
-        match self {
-            Self::Registry(name, version, _) => {
-                // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
-                // `version` is normalized by its `ToString` impl
-                format!("{}-{}", PackageName::from(*name), version)
-            }
-            Self::Url(_name, url) => puffin_cache::digest(&CanonicalUrl::new(url)),
+            Self::Registry(dist) => dist.version_or_url(),
+            Self::DirectUrl(dist) => dist.version_or_url(),
+            Self::Git(dist) => dist.version_or_url(),
         }
     }
 }
 
-impl std::fmt::Display for RemoteDistributionRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl BaseDistribution for BuiltDistribution {
+    fn name(&self) -> &PackageName {
         match self {
-            Self::Registry(name, version, _file) => {
-                write!(f, "{name}=={version}")
-            }
-            Self::Url(name, url) => {
-                write!(f, "{name} @ {url}")
-            }
+            Self::Registry(dist) => dist.name(),
+            Self::DirectUrl(dist) => dist.name(),
+        }
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        match self {
+            Self::Registry(dist) => dist.version_or_url(),
+            Self::DirectUrl(dist) => dist.version_or_url(),
         }
     }
 }
 
-impl<'a> From<&'a RemoteDistribution> for RemoteDistributionRef<'a> {
-    fn from(dist: &'a RemoteDistribution) -> Self {
-        match dist {
-            RemoteDistribution::Registry(name, version, file) => {
-                Self::Registry(name, version, file)
-            }
-            RemoteDistribution::Url(name, url) => Self::Url(name, url),
+impl BaseDistribution for Distribution {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Built(dist) => dist.name(),
+            Self::Source(dist) => dist.name(),
+        }
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        match self {
+            Self::Built(dist) => dist.version_or_url(),
+            Self::Source(dist) => dist.version_or_url(),
+        }
+    }
+}
+
+impl RemoteDistribution for RegistryBuiltDistribution {
+    fn filename(&self) -> Result<&str> {
+        Ok(&self.file.filename)
+    }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.file.size)
+    }
+}
+
+impl RemoteDistribution for RegistrySourceDistribution {
+    fn filename(&self) -> Result<&str> {
+        Ok(&self.file.filename)
+    }
+
+    fn size(&self) -> Option<usize> {
+        Some(self.file.size)
+    }
+}
+
+impl RemoteDistribution for DirectUrlBuiltDistribution {
+    fn filename(&self) -> Result<&str> {
+        self.url
+            .path_segments()
+            .and_then(Iterator::last)
+            .map(|filename| {
+                filename
+                    .rsplit_once('@')
+                    .map_or(filename, |(_, filename)| filename)
+            })
+            .with_context(|| format!("Could not parse filename from URL: {}", self.url))
+    }
+
+    fn size(&self) -> Option<usize> {
+        None
+    }
+}
+
+impl RemoteDistribution for DirectUrlSourceDistribution {
+    fn filename(&self) -> Result<&str> {
+        self.url
+            .path_segments()
+            .and_then(Iterator::last)
+            .map(|filename| {
+                filename
+                    .rsplit_once('@')
+                    .map_or(filename, |(_, filename)| filename)
+            })
+            .with_context(|| format!("Could not parse filename from URL: {}", self.url))
+    }
+
+    fn size(&self) -> Option<usize> {
+        None
+    }
+}
+
+impl RemoteDistribution for GitSourceDistribution {
+    fn filename(&self) -> Result<&str> {
+        self.url
+            .path_segments()
+            .and_then(Iterator::last)
+            .map(|filename| {
+                filename
+                    .rsplit_once('@')
+                    .map_or(filename, |(_, filename)| filename)
+            })
+            .with_context(|| format!("Could not parse filename from URL: {}", self.url))
+    }
+
+    fn size(&self) -> Option<usize> {
+        None
+    }
+}
+
+impl RemoteDistribution for SourceDistribution {
+    fn filename(&self) -> Result<&str> {
+        match self {
+            Self::Registry(dist) => dist.filename(),
+            Self::DirectUrl(dist) => dist.filename(),
+            Self::Git(dist) => dist.filename(),
+        }
+    }
+
+    fn size(&self) -> Option<usize> {
+        match self {
+            Self::Registry(dist) => dist.size(),
+            Self::DirectUrl(dist) => dist.size(),
+            Self::Git(dist) => dist.size(),
+        }
+    }
+}
+
+impl RemoteDistribution for BuiltDistribution {
+    fn filename(&self) -> Result<&str> {
+        match self {
+            Self::Registry(dist) => dist.filename(),
+            Self::DirectUrl(dist) => dist.filename(),
+        }
+    }
+
+    fn size(&self) -> Option<usize> {
+        match self {
+            Self::Registry(dist) => dist.size(),
+            Self::DirectUrl(dist) => dist.size(),
+        }
+    }
+}
+
+impl RemoteDistribution for Distribution {
+    fn filename(&self) -> Result<&str> {
+        match self {
+            Self::Built(dist) => dist.filename(),
+            Self::Source(dist) => dist.filename(),
+        }
+    }
+
+    fn size(&self) -> Option<usize> {
+        match self {
+            Self::Built(dist) => dist.size(),
+            Self::Source(dist) => dist.size(),
+        }
+    }
+}
+
+impl DistributionIdentifier for Url {
+    fn distribution_id(&self) -> String {
+        puffin_cache::digest(&puffin_cache::CanonicalUrl::new(self))
+    }
+
+    fn resource_id(&self) -> String {
+        puffin_cache::digest(&puffin_cache::RepositoryUrl::new(self))
+    }
+}
+
+impl DistributionIdentifier for File {
+    fn distribution_id(&self) -> String {
+        self.hashes.sha256.clone()
+    }
+
+    fn resource_id(&self) -> String {
+        self.hashes.sha256.clone()
+    }
+}
+
+impl DistributionIdentifier for RegistryBuiltDistribution {
+    fn distribution_id(&self) -> String {
+        self.file.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.file.resource_id()
+    }
+}
+
+impl DistributionIdentifier for RegistrySourceDistribution {
+    fn distribution_id(&self) -> String {
+        self.file.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.file.resource_id()
+    }
+}
+
+impl DistributionIdentifier for DirectUrlBuiltDistribution {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl DistributionIdentifier for DirectUrlSourceDistribution {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl DistributionIdentifier for GitSourceDistribution {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl DistributionIdentifier for SourceDistribution {
+    fn distribution_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.distribution_id(),
+            Self::DirectUrl(dist) => dist.distribution_id(),
+            Self::Git(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.resource_id(),
+            Self::DirectUrl(dist) => dist.resource_id(),
+            Self::Git(dist) => dist.resource_id(),
+        }
+    }
+}
+
+impl DistributionIdentifier for BuiltDistribution {
+    fn distribution_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.distribution_id(),
+            Self::DirectUrl(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            Self::Registry(dist) => dist.resource_id(),
+            Self::DirectUrl(dist) => dist.resource_id(),
+        }
+    }
+}
+
+impl DistributionIdentifier for Distribution {
+    fn distribution_id(&self) -> String {
+        match self {
+            Self::Built(dist) => dist.distribution_id(),
+            Self::Source(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> String {
+        match self {
+            Self::Built(dist) => dist.resource_id(),
+            Self::Source(dist) => dist.resource_id(),
         }
     }
 }

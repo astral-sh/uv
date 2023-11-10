@@ -7,18 +7,18 @@ mod git;
 mod source;
 mod util;
 
-/// A reference to a Git repository.
+/// A URL reference to a Git repository.
 #[derive(Debug, Clone)]
-pub struct Git {
+pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters and fragments removed.
-    url: Url,
+    repository: Url,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
     /// The precise commit to use, if known.
     precise: Option<git2::Oid>,
 }
 
-impl Git {
+impl GitUrl {
     #[must_use]
     pub(crate) fn with_precise(mut self, precise: git2::Oid) -> Self {
         self.precise = Some(precise);
@@ -26,8 +26,8 @@ impl Git {
     }
 
     /// Return the [`Url`] of the Git repository.
-    pub fn url(&self) -> &Url {
-        &self.url
+    pub fn repository(&self) -> &Url {
+        &self.repository
     }
 
     /// Return the reference to the commit to use, which could be a branch, tag or revision.
@@ -49,10 +49,10 @@ impl Git {
     }
 }
 
-impl TryFrom<Url> for Git {
+impl TryFrom<Url> for GitUrl {
     type Error = anyhow::Error;
 
-    /// Initialize a [`Git`] source from a URL.
+    /// Initialize a [`GitUrl`] source from a URL.
     fn try_from(mut url: Url) -> Result<Self, Self::Error> {
         // Remove any query parameters and fragments.
         url.set_fragment(None);
@@ -72,16 +72,16 @@ impl TryFrom<Url> for Git {
         };
 
         Ok(Self {
-            url,
+            repository: url,
             reference,
             precise,
         })
     }
 }
 
-impl From<Git> for Url {
-    fn from(git: Git) -> Self {
-        let mut url = git.url;
+impl From<GitUrl> for Url {
+    fn from(git: GitUrl) -> Self {
+        let mut url = git.repository;
 
         // If we have a precise commit, add `@` and the commit hash to the URL.
         if let Some(precise) = git.precise {
@@ -105,9 +105,9 @@ impl From<Git> for Url {
     }
 }
 
-impl std::fmt::Display for Git {
+impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.url)
+        write!(f, "{}", self.repository)
     }
 }
 

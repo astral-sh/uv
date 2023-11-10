@@ -11,7 +11,7 @@ use waitmap::WaitMap;
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::RemoteDistribution;
+use puffin_distribution::{BaseDistribution, BuiltDistribution, Distribution, SourceDistribution};
 use puffin_normalize::PackageName;
 use pypi_types::File;
 
@@ -19,21 +19,21 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default)]
-pub struct Resolution(FxHashMap<PackageName, RemoteDistribution>);
+pub struct Resolution(FxHashMap<PackageName, Distribution>);
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub(crate) fn new(packages: FxHashMap<PackageName, RemoteDistribution>) -> Self {
+    pub(crate) fn new(packages: FxHashMap<PackageName, Distribution>) -> Self {
         Self(packages)
     }
 
     /// Return the distribution for the given package name, if it exists.
-    pub fn get(&self, package_name: &PackageName) -> Option<&RemoteDistribution> {
+    pub fn get(&self, package_name: &PackageName) -> Option<&Distribution> {
         self.0.get(package_name)
     }
 
-    /// Iterate over the [`RemoteDistribution`] entities in this resolution.
-    pub fn into_distributions(self) -> impl Iterator<Item = RemoteDistribution> {
+    /// Iterate over the [`Distribution`] entities in this resolution.
+    pub fn into_distributions(self) -> impl Iterator<Item = Distribution> {
         self.0.into_values()
     }
 
@@ -51,7 +51,7 @@ impl Resolution {
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct Graph(petgraph::graph::Graph<RemoteDistribution, (), petgraph::Directed>);
+pub struct Graph(petgraph::graph::Graph<Distribution, (), petgraph::Directed>);
 
 impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
@@ -78,7 +78,7 @@ impl Graph {
                         .unwrap()
                         .clone();
                     let pinned_package =
-                        RemoteDistribution::from_registry(package_name.clone(), version, file);
+                        Distribution::from_registry(package_name.clone(), version, file);
 
                     let index = graph.add_node(pinned_package);
                     inverse.insert(package_name, index);
@@ -87,8 +87,7 @@ impl Graph {
                     let url = redirects
                         .get(url)
                         .map_or_else(|| url.clone(), |url| url.value().clone());
-                    let pinned_package =
-                        RemoteDistribution::from_url(package_name.clone(), url.clone());
+                    let pinned_package = Distribution::from_url(package_name.clone(), url);
 
                     let index = graph.add_node(pinned_package);
                     inverse.insert(package_name, index);
@@ -144,18 +143,38 @@ impl Graph {
         self.0
             .node_indices()
             .map(|node| match &self.0[node] {
-                RemoteDistribution::Registry(name, version, _file) => Requirement {
-                    name: name.clone(),
+                Distribution::Built(BuiltDistribution::Registry(wheel)) => Requirement {
+                    name: wheel.name.clone(),
                     extras: None,
                     version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-                        VersionSpecifier::equals_version(version.clone()),
+                        VersionSpecifier::equals_version(wheel.version.clone()),
                     ))),
                     marker: None,
                 },
-                RemoteDistribution::Url(name, url) => Requirement {
-                    name: name.clone(),
+                Distribution::Built(BuiltDistribution::DirectUrl(wheel)) => Requirement {
+                    name: wheel.name.clone(),
                     extras: None,
-                    version_or_url: Some(VersionOrUrl::Url(url.clone())),
+                    version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
+                    marker: None,
+                },
+                Distribution::Source(SourceDistribution::Registry(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+                        VersionSpecifier::equals_version(sdist.version.clone()),
+                    ))),
+                    marker: None,
+                },
+                Distribution::Source(SourceDistribution::DirectUrl(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
+                    marker: None,
+                },
+                Distribution::Source(SourceDistribution::Git(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
                     marker: None,
                 },
             })
