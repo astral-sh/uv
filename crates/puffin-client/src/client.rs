@@ -212,10 +212,9 @@ impl RegistryClient {
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_INDEX).join("pypi");
             let cache_file = format!("{}.json", filename.stem());
 
-            let url_ = url.clone();
-            let response_callback = |response: Response| async move {
+            let response_callback = |response: Response| async {
                 Metadata21::parse(response.bytes().await?.as_ref())
-                    .map_err(|err| Error::MetadataParseError(filename, url_, err))
+                    .map_err(|err| Error::MetadataParseError(filename, url.clone(), err))
             };
             let req = self.client_raw.get(url.clone()).build()?;
             self.cached_client
