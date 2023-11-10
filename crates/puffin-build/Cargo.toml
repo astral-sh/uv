@@ -21,6 +21,7 @@ anyhow = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
+itertools = { workspace = true }
 once_cell = { workspace = true }
 pyproject-toml = { workspace = true }
 regex = { workspace = true }
