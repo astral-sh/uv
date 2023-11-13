@@ -32,6 +32,7 @@ requirements-txt = { path = "../requirements-txt" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-workspace = { path = "../puffin-workspace" }
 
+anstream = { workspace = true }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 cacache = { workspace = true }
