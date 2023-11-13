@@ -8,9 +8,9 @@ info:
     - "--constraint"
     - constraints.txt
     - "--cache-dir"
-    - /tmp/.tmp9F1Ljq
+    - /tmp/.tmpuS4Jn4
   env:
-    VIRTUAL_ENV: /tmp/.tmpNJjhiS/.venv
+    VIRTUAL_ENV: /tmp/.tmpnFovuD/.venv
 ---
 success: true
 exit_code: 0
@@ -22,9 +22,7 @@ asgiref==3.7.2
 django==5.0b1
 sqlparse==0.4.3
     # via django
-typing-extensions==4.8.0
-    # via asgiref
 
 ----- stderr -----
-Resolved 4 packages in [TIME]
+Resolved 3 packages in [TIME]
 

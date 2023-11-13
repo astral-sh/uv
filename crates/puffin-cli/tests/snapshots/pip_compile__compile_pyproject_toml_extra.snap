@@ -8,9 +8,9 @@ info:
     - "--extra"
     - foo
     - "--cache-dir"
-    - /tmp/.tmpvkwe04
+    - /tmp/.tmpLjFVr0
   env:
-    VIRTUAL_ENV: /tmp/.tmpMFDom0/.venv
+    VIRTUAL_ENV: /tmp/.tmpDT0oRC/.venv
 ---
 success: true
 exit_code: 0
@@ -22,9 +22,7 @@ asgiref==3.7.2
 django==5.0b1
 sqlparse==0.4.4
     # via django
-typing-extensions==4.8.0
-    # via asgiref
 
 ----- stderr -----
-Resolved 4 packages in [TIME]
+Resolved 3 packages in [TIME]
 

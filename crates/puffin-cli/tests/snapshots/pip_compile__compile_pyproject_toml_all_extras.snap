@@ -7,9 +7,9 @@ info:
     - pyproject.toml
     - "--all-extras"
     - "--cache-dir"
-    - /tmp/.tmpLq97XV
+    - /tmp/.tmpQHVFqr
   env:
-    VIRTUAL_ENV: /tmp/.tmpj8K855/.venv
+    VIRTUAL_ENV: /tmp/.tmpmKXqaF/.venv
 ---
 success: true
 exit_code: 0
@@ -23,8 +23,6 @@ asgiref==3.7.2
 certifi==2023.7.22
     # via httpcore
 django==5.0b1
-exceptiongroup==1.1.3
-    # via anyio
 h11==0.14.0
     # via httpcore
 httpcore==0.18.0
@@ -36,9 +34,7 @@ sniffio==1.3.0
     #   httpcore
 sqlparse==0.4.4
     # via django
-typing-extensions==4.8.0
-    # via asgiref
 
 ----- stderr -----
-Resolved 11 packages in [TIME]
+Resolved 9 packages in [TIME]
 
