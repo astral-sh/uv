@@ -51,7 +51,7 @@ jobs:
       # TODO(konstin): Mock the venv in the installer test so we don't need this anymore
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          python-version: '3.8'
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:

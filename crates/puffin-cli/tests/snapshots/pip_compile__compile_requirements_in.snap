@@ -6,9 +6,9 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpxF1zFY
+    - /tmp/.tmpNz0KIo
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp33QZdv/.venv
+    VIRTUAL_ENV: /tmp/.tmpyQ2rTA/.venv
 ---
 success: true
 exit_code: 0
@@ -20,7 +20,9 @@ asgiref==3.7.2
 django==5.0b1
 sqlparse==0.4.4
     # via django
+typing-extensions==4.8.0
+    # via asgiref
 
 ----- stderr -----
-Resolved 3 packages in [TIME]
+Resolved 4 packages in [TIME]
 

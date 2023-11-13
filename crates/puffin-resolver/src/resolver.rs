@@ -536,6 +536,21 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     // distributions.
                     let mut version_map: VersionMap = BTreeMap::new();
                     for file in metadata.files {
+                        // Only add dists compatible with the python version.
+                        // This is relevant for source dists which give no other indication of their
+                        // compatibility and wheels which may be tagged `py3-none-any` but
+                        // have `requires-python: ">=3.9"`
+                        // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
+                        if !file
+                            .requires_python
+                            .as_ref()
+                            .map_or(true, |requires_python| {
+                                requires_python
+                                    .contains(self.build_context.interpreter_info().version())
+                            })
+                        {
+                            continue;
+                        }
                         if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
                             if filename.is_compatible(self.tags) {
                                 let version = PubGrubVersion::from(filename.version.clone());
@@ -554,22 +569,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         } else if let Ok(filename) =
                             SourceDistFilename::parse(file.filename.as_str(), &package_name)
                         {
-                            // Only add source dists compatible with the python version
-                            // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-                            if file
-                                .requires_python
-                                .as_ref()
-                                .map_or(true, |requires_python| {
-                                    requires_python
-                                        .contains(self.build_context.interpreter_info().version())
-                                })
+                            let version = PubGrubVersion::from(filename.version.clone());
+                            if let std::collections::btree_map::Entry::Vacant(entry) =
+                                version_map.entry(version)
                             {
-                                let version = PubGrubVersion::from(filename.version.clone());
-                                if let std::collections::btree_map::Entry::Vacant(entry) =
-                                    version_map.entry(version)
-                                {
-                                    entry.insert(DistFile::from(SdistFile(file)));
-                                }
+                                entry.insert(DistFile::from(SdistFile(file)));
                             }
                         }
                     }

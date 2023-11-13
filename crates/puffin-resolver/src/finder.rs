@@ -136,6 +136,20 @@ impl<'a> DistFinder<'a> {
     fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<Dist> {
         let mut fallback = None;
         for file in files.into_iter().rev() {
+            // Only add dists compatible with the python version.
+            // This is relevant for source dists which give no other indication of their
+            // compatibility and wheels which may be tagged `py3-none-any` but
+            // have `requires-python: ">=3.9"`
+            // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
+            if !file
+                .requires_python
+                .as_ref()
+                .map_or(true, |requires_python| {
+                    requires_python.contains(self.interpreter_info.version())
+                })
+            {
+                continue;
+            }
             if let Ok(wheel) = WheelFilename::from_str(file.filename.as_str()) {
                 if !wheel.is_compatible(self.tags) {
                     continue;
@@ -146,18 +160,8 @@ impl<'a> DistFinder<'a> {
             } else if let Ok(sdist) =
                 SourceDistFilename::parse(file.filename.as_str(), &requirement.name)
             {
-                // Only add source dists compatible with the python version
-                // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-                if file
-                    .requires_python
-                    .as_ref()
-                    .map_or(true, |requires_python| {
-                        requires_python.contains(self.interpreter_info.version())
-                    })
-                {
-                    if requirement.is_satisfied_by(&sdist.version) {
-                        fallback = Some(Dist::from_registry(sdist.name, sdist.version, file));
-                    }
+                if requirement.is_satisfied_by(&sdist.version) {
+                    fallback = Some(Dist::from_registry(sdist.name, sdist.version, file));
                 }
             }
         }

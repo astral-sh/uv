@@ -6,9 +6,9 @@ info:
     - pip-compile
     - pyproject.toml
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpOOTFwj
+    - /tmp/.tmphqsdmA
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpU0VXyY/.venv
+    VIRTUAL_ENV: /tmp/.tmpvlroQ4/.venv
 ---
 success: true
 exit_code: 0
@@ -20,7 +20,9 @@ asgiref==3.7.2
 django==5.0b1
 sqlparse==0.4.4
     # via django
+typing-extensions==4.8.0
+    # via asgiref
 
 ----- stderr -----
-Resolved 3 packages in [TIME]
+Resolved 4 packages in [TIME]
 

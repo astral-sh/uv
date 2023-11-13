@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /tmp/.tmpQ4q9dh
+    - /tmp/.tmpL9E9fl
   env:
-    VIRTUAL_ENV: /tmp/.tmp6vLqVn/.venv
+    VIRTUAL_ENV: /tmp/.tmp0yDHj5/.venv
 ---
 success: true
 exit_code: 0
@@ -18,8 +18,6 @@ exit_code: 0
 Resolved 1 package in [TIME]
 Downloaded 1 package in [TIME]
 Unzipped 1 package in [TIME]
-Uninstalled 1 package in [TIME]
 Installed 1 package in [TIME]
- + numpy==1.21.6
- - werkzeug==2.0.0
+ + numpy==1.24.4
 
