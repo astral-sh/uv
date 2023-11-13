@@ -211,10 +211,14 @@ impl Metadata21 {
     }
 }
 
+/// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
+/// Ex) `!=~5.0`
 static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
-/// e.g. `>=1.9.*`
+/// Ex) `>=1.9.*`
 static GREATER_THAN_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r">=(\d+\.\d+)\.\*").unwrap());
+/// Ex) `!=3.0*`
+static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -228,7 +232,7 @@ impl FromStr for LenientRequirement {
             Ok(requirement) => Ok(Self(requirement)),
             Err(err) => {
                 // Given `elasticsearch-dsl (>=7.2.0<8.0.0)`, rewrite to `elasticsearch-dsl (>=7.2.0,<8.0.0)`.
-                let patched = MISSING_COMMA.replace(s, r"$1,$2");
+                let patched = MISSING_COMMA.replace_all(s, r"$1,$2");
                 if patched != s {
                     if let Ok(requirement) = Requirement::from_str(&patched) {
                         warn!(
@@ -239,7 +243,7 @@ impl FromStr for LenientRequirement {
                 }
 
                 // Given `jupyter-core (!=~5.0,>=4.12)`, rewrite to `jupyter-core (!=5.0.*,>=4.12)`.
-                let patched = NOT_EQUAL_TILDE.replace(s, r"!=${1}.*");
+                let patched = NOT_EQUAL_TILDE.replace_all(s, r"!=${1}.*");
                 if patched != s {
                     if let Ok(requirement) = Requirement::from_str(&patched) {
                         warn!(
@@ -250,11 +254,22 @@ impl FromStr for LenientRequirement {
                 }
 
                 // Given `torch (>=1.9.*)`, rewrite to `torch (>=1.9)`
-                let patched = GREATER_THAN_STAR.replace(s, r">=${1}");
+                let patched = GREATER_THAN_STAR.replace_all(s, r">=${1}");
                 if patched != s {
                     if let Ok(requirement) = Requirement::from_str(&patched) {
                         warn!(
                         "Removing star after greater equal operator (before: `{s}`; after: `{patched}`)",
+                    );
+                        return Ok(Self(requirement));
+                    }
+                }
+
+                // Given `pyzmq (!=3.0*)`, rewrite to `pyzmq (!=3.0.*)`
+                let patched = MISSING_DOT.replace_all(s, r"${1}.*");
+                if patched != s {
+                    if let Ok(requirement) = Requirement::from_str(&patched) {
+                        warn!(
+                        "Inserting missing dot into invalid requirement (before: `{s}`; after: `{patched}`)",
                     );
                         return Ok(Self(requirement));
                     }
@@ -311,6 +326,17 @@ mod tests {
             .unwrap()
             .into();
         let expected: Requirement = Requirement::from_str("torch (>=1.9)").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn missing_dot() {
+        let actual: Requirement =
+            LenientRequirement::from_str("pyzmq (>=2.7,!=3.0*,!=3.1*,!=3.2*)")
+                .unwrap()
+                .into();
+        let expected: Requirement =
+            Requirement::from_str("pyzmq (>=2.7,!=3.0.*,!=3.1.*,!=3.2.*)").unwrap();
         assert_eq!(actual, expected);
     }
 }
