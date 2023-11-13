@@ -2,3 +2,5 @@ exclude = [
     "crates/gourgeist/src/activator/activate_this.py",
     "crates/gourgeist/src/_virtualenv.py"
 ]
+[per-file-ignores]
+"__init__.py" = ["F403", "F405"]

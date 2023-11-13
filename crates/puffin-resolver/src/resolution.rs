@@ -52,7 +52,7 @@ impl Resolution {
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct Graph(petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>);
+pub struct Graph(pub petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>);
 
 impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
