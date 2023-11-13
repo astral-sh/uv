@@ -72,3 +72,14 @@ impl From<DistFile> for File {
         }
     }
 }
+
+impl Deref for DistFile {
+    type Target = File;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            DistFile::Wheel(file) => &file.0,
+            DistFile::Sdist(file) => &file.0,
+        }
+    }
+}

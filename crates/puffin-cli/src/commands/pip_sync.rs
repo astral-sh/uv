@@ -3,10 +3,10 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use colored::Colorize;
+use fs_err as fs;
 use itertools::{Either, Itertools};
 use tracing::debug;
 
-use fs_err as fs;
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
@@ -16,6 +16,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_distribution::{AnyDist, Metadata};
 use puffin_installer::{Builder, InstallPlan};
 use puffin_interpreter::Virtualenv;
+use pypi_types::Yanked;
 
 use crate::commands::reporters::{
     BuildReporter, DownloadReporter, FinderReporter, InstallReporter, UnzipReporter,
@@ -147,6 +148,33 @@ pub(crate) async fn sync_requirements(
 
         resolution.into_distributions().collect::<Vec<_>>()
     };
+
+    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
+    // have been yanked, we currently don't show this message on the second run anymore
+    for dist in &remote {
+        let Some(file) = dist.file() else {
+            continue;
+        };
+        match &file.yanked {
+            Yanked::Bool(false) => {}
+            Yanked::Bool(true) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+            Yanked::Reason(reason) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+        }
+    }
 
     // Download any missing distributions.
     let downloads = if remote.is_empty() {
