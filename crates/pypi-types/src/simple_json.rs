@@ -66,6 +66,15 @@ pub enum Yanked {
     Reason(String),
 }
 
+impl Yanked {
+    pub fn is_yanked(&self) -> bool {
+        match self {
+            Yanked::Bool(is_yanked) => *is_yanked,
+            Yanked::Reason(_) => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hashes {
     pub sha256: String,

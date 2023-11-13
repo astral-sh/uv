@@ -117,27 +117,28 @@ impl CandidateSelector {
             }
         };
 
+        // When resolving, exclude yanked files. TODO(konstin): When we fail resolving due to a
+        // dependency locked to yanked version, we should tell the user.
+        let version_map_iter = version_map
+            .iter()
+            .filter(|(_, file)| !file.yanked.is_yanked());
+
         match &self.resolution_strategy {
             ResolutionStrategy::Highest => Self::select_candidate(
-                version_map.iter().rev(),
+                version_map_iter.rev(),
                 package_name,
                 range,
                 allow_prerelease,
             ),
             ResolutionStrategy::Lowest => {
-                Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
+                Self::select_candidate(version_map_iter, package_name, range, allow_prerelease)
             }
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
                 if direct_dependencies.contains(package_name) {
-                    Self::select_candidate(
-                        version_map.iter(),
-                        package_name,
-                        range,
-                        allow_prerelease,
-                    )
+                    Self::select_candidate(version_map_iter, package_name, range, allow_prerelease)
                 } else {
                     Self::select_candidate(
-                        version_map.iter().rev(),
+                        version_map_iter.rev(),
                         package_name,
                         range,
                         allow_prerelease,

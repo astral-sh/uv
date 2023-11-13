@@ -127,6 +127,34 @@ impl Dist {
             Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist { name, url }))
         }
     }
+
+    /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
+    pub fn file(&self) -> Option<&File> {
+        match self {
+            Dist::Built(built) => built.file(),
+            Dist::Source(source) => source.file(),
+        }
+    }
+}
+
+impl BuiltDist {
+    /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
+    pub fn file(&self) -> Option<&File> {
+        match self {
+            BuiltDist::Registry(registry) => Some(&registry.file),
+            BuiltDist::DirectUrl(_) => None,
+        }
+    }
+}
+
+impl SourceDist {
+    /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
+    pub fn file(&self) -> Option<&File> {
+        match self {
+            SourceDist::Registry(registry) => Some(&registry.file),
+            SourceDist::DirectUrl(_) | SourceDist::Git(_) => None,
+        }
+    }
 }
 
 impl Metadata for RegistryBuiltDist {
