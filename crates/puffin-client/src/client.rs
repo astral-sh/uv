@@ -171,7 +171,7 @@ impl RegistryClient {
             match self.simple_impl(&url).await {
                 Ok(text) => {
                     return serde_json::from_str(&text)
-                        .map_err(move |e| Error::from_json_err(e, String::new()));
+                        .map_err(move |e| Error::from_json_err(e, url));
                 }
                 Err(err) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {

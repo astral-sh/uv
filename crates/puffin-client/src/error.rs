@@ -41,11 +41,8 @@ pub enum Error {
     #[error(transparent)]
     RequestMiddlewareError(#[from] reqwest_middleware::Error),
 
-    #[error("Received some unexpected JSON: {source}")]
-    BadJson {
-        source: serde_json::Error,
-        url: String,
-    },
+    #[error("Received some unexpected JSON from {url}")]
+    BadJson { source: serde_json::Error, url: Url },
 
     #[error(transparent)]
     AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
@@ -71,7 +68,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn from_json_err(err: serde_json::Error, url: String) -> Self {
+    pub fn from_json_err(err: serde_json::Error, url: Url) -> Self {
         Self::BadJson { source: err, url }
     }
 }
