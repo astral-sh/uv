@@ -160,17 +160,15 @@ pub(crate) async fn sync_requirements(
                 Yanked::Bool(true) => {
                     writeln!(
                         printer,
-                        "{}: {}",
-                        "Warning".red().bold(),
-                        format!("{dist} is yanked, please refresh your lockfile")
+                        "{}: {dist} is yanked, please refresh your lockfile",
+                        "Warning".yellow().bold(),
                     )?;
                 }
                 Yanked::Reason(reason) => {
                     writeln!(
                         printer,
-                        "{}: {}",
-                        "Warning".red().bold(),
-                        format!("{dist} is yanked, please refresh your lockfile. Reason: {reason}")
+                        "{}: {dist} is yanked, please refresh your lockfile. Reason: {reason}",
+                        "Warning".yellow().bold(),
                     )?;
                 }
             }

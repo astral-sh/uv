@@ -551,6 +551,12 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         {
                             continue;
                         }
+                        // When resolving, exclude yanked files. TODO(konstin): When we fail
+                        // resolving due to a dependency locked to yanked version, we should tell
+                        // the user.
+                        if file.yanked.is_yanked() {
+                            continue;
+                        }
                         if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
                             if filename.is_compatible(self.tags) {
                                 let version = PubGrubVersion::from(filename.version.clone());
