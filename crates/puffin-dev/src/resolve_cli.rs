@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use anstream::println;
 use clap::Parser;
 use directories::ProjectDirs;
 use itertools::Itertools;
@@ -46,8 +47,12 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
 
     let mut resolution = build_dispatch.resolve(&args.requirements).await?;
     resolution.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+
     // Concise format for dev
-    println!("{}", resolution.iter().map(ToString::to_string).join(" "));
+    #[allow(clippy::print_stderr, clippy::ignored_unit_patterns)]
+    {
+        println!("{}", resolution.iter().map(ToString::to_string).join(" "));
+    }
 
     Ok(())
 }

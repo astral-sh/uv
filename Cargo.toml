@@ -13,6 +13,7 @@ authors = ["Astral Software Inc. <hey@astral.sh>"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+anstream = { version = "0.6.4" }
 anyhow = { version = "1.0.75" }
 async_http_range_reader = { git = "https://github.com/baszalmstra/async_http_range_reader", rev = "8dab2c08ac864fec1df014465264f9a7c8eae905" }
 async_zip = { version = "0.0.15", features = ["tokio", "deflate"] }

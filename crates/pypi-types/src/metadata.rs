@@ -5,16 +5,14 @@ use std::io;
 use std::str::FromStr;
 
 use mailparse::{MailHeaderMap, MailParseError};
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::warn;
 
-use crate::lenient_requirement::LenientVersionSpecifiers;
 use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
 use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
+
+use crate::lenient_requirement::{LenientRequirement, LenientVersionSpecifiers};
 
 /// Python Package Metadata 2.1 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>
@@ -208,109 +206,5 @@ impl Metadata21 {
             project_urls,
             provides_extras,
         })
-    }
-}
-
-static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
-static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
-/// e.g. `>=1.9.*`
-static GREATER_THAN_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r">=(\d+\.\d+)\.\*").unwrap());
-
-/// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-struct LenientRequirement(Requirement);
-
-impl FromStr for LenientRequirement {
-    type Err = Pep508Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Requirement::from_str(s) {
-            Ok(requirement) => Ok(Self(requirement)),
-            Err(err) => {
-                // Given `elasticsearch-dsl (>=7.2.0<8.0.0)`, rewrite to `elasticsearch-dsl (>=7.2.0,<8.0.0)`.
-                let patched = MISSING_COMMA.replace(s, r"$1,$2");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Inserting missing comma into invalid requirement (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                // Given `jupyter-core (!=~5.0,>=4.12)`, rewrite to `jupyter-core (!=5.0.*,>=4.12)`.
-                let patched = NOT_EQUAL_TILDE.replace(s, r"!=${1}.*");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Adding wildcard after invalid tilde operator (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                // Given `torch (>=1.9.*)`, rewrite to `torch (>=1.9)`
-                let patched = GREATER_THAN_STAR.replace(s, r">=${1}");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Removing star after greater equal operator (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                Err(err)
-            }
-        }
-    }
-}
-
-impl From<LenientRequirement> for Requirement {
-    fn from(requirement: LenientRequirement) -> Self {
-        requirement.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use pep508_rs::Requirement;
-
-    use super::LenientRequirement;
-
-    #[test]
-    fn missing_comma() {
-        let actual: Requirement = LenientRequirement::from_str("elasticsearch-dsl (>=7.2.0<8.0.0)")
-            .unwrap()
-            .into();
-        let expected: Requirement =
-            Requirement::from_str("elasticsearch-dsl (>=7.2.0,<8.0.0)").unwrap();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn not_equal_tile() {
-        let actual: Requirement = LenientRequirement::from_str("jupyter-core (!=~5.0,>=4.12)")
-            .unwrap()
-            .into();
-        let expected: Requirement = Requirement::from_str("jupyter-core (!=5.0.*,>=4.12)").unwrap();
-        assert_eq!(actual, expected);
-
-        let actual: Requirement = LenientRequirement::from_str("jupyter-core (!=~5,>=4.12)")
-            .unwrap()
-            .into();
-        let expected: Requirement = Requirement::from_str("jupyter-core (!=5.*,>=4.12)").unwrap();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn greater_than_star() {
-        let actual: Requirement = LenientRequirement::from_str("torch (>=1.9.*)")
-            .unwrap()
-            .into();
-        let expected: Requirement = Requirement::from_str("torch (>=1.9)").unwrap();
-        assert_eq!(actual, expected);
     }
 }

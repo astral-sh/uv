@@ -2334,6 +2334,7 @@ dependencies = [
 name = "puffin-cli"
 version = "0.0.1"
 dependencies = [
+ "anstream",
  "anyhow",
  "assert_cmd",
  "assert_fs",
@@ -2414,6 +2415,7 @@ dependencies = [
 name = "puffin-dev"
 version = "0.0.1"
 dependencies = [
+ "anstream",
  "anyhow",
  "clap",
  "colored",

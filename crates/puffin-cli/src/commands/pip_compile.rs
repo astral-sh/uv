@@ -1,13 +1,13 @@
+use anstream::AutoStream;
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::io::{stdout, BufWriter};
+use std::io::stdout;
 use std::path::Path;
 use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{anyhow, Result};
 use colored::Colorize;
-use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -182,14 +182,10 @@ pub(crate) async fn pip_compile(
         .dimmed()
     )?;
 
-    if output_file.is_some() {
-        colored::control::set_override(false);
-    }
-
     let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
-        Box::new(BufWriter::new(File::create(output_file)?))
+        Box::new(AutoStream::auto(fs::File::create(output_file)?))
     } else {
-        Box::new(stdout())
+        Box::new(AutoStream::auto(stdout()))
     };
 
     writeln!(
@@ -204,10 +200,6 @@ pub(crate) async fn pip_compile(
         format!("#    {}", env::args().join(" ")).green()
     )?;
     write!(writer, "{resolution}")?;
-
-    if output_file.is_some() {
-        colored::control::unset_override();
-    }
 
     Ok(ExitStatus::Success)
 }
