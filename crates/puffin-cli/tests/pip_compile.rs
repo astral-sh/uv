@@ -653,19 +653,19 @@ fn compile_numpy_py38() -> Result<()> {
     requirements_in.write_str("numpy")?;
 
     insta::with_settings!({
-            filters => INSTA_FILTERS.to_vec()
-        }, {
-            assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-                .arg("pip-compile")
-                .arg("requirements.in")
-                .arg("--python-version")
-                .arg("py38")
-                .arg("--cache-dir")
-                .arg(cache_dir.path())
-    // Check that we select the wheel and not the sdist
-                .arg("--no-build")
-                .env("VIRTUAL_ENV", venv.as_os_str())
-                .current_dir(&temp_dir), @r###"
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--python-version")
+            .arg("py38")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            // Check that we select the wheel and not the sdist
+            .arg("--no-build")
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
             success: false
             exit_code: 2
             ----- stdout -----
@@ -674,7 +674,7 @@ fn compile_numpy_py38() -> Result<()> {
             error: Failed to build distribution: numpy-1.24.4.tar.gz
               Caused by: Building source distributions is disabled
             "###);
-        });
+    });
 
     Ok(())
 }
