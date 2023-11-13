@@ -517,11 +517,6 @@ async fn create_pep517_build_environment(
         "Calling `{}.get_requires_for_build_wheel()`",
         pep517_backend.backend
     );
-    if pep517_backend.backend_path.is_some() {
-        return Err(Error::InvalidSourceDist(
-            "backend-path is not supported yet".to_string(),
-        ));
-    }
     let script = formatdoc! {
         r#"
             {}
