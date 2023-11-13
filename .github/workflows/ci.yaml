@@ -48,10 +48,13 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+      # TODO(konstin): Mock the venv in the installer test so we don't need 3.8 anymore
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: | 
+            3.8
+            ${{ env.PYTHON_VERSION }}
       - name: "Install Rust toolchain"
         run: rustup show
       - name: "Install cargo insta"

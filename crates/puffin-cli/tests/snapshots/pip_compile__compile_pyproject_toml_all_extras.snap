@@ -7,9 +7,9 @@ info:
     - pyproject.toml
     - "--all-extras"
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpFzJKRe
+    - /tmp/.tmpQHVFqr
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpdadcmu/.venv
+    VIRTUAL_ENV: /tmp/.tmpmKXqaF/.venv
 ---
 success: true
 exit_code: 0

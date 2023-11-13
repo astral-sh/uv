@@ -135,7 +135,7 @@ impl BuildContext for BuildDispatch {
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
-                let resolution = DistFinder::new(&tags, &self.client)
+                let resolution = DistFinder::new(&tags, &self.client, self.interpreter_info())
                     .resolve(&remote)
                     .await
                     .context("Failed to resolve build dependencies")?;

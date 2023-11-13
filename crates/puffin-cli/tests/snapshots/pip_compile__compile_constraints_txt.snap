@@ -8,9 +8,9 @@ info:
     - "--constraint"
     - constraints.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpvjdHOb
+    - /tmp/.tmpuS4Jn4
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpSAaWi3/.venv
+    VIRTUAL_ENV: /tmp/.tmpnFovuD/.venv
 ---
 success: true
 exit_code: 0

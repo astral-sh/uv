@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta_cmd::_macro_support::insta;
@@ -922,6 +922,53 @@ fn install_version_then_install_url() -> Result<()> {
     Command::new(venv.join("bin").join("python"))
         .arg("-c")
         .arg("import werkzeug")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
+/// incompatible sdist <https://github.com/astral-sh/puffin/issues/388>
+#[test]
+fn install_numpy_py38() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--python")
+        // TODO(konstin): Mock the venv in the installer test so we don't need this anymore
+        .arg(which::which("python3.8").context("python3.8 must be installed")?)
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("numpy")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import numpy")
         .current_dir(&temp_dir)
         .assert()
         .success();

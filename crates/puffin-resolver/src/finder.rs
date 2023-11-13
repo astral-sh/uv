@@ -14,6 +14,7 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::Dist;
+use puffin_interpreter::InterpreterInfo;
 use puffin_normalize::PackageName;
 use pypi_types::{File, SimpleJson};
 
@@ -24,15 +25,21 @@ pub struct DistFinder<'a> {
     tags: &'a Tags,
     client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
+    interpreter_info: &'a InterpreterInfo,
 }
 
 impl<'a> DistFinder<'a> {
     /// Initialize a new distribution finder.
-    pub fn new(tags: &'a Tags, client: &'a RegistryClient) -> Self {
+    pub fn new(
+        tags: &'a Tags,
+        client: &'a RegistryClient,
+        interpreter_info: &'a InterpreterInfo,
+    ) -> Self {
         Self {
             tags,
             client,
             reporter: None,
+            interpreter_info,
         }
     }
 
@@ -129,6 +136,20 @@ impl<'a> DistFinder<'a> {
     fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<Dist> {
         let mut fallback = None;
         for file in files.into_iter().rev() {
+            // Only add dists compatible with the python version.
+            // This is relevant for source dists which give no other indication of their
+            // compatibility and wheels which may be tagged `py3-none-any` but
+            // have `requires-python: ">=3.9"`
+            // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
+            if !file
+                .requires_python
+                .as_ref()
+                .map_or(true, |requires_python| {
+                    requires_python.contains(self.interpreter_info.version())
+                })
+            {
+                continue;
+            }
             if let Ok(wheel) = WheelFilename::from_str(file.filename.as_str()) {
                 if !wheel.is_compatible(self.tags) {
                     continue;

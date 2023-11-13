@@ -8,9 +8,9 @@ info:
     - "--extra"
     - FRiENDlY-...-_-BARd
     - "--cache-dir"
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpFyLXQn
+    - /tmp/.tmpga6JO1
   env:
-    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpxfZatv/.venv
+    VIRTUAL_ENV: /tmp/.tmpwmJIym/.venv
 ---
 success: true
 exit_code: 0

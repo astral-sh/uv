@@ -6,9 +6,9 @@ info:
     - pip-compile
     - pyproject.toml
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpOOTFwj
+    - /tmp/.tmpWzFzu7
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpU0VXyY/.venv
+    VIRTUAL_ENV: /tmp/.tmpSiRk6d/.venv
 ---
 success: true
 exit_code: 0

@@ -6,9 +6,9 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpxF1zFY
+    - /tmp/.tmpQB4Ze4
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp33QZdv/.venv
+    VIRTUAL_ENV: /tmp/.tmpSYcMgG/.venv
 ---
 success: true
 exit_code: 0

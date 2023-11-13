@@ -540,6 +540,9 @@ impl Display for VersionSpecifier {
 /// ```
 pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep440Error> {
     let mut version_ranges = Vec::new();
+    if spec.is_empty() {
+        return Ok(version_ranges);
+    }
     let mut start: usize = 0;
     let separator = ",";
     for version_range_spec in spec.split(separator) {
@@ -1300,5 +1303,12 @@ mod test {
                 .to_string(),
             ">=3.7, <4.0, !=3.9.0"
         );
+    }
+
+    /// These occur in the simple api, e.g.
+    /// <https://pypi.org/simple/geopandas/?format=application/vnd.pypi.simple.v1+json>
+    #[test]
+    fn test_version_specifiers_empty() {
+        assert_eq!(VersionSpecifiers::from_str("").unwrap().to_string(), "");
     }
 }

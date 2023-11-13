@@ -44,6 +44,21 @@ impl InterpreterInfo {
             base_prefix: info.base_prefix,
         })
     }
+
+    // TODO(konstin): Find a better way mocking the fields
+    pub fn artificial(
+        platform: Platform,
+        markers: MarkerEnvironment,
+        base_exec_prefix: PathBuf,
+        base_prefix: PathBuf,
+    ) -> Self {
+        Self {
+            platform: PythonPlatform(platform),
+            markers,
+            base_exec_prefix,
+            base_prefix,
+        }
+    }
 }
 
 impl InterpreterInfo {
@@ -75,6 +90,12 @@ impl InterpreterInfo {
     }
     pub fn base_prefix(&self) -> &Path {
         &self.base_prefix
+    }
+
+    /// Inject markers of a fake python version
+    #[must_use]
+    pub fn patch_markers(self, markers: MarkerEnvironment) -> Self {
+        Self { markers, ..self }
     }
 }
 
