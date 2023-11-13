@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /tmp/.tmpEk3ayO
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpfXTdj6
   env:
-    VIRTUAL_ENV: /tmp/.tmpZR0GJB/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpK8X9JT/.venv
 ---
 success: true
 exit_code: 0
@@ -16,7 +16,7 @@ exit_code: 0
 
 ----- stderr -----
 Resolved 1 package in [TIME]
-Warning: ipython==8.13.0 is yanked, please refresh your lockfile. Reason: Wrong Python Pinning
+warning: ipython==8.13.0 is yanked (reason: "Wrong Python Pinning"). Refresh your lockfile to pin an un-yanked version.
 Downloaded 1 package in [TIME]
 Unzipped 1 package in [TIME]
 Installed 1 package in [TIME]

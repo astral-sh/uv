@@ -152,25 +152,26 @@ pub(crate) async fn sync_requirements(
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
     // have been yanked, we currently don't show this message on the second run anymore
     for dist in &remote {
-        if let Some(file) = dist.file() {
-            match &file.yanked {
-                Yanked::Bool(false) => {
-                    // Not yanked
-                }
-                Yanked::Bool(true) => {
-                    writeln!(
-                        printer,
-                        "{}: {dist} is yanked, please refresh your lockfile",
-                        "Warning".yellow().bold(),
-                    )?;
-                }
-                Yanked::Reason(reason) => {
-                    writeln!(
-                        printer,
-                        "{}: {dist} is yanked, please refresh your lockfile. Reason: {reason}",
-                        "Warning".yellow().bold(),
-                    )?;
-                }
+        let Some(file) = dist.file() else {
+            continue;
+        };
+        match &file.yanked {
+            Yanked::Bool(false) => {}
+            Yanked::Bool(true) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+            Yanked::Reason(reason) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
             }
         }
     }
