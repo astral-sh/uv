@@ -1,3 +1,4 @@
+use anstream::eprint;
 use indicatif::ProgressDrawTarget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +27,7 @@ impl std::fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Default | Self::Verbose => {
-                #[allow(clippy::print_stderr)]
+                #[allow(clippy::print_stderr, clippy::ignored_unit_patterns)]
                 {
                     eprint!("{s}");
                 }
