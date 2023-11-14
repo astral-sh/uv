@@ -10,5 +10,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-fxhash = { workspace = true }
 platform-host = { path = "../platform-host" }
+
+anyhow = { workspace = true }
+fxhash = { workspace = true }

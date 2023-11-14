@@ -1,7 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -17,7 +15,7 @@ use tracing::{debug, error, trace};
 use url::Url;
 use waitmap::WaitMap;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
+use distribution_filename::WheelFilename;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
@@ -33,13 +31,14 @@ use pypi_types::{File, Metadata21, SimpleJson};
 use crate::candidate_selector::CandidateSelector;
 use crate::distribution::{BuiltDistFetcher, SourceDistFetcher, SourceDistributionReporter};
 use crate::error::ResolveError;
-use crate::file::{DistFile, SdistFile, WheelFile};
+use crate::file::DistFile;
 use crate::locks::Locks;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
 };
 use crate::resolution::Graph;
+use crate::version_map::VersionMap;
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
     project: Option<PackageName>,
@@ -532,62 +531,13 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             match response? {
                 Response::Package(package_name, metadata) => {
                     trace!("Received package metadata for: {package_name}");
-
-                    // Group the distributions by version and kind, discarding any incompatible
-                    // distributions.
-                    let mut version_map = VersionMap::new();
-                    for file in metadata.files {
-                        // Only add dists compatible with the python version.
-                        // This is relevant for source dists which give no other indication of their
-                        // compatibility and wheels which may be tagged `py3-none-any` but
-                        // have `requires-python: ">=3.9"`
-                        // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-                        if !file
-                            .requires_python
-                            .as_ref()
-                            .map_or(true, |requires_python| {
-                                requires_python
-                                    .contains(self.build_context.interpreter_info().version())
-                            })
-                        {
-                            continue;
-                        }
-                        // When resolving, exclude yanked files. TODO(konstin): When we fail
-                        // resolving due to a dependency locked to yanked version, we should tell
-                        // the user.
-                        if file.yanked.is_yanked() {
-                            continue;
-                        }
-                        if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
-                            if filename.is_compatible(self.tags) {
-                                let version = PubGrubVersion::from(filename.version);
-                                match version_map.entry(version) {
-                                    std::collections::btree_map::Entry::Occupied(mut entry) => {
-                                        if matches!(entry.get(), DistFile::Sdist(_)) {
-                                            // Wheels get precedence over source distributions.
-                                            entry.insert(DistFile::from(WheelFile(file)));
-                                        }
-                                    }
-                                    std::collections::btree_map::Entry::Vacant(entry) => {
-                                        entry.insert(DistFile::from(WheelFile(file)));
-                                    }
-                                }
-                            }
-                        } else if let Ok(filename) =
-                            SourceDistFilename::parse(file.filename.as_str(), &package_name)
-                        {
-                            let version = PubGrubVersion::from(filename.version);
-                            if let std::collections::btree_map::Entry::Vacant(entry) =
-                                version_map.entry(version)
-                            {
-                                entry.insert(DistFile::from(SdistFile(file)));
-                            }
-                        }
-                    }
-
-                    self.index
-                        .packages
-                        .insert(package_name.clone(), version_map);
+                    let version_map = VersionMap::from_metadata(
+                        metadata,
+                        &package_name,
+                        self.tags,
+                        self.build_context.interpreter_info().version(),
+                    );
+                    self.index.packages.insert(package_name, version_map);
                 }
                 Response::Dist(Dist::Built(distribution), metadata, ..) => {
                     trace!("Received built distribution metadata for: {distribution}");
@@ -835,8 +785,6 @@ enum Response {
     /// The returned metadata for a distribution.
     Dist(Dist, Metadata21, Option<Url>),
 }
-
-pub(crate) type VersionMap = BTreeMap<PubGrubVersion, DistFile>;
 
 /// In-memory index of in-flight network requests. Any request in an [`InFlight`] state will be
 /// eventually be inserted into an [`Index`].
