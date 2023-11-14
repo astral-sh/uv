@@ -330,9 +330,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             // Emit a request to fetch the metadata for this version.
             if in_flight.insert_file(&candidate.file) {
                 let distribution = Dist::from_registry(
-                    candidate.package_name.clone(),
-                    candidate.version.clone().into(),
-                    candidate.file.clone().into(),
+                    candidate.package_name,
+                    candidate.version.into(),
+                    candidate.file.into(),
                 );
                 request_sink.unbounded_send(Request::Dist(distribution))?;
             }
@@ -419,17 +419,18 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         candidate.file.clone().into(),
                     );
 
+                let version = candidate.version.clone();
+
                 // Emit a request to fetch the metadata for this version.
                 if in_flight.insert_file(&candidate.file) {
                     let distribution = Dist::from_registry(
-                        candidate.package_name.clone(),
-                        candidate.version.clone().into(),
-                        candidate.file.clone().into(),
+                        candidate.package_name,
+                        candidate.version.into(),
+                        candidate.file.into(),
                     );
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
 
-                let version = candidate.version.clone();
                 Ok(Some(version))
             }
         };
@@ -559,7 +560,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         }
                         if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
                             if filename.is_compatible(self.tags) {
-                                let version = PubGrubVersion::from(filename.version.clone());
+                                let version = PubGrubVersion::from(filename.version);
                                 match version_map.entry(version) {
                                     std::collections::btree_map::Entry::Occupied(mut entry) => {
                                         if matches!(entry.get(), DistFile::Sdist(_)) {
@@ -575,7 +576,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         } else if let Ok(filename) =
                             SourceDistFilename::parse(file.filename.as_str(), &package_name)
                         {
-                            let version = PubGrubVersion::from(filename.version.clone());
+                            let version = PubGrubVersion::from(filename.version);
                             if let std::collections::btree_map::Entry::Vacant(entry) =
                                 version_map.entry(version)
                             {
