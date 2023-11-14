@@ -1,5 +1,22 @@
 # Crates
 
+## [bench](./bench)
+
+Functionality for benchmarking Puffin.
+
+## [distribution-filename](./distribution-filename)
+
+Parse built distribution (wheel) and source distribution (sdist) filenames to extract structured
+metadata.
+
+## [gourgeist](./gourgeist)
+
+A `venv` replacement to create virtual environments in Rust.
+
+## [install-wheel-rs](./install-wheel-rs)
+
+Install built distributions (wheels) into a virtual environment.]
+
 ## [pep440-rs](./pep440-rs)
 
 Utilities for interacting with Python version numbers and specifiers.
@@ -16,6 +33,14 @@ Functionality for detecting the current platform (operating system, architecture
 
 Functionality for parsing and inferring Python platform tags as per [PEP 425](https://peps.python.org/pep-0425/).
 
+## [puffin-build](./puffin-build)
+
+A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for Puffin.
+
+## [puffin-cache](./puffin-cache)
+
+Functionality for caching Python packages and associated metadata.
+
 ## [puffin-cli](./puffin-cli)
 
 Command-line interface for the Puffin package manager.
@@ -23,6 +48,24 @@ Command-line interface for the Puffin package manager.
 ## [puffin-client](./puffin-client)
 
 Client for interacting with PyPI-compatible HTTP APIs.
+
+## [puffin-dev](./puffin-dev)
+
+Development utilities for Puffin.
+
+## [puffin-dispatch](./puffin-dispatch)
+
+A centralized `struct` for resolving and building source distributions in isolated environments.
+Implements the traits defined in `puffin-traits`.
+
+## [puffin-distribution](./puffin-distribution)
+
+Abstractions for representing built distributions (wheels) and source distributions (sdists), and
+the sources from which they can be downloaded.
+
+## [puffin-git](./puffin-git)
+
+Functionality for interacting with Git repositories.
 
 ## [puffin-installer](./puffin-installer)
 
@@ -32,6 +75,10 @@ Functionality for installing Python packages into a virtual environment.
 
 Functionality for detecting and leveraging the current Python interpreter.
 
+## [puffin-normalize](./puffin-normalize)
+
+Normalize package and extra names as per Python specifications.
+
 ## [puffin-package](./puffin-package)
 
 Types and functionality for working with Python packages, e.g., parsing wheel files.
@@ -40,6 +87,14 @@ Types and functionality for working with Python packages, e.g., parsing wheel fi
 
 Functionality for resolving Python packages and their dependencies.
 
-## [distribution-filename](./distribution-filename)
+## [puffin-traits](./puffin-traits)
 
-Functionality for parsing wheel filenames as per [PEP 427](https://peps.python.org/pep-0427/).
+Shared traits for Puffin, to avoid circular dependencies.
+
+## [pypi-types](./pypi-types)
+
+General-purpose type definitions for types used in PyPI-compatible APIs.
+
+## [requirements-txt](./requirements-txt)
+
+Functionality for parsing `requirements.txt` files.

@@ -32,6 +32,8 @@ with a minimal barrier to adoption. Try it today in lieu of `pip` and `pip-tools
 Puffin does not yet support:
 
 - Windows
+- Path dependencies
+- `--find-links`
 - ...
 
 Like `pip-compile`, Puffin generates a platform-specific `requirements.txt` file (unlike, e.g.,
