@@ -185,9 +185,8 @@ fn merge_versions(
     let result = left.intersection(right);
     if result.is_empty() {
         Err(ResolveError::ConflictingVersions(
-            package.clone(),
-            left.clone(),
-            right.clone(),
+            package.to_string(),
+            format!("`{package}{left}` does not intersect with `{package}{right}`"),
         ))
     } else {
         Ok(result)

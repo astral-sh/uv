@@ -1,6 +1,5 @@
 use std::fmt;
 
-use pubgrub::package::Package;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, Reporter};
 use pubgrub::term::Term;
