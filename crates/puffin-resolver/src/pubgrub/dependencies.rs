@@ -59,7 +59,7 @@ impl PubGrubDependencies {
 
                 if let Some(entry) = dependencies.get_key_value(&package) {
                     // Merge the versions.
-                    let version = merge_versions(entry.1, &version);
+                    let version = merge_versions(&package, entry.1, &version)?;
 
                     // Merge the package.
                     if let Some(package) = merge_package(entry.0, &package)? {
@@ -107,7 +107,7 @@ impl PubGrubDependencies {
 
                 if let Some(entry) = dependencies.get_key_value(&package) {
                     // Merge the versions.
-                    let version = merge_versions(entry.1, &version);
+                    let version = merge_versions(&package, entry.1, &version)?;
 
                     // Merge the package.
                     if let Some(package) = merge_package(entry.0, &package)? {
@@ -178,10 +178,20 @@ fn to_pubgrub(
 
 /// Merge two [`PubGrubVersion`] ranges.
 fn merge_versions(
+    package: &PubGrubPackage,
     left: &Range<PubGrubVersion>,
     right: &Range<PubGrubVersion>,
-) -> Range<PubGrubVersion> {
-    left.intersection(right)
+) -> Result<Range<PubGrubVersion>, ResolveError> {
+    let result = left.intersection(right);
+    if result.is_empty() {
+        Err(ResolveError::ConflictingVersions(
+            package.clone(),
+            left.clone(),
+            right.clone(),
+        ))
+    } else {
+        Ok(result)
+    }
 }
 
 /// Merge two [`PubGrubPackage`] instances.

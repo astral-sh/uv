@@ -239,6 +239,14 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         ));
                         continue;
                     }
+                    Dependencies::Unusable(reason) => {
+                        state.add_incompatibility(Incompatibility::unusable_dependencies(
+                            package.clone(),
+                            version.clone(),
+                            reason.clone(),
+                        ));
+                        continue;
+                    }
                     Dependencies::Known(constraints) if constraints.contains_key(package) => {
                         return Err(PubGrubError::SelfDependency {
                             package: package.clone(),
@@ -455,7 +463,11 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     None,
                     None,
                     self.markers,
-                )?;
+                );
+                if let Err(err @ ResolveError::ConflictingVersions(..)) = constraints {
+                    return Ok(Dependencies::Unusable(Some(format!("{err}"))));
+                }
+                let constraints = constraints?;
 
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
@@ -910,6 +922,8 @@ impl<'a> FromIterator<&'a Url> for AllowedUrls {
 enum Dependencies {
     /// Package dependencies are unavailable.
     Unknown,
+    /// Package dependencies are not usable
+    Unusable(Option<String>),
     /// Container for all available package versions.
     Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
 }
