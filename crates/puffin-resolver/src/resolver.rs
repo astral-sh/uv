@@ -465,7 +465,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     self.markers,
                 );
                 if let Err(err @ ResolveError::ConflictingVersions(..)) = constraints {
-                    return Ok(Dependencies::Unusable(Some(format!("{err}"))));
+                    return Ok(Dependencies::Unusable(Some(err.to_string())));
                 }
                 let constraints = constraints?;
 
