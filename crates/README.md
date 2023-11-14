@@ -9,6 +9,11 @@ Functionality for benchmarking Puffin.
 Parse built distribution (wheel) and source distribution (sdist) filenames to extract structured
 metadata.
 
+## [distribution-types](./distribution-types)
+
+Abstractions for representing built distributions (wheels) and source distributions (sdists), and
+the sources from which they can be downloaded.
+
 ## [gourgeist](./gourgeist)
 
 A `venv` replacement to create virtual environments in Rust.
@@ -58,10 +63,10 @@ Development utilities for Puffin.
 A centralized `struct` for resolving and building source distributions in isolated environments.
 Implements the traits defined in `puffin-traits`.
 
-## [distribution-types](./distribution-types)
+## [puffin-distribution](./puffin-distribution)
 
-Abstractions for representing built distributions (wheels) and source distributions (sdists), and
-the sources from which they can be downloaded.
+Client for interacting with built distributions (wheels) and source distributions (sdists).
+Capable of fetching metadata, distribution contents, etc.
 
 ## [puffin-git](./puffin-git)
 
