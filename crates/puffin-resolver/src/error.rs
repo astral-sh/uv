@@ -5,7 +5,7 @@ use pubgrub::report::Reporter;
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{BuiltDist, SourceDist};
+use distribution_types::{BuiltDist, Dist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
 
@@ -115,31 +115,26 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> f
 }
 
 impl ResolveError {
-    pub fn from_source_dist(dist: SourceDist, err: anyhow::Error) -> Self {
+    pub fn from_dist(dist: Dist, err: anyhow::Error) -> Self {
         match dist {
-            SourceDist::Registry(sdist) => Self::RegistrySourceDist {
-                filename: sdist.file.filename.clone(),
-                err,
-            },
-            SourceDist::DirectUrl(sdist) => Self::UrlSourceDist {
-                url: sdist.url.clone(),
-                err,
-            },
-            SourceDist::Git(sdist) => Self::UrlSourceDist {
-                url: sdist.url.clone(),
-                err,
-            },
-        }
-    }
-
-    pub fn from_built_dist(dist: BuiltDist, err: anyhow::Error) -> Self {
-        match dist {
-            BuiltDist::Registry(wheel) => Self::RegistryBuiltDist {
+            Dist::Built(BuiltDist::Registry(wheel)) => Self::RegistryBuiltDist {
                 filename: wheel.file.filename.clone(),
                 err,
             },
-            BuiltDist::DirectUrl(wheel) => Self::UrlBuiltDist {
+            Dist::Built(BuiltDist::DirectUrl(wheel)) => Self::UrlBuiltDist {
                 url: wheel.url.clone(),
+                err,
+            },
+            Dist::Source(SourceDist::Registry(sdist)) => Self::RegistrySourceDist {
+                filename: sdist.file.filename.clone(),
+                err,
+            },
+            Dist::Source(SourceDist::DirectUrl(sdist)) => Self::UrlSourceDist {
+                url: sdist.url.clone(),
+                err,
+            },
+            Dist::Source(SourceDist::Git(sdist)) => Self::UrlSourceDist {
+                url: sdist.url.clone(),
                 err,
             },
         }

@@ -1,12 +1,12 @@
-use colored::Colorize;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, Metadata, SourceDist, VersionOrUrl};
-use puffin_installer::Download;
+use distribution_types::{CachedDist, Dist, Metadata, VersionOrUrl};
+use puffin_distribution::Download;
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
 
@@ -246,7 +246,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
+    fn on_build_start(&self, dist: &Dist) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -264,7 +264,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
+    fn on_build_complete(&self, dist: &Dist, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
@@ -311,7 +311,7 @@ trait ColorDisplay {
     fn to_color_string(&self) -> String;
 }
 
-impl ColorDisplay for &SourceDist {
+impl ColorDisplay for &Dist {
     fn to_color_string(&self) -> String {
         let name = self.name();
         let version_or_url = self.version_or_url();

@@ -9,7 +9,6 @@ pub use resolution_options::ResolutionOptions;
 pub use resolver::{BuildId, Reporter as ResolverReporter, Resolver};
 
 mod candidate_selector;
-mod distribution;
 mod error;
 mod file;
 mod finder;

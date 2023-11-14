@@ -1,5 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -12,25 +13,22 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
-use tracing::{debug, error, trace};
+use tracing::{debug, trace};
 use url::Url;
 use waitmap::WaitMap;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{
-    BuiltDist, DirectUrlSourceDist, Dist, GitSourceDist, Identifier, Metadata, SourceDist,
-    VersionOrUrl,
-};
+use distribution_types::{BuiltDist, Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
+use puffin_distribution::Fetcher;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{BuiltDistFetcher, SourceDistFetcher, SourceDistributionReporter};
 use crate::error::ResolveError;
 use crate::file::DistFile;
 use crate::locks::Locks;
@@ -42,7 +40,7 @@ use crate::resolution::Graph;
 use crate::version_map::VersionMap;
 use crate::ResolutionOptions;
 
-pub struct Resolver<'a, Context: BuildContext + Sync> {
+pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
@@ -58,7 +56,7 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
+impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
@@ -607,42 +605,65 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .await
             }
 
-            // Fetch wheel metadata.
-            Request::Dist(Dist::Built(distribution)) => {
-                let metadata =
-                    match &distribution {
-                        BuiltDist::Registry(wheel) => {
-                            self.client
-                                .wheel_metadata(wheel.file.clone())
-                                .map_err(ResolveError::Client)
-                                .await?
-                        }
-                        BuiltDist::DirectUrl(wheel) => {
-                            let fetcher = BuiltDistFetcher::new(self.build_context.cache());
-                            match fetcher.find_dist_info(wheel, self.tags) {
-                                Ok(Some(metadata)) => {
-                                    debug!("Found wheel metadata in cache: {wheel}");
-                                    metadata
-                                }
-                                Ok(None) => {
-                                    debug!("Downloading wheel: {wheel}");
-                                    fetcher.download_wheel(wheel, self.client).await.map_err(
-                                        |err| {
-                                            ResolveError::from_built_dist(distribution.clone(), err)
-                                        },
-                                    )?
-                                }
-                                Err(err) => {
-                                    error!("Failed to read wheel from cache: {err}");
-                                    fetcher.download_wheel(wheel, self.client).await.map_err(
-                                        |err| {
-                                            ResolveError::from_built_dist(distribution.clone(), err)
-                                        },
-                                    )?
-                                }
-                            }
-                        }
-                    };
+            // Fetch wheel metadata from the registry if possible. This is a fast-path to avoid
+            // reading from the cache in the common case: we cache wheel metadata in the HTTP
+            // cache, rather than downloading the wheel itself.
+            Request::Dist(Dist::Built(BuiltDist::Registry(wheel))) => {
+                let metadata = self
+                    .client
+                    .wheel_metadata(wheel.file.clone())
+                    .map_err(ResolveError::Client)
+                    .await?;
+                if metadata.name != *wheel.name() {
+                    return Err(ResolveError::NameMismatch {
+                        metadata: metadata.name,
+                        given: wheel.name().clone(),
+                    });
+                }
+                Ok(Response::Dist(
+                    Dist::Built(BuiltDist::Registry(wheel)),
+                    metadata,
+                    None,
+                ))
+            }
+
+            // Fetch distribution metadata.
+            Request::Dist(distribution) => {
+                let lock = self.locks.acquire(&distribution).await;
+                let _guard = lock.lock().await;
+
+                let fetcher = if let Some(reporter) = self.reporter.clone() {
+                    Fetcher::new(self.build_context.cache()).with_reporter(Facade { reporter })
+                } else {
+                    Fetcher::new(self.build_context.cache())
+                };
+
+                let precise_url = fetcher
+                    .precise(&distribution)
+                    .await
+                    .map_err(|err| ResolveError::from_dist(distribution.clone(), err))?;
+
+                // Insert the `precise`, if it exists.
+                let precise_distribution = match precise_url.as_ref() {
+                    Some(url) => Cow::Owned(distribution.clone().with_url(url.clone())),
+                    None => Cow::Borrowed(&distribution),
+                };
+
+                // Fetch the metadata for the distribution.
+                let metadata = {
+                    if let Ok(Some(metadata)) =
+                        fetcher.find_metadata(&precise_distribution, self.tags)
+                    {
+                        debug!("Found distribution metadata in cache: {precise_distribution}");
+                        metadata
+                    } else {
+                        debug!("Downloading distribution: {precise_distribution}");
+                        fetcher
+                            .fetch_metadata(&precise_distribution, self.client, self.build_context)
+                            .await
+                            .map_err(|err| ResolveError::from_dist(distribution.clone(), err))?
+                    }
+                };
 
                 if metadata.name != *distribution.name() {
                     return Err(ResolveError::NameMismatch {
@@ -651,84 +672,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     });
                 }
 
-                Ok(Response::Dist(Dist::Built(distribution), metadata, None))
-            }
-
-            // Fetch source distribution metadata.
-            Request::Dist(Dist::Source(sdist)) => {
-                let lock = self.locks.acquire(&sdist).await;
-                let _guard = lock.lock().await;
-
-                let fetcher = if let Some(reporter) = &self.reporter {
-                    SourceDistFetcher::new(self.build_context).with_reporter(Facade {
-                        reporter: reporter.clone(),
-                    })
-                } else {
-                    SourceDistFetcher::new(self.build_context)
-                };
-
-                let precise = fetcher
-                    .precise(&sdist)
-                    .await
-                    .map_err(|err| ResolveError::from_source_dist(sdist.clone(), err))?;
-
-                let task = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| reporter.on_build_start(&sdist));
-
-                let metadata = {
-                    // Insert the `precise`, if it exists.
-                    let sdist = match sdist.clone() {
-                        SourceDist::DirectUrl(sdist) => {
-                            SourceDist::DirectUrl(DirectUrlSourceDist {
-                                url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
-                                ..sdist
-                            })
-                        }
-                        SourceDist::Git(sdist) => SourceDist::Git(GitSourceDist {
-                            url: precise.clone().unwrap_or_else(|| sdist.url.clone()),
-                            ..sdist
-                        }),
-                        sdist @ SourceDist::Registry(_) => sdist,
-                    };
-
-                    match fetcher.find_dist_info(&sdist, self.tags) {
-                        Ok(Some(metadata)) => {
-                            debug!("Found source distribution metadata in cache: {sdist}");
-                            metadata
-                        }
-                        Ok(None) => {
-                            debug!("Downloading source distribution: {sdist}");
-                            fetcher
-                                .download_and_build_sdist(&sdist, self.client)
-                                .await
-                                .map_err(|err| ResolveError::from_source_dist(sdist.clone(), err))?
-                        }
-                        Err(err) => {
-                            error!("Failed to read source distribution from cache: {err}",);
-                            fetcher
-                                .download_and_build_sdist(&sdist, self.client)
-                                .await
-                                .map_err(|err| ResolveError::from_source_dist(sdist.clone(), err))?
-                        }
-                    }
-                };
-
-                if metadata.name != *sdist.name() {
-                    return Err(ResolveError::NameMismatch {
-                        metadata: metadata.name,
-                        given: sdist.name().clone(),
-                    });
-                }
-
-                if let Some(task) = task {
-                    if let Some(reporter) = self.reporter.as_ref() {
-                        reporter.on_build_complete(&sdist, task);
-                    }
-                }
-
-                Ok(Response::Dist(Dist::Source(sdist), metadata, precise))
+                Ok(Response::Dist(distribution, metadata, precise_url))
             }
         }
     }
@@ -768,10 +712,10 @@ pub trait Reporter: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &SourceDist) -> usize;
+    fn on_build_start(&self, dist: &Dist) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &SourceDist, id: usize);
+    fn on_build_complete(&self, dist: &Dist, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -780,12 +724,20 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to  [`puffin_git::Reporter`].
+/// A facade for converting from [`Reporter`] to  [`puffin_distribution::Reporter`].
 struct Facade {
     reporter: Arc<dyn Reporter>,
 }
 
-impl SourceDistributionReporter for Facade {
+impl puffin_distribution::Reporter for Facade {
+    fn on_build_start(&self, dist: &Dist) -> usize {
+        self.reporter.on_build_start(dist)
+    }
+
+    fn on_build_complete(&self, dist: &Dist, id: usize) {
+        self.reporter.on_build_complete(dist, id);
+    }
+
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }

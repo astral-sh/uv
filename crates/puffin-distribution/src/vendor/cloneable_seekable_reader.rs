@@ -135,6 +135,12 @@ impl HasLength for Cursor<Vec<u8>> {
     }
 }
 
+impl HasLength for Cursor<&Vec<u8>> {
+    fn len(&self) -> u64 {
+        self.get_ref().len() as u64
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::{Cursor, Read, Seek, SeekFrom};
