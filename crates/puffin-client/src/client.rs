@@ -206,7 +206,10 @@ impl RegistryClient {
         // If the metadata file is available at its own url (PEP 658), download it from there
         let url = Url::parse(&file.url)?;
         let filename = WheelFilename::from_str(&file.filename)?;
-        if file.data_dist_info_metadata.is_available() {
+        if file
+            .dist_info_metadata
+            .is_some_and(|dist_info_metadata| dist_info_metadata.is_available())
+        {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
             let cache_dir = self.cache.join(WHEEL_METADATA_FROM_INDEX).join("pypi");

@@ -12,21 +12,25 @@ pub struct SimpleJson {
     pub versions: Vec<String>,
 }
 
+/// A single (remote) file belonging to a package, generally either a wheel or a source dist.
+///
+/// <https://peps.python.org/pep-0691/#project-detail>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {
-    pub core_metadata: Metadata,
-    pub data_dist_info_metadata: Metadata,
+    // Not PEP 691 compliant alias used by pypi
+    #[serde(alias = "data_dist_info_metadata")]
+    pub dist_info_metadata: Option<Metadata>,
     pub filename: String,
     pub hashes: Hashes,
     /// Note: Deserialized with [`LenientVersionSpecifiers`] since there are a number of invalid
     /// versions on pypi
     #[serde(deserialize_with = "deserialize_version_specifiers_lenient")]
     pub requires_python: Option<VersionSpecifiers>,
-    pub size: usize,
+    pub size: Option<usize>,
     pub upload_time: String,
     pub url: String,
-    pub yanked: Yanked,
+    pub yanked: Option<Yanked>,
 }
 
 fn deserialize_version_specifiers_lenient<'de, D>(
@@ -75,6 +79,10 @@ impl Yanked {
     }
 }
 
+/// A dictionary mapping a hash name to a hex encoded digest of the file.
+///
+/// PEP 691 says multiple hashes can be included and the interpretation is left to the client, we
+/// only support SHA 256 atm.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hashes {
     pub sha256: String,

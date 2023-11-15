@@ -18,5 +18,6 @@ pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 url = { workspace = true }

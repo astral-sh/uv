@@ -6,7 +6,7 @@ use distribution_filename::{SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
 use platform_tags::{TagPriority, Tags};
 use puffin_normalize::PackageName;
-use pypi_types::SimpleJson;
+use pypi_types::{SimpleJson, Yanked};
 
 use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::pubgrub::PubGrubVersion;
@@ -45,7 +45,7 @@ impl VersionMap {
             // When resolving, exclude yanked files.
             // TODO(konstin): When we fail resolving due to a dependency locked to yanked version,
             // we should tell the user.
-            if file.yanked.is_yanked() {
+            if file.yanked.as_ref().is_some_and(Yanked::is_yanked) {
                 continue;
             }
 
