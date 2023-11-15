@@ -4,12 +4,14 @@ info:
   program: puffin
   args:
     - venv
+    - "--python"
+    - python3.12
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
-Using Python 3.11 at /usr/bin/python3.11
+Using Python 3.11 at [PATH]
 Creating virtual environment at: .venv
 

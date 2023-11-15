@@ -80,7 +80,7 @@ fn venv_impl(
         printer,
         "Using Python {} at {}",
         interpreter_info.version(),
-        format!("{}", base_python.display()).cyan()
+        format!("{}", interpreter_info.sys_executable().display()).cyan()
     )
     .into_diagnostic()?;
 
@@ -96,8 +96,7 @@ fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    gourgeist::create_venv(path, &base_python, &interpreter_info)
-        .map_err(VenvError::CreationError)?;
+    gourgeist::create_venv(path, &interpreter_info).map_err(VenvError::CreationError)?;
 
     Ok(ExitStatus::Success)
 }
