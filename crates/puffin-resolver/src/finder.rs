@@ -10,8 +10,9 @@ use futures::{StreamExt, TryFutureExt};
 use fxhash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
+use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
-use platform_tags::Tags;
+use platform_tags::{TagPriority, Tags};
 use puffin_client::RegistryClient;
 use puffin_distribution::Dist;
 use puffin_interpreter::InterpreterInfo;
@@ -134,7 +135,10 @@ impl<'a> DistFinder<'a> {
 
     /// select a version that satisfies the requirement, preferring wheels to source distributions.
     fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<Dist> {
-        let mut fallback = None;
+        let mut best_version: Option<Version> = None;
+        let mut best_wheel: Option<(Dist, TagPriority)> = None;
+        let mut best_sdist: Option<Dist> = None;
+
         for file in files.into_iter().rev() {
             // Only add dists compatible with the python version.
             // This is relevant for source dists which give no other indication of their
@@ -150,22 +154,56 @@ impl<'a> DistFinder<'a> {
             {
                 continue;
             }
+
+            // Find the most-compatible wheel.
             if let Ok(wheel) = WheelFilename::from_str(file.filename.as_str()) {
-                if !wheel.is_compatible(self.tags) {
-                    continue;
+                // If we iterated past the first-compatible version, break.
+                if best_version
+                    .as_ref()
+                    .is_some_and(|version| *version != wheel.version)
+                {
+                    break;
                 }
+
                 if requirement.is_satisfied_by(&wheel.version) {
-                    return Some(Dist::from_registry(wheel.name, wheel.version, file));
+                    best_version = Some(wheel.version.clone());
+                    if let Some(priority) = wheel.compatibility(self.tags) {
+                        if best_wheel
+                            .as_ref()
+                            .map_or(true, |(.., existing)| priority > *existing)
+                        {
+                            best_wheel = Some((
+                                Dist::from_registry(wheel.name, wheel.version, file),
+                                priority,
+                            ));
+                        }
+                    }
                 }
-            } else if let Ok(sdist) =
-                SourceDistFilename::parse(file.filename.as_str(), &requirement.name)
-            {
-                if requirement.is_satisfied_by(&sdist.version) {
-                    fallback = Some(Dist::from_registry(sdist.name, sdist.version, file));
+                continue;
+            }
+
+            // Find the most-compatible sdist, if no wheel was found.
+            if best_wheel.is_none() {
+                if let Ok(sdist) =
+                    SourceDistFilename::parse(file.filename.as_str(), &requirement.name)
+                {
+                    // If we iterated past the first-compatible version, break.
+                    if best_version
+                        .as_ref()
+                        .is_some_and(|version| *version != sdist.version)
+                    {
+                        break;
+                    }
+
+                    if requirement.is_satisfied_by(&sdist.version) {
+                        best_version = Some(sdist.version.clone());
+                        best_sdist = Some(Dist::from_registry(sdist.name, sdist.version, file));
+                    }
                 }
             }
         }
-        fallback
+
+        best_wheel.map_or(best_sdist, |(wheel, ..)| Some(wheel))
     }
 }
 

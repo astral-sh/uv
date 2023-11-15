@@ -8,7 +8,7 @@ use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::resolver::VersionMap;
+use crate::version_map::VersionMap;
 use crate::Manifest;
 
 #[derive(Debug)]
