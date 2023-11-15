@@ -62,6 +62,8 @@ fn install() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -105,6 +107,8 @@ fn install_copy() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -150,6 +154,8 @@ fn install_hardlink() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -195,6 +201,8 @@ fn install_many() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -238,6 +246,8 @@ fn noop() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -292,6 +302,8 @@ fn link() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -317,6 +329,8 @@ fn link() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -357,6 +371,8 @@ fn add_remove() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -422,6 +438,8 @@ fn install_sequential() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -480,6 +498,8 @@ fn upgrade() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -537,6 +557,8 @@ fn install_url() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -583,6 +605,8 @@ fn install_git_commit() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -629,6 +653,8 @@ fn install_git_tag() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -675,6 +701,8 @@ fn install_git_subdirectories() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -720,6 +748,8 @@ fn install_sdist() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -766,6 +796,8 @@ fn install_url_then_install_url() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -822,6 +854,8 @@ fn install_url_then_install_version() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -882,6 +916,8 @@ fn install_version_then_install_url() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -987,6 +1023,8 @@ fn warn_on_yanked_version() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--python")
+        .arg("python3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
