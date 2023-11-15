@@ -1,4 +1,7 @@
-use fxhash::{FxHashMap, FxHashSet};
+use std::num::NonZeroU32;
+
+use anyhow::{Error, Result};
+use fxhash::FxHashMap;
 
 use platform_host::{Arch, Os, Platform, PlatformError};
 
@@ -8,20 +11,24 @@ use platform_host::{Arch, Os, Platform, PlatformError};
 /// wheel are compatible with the current environment.
 #[derive(Debug)]
 pub struct Tags {
-    /// python_tag |--> abi_tag |--> {platform_tag}
-    map: FxHashMap<String, FxHashMap<String, FxHashSet<String>>>,
+    /// python_tag |--> abi_tag |--> platform_tag |--> priority
+    map: FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>,
 }
 
 impl Tags {
     /// Create a new set of tags.
+    ///
+    /// Tags are prioritized based on their position in the given vector. Specifically, tags that
+    /// appear earlier in the vector are given higher priority than tags that appear later.
     pub fn new(tags: Vec<(String, String, String)>) -> Self {
         let mut map = FxHashMap::default();
-        for (py, abi, platform) in tags {
+        for (index, (py, abi, platform)) in tags.into_iter().rev().enumerate() {
             map.entry(py.to_string())
                 .or_insert(FxHashMap::default())
                 .entry(abi.to_string())
-                .or_insert(FxHashSet::default())
-                .insert(platform.to_string());
+                .or_insert(FxHashMap::default())
+                .entry(platform.to_string())
+                .or_insert(TagPriority::try_from(index).expect("valid tag priority"));
         }
         Self { map }
     }
@@ -98,7 +105,10 @@ impl Tags {
     }
 
     /// Returns true when there exists at least one tag for this platform
-    /// whose individal components all appear in each of the slices given.
+    /// whose individual components all appear in each of the slices given.
+    ///
+    /// Like [`Tags::compatibility`], but short-circuits as soon as a compatible
+    /// tag is found.
     pub fn is_compatible(
         &self,
         wheel_python_tags: &[String],
@@ -112,9 +122,8 @@ impl Tags {
         // to avoid is looping over all of the platform tags. We avoid that
         // with hashmap lookups.
 
-        let pythons = &self.map;
         for wheel_py in wheel_python_tags {
-            let Some(abis) = pythons.get(wheel_py) else {
+            let Some(abis) = self.map.get(wheel_py) else {
                 continue;
             };
             for wheel_abi in wheel_abi_tags {
@@ -122,13 +131,55 @@ impl Tags {
                     continue;
                 };
                 for wheel_platform in wheel_platform_tags {
-                    if platforms.contains(wheel_platform) {
+                    if platforms.contains_key(wheel_platform) {
                         return true;
                     }
                 }
             }
         }
         false
+    }
+
+    /// Returns the [`TagPriority`] of the most-compatible platform tag, or `None` if there is no
+    /// compatible tag.
+    pub fn compatibility(
+        &self,
+        wheel_python_tags: &[String],
+        wheel_abi_tags: &[String],
+        wheel_platform_tags: &[String],
+    ) -> Option<TagPriority> {
+        let mut max_priority = None;
+        for wheel_py in wheel_python_tags {
+            let Some(abis) = self.map.get(wheel_py) else {
+                continue;
+            };
+            for wheel_abi in wheel_abi_tags {
+                let Some(platforms) = abis.get(wheel_abi) else {
+                    continue;
+                };
+                for wheel_platform in wheel_platform_tags {
+                    let priority = platforms.get(wheel_platform).copied();
+                    max_priority = max_priority.max(priority);
+                }
+            }
+        }
+        max_priority
+    }
+}
+
+/// The priority of a platform tag.
+///
+/// A wrapper around [`NonZeroU32`]. Higher values indicate higher priority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TagPriority(NonZeroU32);
+
+impl TryFrom<usize> for TagPriority {
+    type Error = Error;
+
+    /// Create a [`TagPriority`] from a `usize`, where higher `usize` values are given higher
+    /// priority.
+    fn try_from(priority: usize) -> Result<Self> {
+        Ok(Self(NonZeroU32::try_from(1 + u32::try_from(priority)?)?))
     }
 }
 

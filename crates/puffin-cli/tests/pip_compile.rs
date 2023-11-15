@@ -535,7 +535,6 @@ fn compile_numpy_py38() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
-            // Check that we select the wheel and not the sdist
             .arg("--no-build")
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"

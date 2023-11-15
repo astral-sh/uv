@@ -19,3 +19,4 @@ mod pubgrub;
 mod resolution;
 mod resolution_mode;
 mod resolver;
+mod version_map;

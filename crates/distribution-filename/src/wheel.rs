@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::Version;
-use platform_tags::Tags;
+use platform_tags::{TagPriority, Tags};
 use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -120,6 +120,12 @@ impl WheelFilename {
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
         compatible_tags.is_compatible(&self.python_tag, &self.abi_tag, &self.platform_tag)
+    }
+
+    /// Return the [`TagPriority`] score of the wheel with the given tags, or `None` if the wheel is
+    /// incompatible.
+    pub fn compatibility(&self, compatible_tags: &Tags) -> Option<TagPriority> {
+        compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
     }
 
     /// Get the tag for this wheel.
