@@ -41,7 +41,7 @@ pub enum ResolveError {
     #[error("~= operator requires at least two release segments: {0}")]
     InvalidTildeEquals(pep440_rs::VersionSpecifier),
 
-    #[error("Conflicting URLs for package `{0}`: {1} and {2}")]
+    #[error("Conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingUrls(PackageName, String, String),
 
     #[error("Conflicting versions for `{0}`: {1}")]
