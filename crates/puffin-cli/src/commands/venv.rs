@@ -78,7 +78,8 @@ fn venv_impl(
 
     writeln!(
         printer,
-        "Using Python interpreter: {}",
+        "Using Python {} at {}",
+        interpreter_info.version(),
         format!("{}", base_python.display()).cyan()
     )
     .into_diagnostic()?;
