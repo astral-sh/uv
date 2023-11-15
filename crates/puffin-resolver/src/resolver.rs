@@ -535,7 +535,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
                     // Group the distributions by version and kind, discarding any incompatible
                     // distributions.
-                    let mut version_map: VersionMap = BTreeMap::new();
+                    let mut version_map = VersionMap::new();
                     for file in metadata.files {
                         // Only add dists compatible with the python version.
                         // This is relevant for source dists which give no other indication of their

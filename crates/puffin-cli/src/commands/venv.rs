@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use colored::Colorize;
@@ -37,6 +37,10 @@ enum VenvError {
     #[diagnostic(code(puffin::venv::python_not_found))]
     PythonNotFound,
 
+    #[error("Unable to find a Python interpreter {0}")]
+    #[diagnostic(code(puffin::venv::python_not_found))]
+    UserPythonNotFound(PathBuf),
+
     #[error("Failed to extract Python interpreter info")]
     #[diagnostic(code(puffin::venv::interpreter))]
     InterpreterError(#[source] anyhow::Error),
@@ -54,7 +58,11 @@ fn venv_impl(
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
     let base_python = if let Some(base_python) = base_python {
-        fs::canonicalize(base_python).into_diagnostic()?
+        fs::canonicalize(
+            which::which_global(base_python)
+                .map_err(|_| VenvError::UserPythonNotFound(base_python.to_path_buf()))?,
+        )
+        .into_diagnostic()?
     } else {
         fs::canonicalize(
             which::which_global("python3")
