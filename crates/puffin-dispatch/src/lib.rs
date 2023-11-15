@@ -79,6 +79,8 @@ impl BuildContext for BuildDispatch {
                 self.interpreter_info.simple_version(),
             )?;
             let resolver = Resolver::new(
+                // TODO(konstin): Split settings (for all resolutions) and inputs (only for this
+                // resolution) and attach the former to Self.
                 Manifest::new(
                     requirements.to_vec(),
                     Vec::default(),
@@ -86,6 +88,7 @@ impl BuildContext for BuildDispatch {
                     ResolutionMode::default(),
                     PreReleaseMode::default(),
                     None, // TODO(zanieb): We may want to provide a project name here
+                    None,
                 ),
                 self.interpreter_info.markers(),
                 &tags,

@@ -29,6 +29,7 @@ pypi-types = { path = "../pypi-types" }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
+chrono = { workspace = true }
 colored = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }

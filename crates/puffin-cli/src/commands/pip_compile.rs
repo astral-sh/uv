@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use colored::Colorize;
 use itertools::Itertools;
 use tracing::debug;
@@ -42,6 +43,7 @@ pub(crate) async fn pip_compile(
     index_urls: Option<IndexUrls>,
     no_build: bool,
     python_version: Option<PythonVersion>,
+    exclude_newer: Option<DateTime<Utc>>,
     cache: &Path,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -102,6 +104,7 @@ pub(crate) async fn pip_compile(
         resolution_mode,
         prerelease_mode,
         project,
+        exclude_newer,
     );
 
     // Detect the current Python interpreter.
