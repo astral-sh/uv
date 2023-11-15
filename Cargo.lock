@@ -1801,12 +1801,12 @@ dependencies = [
 [[package]]
 name = "miette"
 version = "5.10.0"
-source = "git+https://github.com/zanieb/miette.git?rev=69fc5c0#69fc5c0ba9aae9051890b587b8bbea7f5860d132"
+source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
 dependencies = [
  "backtrace",
  "backtrace-ext",
  "is-terminal",
- "miette-derive 5.10.0 (git+https://github.com/zanieb/miette.git?rev=69fc5c0)",
+ "miette-derive 5.10.0 (git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6)",
  "once_cell",
  "owo-colors",
  "supports-color",
@@ -1832,7 +1832,7 @@ dependencies = [
 [[package]]
 name = "miette-derive"
 version = "5.10.0"
-source = "git+https://github.com/zanieb/miette.git?rev=69fc5c0#69fc5c0ba9aae9051890b587b8bbea7f5860d132"
+source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2380,7 +2380,7 @@ dependencies = [
  "insta-cmd",
  "install-wheel-rs",
  "itertools 0.11.0",
- "miette 5.10.0 (git+https://github.com/zanieb/miette.git?rev=69fc5c0)",
+ "miette 5.10.0 (git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6)",
  "mimalloc",
  "pep440_rs 0.3.12",
  "pep508_rs",
