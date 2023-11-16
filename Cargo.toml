@@ -43,7 +43,7 @@ indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.11.0" }
 mailparse = { version = "0.14.0" }
-miette = { version = "5.10.0" }
+miette =  { git = "https://github.com/zanieb/miette.git", rev = "69fc5c0" }
 once_cell = { version = "1.18.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
