@@ -19,12 +19,15 @@ fn create_venv() -> Result<()> {
     insta::with_settings!({
         filters => vec![
             (r"Using Python interpreter: .+", "Using Python interpreter: /usr/bin/python3"),
+            (r"Using Python 3.12 at .+", "Using Python 3.11 at [PATH]"),
             (tempdir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("venv")
             .arg(venv.as_os_str())
+            .arg("--python")
+            .arg("python3.12")
             .current_dir(&tempdir));
     });
 
@@ -41,11 +44,14 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     insta::with_settings!({
         filters => vec![
             (r"Using Python interpreter: .+", "Using Python interpreter: /usr/bin/python3"),
+            (r"Using Python 3.12 at .+", "Using Python 3.11 at [PATH]"),
             (tempdir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("venv")
+            .arg("--python")
+            .arg("python3.12")
             .current_dir(&tempdir));
     });
 

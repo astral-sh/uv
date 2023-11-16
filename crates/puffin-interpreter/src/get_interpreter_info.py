@@ -35,5 +35,6 @@ interpreter_info = {
     "markers": markers,
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,
+    "sys_executable": sys.executable,
 }
 print(json.dumps(interpreter_info))

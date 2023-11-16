@@ -76,6 +76,7 @@ async fn resolve(
             markers.clone(),
             PathBuf::from("/dev/null"),
             PathBuf::from("/dev/null"),
+            PathBuf::from("/dev/null"),
         ),
     };
     let resolver = Resolver::new(manifest, markers, tags, &client, &build_context);
