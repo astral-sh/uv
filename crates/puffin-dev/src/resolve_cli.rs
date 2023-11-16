@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_cache::CacheArgs;
+use puffin_cache::{CacheArgs, CacheDir};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
@@ -30,13 +30,13 @@ pub(crate) struct ResolveCliArgs {
 }
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
-    let (_temp_dir, cache) = args.cache_args.get_cache_dir()?;
+    let cache_dir = CacheDir::try_from(args.cache_args)?;
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(&cache))?;
+    let venv = Virtualenv::from_env(platform, Some(cache_dir.path()))?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::new(cache.clone()).build(),
-        cache.clone(),
+        RegistryClientBuilder::new(cache_dir.path().clone()).build(),
+        cache_dir.path().clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,

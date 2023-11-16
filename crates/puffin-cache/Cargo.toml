@@ -11,7 +11,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 hex = { workspace = true }
 seahash = { workspace = true }

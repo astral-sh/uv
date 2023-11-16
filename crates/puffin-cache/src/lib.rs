@@ -3,7 +3,8 @@ use std::hash::Hasher;
 use seahash::SeaHasher;
 
 pub use canonical_url::{CanonicalUrl, RepositoryUrl};
-pub use cli::CacheArgs;
+#[cfg(feature = "clap")]
+pub use cli::{CacheArgs, CacheDir};
 pub use digest::digest;
 
 mod cache_key;

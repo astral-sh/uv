@@ -3,8 +3,9 @@ use std::str::FromStr;
 use clap::Parser;
 use url::Url;
 
+use anyhow::Result;
 use distribution_filename::WheelFilename;
-use puffin_cache::CacheArgs;
+use puffin_cache::{CacheArgs, CacheDir};
 use puffin_client::RegistryClientBuilder;
 
 #[derive(Parser)]
@@ -14,10 +15,10 @@ pub(crate) struct WheelMetadataArgs {
     cache_args: CacheArgs,
 }
 
-pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> anyhow::Result<()> {
-    let (_temp_dir, cache) = args.cache_args.get_cache_dir()?;
+pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
+    let cache_dir = CacheDir::try_from(args.cache_args)?;
 
-    let client = RegistryClientBuilder::new(cache).build();
+    let client = RegistryClientBuilder::new(cache_dir.path().clone()).build();
 
     let filename = WheelFilename::from_str(
         args.url
