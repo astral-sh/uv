@@ -2,32 +2,29 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use anyhow::Result;
 use clap::Parser;
-use directories::ProjectDirs;
 use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
-use tokio::sync::Semaphore;
-use tokio::time::Instant;
-use tracing::{info, info_span, span, Level, Span};
-use tracing_indicatif::span_ext::IndicatifSpanExt;
-
 use pep508_rs::Requirement;
 use platform_host::Platform;
+use puffin_cache::{CacheArgs, CacheDir};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_traits::BuildContext;
+use tokio::sync::Semaphore;
+use tokio::time::Instant;
+use tracing::{info, info_span, span, Level, Span};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
     list: PathBuf,
     #[clap(long)]
     limit: Option<usize>,
-    /// Path to the cache directory.
-    #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
-    cache_dir: Option<PathBuf>,
     /// Don't build source distributions. This means resolving will not run arbitrary code. The
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
@@ -35,19 +32,12 @@ pub(crate) struct ResolveManyArgs {
     /// Run this many tasks in parallel
     #[clap(long, default_value = "50")]
     num_tasks: usize,
+    #[command(flatten)]
+    cache_args: CacheArgs,
 }
 
-pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
-    let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = args
-        .cache_dir
-        .or_else(|| {
-            project_dirs
-                .as_ref()
-                .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
-        })
-        .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
-        .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
+pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
+    let cache_dir = CacheDir::try_from(args.cache_args)?;
 
     let data = fs::read_to_string(&args.list)?;
     let lines = data.lines().map(Requirement::from_str);
@@ -58,10 +48,10 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> anyhow::Result<()> {
     };
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(&cache))?;
+    let venv = Virtualenv::from_env(platform, Some(cache_dir.path()))?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::new(cache.clone()).build(),
-        cache.clone(),
+        RegistryClientBuilder::new(cache_dir.path().clone()).build(),
+        cache_dir.path().clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,

@@ -1,5 +1,4 @@
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 
@@ -7,10 +6,9 @@ use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
-use directories::ProjectDirs;
-use tempfile::tempdir;
 use url::Url;
 
+use puffin_cache::{CacheArgs, CacheDir};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use requirements::ExtrasSpecification;
@@ -58,13 +56,8 @@ struct Cli {
     #[arg(global = true, long, short, conflicts_with = "quiet")]
     verbose: bool,
 
-    /// Avoid reading from or writing to the cache.
-    #[arg(global = true, long, short)]
-    no_cache: bool,
-
-    /// Path to the cache directory.
-    #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
-    cache_dir: Option<PathBuf>,
+    #[command(flatten)]
+    cache_args: CacheArgs,
 }
 
 #[derive(Subcommand)]
@@ -256,21 +249,7 @@ async fn inner() -> Result<ExitStatus> {
         printer::Printer::Default
     };
 
-    // Prefer, in order:
-    // 1. A temporary cache directory, if the user requested `--no-cache`.
-    // 2. The specific cache directory specified by the user via `--cache-dir` or `PUFFIN_CACHE_DIR`.
-    // 3. The system-appropriate cache directory.
-    // 4. A `.puffin_cache` directory in the current working directory.
-    let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache_dir = if cli.no_cache {
-        Cow::Owned(tempdir()?.into_path())
-    } else if let Some(cache_dir) = cli.cache_dir {
-        Cow::Owned(cache_dir)
-    } else if let Some(project_dirs) = project_dirs.as_ref() {
-        Cow::Borrowed(project_dirs.cache_dir())
-    } else {
-        Cow::Borrowed(Path::new(".puffin_cache"))
-    };
+    let cache_dir = CacheDir::try_from(cli.cache_args)?;
 
     match cli.command {
         Commands::PipCompile(args) => {
@@ -307,7 +286,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.no_build,
                 args.python_version,
                 args.exclude_newer,
-                &cache_dir,
+                cache_dir.path(),
                 printer,
             )
             .await
@@ -325,7 +304,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.link_mode.unwrap_or_default(),
                 index_urls,
                 args.no_build,
-                &cache_dir,
+                cache_dir.path(),
                 printer,
             )
             .await
@@ -337,10 +316,10 @@ async fn inner() -> Result<ExitStatus> {
                 .map(RequirementsSource::from)
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, &cache_dir, printer).await
+            commands::pip_uninstall(&sources, cache_dir.path(), printer).await
         }
-        Commands::Clean => commands::clean(&cache_dir, printer),
-        Commands::Freeze => commands::freeze(&cache_dir, printer),
+        Commands::Clean => commands::clean(cache_dir.path(), printer),
+        Commands::Freeze => commands::freeze(cache_dir.path(), printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer),
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),

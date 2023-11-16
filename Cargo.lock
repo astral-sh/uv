@@ -2330,8 +2330,11 @@ dependencies = [
 name = "puffin-cache"
 version = "0.0.1"
 dependencies = [
+ "clap",
+ "directories",
  "hex",
  "seahash",
+ "tempfile",
  "url",
 ]
 
@@ -2348,7 +2351,6 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
- "directories",
  "fs-err",
  "futures",
  "gourgeist",
@@ -2365,6 +2367,7 @@ dependencies = [
  "platform-tags",
  "predicates",
  "pubgrub",
+ "puffin-cache",
  "puffin-client",
  "puffin-dispatch",
  "puffin-distribution",
@@ -2425,7 +2428,6 @@ dependencies = [
  "anyhow",
  "clap",
  "colored",
- "directories",
  "distribution-filename",
  "fs-err",
  "futures",
@@ -2437,6 +2439,7 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "puffin-build",
+ "puffin-cache",
  "puffin-client",
  "puffin-dispatch",
  "puffin-interpreter",

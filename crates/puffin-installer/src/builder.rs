@@ -97,6 +97,7 @@ async fn build_sdist<T: BuildContext + Send + Sync>(
     Ok(WheelDownload::Disk(DiskWheel {
         dist: dist.dist,
         path: wheel_filename,
+        temp_dir: None,
     }))
 }
 

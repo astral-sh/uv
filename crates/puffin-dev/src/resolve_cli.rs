@@ -3,11 +3,11 @@ use std::path::PathBuf;
 
 use anstream::println;
 use clap::Parser;
-use directories::ProjectDirs;
 use itertools::Itertools;
 
 use pep508_rs::Requirement;
 use platform_host::Platform;
+use puffin_cache::{CacheArgs, CacheDir};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
@@ -25,21 +25,18 @@ pub(crate) struct ResolveCliArgs {
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
     no_build: bool,
+    #[command(flatten)]
+    cache_args: CacheArgs,
 }
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
-    let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = project_dirs
-        .as_ref()
-        .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
-        .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
-        .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
+    let cache_dir = CacheDir::try_from(args.cache_args)?;
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(&cache))?;
+    let venv = Virtualenv::from_env(platform, Some(cache_dir.path()))?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::new(cache.clone()).build(),
-        cache.clone(),
+        RegistryClientBuilder::new(cache_dir.path().clone()).build(),
+        cache_dir.path().clone(),
         venv.interpreter_info().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,
