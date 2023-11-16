@@ -197,7 +197,7 @@ pub(crate) async fn pip_compile(
     writeln!(
         writer,
         "{}",
-        format!("#    {}", env::args().join(" ")).green()
+        format!("#    puffin {}", env::args().skip(1).join(" ")).green()
     )?;
     write!(writer, "{resolution}")?;
 
