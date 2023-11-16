@@ -3,13 +3,14 @@
 use std::io;
 use std::io::{BufWriter, Write};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{FromPathError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
 use fs_err::File;
-use puffin_interpreter::InterpreterInfo;
 use tracing::info;
+
+use puffin_interpreter::InterpreterInfo;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -35,31 +36,31 @@ fn write_cfg(f: &mut impl Write, data: &[(&str, String); 8]) -> io::Result<()> {
 
 /// Absolute paths of the virtualenv
 #[derive(Debug)]
-pub(crate) struct VenvPaths {
+pub struct VenvPaths {
     /// The location of the virtualenv, e.g. `.venv`
     #[allow(unused)]
-    pub(crate) root: Utf8PathBuf,
+    pub root: Utf8PathBuf,
 
     /// The python interpreter.rs inside the virtualenv, on unix `.venv/bin/python`
     #[allow(unused)]
-    pub(crate) interpreter: Utf8PathBuf,
+    pub interpreter: Utf8PathBuf,
 
     /// The directory with the scripts, on unix `.venv/bin`
     #[allow(unused)]
-    pub(crate) bin: Utf8PathBuf,
+    pub bin: Utf8PathBuf,
 
     /// The site-packages directory where all the packages are installed to, on unix
     /// and python 3.11 `.venv/lib/python3.11/site-packages`
     #[allow(unused)]
-    pub(crate) site_packages: Utf8PathBuf,
+    pub site_packages: Utf8PathBuf,
 }
 
 /// Write all the files that belong to a venv without any packages installed.
-pub(crate) fn create_bare_venv(
-    location: &Utf8Path,
-    base_python: &Utf8Path,
-    info: &InterpreterInfo,
-) -> io::Result<VenvPaths> {
+pub fn create_bare_venv(location: &Utf8Path, info: &InterpreterInfo) -> io::Result<VenvPaths> {
+    let base_python: &Utf8Path = info
+        .sys_executable()
+        .try_into()
+        .map_err(|err: FromPathError| err.into_io_error())?;
     if location.exists() {
         if location.join("pyvenv.cfg").is_file() {
             info!("Removing existing directory");

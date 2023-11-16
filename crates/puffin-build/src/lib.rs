@@ -251,11 +251,7 @@ impl SourceBuild {
             None
         };
 
-        let venv = gourgeist::create_venv(
-            temp_dir.path().join(".venv"),
-            build_context.base_python(),
-            interpreter_info,
-        )?;
+        let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter_info)?;
 
         // There are packages such as DTLSSocket 0.1.16 that say
         // ```toml

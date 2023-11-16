@@ -20,6 +20,7 @@ pub struct InterpreterInfo {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
+    pub(crate) sys_executable: PathBuf,
 }
 
 impl InterpreterInfo {
@@ -42,6 +43,7 @@ impl InterpreterInfo {
             markers: info.markers,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
+            sys_executable: info.sys_executable,
         })
     }
 
@@ -51,12 +53,14 @@ impl InterpreterInfo {
         markers: MarkerEnvironment,
         base_exec_prefix: PathBuf,
         base_prefix: PathBuf,
+        sys_executable: PathBuf,
     ) -> Self {
         Self {
             platform: PythonPlatform(platform),
             markers,
             base_exec_prefix,
             base_prefix,
+            sys_executable,
         }
     }
 }
@@ -91,6 +95,9 @@ impl InterpreterInfo {
     pub fn base_prefix(&self) -> &Path {
         &self.base_prefix
     }
+    pub fn sys_executable(&self) -> &Path {
+        &self.sys_executable
+    }
 
     /// Inject markers of a fake python version
     #[must_use]
@@ -116,6 +123,7 @@ pub(crate) struct InterpreterQueryResult {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
+    pub(crate) sys_executable: PathBuf,
 }
 
 impl InterpreterQueryResult {
@@ -188,9 +196,13 @@ impl InterpreterQueryResult {
         debug!("Detecting markers for {}", executable.display());
         let info = Self::query(executable)?;
 
-        // Write to the cache.
-        if let Some(key) = key {
-            cacache::write_sync(cache, key, serde_json::to_vec(&info)?)?;
+        // If the executable is actually a pyenv shim, a bash script that redirects to the activated
+        // python, we're not allowed to cache the interpreter info
+        if executable == info.sys_executable {
+            // Write to the cache.
+            if let Some(key) = key {
+                cacache::write_sync(cache, key, serde_json::to_vec(&info)?)?;
+            }
         }
 
         Ok(info)
