@@ -49,17 +49,19 @@ impl VersionMap {
             // Support resolving as if it were an earlier timestamp, at least as long files have
             // upload time information
             if let Some(exclude_newer) = exclude_newer {
-                if let Some(upload_time) = &file.upload_time {
-                    if upload_time >= exclude_newer {
+                match file.upload_time.as_ref() {
+                    Some(upload_time) if upload_time >= exclude_newer => {
                         continue;
                     }
-                } else {
-                    // TODO(konstin): Implement and use `warn_once` here.
-                    warn!(
-                        "At least one file has non upload date, the resolution might include \
-                        versions newer than {} ({} @ {})",
-                        exclude_newer, file.filename, file.url
-                    );
+                    None => {
+                        // TODO(konstin): Implement and use `warn_once` here.
+                        warn!(
+                            "{} is missing an upload date, but user provided {}",
+                            file.filename, exclude_newer,
+                        );
+                        continue;
+                    }
+                    _ => {}
                 }
             }
 
