@@ -68,8 +68,8 @@ async fn resolve(
     markers: &'static MarkerEnvironment,
     tags: &Tags,
 ) -> Result<Graph> {
-    let tempdir = tempdir()?;
-    let client = RegistryClientBuilder::new(tempdir.path()).build();
+    let temp_dir = tempdir()?;
+    let client = RegistryClientBuilder::new(temp_dir.path()).build();
     let build_context = DummyContext {
         interpreter_info: InterpreterInfo::artificial(
             Platform::current()?,

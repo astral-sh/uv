@@ -10,13 +10,13 @@ mod common;
 
 #[test]
 fn missing_pyproject_toml() -> Result<()> {
-    let tempdir = assert_fs::TempDir::new()?;
-    let pyproject_toml = tempdir.child("pyproject.toml");
+    let temp_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = temp_dir.child("pyproject.toml");
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask")
-        .current_dir(&tempdir));
+        .current_dir(&temp_dir));
 
     pyproject_toml.assert(predicates::path::missing());
 
@@ -25,14 +25,14 @@ fn missing_pyproject_toml() -> Result<()> {
 
 #[test]
 fn missing_project_table() -> Result<()> {
-    let tempdir = assert_fs::TempDir::new()?;
-    let pyproject_toml = tempdir.child("pyproject.toml");
+    let temp_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask")
-        .current_dir(&tempdir));
+        .current_dir(&temp_dir));
 
     pyproject_toml.assert(
         r#"[project]
@@ -47,8 +47,8 @@ dependencies = [
 
 #[test]
 fn missing_dependencies_array() -> Result<()> {
-    let tempdir = assert_fs::TempDir::new()?;
-    let pyproject_toml = tempdir.child("pyproject.toml");
+    let temp_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
     pyproject_toml.write_str(
         r#"[project]
@@ -59,7 +59,7 @@ name = "project"
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask")
-        .current_dir(&tempdir));
+        .current_dir(&temp_dir));
 
     pyproject_toml.assert(
         r#"[project]
@@ -75,8 +75,8 @@ dependencies = [
 
 #[test]
 fn replace_dependency() -> Result<()> {
-    let tempdir = assert_fs::TempDir::new()?;
-    let pyproject_toml = tempdir.child("pyproject.toml");
+    let temp_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
     pyproject_toml.write_str(
         r#"[project]
@@ -90,7 +90,7 @@ dependencies = [
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask==2.0.0")
-        .current_dir(&tempdir));
+        .current_dir(&temp_dir));
 
     pyproject_toml.assert(
         r#"[project]
@@ -106,8 +106,8 @@ dependencies = [
 
 #[test]
 fn reformat_array() -> Result<()> {
-    let tempdir = assert_fs::TempDir::new()?;
-    let pyproject_toml = tempdir.child("pyproject.toml");
+    let temp_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
     pyproject_toml.write_str(
         r#"[project]
@@ -119,7 +119,7 @@ dependencies = ["flask==1.0.0"]
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("requests")
-        .current_dir(&tempdir));
+        .current_dir(&temp_dir));
 
     pyproject_toml.assert(
         r#"[project]
