@@ -345,6 +345,8 @@ enum PuffinExternal {
     NoVersions(PubGrubPackage, Range<PubGrubVersion>),
     /// Dependencies of the package are unavailable for versions in that set.
     UnavailableDependencies(PubGrubPackage, Range<PubGrubVersion>),
+    /// Dependencies of the package are unusable for versions in that set.
+    UnusableDependencies(PubGrubPackage, Range<PubGrubVersion>, Option<String>),
     /// Incompatibility coming from the dependencies of a given package.
     FromDependencyOf(
         PubGrubPackage,
@@ -361,6 +363,9 @@ impl PuffinExternal {
             External::NoVersions(p, vs) => PuffinExternal::NoVersions(p, vs),
             External::UnavailableDependencies(p, vs) => {
                 PuffinExternal::UnavailableDependencies(p, vs)
+            }
+            External::UnusableDependencies(p, vs, reason) => {
+                PuffinExternal::UnusableDependencies(p, vs, reason)
             }
             External::FromDependencyOf(p, vs, p_dep, vs_dep) => {
                 PuffinExternal::FromDependencyOf(p, vs, p_dep, vs_dep)
@@ -393,6 +398,25 @@ impl fmt::Display for PuffinExternal {
                         f,
                         "dependencies of {package} at version {set} are unavailable"
                     )
+                }
+            }
+            Self::UnusableDependencies(package, set, reason) => {
+                if let Some(reason) = reason {
+                    if matches!(package, PubGrubPackage::Root(_)) {
+                        write!(f, "{package} dependencies are unusable: {reason}")
+                    } else {
+                        if set == &Range::full() {
+                            write!(f, "dependencies of {package} are unusable: {reason}")
+                        } else {
+                            write!(f, "dependencies of {package}{set} are unusable: {reason}",)
+                        }
+                    }
+                } else {
+                    if set == &Range::full() {
+                        write!(f, "dependencies of {package} are unusable")
+                    } else {
+                        write!(f, "dependencies of {package}{set} are unusable")
+                    }
                 }
             }
             Self::FromDependencyOf(package, package_set, dependency, dependency_set) => {
