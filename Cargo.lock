@@ -504,7 +504,10 @@ checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "serde",
+ "wasm-bindgen",
  "windows-targets 0.48.5",
 ]
 
@@ -2284,6 +2287,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
+source = "git+https://github.com/zanieb/pubgrub?rev=efe34571a876831dacac1cbba3ce5bc358f2a6e7#efe34571a876831dacac1cbba3ce5bc358f2a6e7"
 dependencies = [
  "indexmap 2.1.0",
  "log",
@@ -2341,6 +2345,7 @@ dependencies = [
  "assert_fs",
  "bitflags 2.4.1",
  "cacache",
+ "chrono",
  "clap",
  "colored",
  "directories",
@@ -2480,6 +2485,7 @@ dependencies = [
  "puffin-git",
  "puffin-normalize",
  "pypi-types",
+ "serde",
  "serde_json",
  "url",
 ]
@@ -2566,6 +2572,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.4.1",
+ "chrono",
  "clap",
  "colored",
  "derivative",
@@ -2702,6 +2709,7 @@ dependencies = [
 name = "pypi-types"
 version = "0.0.1"
 dependencies = [
+ "chrono",
  "indoc",
  "insta",
  "mailparse",

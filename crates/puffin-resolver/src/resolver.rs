@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
 use fxhash::{FxHashMap, FxHashSet};
@@ -50,6 +51,7 @@ pub struct Resolver<'a, Context: BuildContext + Sync> {
     client: &'a RegistryClient,
     selector: CandidateSelector,
     index: Arc<Index>,
+    exclude_newer: Option<DateTime<Utc>>,
     locks: Arc<Locks>,
     build_context: &'a Context,
     reporter: Option<Arc<dyn Reporter>>,
@@ -85,6 +87,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             constraints: manifest.constraints,
             markers,
             tags,
+            exclude_newer: manifest.exclude_newer,
             client,
             build_context,
             reporter: None,
@@ -548,6 +551,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         &package_name,
                         self.tags,
                         self.build_context.interpreter_info().version(),
+                        self.exclude_newer.as_ref(),
                     );
                     self.index.packages.insert(package_name, version_map);
                 }

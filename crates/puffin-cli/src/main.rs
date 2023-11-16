@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::str::FromStr;
 
 use anyhow::Result;
+use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use directories::ProjectDirs;
@@ -85,6 +87,24 @@ enum Commands {
     Remove(RemoveArgs),
 }
 
+/// Clap parser for the union of date and datetime
+fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
+    let date_err = match NaiveDate::from_str(input) {
+        Ok(date) => {
+            // Midnight that day is 00:00:00 the next day
+            return Ok((date + Days::new(1)).and_time(NaiveTime::MIN).and_utc());
+        }
+        Err(err) => err,
+    };
+    let datetime_err = match DateTime::parse_from_rfc3339(input) {
+        Ok(datetime) => return Ok(datetime.with_timezone(&Utc)),
+        Err(err) => err,
+    };
+    Err(format!(
+        "Neither a valid date ({date_err}) not a valid datetime ({datetime_err})"
+    ))
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
@@ -130,14 +150,28 @@ struct PipCompileArgs {
     #[clap(long)]
     upgrade: bool,
 
-    /// Don't build source distributions. This means resolving will not run arbitrary code. The
-    /// cached wheels of already built source distributions will be reused.
+    /// Don't build source distributions.
+    ///
+    /// This means resolving will not run arbitrary code. The cached wheels of already built source
+    /// distributions will be reused.
     #[clap(long)]
     no_build: bool,
 
     /// The minimum Python version that should be supported.
     #[arg(long, short, value_enum)]
     python_version: Option<PythonVersion>,
+
+    /// Try to resolve at a past time.
+    ///
+    /// This works by filtering out files with a more recent upload time, so if the index you use
+    /// does not provide upload times, the results might be inaccurate. pypi provides upload times
+    /// for all files.
+    ///
+    /// Timestamps are given either as RFC 3339 timestamps such as `2006-12-02T02:07:43Z` or as
+    /// UTC dates in the same format such as `2006-12-02`. Dates are interpreted as including this
+    /// day, i.e. until midnight UTC that day.
+    #[arg(long, value_parser = date_or_datetime)]
+    exclude_newer: Option<DateTime<Utc>>,
 }
 
 #[derive(Args)]
@@ -272,6 +306,7 @@ async fn inner() -> Result<ExitStatus> {
                 index_urls,
                 args.no_build,
                 args.python_version,
+                args.exclude_newer,
                 &cache_dir,
                 printer,
             )

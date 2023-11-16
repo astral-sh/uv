@@ -116,9 +116,34 @@ async fn fetch(
             let reader = client.stream_external(&url).await?;
 
             // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
-            let file_size = ByteSize::b(wheel.file.size as u64);
-            if file_size >= ByteSize::mb(5) {
-                debug!("Fetching disk-based wheel from registry: {dist} ({file_size})");
+            let small_size = if let Some(size) = wheel.file.size {
+                let byte_size = ByteSize::b(size as u64);
+                if byte_size < ByteSize::mb(5) {
+                    Some(size)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some(small_size) = small_size {
+                debug!(
+                    "Fetching in-memory wheel from registry: {dist} ({})",
+                    ByteSize::b(small_size as u64)
+                );
+
+                // Read into a buffer.
+                let mut buffer = Vec::with_capacity(small_size);
+                let mut reader = tokio::io::BufReader::new(reader.compat());
+                tokio::io::copy(&mut reader, &mut buffer).await?;
+
+                Ok(Download::Wheel(WheelDownload::InMemory(InMemoryWheel {
+                    dist,
+                    buffer,
+                })))
+            } else {
+                let size = small_size.map_or("unknown size".to_string(), |size| size.to_string());
+                debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
                 // Download the wheel to a temporary file.
                 let temp_dir = tempfile::tempdir_in(cache)?.into_path();
@@ -130,18 +155,6 @@ async fn fetch(
                 Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                     dist,
                     path: wheel_file,
-                })))
-            } else {
-                debug!("Fetching in-memory wheel from registry: {dist} ({file_size})");
-
-                // Read into a buffer.
-                let mut buffer = Vec::with_capacity(wheel.file.size);
-                let mut reader = tokio::io::BufReader::new(reader.compat());
-                tokio::io::copy(&mut reader, &mut buffer).await?;
-
-                Ok(Download::Wheel(WheelDownload::InMemory(InMemoryWheel {
-                    dist,
-                    buffer,
                 })))
             }
         }

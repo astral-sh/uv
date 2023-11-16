@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
 
@@ -13,6 +14,7 @@ pub struct Manifest {
     pub(crate) resolution_mode: ResolutionMode,
     pub(crate) prerelease_mode: PreReleaseMode,
     pub(crate) project: Option<PackageName>,
+    pub(crate) exclude_newer: Option<DateTime<Utc>>,
 }
 
 impl Manifest {
@@ -23,6 +25,7 @@ impl Manifest {
         resolution_mode: ResolutionMode,
         prerelease_mode: PreReleaseMode,
         project: Option<PackageName>,
+        exclude_newer: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             requirements,
@@ -31,6 +34,7 @@ impl Manifest {
             resolution_mode,
             prerelease_mode,
             project,
+            exclude_newer,
         }
     }
 }
