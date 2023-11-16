@@ -3,10 +3,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use directories::ProjectDirs;
 use fs_err as fs;
 
 use platform_host::Platform;
+use puffin_cache::CacheArgs;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
@@ -25,6 +25,8 @@ pub(crate) struct BuildArgs {
     sdist: PathBuf,
     /// The subdirectory to build within the source distribution.
     subdirectory: Option<PathBuf>,
+    #[command(flatten)]
+    cache_args: CacheArgs,
 }
 
 /// Build a source distribution to a wheel
@@ -36,12 +38,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         env::current_dir()?
     };
 
-    let project_dirs = ProjectDirs::from("", "", "puffin");
-    let cache = project_dirs
-        .as_ref()
-        .map(|project_dirs| project_dirs.cache_dir().to_path_buf())
-        .or_else(|| Some(tempfile::tempdir().ok()?.into_path()))
-        .unwrap_or_else(|| PathBuf::from(".puffin_cache"));
+    let (_temp_dir, cache) = args.cache_args.get_cache_dir()?;
 
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, Some(&cache))?;

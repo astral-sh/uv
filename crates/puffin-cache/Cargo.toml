@@ -11,6 +11,9 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+clap = { workspace = true, features = ["derive"] }
+directories = { workspace = true }
 hex = { workspace = true }
 seahash = { workspace = true }
+tempfile = { workspace = true }
 url = { workspace = true }

@@ -20,16 +20,18 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+pubgrub = { path = "../../vendor/pubgrub" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
 puffin-dispatch = { path = "../puffin-dispatch" }
 puffin-distribution = { path = "../puffin-distribution" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
-pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-workspace = { path = "../puffin-workspace" }
+pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -38,13 +40,11 @@ cacache = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 colored = { workspace = true }
-directories = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
-pubgrub = { workspace = true }
 pyproject-toml = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
