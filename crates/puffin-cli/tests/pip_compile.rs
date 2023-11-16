@@ -1262,7 +1262,7 @@ dependencies = ["django==300.1.4"]
     Ok(())
 }
 
-/// Resolve as of a specific datetime
+/// Resolve at a specific time in the past
 #[test]
 fn compile_exclude_newer() -> Result<()> {
     let temp_dir = TempDir::new()?;

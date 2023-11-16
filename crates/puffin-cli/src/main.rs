@@ -87,6 +87,7 @@ enum Commands {
     Remove(RemoveArgs),
 }
 
+/// Clap parser for the union of date and datetime
 fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
     let date_err = match NaiveDate::from_str(input) {
         Ok(date) => {
@@ -160,7 +161,7 @@ struct PipCompileArgs {
     #[arg(long, short, value_enum)]
     python_version: Option<PythonVersion>,
 
-    /// Try to resolve as if it was the given timestamp.
+    /// Try to resolve at a past time.
     ///
     /// This works by filtering out files with a more recent upload time, so if the index you use
     /// does not provide upload times, the results might be inaccurate. pypi provides upload times
