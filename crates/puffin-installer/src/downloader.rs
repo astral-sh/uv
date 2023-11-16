@@ -147,15 +147,16 @@ async fn fetch(
                 debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
                 // Download the wheel to a temporary file.
-                let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+                let temp_dir = tempfile::tempdir_in(cache)?;
                 let wheel_filename = &wheel.file.filename;
-                let wheel_file = temp_dir.join(wheel_filename);
+                let wheel_file = temp_dir.path().join(wheel_filename);
                 let mut writer = tokio::fs::File::create(&wheel_file).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                 Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                     dist,
                     path: wheel_file,
+                    temp_dir: Some(temp_dir),
                 })))
             }
         }
@@ -167,15 +168,16 @@ async fn fetch(
             let reader = client.stream_external(&wheel.url).await?;
 
             // Download the wheel to a temporary file.
-            let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+            let temp_dir = tempfile::tempdir_in(cache)?;
             let wheel_filename = wheel.filename()?;
-            let wheel_file = temp_dir.join(wheel_filename);
+            let wheel_file = temp_dir.path().join(wheel_filename);
             let mut writer = tokio::fs::File::create(&wheel_file).await?;
             tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
             Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                 dist,
                 path: wheel_file,
+                temp_dir: Some(temp_dir),
             })))
         }
 
@@ -271,6 +273,9 @@ pub struct DiskWheel {
     pub(crate) dist: Dist,
     /// The path to the downloaded wheel.
     pub(crate) path: PathBuf,
+    /// The download location, to be dropped after use.
+    #[allow(dead_code)] // We only want the drop implementation
+    pub(crate) temp_dir: Option<TempDir>,
 }
 
 /// A downloaded wheel.
