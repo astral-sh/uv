@@ -26,7 +26,7 @@ pub struct CacheDir {
     /// the temporary directory exists for the length of the operation, but is dropped at the end
     /// as appropriate.
     #[allow(dead_code)]
-    tempdir: Option<TempDir>,
+    temp_dir: Option<TempDir>,
 }
 
 impl TryFrom<CacheArgs> for CacheDir {
@@ -40,26 +40,26 @@ impl TryFrom<CacheArgs> for CacheDir {
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
         let project_dirs = ProjectDirs::from("", "", "puffin");
         if value.no_cache {
-            let tempdir = tempdir()?;
-            let cache_dir = tempdir.path().to_path_buf();
+            let temp_dir = tempdir()?;
+            let cache_dir = temp_dir.path().to_path_buf();
             Ok(Self {
                 cache_dir,
-                tempdir: Some(tempdir),
+                temp_dir: Some(temp_dir),
             })
         } else if let Some(cache_dir) = value.cache_dir {
             Ok(Self {
                 cache_dir,
-                tempdir: None,
+                temp_dir: None,
             })
         } else if let Some(project_dirs) = project_dirs {
             Ok(Self {
                 cache_dir: project_dirs.cache_dir().to_path_buf(),
-                tempdir: None,
+                temp_dir: None,
             })
         } else {
             Ok(Self {
                 cache_dir: PathBuf::from(".puffin_cache"),
-                tempdir: None,
+                temp_dir: None,
             })
         }
     }

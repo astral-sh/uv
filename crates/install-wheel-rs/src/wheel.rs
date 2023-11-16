@@ -519,9 +519,9 @@ fn bytecode_compile_inner(
     py_source_paths: &[PathBuf],
     sys_executable: &Path,
 ) -> Result<(ExitStatus, Vec<String>), Error> {
-    let tempdir = tempdir()?;
+    let temp_dir = tempdir()?;
     // Running python with an actual file will produce better error messages
-    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+    let pip_compileall_py = temp_dir.path().join("pip_compileall.py");
     fs::write(&pip_compileall_py, include_str!("pip_compileall.py"))?;
     // We input the paths through stdin and get the successful paths returned through stdout
     let mut bytecode_compiler = Command::new(sys_executable)
