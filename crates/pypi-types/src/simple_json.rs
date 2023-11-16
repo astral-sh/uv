@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use pep440_rs::VersionSpecifiers;
 use serde::{de, Deserialize, Deserializer, Serialize};
 use std::str::FromStr;
@@ -28,7 +29,7 @@ pub struct File {
     #[serde(deserialize_with = "deserialize_version_specifiers_lenient")]
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<usize>,
-    pub upload_time: String,
+    pub upload_time: Option<DateTime<Utc>>,
     pub url: String,
     pub yanked: Option<Yanked>,
 }

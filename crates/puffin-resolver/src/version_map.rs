@@ -2,6 +2,9 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
+use chrono::{DateTime, Utc};
+use tracing::warn;
+
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
 use platform_tags::{TagPriority, Tags};
@@ -22,6 +25,7 @@ impl VersionMap {
         package_name: &PackageName,
         tags: &Tags,
         python_version: &Version,
+        exclude_newer: Option<&DateTime<Utc>>,
     ) -> Self {
         let mut map = BTreeMap::default();
 
@@ -40,6 +44,25 @@ impl VersionMap {
                 })
             {
                 continue;
+            }
+
+            // Support resolving as if it were an earlier timestamp, at least as long files have
+            // upload time information
+            if let Some(exclude_newer) = exclude_newer {
+                match file.upload_time.as_ref() {
+                    Some(upload_time) if upload_time >= exclude_newer => {
+                        continue;
+                    }
+                    None => {
+                        // TODO(konstin): Implement and use `warn_once` here.
+                        warn!(
+                            "{} is missing an upload date, but user provided {}",
+                            file.filename, exclude_newer,
+                        );
+                        continue;
+                    }
+                    _ => {}
+                }
             }
 
             // When resolving, exclude yanked files.

@@ -94,6 +94,7 @@ async fn black() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::default(),
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -114,6 +115,7 @@ async fn black_colorama() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::default(),
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -133,6 +135,7 @@ async fn black_python_310() -> Result<()> {
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::default(),
+        None,
         None,
     );
 
@@ -156,6 +159,7 @@ async fn black_mypy_extensions() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::default(),
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -177,6 +181,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::default(),
+        None,
         None,
     );
 
@@ -200,6 +205,7 @@ async fn black_flake8() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::default(),
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -219,6 +225,7 @@ async fn black_lowest() -> Result<()> {
         vec![],
         ResolutionMode::Lowest,
         PreReleaseMode::default(),
+        None,
         None,
     );
 
@@ -240,6 +247,7 @@ async fn black_lowest_direct() -> Result<()> {
         ResolutionMode::LowestDirect,
         PreReleaseMode::default(),
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -259,6 +267,7 @@ async fn black_respect_preference() -> Result<()> {
         vec![Requirement::from_str("black==23.9.0").unwrap()],
         ResolutionMode::default(),
         PreReleaseMode::default(),
+        None,
         None,
     );
 
@@ -280,6 +289,7 @@ async fn black_ignore_preference() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::default(),
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -299,6 +309,7 @@ async fn black_disallow_prerelease() -> Result<()> {
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::Disallow,
+        None,
         None,
     );
 
@@ -322,6 +333,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::IfNecessary,
         None,
+        None,
     );
 
     let err = resolve(manifest, &MARKERS_311, &TAGS_311)
@@ -344,6 +356,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::Disallow,
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -363,6 +376,7 @@ async fn pylint_allow_prerelease() -> Result<()> {
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::Allow,
+        None,
         None,
     );
 
@@ -387,6 +401,7 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
         ResolutionMode::default(),
         PreReleaseMode::Explicit,
         None,
+        None,
     );
 
     let resolution = resolve(manifest, &MARKERS_311, &TAGS_311).await?;
@@ -409,6 +424,7 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
         vec![],
         ResolutionMode::default(),
         PreReleaseMode::Explicit,
+        None,
         None,
     );
 

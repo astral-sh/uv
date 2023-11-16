@@ -36,6 +36,7 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 cacache = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 colored = { workspace = true }
 directories = { workspace = true }
