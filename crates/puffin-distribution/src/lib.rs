@@ -263,7 +263,7 @@ impl RemoteSource for RegistryBuiltDist {
     }
 
     fn size(&self) -> Option<usize> {
-        Some(self.file.size)
+        self.file.size
     }
 }
 
@@ -273,7 +273,7 @@ impl RemoteSource for RegistrySourceDist {
     }
 
     fn size(&self) -> Option<usize> {
-        Some(self.file.size)
+        self.file.size
     }
 }
 

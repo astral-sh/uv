@@ -156,8 +156,8 @@ pub(crate) async fn sync_requirements(
             continue;
         };
         match &file.yanked {
-            Yanked::Bool(false) => {}
-            Yanked::Bool(true) => {
+            None | Some(Yanked::Bool(false)) => {}
+            Some(Yanked::Bool(true)) => {
                 writeln!(
                     printer,
                     "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
@@ -165,7 +165,7 @@ pub(crate) async fn sync_requirements(
                     ":".bold(),
                 )?;
             }
-            Yanked::Reason(reason) => {
+            Some(Yanked::Reason(reason)) => {
                 writeln!(
                     printer,
                     "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",

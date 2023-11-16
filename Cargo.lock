@@ -2480,6 +2480,7 @@ dependencies = [
  "puffin-git",
  "puffin-normalize",
  "pypi-types",
+ "serde",
  "serde_json",
  "url",
 ]
