@@ -16,7 +16,6 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-pubgrub = { path = "../../vendor/pubgrub" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
 puffin-distribution = { path = "../puffin-distribution" }
@@ -36,6 +35,7 @@ fxhash = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
+pubgrub = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
