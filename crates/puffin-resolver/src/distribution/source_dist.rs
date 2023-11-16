@@ -78,7 +78,7 @@ impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
             bail!("Building source distributions is disabled");
         }
 
-        let (sdist_file, subdirectory) = match dist {
+        let (temp_dir, sdist_file, subdirectory) = match dist {
             SourceDist::Registry(sdist) => {
                 debug!(
                     "Fetching source distribution from registry: {}",
@@ -89,13 +89,13 @@ impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
                 let reader = client.stream_external(&url).await?;
 
                 // Download the source distribution.
-                let temp_dir = tempfile::tempdir_in(self.build_context.cache())?.into_path();
+                let temp_dir = tempfile::tempdir_in(self.build_context.cache())?;
                 let sdist_filename = sdist.filename()?;
-                let sdist_file = temp_dir.join(sdist_filename);
+                let sdist_file = temp_dir.path().join(sdist_filename);
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                (sdist_file, None)
+                (Some(temp_dir), sdist_file, None)
             }
 
             SourceDist::DirectUrl(sdist) => {
@@ -107,13 +107,13 @@ impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
                 let mut reader = tokio::io::BufReader::new(reader.compat());
 
                 // Download the source distribution.
-                let temp_dir = tempfile::tempdir_in(self.build_context.cache())?.into_path();
+                let temp_dir = tempfile::tempdir_in(self.build_context.cache())?;
                 let sdist_filename = sdist.filename()?;
-                let sdist_file = temp_dir.join(sdist_filename);
+                let sdist_file = temp_dir.path().join(sdist_filename);
                 let mut writer = tokio::fs::File::create(&sdist_file).await?;
                 tokio::io::copy(&mut reader, &mut writer).await?;
 
-                (sdist_file, subdirectory)
+                (Some(temp_dir), sdist_file, subdirectory)
             }
 
             SourceDist::Git(sdist) => {
@@ -131,7 +131,7 @@ impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
                     .await??
                     .into();
 
-                (sdist_file, subdirectory)
+                (None, sdist_file, subdirectory)
             }
         };
 
@@ -153,6 +153,10 @@ impl<'a, T: BuildContext> SourceDistFetcher<'a, T> {
                 &dist.to_string(),
             )
             .await?;
+
+        if let Some(temp_dir) = temp_dir {
+            temp_dir.close()?;
+        }
 
         // Read the metadata from the wheel.
         let wheel = CachedWheel::new(

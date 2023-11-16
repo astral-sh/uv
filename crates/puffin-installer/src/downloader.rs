@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use bytesize::ByteSize;
+use tempfile::TempDir;
 use tokio::task::JoinSet;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
@@ -188,9 +189,9 @@ async fn fetch(
             let reader = client.stream_external(&url).await?;
 
             // Download the source distribution.
-            let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+            let temp_dir = tempfile::tempdir_in(cache)?;
             let sdist_filename = sdist.filename()?;
-            let sdist_file = temp_dir.join(sdist_filename);
+            let sdist_file = temp_dir.path().join(sdist_filename);
             let mut writer = tokio::fs::File::create(&sdist_file).await?;
             tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
@@ -198,6 +199,7 @@ async fn fetch(
                 dist,
                 sdist_file,
                 subdirectory: None,
+                temp_dir: Some(temp_dir),
             }))
         }
 
@@ -210,9 +212,9 @@ async fn fetch(
             let mut reader = tokio::io::BufReader::new(reader.compat());
 
             // Download the source distribution.
-            let temp_dir = tempfile::tempdir_in(cache)?.into_path();
+            let temp_dir = tempfile::tempdir_in(cache)?;
             let sdist_filename = sdist.filename()?;
-            let sdist_file = temp_dir.join(sdist_filename);
+            let sdist_file = temp_dir.path().join(sdist_filename);
             let mut writer = tokio::fs::File::create(&sdist_file).await?;
             tokio::io::copy(&mut reader, &mut writer).await?;
 
@@ -220,6 +222,7 @@ async fn fetch(
                 dist,
                 sdist_file,
                 subdirectory,
+                temp_dir: Some(temp_dir),
             }))
         }
 
@@ -238,6 +241,7 @@ async fn fetch(
                 dist,
                 sdist_file,
                 subdirectory,
+                temp_dir: None,
             }))
         }
     }
@@ -287,7 +291,7 @@ impl WheelDownload {
 }
 
 /// A downloaded source distribution.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SourceDistDownload {
     /// The remote distribution from which this source distribution was downloaded.
     pub(crate) dist: Dist,
@@ -295,6 +299,10 @@ pub struct SourceDistDownload {
     pub(crate) sdist_file: PathBuf,
     /// The subdirectory within the archive or directory.
     pub(crate) subdirectory: Option<PathBuf>,
+    /// We can't use source dist archives, we build them into wheels which we persist and then drop
+    /// the source distribution. This field is non for git dependencies, which we keep in the cache.
+    #[allow(dead_code)] // We only keep it for the drop impl
+    pub(crate) temp_dir: Option<TempDir>,
 }
 
 /// A downloaded distribution, either a wheel or a source distribution.
