@@ -43,7 +43,8 @@ indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.11.0" }
 mailparse = { version = "0.14.0" }
-miette = { version = "5.10.0" }
+# For additional textwrap options: https://github.com/zkat/miette/pull/321
+miette =  { git = "https://github.com/zkat/miette.git", rev = "fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6" }
 once_cell = { version = "1.18.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
