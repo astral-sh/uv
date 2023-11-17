@@ -1,4 +1,3 @@
-use anstream::AutoStream;
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::io::stdout;
@@ -6,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{env, fs};
 
+use anstream::AutoStream;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
@@ -19,7 +19,7 @@ use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions};
 
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
@@ -107,15 +107,8 @@ pub(crate) async fn pip_compile(
         .unwrap_or_default();
 
     // Create a manifest of the requirements.
-    let manifest = Manifest::new(
-        requirements,
-        constraints,
-        preferences,
-        resolution_mode,
-        prerelease_mode,
-        project,
-        exclude_newer,
-    );
+    let manifest = Manifest::new(requirements, constraints, preferences, project);
+    let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -164,12 +157,19 @@ pub(crate) async fn pip_compile(
         interpreter_info,
         fs::canonicalize(venv.python_executable())?,
         no_build,
-    );
+    )
+    .with_options(options);
 
     // Resolve the dependencies.
-    let resolver =
-        puffin_resolver::Resolver::new(manifest, &markers, &tags, &client, &build_dispatch)
-            .with_reporter(ResolverReporter::from(printer));
+    let resolver = puffin_resolver::Resolver::new(
+        manifest,
+        options,
+        &markers,
+        &tags,
+        &client,
+        &build_dispatch,
+    )
+    .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(err)) => {
             #[allow(clippy::print_stderr)]

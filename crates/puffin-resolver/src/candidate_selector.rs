@@ -9,7 +9,7 @@ use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::VersionMap;
-use crate::Manifest;
+use crate::{Manifest, ResolutionOptions};
 
 #[derive(Debug)]
 pub(crate) struct CandidateSelector {
@@ -18,16 +18,16 @@ pub(crate) struct CandidateSelector {
     preferences: Preferences,
 }
 
-impl From<&Manifest> for CandidateSelector {
+impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
-    fn from(manifest: &Manifest) -> Self {
+    pub(crate) fn for_resolution(manifest: &Manifest, options: ResolutionOptions) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(
-                manifest.resolution_mode,
+                options.resolution_mode,
                 manifest.requirements.as_slice(),
             ),
             prerelease_strategy: PreReleaseStrategy::from_mode(
-                manifest.prerelease_mode,
+                options.prerelease_mode,
                 manifest.requirements.as_slice(),
             ),
             preferences: Preferences::from(manifest.preferences.as_slice()),

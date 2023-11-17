@@ -40,6 +40,7 @@ use crate::pubgrub::{
 };
 use crate::resolution::Graph;
 use crate::version_map::VersionMap;
+use crate::ResolutionOptions;
 
 pub struct Resolver<'a, Context: BuildContext + Sync> {
     project: Option<PackageName>,
@@ -61,6 +62,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
     /// Initialize a new resolver.
     pub fn new(
         manifest: Manifest,
+        options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
         tags: &'a Tags,
         client: &'a RegistryClient,
@@ -69,7 +71,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         Self {
             index: Arc::new(Index::default()),
             locks: Arc::new(Locks::default()),
-            selector: CandidateSelector::from(&manifest),
+            selector: CandidateSelector::for_resolution(&manifest, options),
             allowed_urls: manifest
                 .requirements
                 .iter()
@@ -85,9 +87,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
+            exclude_newer: options.exclude_newer,
             markers,
             tags,
-            exclude_newer: manifest.exclude_newer,
             client,
             build_context,
             reporter: None,
