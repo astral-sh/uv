@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anstream::println;
 use anyhow::Context;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
@@ -18,6 +18,13 @@ use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver};
 
+#[derive(ValueEnum, Default, Clone)]
+pub(crate) enum ResolveCliFormat {
+    #[default]
+    Compact,
+    Expanded,
+}
+
 #[derive(Parser)]
 pub(crate) struct ResolveCliArgs {
     requirements: Vec<Requirement>,
@@ -28,6 +35,8 @@ pub(crate) struct ResolveCliArgs {
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
     no_build: bool,
+    #[clap(long, default_value = "compact")]
+    format: ResolveCliFormat,
     #[command(flatten)]
     cache_args: CacheArgs,
 }
@@ -94,10 +103,16 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
     let mut resolution = resolution_graph.requirements();
     resolution.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
-    // Concise format for dev
     #[allow(clippy::print_stderr, clippy::ignored_unit_patterns)]
-    {
-        println!("{}", resolution.iter().map(ToString::to_string).join(" "));
+    match args.format {
+        ResolveCliFormat::Compact => {
+            println!("{}", resolution.iter().map(ToString::to_string).join(" "));
+        }
+        ResolveCliFormat::Expanded => {
+            for package in resolution {
+                println!("{}", package);
+            }
+        }
     }
 
     Ok(())
