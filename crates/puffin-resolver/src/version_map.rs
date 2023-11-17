@@ -16,7 +16,7 @@ use crate::pubgrub::PubGrubVersion;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default)]
-pub(crate) struct VersionMap(BTreeMap<PubGrubVersion, ScoreDistribution>);
+pub(crate) struct VersionMap(BTreeMap<PubGrubVersion, PrioritizedDistribution>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
@@ -27,7 +27,8 @@ impl VersionMap {
         python_version: &Version,
         exclude_newer: Option<&DateTime<Utc>>,
     ) -> Self {
-        let mut map = BTreeMap::default();
+        let mut version_map: BTreeMap<PubGrubVersion, PrioritizedDistribution> =
+            BTreeMap::default();
 
         // Group the distributions by version and kind, discarding any incompatible
         // distributions.
@@ -75,30 +76,13 @@ impl VersionMap {
             if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
                 let priority = filename.compatibility(tags);
 
-                match map.entry(filename.version.into()) {
+                match version_map.entry(filename.version.into()) {
                     Entry::Occupied(mut entry) => {
-                        match entry.get() {
-                            ScoreDistribution::Sdist(_) => {
-                                // Prefer wheels over source distributions.
-                                entry.insert(ScoreDistribution::Wheel(
-                                    DistFile::from(WheelFile(file)),
-                                    priority,
-                                ));
-                            }
-                            ScoreDistribution::Wheel(.., existing) => {
-                                // Prefer wheels with higher priority.
-                                if priority > *existing {
-                                    entry.insert(ScoreDistribution::Wheel(
-                                        DistFile::from(WheelFile(file)),
-                                        priority,
-                                    ));
-                                }
-                            }
-                        }
+                        entry.get_mut().insert_built(WheelFile(file), priority);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(ScoreDistribution::Wheel(
-                            DistFile::from(WheelFile(file)),
+                        entry.insert(PrioritizedDistribution::from_built(
+                            WheelFile(file),
                             priority,
                         ));
                     }
@@ -106,39 +90,110 @@ impl VersionMap {
             } else if let Ok(filename) =
                 SourceDistFilename::parse(file.filename.as_str(), package_name)
             {
-                if let Entry::Vacant(entry) = map.entry(filename.version.into()) {
-                    entry.insert(ScoreDistribution::Sdist(DistFile::from(SdistFile(file))));
+                match version_map.entry(filename.version.into()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert_source(SdistFile(file));
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(PrioritizedDistribution::from_source(SdistFile(file)));
+                    }
                 }
             }
         }
 
-        Self(map)
+        Self(version_map)
     }
 
     /// Return the [`DistFile`] for the given version, if any.
     pub(crate) fn get(&self, version: &PubGrubVersion) -> Option<&DistFile> {
-        self.0.get(version).map(|file| match file {
-            ScoreDistribution::Sdist(file) => file,
-            ScoreDistribution::Wheel(file, ..) => file,
-        })
+        self.0.get(version).and_then(|file| file.get())
     }
 
     /// Return an iterator over the versions and distributions.
     pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&PubGrubVersion, &DistFile)> {
-        self.0.iter().map(|(version, file)| {
-            (
-                version,
-                match file {
-                    ScoreDistribution::Sdist(file) => file,
-                    ScoreDistribution::Wheel(file, ..) => file,
-                },
-            )
-        })
+        self.0
+            .iter()
+            .filter_map(|(version, file)| Some((version, file.get()?)))
     }
 }
 
 #[derive(Debug)]
-enum ScoreDistribution {
-    Sdist(DistFile),
-    Wheel(DistFile, Option<TagPriority>),
+struct PrioritizedDistribution {
+    /// An arbitrary source distribution for the package version.
+    source: Option<DistFile>,
+    /// The highest-priority, platform-compatible wheel for the package version.
+    compatible_wheel: Option<(DistFile, TagPriority)>,
+    /// An arbitrary, platform-incompatible wheel for the package version.
+    incompatible_wheel: Option<DistFile>,
+}
+
+impl PrioritizedDistribution {
+    /// Create a new [`PrioritizedDistribution`] from the given wheel distribution.
+    fn from_built(dist: WheelFile, priority: Option<TagPriority>) -> Self {
+        if let Some(priority) = priority {
+            Self {
+                source: None,
+                compatible_wheel: Some((dist.into(), priority)),
+                incompatible_wheel: None,
+            }
+        } else {
+            Self {
+                source: None,
+                compatible_wheel: None,
+                incompatible_wheel: Some(dist.into()),
+            }
+        }
+    }
+
+    /// Create a new [`PrioritizedDistribution`] from the given source distribution.
+    fn from_source(dist: SdistFile) -> Self {
+        Self {
+            source: Some(dist.into()),
+            compatible_wheel: None,
+            incompatible_wheel: None,
+        }
+    }
+
+    /// Insert the given built distribution into the [`PrioritizedDistribution`].
+    fn insert_built(&mut self, file: WheelFile, priority: Option<TagPriority>) {
+        // Prefer the highest-priority, platform-compatible wheel.
+        if let Some(priority) = priority {
+            if let Some((.., existing_priority)) = &self.compatible_wheel {
+                if priority > *existing_priority {
+                    self.compatible_wheel = Some((file.into(), priority));
+                }
+            } else {
+                self.compatible_wheel = Some((file.into(), priority));
+            }
+        } else if self.incompatible_wheel.is_none() {
+            self.incompatible_wheel = Some(file.into());
+        }
+    }
+
+    /// Insert the given source distribution into the [`PrioritizedDistribution`].
+    fn insert_source(&mut self, file: SdistFile) {
+        if self.source.is_none() {
+            self.source = Some(file.into());
+        }
+    }
+
+    /// Return the highest-priority distribution for the package version, if any.
+    fn get(&self) -> Option<&DistFile> {
+        match (
+            &self.compatible_wheel,
+            &self.source,
+            &self.incompatible_wheel,
+        ) {
+            // Prefer the highest-priority, platform-compatible wheel.
+            (Some((file, _)), _, _) => Some(file),
+            // If we have a source distribution and an incompatible wheel, return the wheel.
+            // We assume that all distributions have the same metadata for a given package version.
+            // If a source distribution exists, we assume we can build it, but using the wheel is
+            // faster.
+            (_, Some(_), Some(file)) => Some(file),
+            // Otherwise, return the source distribution.
+            (_, Some(file), _) => Some(file),
+            _ => None,
+        }
+    }
 }
