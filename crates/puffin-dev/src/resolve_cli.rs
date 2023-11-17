@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
 
 use anstream::println;
 use clap::Parser;
@@ -18,9 +17,6 @@ pub(crate) struct ResolveCliArgs {
     requirements: Vec<Requirement>,
     #[clap(long)]
     limit: Option<usize>,
-    /// Path to the cache directory.
-    #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
-    cache_dir: Option<PathBuf>,
     /// Don't build source distributions. This means resolving will not run arbitrary code. The
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
