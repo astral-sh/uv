@@ -2,8 +2,8 @@ use std::hash::BuildHasherDefault;
 
 use colored::Colorize;
 use fxhash::FxHashMap;
-use petgraph::Direction;
 use petgraph::visit::EdgeRef;
+use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
@@ -186,7 +186,9 @@ impl Graph {
     }
 
     /// Return the underlying graph.
-    pub fn petgraph(&self) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
+    pub fn petgraph(
+        &self,
+    ) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
         &self.0
     }
 }

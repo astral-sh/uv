@@ -14,6 +14,8 @@ name = "puffin"
 path = "src/main.rs"
 
 [dependencies]
+textwrap = { version = "0.15.2" }
+
 gourgeist = { path = "../gourgeist" }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
 pep440_rs = { path = "../pep440-rs" }

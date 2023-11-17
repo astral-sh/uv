@@ -412,7 +412,7 @@ dependencies = [
  "hex",
  "libc",
  "memmap2 0.5.10",
- "miette",
+ "miette 5.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "reflink-copy",
  "serde",
  "serde_derive",
@@ -1792,10 +1792,21 @@ version = "5.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59bb584eaeeab6bd0226ccf3509a69d7936d148cf3d036ad350abe35e8c6856e"
 dependencies = [
+ "miette-derive 5.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "once_cell",
+ "thiserror",
+ "unicode-width",
+]
+
+[[package]]
+name = "miette"
+version = "5.10.0"
+source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
+dependencies = [
  "backtrace",
  "backtrace-ext",
  "is-terminal",
- "miette-derive",
+ "miette-derive 5.10.0 (git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6)",
  "once_cell",
  "owo-colors",
  "supports-color",
@@ -1812,6 +1823,16 @@ name = "miette-derive"
 version = "5.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49e7bc1560b95a3c4a25d03de42fe76ca718ab92d1a22a55b9b4cf67b3ae635c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
+
+[[package]]
+name = "miette-derive"
+version = "5.10.0"
+source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2359,7 +2380,7 @@ dependencies = [
  "insta-cmd",
  "install-wheel-rs",
  "itertools 0.11.0",
- "miette",
+ "miette 5.10.0 (git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6)",
  "mimalloc",
  "pep440_rs 0.3.12",
  "pep508_rs",
@@ -2380,6 +2401,7 @@ dependencies = [
  "pyproject-toml",
  "requirements-txt",
  "tempfile",
+ "textwrap",
  "thiserror",
  "tikv-jemallocator",
  "tokio",
@@ -3347,7 +3369,7 @@ dependencies = [
  "base64 0.21.5",
  "digest",
  "hex",
- "miette",
+ "miette 5.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "sha-1",
  "sha2",

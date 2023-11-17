@@ -6,14 +6,17 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpIZhaps
+    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpPPS74q
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpKUYHgL/.venv
+    VIRTUAL_ENV: /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmplYH9yM/.venv
 ---
 success: false
-exit_code: 2
+exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-error: Conflicting URLs for package `werkzeug`: git+https://github.com/pallets/werkzeug.git@2.0.0 and https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+  × No solution found when resolving dependencies:
+  ╰─▶ root dependencies are unusable: Conflicting URLs for package `werkzeug`:
+      - git+https://github.com/pallets/werkzeug.git@2.0.0
+      - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
 
