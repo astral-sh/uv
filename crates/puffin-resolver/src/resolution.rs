@@ -3,6 +3,7 @@ use std::hash::BuildHasherDefault;
 use colored::Colorize;
 use fxhash::FxHashMap;
 use petgraph::visit::EdgeRef;
+use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
@@ -51,7 +52,7 @@ impl Resolution {
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct Graph(petgraph::graph::Graph<Dist, (), petgraph::Directed>);
+pub struct Graph(petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>);
 
 impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
@@ -98,8 +99,12 @@ impl Graph {
         // Add every edge to the graph.
         for (package, version) in selection {
             for id in &state.incompatibilities[package] {
-                if let Kind::FromDependencyOf(self_package, self_version, dependency_package, _) =
-                    &state.incompatibility_store[*id].kind
+                if let Kind::FromDependencyOf(
+                    self_package,
+                    self_version,
+                    dependency_package,
+                    dependency_range,
+                ) = &state.incompatibility_store[*id].kind
                 {
                     let PubGrubPackage::Package(self_package, None, _) = self_package else {
                         continue;
@@ -112,7 +117,7 @@ impl Graph {
                     if self_version.contains(version) {
                         let self_index = &inverse[self_package];
                         let dependency_index = &inverse[dependency_package];
-                        graph.update_edge(*dependency_index, *self_index, ());
+                        graph.update_edge(*self_index, *dependency_index, dependency_range.clone());
                     }
                 }
             }
@@ -179,6 +184,13 @@ impl Graph {
             })
             .collect()
     }
+
+    /// Return the underlying graph.
+    pub fn petgraph(
+        &self,
+    ) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
+        &self.0
+    }
 }
 
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
@@ -198,8 +210,8 @@ impl std::fmt::Display for Graph {
 
             let mut edges = self
                 .0
-                .edges(index)
-                .map(|edge| &self.0[edge.target()])
+                .edges_directed(index, Direction::Incoming)
+                .map(|edge| &self.0[edge.source()])
                 .collect::<Vec<_>>();
             edges.sort_unstable_by_key(|package| package.name());
 
