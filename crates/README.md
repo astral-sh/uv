@@ -75,6 +75,10 @@ Functionality for installing Python packages into a virtual environment.
 
 Functionality for detecting and leveraging the current Python interpreter.
 
+## [puffin-macros](./puffin-macros)
+
+Reusable procedural macros for Puffin.
+
 ## [puffin-normalize](./puffin-normalize)
 
 Normalize package and extra names as per Python specifications.

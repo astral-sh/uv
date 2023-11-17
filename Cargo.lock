@@ -2457,7 +2457,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-dispatch"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "gourgeist",
@@ -2479,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-distribution"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -2561,6 +2561,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "puffin-macros"
+version = "0.0.1"
+dependencies = [
+ "colored",
+ "fxhash",
+ "once_cell",
+ "tracing",
+]
+
+[[package]]
 name = "puffin-normalize"
 version = "0.0.1"
 dependencies = [
@@ -2599,6 +2609,7 @@ dependencies = [
  "puffin-distribution",
  "puffin-git",
  "puffin-interpreter",
+ "puffin-macros",
  "puffin-normalize",
  "puffin-traits",
  "pypi-types",
@@ -2615,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "puffin-traits"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "pep508_rs",

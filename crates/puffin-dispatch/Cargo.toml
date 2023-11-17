@@ -1,6 +1,6 @@
 [package]
 name = "puffin-dispatch"
-version = "0.1.0"
+version = "0.0.1"
 description = "Avoid cyclic crate dependencies between resolver, installer and builder"
 edition = { workspace = true }
 rust-version = { workspace = true }
