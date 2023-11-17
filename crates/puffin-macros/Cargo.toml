@@ -1,5 +1,5 @@
 [package]
-name = "puffin-traits"
+name = "puffin-macros"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -10,7 +10,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-pep508_rs = { path = "../pep508-rs" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-
-anyhow = { workspace = true }
+colored = { workspace = true }
+fxhash = { workspace = true }
+once_cell = { workspace = true }
+tracing = { workspace = true }

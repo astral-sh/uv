@@ -5,6 +5,7 @@ use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use puffin_cache::CanonicalUrl;
+use puffin_macros::warn_once;
 use puffin_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
@@ -30,8 +31,7 @@ impl PubGrubDependencies {
         for requirement in requirements {
             // Avoid self-dependencies.
             if source.is_some_and(|source| source == &requirement.name) {
-                // TODO(konstin): Warn only once here
-                warn!("{} depends on itself", requirement.name);
+                warn_once!("{} has a dependency on itself", requirement.name);
                 continue;
             }
 
@@ -78,8 +78,7 @@ impl PubGrubDependencies {
         for constraint in constraints {
             // Avoid self-dependencies.
             if source.is_some_and(|source| source == &constraint.name) {
-                // TODO(konstin): Warn only once here
-                warn!("{} depends on itself", constraint.name);
+                warn_once!("{} has a dependency on itself", constraint.name);
                 continue;
             }
 

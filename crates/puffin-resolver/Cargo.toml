@@ -21,6 +21,7 @@ puffin-client = { path = "../puffin-client" }
 puffin-distribution = { path = "../puffin-distribution" }
 puffin-git = { path = "../puffin-git" }
 puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-macros = { path = "../puffin-macros" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }

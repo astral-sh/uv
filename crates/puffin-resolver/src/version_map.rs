@@ -8,6 +8,7 @@ use tracing::warn;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
 use platform_tags::{TagPriority, Tags};
+use puffin_macros::warn_once;
 use puffin_normalize::PackageName;
 use pypi_types::{SimpleJson, Yanked};
 
@@ -54,10 +55,10 @@ impl VersionMap {
                         continue;
                     }
                     None => {
-                        // TODO(konstin): Implement and use `warn_once` here.
-                        warn!(
+                        warn_once!(
                             "{} is missing an upload date, but user provided {}",
-                            file.filename, exclude_newer,
+                            file.filename,
+                            exclude_newer,
                         );
                         continue;
                     }
