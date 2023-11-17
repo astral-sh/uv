@@ -2,8 +2,8 @@ use std::hash::BuildHasherDefault;
 
 use colored::Colorize;
 use fxhash::FxHashMap;
-use petgraph::visit::EdgeRef;
 use petgraph::Direction;
+use petgraph::visit::EdgeRef;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
@@ -52,7 +52,7 @@ impl Resolution {
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct Graph(pub petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>);
+pub struct Graph(petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>);
 
 impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
@@ -183,6 +183,11 @@ impl Graph {
                 },
             })
             .collect()
+    }
+
+    /// Return the underlying graph.
+    pub fn petgraph(&self) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
+        &self.0
     }
 }
 

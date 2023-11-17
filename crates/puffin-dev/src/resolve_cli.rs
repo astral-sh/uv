@@ -78,7 +78,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
     if let Some(graphviz) = args.graphviz {
         let mut writer = BufWriter::new(File::create(graphviz)?);
         let graphviz = Dot::with_attr_getters(
-            &resolution_graph.0,
+            resolution_graph.petgraph(),
             &[DotConfig::NodeNoLabel, DotConfig::EdgeNoLabel],
             &|_graph, edge_ref| format!("label={:?}", edge_ref.weight().to_string()),
             &|_graph, (_node_index, dist)| {
