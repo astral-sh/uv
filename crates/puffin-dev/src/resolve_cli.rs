@@ -16,7 +16,7 @@ use puffin_cache::{CacheArgs, CacheDir};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, Resolver};
+use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -61,17 +61,13 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
         venv.interpreter_info().simple_version(),
     )?;
     let resolver = Resolver::new(
-        // TODO(konstin): Split settings (for all resolutions) and inputs (only for this
-        // resolution) and attach the former to Self.
         Manifest::new(
             args.requirements.clone(),
             Vec::default(),
             Vec::default(),
-            ResolutionMode::default(),
-            PreReleaseMode::default(),
-            None, // TODO(zanieb): We may want to provide a project name here
             None,
         ),
+        ResolutionOptions::default(),
         venv.interpreter_info().markers(),
         &tags,
         &client,

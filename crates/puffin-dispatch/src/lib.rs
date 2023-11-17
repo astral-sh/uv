@@ -18,7 +18,7 @@ use puffin_client::RegistryClient;
 use puffin_distribution::Metadata;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
-use puffin_resolver::{DistFinder, Manifest, PreReleaseMode, ResolutionMode, Resolver};
+use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::BuildContext;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -28,8 +28,9 @@ pub struct BuildDispatch {
     cache: PathBuf,
     interpreter_info: InterpreterInfo,
     base_python: PathBuf,
-    source_build_context: SourceBuildContext,
     no_build: bool,
+    source_build_context: SourceBuildContext,
+    options: ResolutionOptions,
 }
 
 impl BuildDispatch {
@@ -45,9 +46,16 @@ impl BuildDispatch {
             cache,
             interpreter_info,
             base_python,
-            source_build_context: SourceBuildContext::default(),
             no_build,
+            source_build_context: SourceBuildContext::default(),
+            options: ResolutionOptions::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_options(mut self, options: ResolutionOptions) -> Self {
+        self.options = options;
+        self
     }
 }
 
@@ -79,17 +87,8 @@ impl BuildContext for BuildDispatch {
                 self.interpreter_info.simple_version(),
             )?;
             let resolver = Resolver::new(
-                // TODO(konstin): Split settings (for all resolutions) and inputs (only for this
-                // resolution) and attach the former to Self.
-                Manifest::new(
-                    requirements.to_vec(),
-                    Vec::default(),
-                    Vec::default(),
-                    ResolutionMode::default(),
-                    PreReleaseMode::default(),
-                    None, // TODO(zanieb): We may want to provide a project name here
-                    None,
-                ),
+                Manifest::new(requirements.to_vec(), Vec::default(), Vec::default(), None),
+                self.options,
                 self.interpreter_info.markers(),
                 &tags,
                 &self.client,
