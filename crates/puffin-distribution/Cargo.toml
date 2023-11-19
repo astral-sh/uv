@@ -10,6 +10,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-git = { path = "../puffin-git" }

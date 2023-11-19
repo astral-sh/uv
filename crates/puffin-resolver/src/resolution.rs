@@ -156,7 +156,7 @@ impl Graph {
                     marker: None,
                 },
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => Requirement {
-                    name: wheel.name.clone(),
+                    name: wheel.filename.name.clone(),
                     extras: None,
                     version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
                     marker: None,

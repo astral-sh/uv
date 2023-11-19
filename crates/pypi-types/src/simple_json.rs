@@ -48,6 +48,13 @@ where
     Ok(Some(lenient.into()))
 }
 
+impl File {
+    pub fn is_pypi(&self) -> bool {
+        // TODO(konstin): https://github.com/astral-sh/puffin/issues/448 instead
+        self.url.starts_with("https://files.pythonhosted.org/")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Metadata {

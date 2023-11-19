@@ -10,6 +10,7 @@ use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use sha2::{Digest, Sha256};
 use tempfile::tempfile;
 use tokio::io::BufWriter;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -18,6 +19,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
+use puffin_cache::metadata::WheelMetadataCachingIndex;
 use puffin_normalize::PackageName;
 use pypi_types::{File, Metadata21, SimpleJson};
 
@@ -208,7 +210,8 @@ impl RegistryClient {
         let filename = WheelFilename::from_str(&file.filename)?;
         if file
             .dist_info_metadata
-            .is_some_and(|dist_info_metadata| dist_info_metadata.is_available())
+            .as_ref()
+            .is_some_and(pypi_types::Metadata::is_available)
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
@@ -227,18 +230,61 @@ impl RegistryClient {
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
         // into the cache and read from there
         } else {
-            self.wheel_metadata_no_index(&filename, &url).await
+            self.wheel_metadata_no_pep658(
+                &filename,
+                &url,
+                if file.is_pypi() {
+                    WheelMetadataCachingIndex::Pypi
+                } else {
+                    WheelMetadataCachingIndex::Index
+                },
+            )
+            .await
         }
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
-    pub async fn wheel_metadata_no_index(
+    pub async fn wheel_metadata_no_pep658(
         &self,
         filename: &WheelFilename,
         url: &Url,
+        index_bucket: WheelMetadataCachingIndex,
     ) -> Result<Metadata21, Error> {
-        let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
-        let cache_file = format!("{}.json", filename.stem());
+        if self.no_index {
+            return Err(Error::NoIndex(url.to_string()));
+        }
+
+        let cache_dir = self
+            .cache
+            .join(WHEEL_METADATA_FROM_ZIP_CACHE)
+            .join(index_bucket.to_key_segment());
+        // url structure:
+        //   <wheel metadata cache>/pypi/foo-1.0.0-py3-none-any.json
+        //   <wheel metadata cache>/index/<sha256(url)>/foo-1.0.0-py3-none-any.json
+        //   <wheel metadata cache>/url/<sha256(url)>/foo-1.0.0-py3-none-any.json
+        // to be come
+        //   <wheel metadata cache>/pypi/foo-1.0.0-py3-none-any.json
+        //   <wheel metadata cache>/<sha256(index-url)>/foo-1.0.0-py3-none-any.json
+        //   <wheel metadata cache>/url/<sha256(url)>/foo-1.0.0-py3-none-any.json
+        // after https://github.com/astral-sh/puffin/issues/448
+        let (cache_dir, cache_file) = match index_bucket {
+            WheelMetadataCachingIndex::Pypi => (cache_dir, format!("{}.json", filename.stem())),
+            WheelMetadataCachingIndex::Index => {
+                // TODO(konstin): https://github.com/astral-sh/puffin/issues/448
+                let hash = Sha256::new().chain_update(url.as_str()).finalize();
+                (
+                    cache_dir.join(format!("{hash:x}")),
+                    format!("{}.json", filename.stem()),
+                )
+            }
+            WheelMetadataCachingIndex::Url => {
+                let hash = Sha256::new().chain_update(url.as_str()).finalize();
+                (
+                    cache_dir.join(format!("{hash:x}")),
+                    format!("{}.json", filename.stem()),
+                )
+            }
+        };
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.

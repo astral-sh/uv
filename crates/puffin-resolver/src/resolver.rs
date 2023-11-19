@@ -19,6 +19,7 @@ use waitmap::WaitMap;
 use distribution_filename::WheelFilename;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
+use puffin_cache::metadata::WheelMetadataCachingIndex;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{
@@ -30,7 +31,7 @@ use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::distribution::{BuiltDistFetcher, SourceDistFetcher, SourceDistributionReporter};
+use crate::distribution::{SourceDistFetcher, SourceDistributionReporter};
 use crate::error::ResolveError;
 use crate::file::DistFile;
 use crate::locks::Locks;
@@ -300,10 +301,10 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                let distribution = Dist::from_url(package_name.clone(), url.clone());
                 // Emit a request to fetch the metadata for this distribution.
                 if in_flight.insert_url(url) {
-                    priorities.add(package_name.clone());
-                    let distribution = Dist::from_url(package_name.clone(), url.clone());
+                    priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
             }
@@ -603,40 +604,20 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
             // Fetch wheel metadata.
             Request::Dist(Dist::Built(distribution)) => {
-                let metadata =
-                    match &distribution {
-                        BuiltDist::Registry(wheel) => {
-                            self.client
-                                .wheel_metadata(wheel.file.clone())
-                                .map_err(ResolveError::Client)
-                                .await?
-                        }
-                        BuiltDist::DirectUrl(wheel) => {
-                            let fetcher = BuiltDistFetcher::new(self.build_context.cache());
-                            match fetcher.find_dist_info(wheel, self.tags) {
-                                Ok(Some(metadata)) => {
-                                    debug!("Found wheel metadata in cache: {wheel}");
-                                    metadata
-                                }
-                                Ok(None) => {
-                                    debug!("Downloading wheel: {wheel}");
-                                    fetcher.download_wheel(wheel, self.client).await.map_err(
-                                        |err| {
-                                            ResolveError::from_built_dist(distribution.clone(), err)
-                                        },
-                                    )?
-                                }
-                                Err(err) => {
-                                    error!("Failed to read wheel from cache: {err}");
-                                    fetcher.download_wheel(wheel, self.client).await.map_err(
-                                        |err| {
-                                            ResolveError::from_built_dist(distribution.clone(), err)
-                                        },
-                                    )?
-                                }
-                            }
-                        }
-                    };
+                let metadata = match &distribution {
+                    BuiltDist::Registry(wheel) => {
+                        self.client.wheel_metadata(wheel.file.clone()).await?
+                    }
+                    BuiltDist::DirectUrl(wheel) => {
+                        self.client
+                            .wheel_metadata_no_pep658(
+                                &wheel.filename,
+                                &wheel.url,
+                                WheelMetadataCachingIndex::Url,
+                            )
+                            .await?
+                    }
+                };
 
                 if metadata.name != *distribution.name() {
                     return Err(ResolveError::NameMismatch {
