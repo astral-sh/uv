@@ -19,7 +19,7 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
 use puffin_normalize::PackageName;
-use pypi_types::{File, Metadata21, SimpleJson};
+use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
 use crate::cached_client::CachedClient;
 use crate::error::Error;
@@ -30,8 +30,8 @@ use crate::remote_metadata::{
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
-    index: Url,
-    extra_index: Vec<Url>,
+    index: IndexUrl,
+    extra_index: Vec<IndexUrl>,
     no_index: bool,
     proxy: Url,
     retries: u32,
@@ -41,7 +41,7 @@ pub struct RegistryClientBuilder {
 impl RegistryClientBuilder {
     pub fn new(cache: impl Into<PathBuf>) -> Self {
         Self {
-            index: Url::parse("https://pypi.org/simple").unwrap(),
+            index: IndexUrl::from(Url::parse("https://pypi.org/simple").unwrap()),
             extra_index: vec![],
             no_index: false,
             proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
@@ -54,13 +54,13 @@ impl RegistryClientBuilder {
 impl RegistryClientBuilder {
     #[must_use]
     pub fn index(mut self, index: Url) -> Self {
-        self.index = index;
+        self.index = IndexUrl::from(index);
         self
     }
 
     #[must_use]
     pub fn extra_index(mut self, extra_index: Vec<Url>) -> Self {
-        self.extra_index = extra_index;
+        self.extra_index = extra_index.into_iter().map(IndexUrl::from).collect();
         self
     }
 
@@ -135,8 +135,8 @@ impl RegistryClientBuilder {
 // TODO(konstin): Clean up the clients once we moved everything to common caching
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
-    pub(crate) index: Url,
-    pub(crate) extra_index: Vec<Url>,
+    pub(crate) index: IndexUrl,
+    pub(crate) extra_index: Vec<IndexUrl>,
     /// Ignore the package index, instead relying on local archives and caches.
     pub(crate) no_index: bool,
     pub(crate) client: ClientWithMiddleware,
@@ -149,14 +149,14 @@ pub struct RegistryClient {
 
 impl RegistryClient {
     /// Fetch a package from the `PyPI` simple API.
-    pub async fn simple(&self, package_name: PackageName) -> Result<SimpleJson, Error> {
+    pub async fn simple(&self, package_name: PackageName) -> Result<(IndexUrl, SimpleJson), Error> {
         if self.no_index {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
         for index in std::iter::once(&self.index).chain(self.extra_index.iter()) {
             // Format the URL for PyPI.
-            let mut url = index.clone();
+            let mut url: Url = index.clone().into();
             url.path_segments_mut().unwrap().push(package_name.as_ref());
             url.path_segments_mut().unwrap().push("");
             url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
@@ -170,8 +170,9 @@ impl RegistryClient {
             // Fetch from the index.
             match self.simple_impl(&url).await {
                 Ok(text) => {
-                    return serde_json::from_str(&text)
-                        .map_err(move |e| Error::from_json_err(e, url));
+                    let data = serde_json::from_str(&text)
+                        .map_err(move |e| Error::from_json_err(e, url))?;
+                    return Ok((index.clone(), data));
                 }
                 Err(err) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {

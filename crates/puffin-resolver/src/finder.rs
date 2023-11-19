@@ -17,7 +17,7 @@ use platform_tags::{TagPriority, Tags};
 use puffin_client::RegistryClient;
 use puffin_interpreter::InterpreterInfo;
 use puffin_normalize::PackageName;
-use pypi_types::{File, SimpleJson};
+use pypi_types::{File, IndexUrl, SimpleJson};
 
 use crate::error::ResolveError;
 use crate::resolution::Resolution;
@@ -68,7 +68,9 @@ impl<'a> DistFinder<'a> {
                 Request::Package(requirement) => self
                     .client
                     .simple(requirement.name.clone())
-                    .map_ok(move |metadata| Response::Package(requirement, metadata)),
+                    .map_ok(move |(index, metadata)| {
+                        Response::Package(requirement, index, metadata)
+                    }),
             })
             .buffer_unordered(32)
             .ready_chunks(32);
@@ -104,9 +106,10 @@ impl<'a> DistFinder<'a> {
             for result in chunk {
                 let result: Response = result?;
                 match result {
-                    Response::Package(requirement, metadata) => {
+                    Response::Package(requirement, index, metadata) => {
                         // Pick a version that satisfies the requirement.
-                        let Some(distribution) = self.select(&requirement, metadata.files) else {
+                        let Some(distribution) = self.select(&requirement, &index, metadata.files)
+                        else {
                             return Err(ResolveError::NotFound(requirement));
                         };
 
@@ -134,7 +137,12 @@ impl<'a> DistFinder<'a> {
     }
 
     /// select a version that satisfies the requirement, preferring wheels to source distributions.
-    fn select(&self, requirement: &Requirement, files: Vec<File>) -> Option<Dist> {
+    fn select(
+        &self,
+        requirement: &Requirement,
+        index: &IndexUrl,
+        files: Vec<File>,
+    ) -> Option<Dist> {
         let mut best_version: Option<Version> = None;
         let mut best_wheel: Option<(Dist, TagPriority)> = None;
         let mut best_sdist: Option<Dist> = None;
@@ -173,7 +181,7 @@ impl<'a> DistFinder<'a> {
                             .map_or(true, |(.., existing)| priority > *existing)
                         {
                             best_wheel = Some((
-                                Dist::from_registry(wheel.name, wheel.version, file),
+                                Dist::from_registry(wheel.name, wheel.version, file, index.clone()),
                                 priority,
                             ));
                         }
@@ -197,7 +205,12 @@ impl<'a> DistFinder<'a> {
 
                     if requirement.is_satisfied_by(&sdist.version) {
                         best_version = Some(sdist.version.clone());
-                        best_sdist = Some(Dist::from_registry(sdist.name, sdist.version, file));
+                        best_sdist = Some(Dist::from_registry(
+                            sdist.name,
+                            sdist.version,
+                            file,
+                            index.clone(),
+                        ));
                     }
                 }
             }
@@ -216,7 +229,7 @@ enum Request {
 #[derive(Debug)]
 enum Response {
     /// The returned metadata for a package.
-    Package(Requirement, SimpleJson),
+    Package(Requirement, IndexUrl, SimpleJson),
 }
 
 pub trait Reporter: Send + Sync {
