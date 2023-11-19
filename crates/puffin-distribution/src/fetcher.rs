@@ -21,8 +21,11 @@ use pypi_types::Metadata21;
 use crate::reporter::Facade;
 use crate::{DiskWheel, Download, InMemoryWheel, Reporter, SourceDistDownload, WheelDownload};
 
+// The cache subdirectory in which to store Git repositories.
 const GIT_CACHE: &str = "git-v0";
-const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
+
+// The cache subdirectory in which to store downloaded wheel archives.
+const ARCHIVES_CACHE: &str = "archives-v0";
 
 /// A high-level interface for accessing distribution metadata and source contents.
 pub struct Fetcher<'a> {
@@ -122,17 +125,20 @@ impl<'a> Fetcher<'a> {
                         small_size.map_or("unknown size".to_string(), |size| size.to_string());
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
+                    // Create a directory for the wheel.
+                    let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
+                    fs::create_dir_all(&wheel_dir).await?;
+
                     // Download the wheel to a temporary file.
-                    let temp_dir = tempfile::tempdir_in(self.cache)?;
                     let wheel_filename = &wheel.file.filename;
-                    let wheel_file = temp_dir.path().join(wheel_filename);
+                    let wheel_file = wheel_dir.join(wheel_filename);
                     let mut writer = tokio::fs::File::create(&wheel_file).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                     Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                         dist: dist.clone(),
                         path: wheel_file,
-                        temp_dir: Some(temp_dir),
+                        temp_dir: None,
                     })))
                 }
             }
@@ -140,20 +146,23 @@ impl<'a> Fetcher<'a> {
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                 debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
 
+                // Create a directory for the wheel.
+                let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
+                fs::create_dir_all(&wheel_dir).await?;
+
                 // Fetch the wheel.
                 let reader = client.stream_external(&wheel.url).await?;
 
-                // Download the wheel to a temporary file.
-                let temp_dir = tempfile::tempdir_in(self.cache)?;
+                // Download the wheel to the directory.
                 let wheel_filename = wheel.filename()?;
-                let wheel_file = temp_dir.path().join(wheel_filename);
+                let wheel_file = wheel_dir.join(wheel_filename);
                 let mut writer = tokio::fs::File::create(&wheel_file).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                 Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
                     dist: dist.clone(),
                     path: wheel_file,
-                    temp_dir: Some(temp_dir),
+                    temp_dir: None,
                 })))
             }
 
@@ -239,8 +248,8 @@ impl<'a> Fetcher<'a> {
         // Create a directory for the wheel.
         let wheel_dir = self
             .cache
-            .join(BUILT_WHEELS_CACHE)
-            .join(dist.dist.package_id());
+            .join(ARCHIVES_CACHE)
+            .join(dist.remote().package_id());
         fs::create_dir_all(&wheel_dir).await?;
 
         // Build the wheel.
@@ -272,10 +281,7 @@ impl<'a> Fetcher<'a> {
 
     /// Find a built wheel in the cache.
     fn find_in_cache(&self, dist: &Dist, tags: &Tags) -> Option<DiskWheel> {
-        let wheel_dir = self
-            .cache
-            .join(BUILT_WHEELS_CACHE)
-            .join(dist.distribution_id());
+        let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(dist.distribution_id());
         let read_dir = fs_err::read_dir(wheel_dir).ok()?;
         for entry in read_dir {
             let Ok(entry) = entry else {
