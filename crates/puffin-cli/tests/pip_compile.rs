@@ -14,6 +14,9 @@ use common::{BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
+// Exclude any packages uploaded after this date.
+static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
+
 fn make_venv_py312(temp_dir: &TempDir, cache_dir: &TempDir) -> PathBuf {
     let venv = temp_dir.child(".venv");
 
@@ -49,6 +52,8 @@ fn compile_requirements_in() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -121,6 +126,8 @@ dependencies = [
             .arg("pyproject.toml")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -151,6 +158,8 @@ fn compile_constraints_txt() -> Result<()> {
             .arg("constraints.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -180,6 +189,8 @@ fn compile_constraints_inline() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -214,6 +225,8 @@ fn compile_constraints_markers() -> Result<()> {
             .arg("constraints.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -252,6 +265,8 @@ optional-dependencies.foo = [
             .arg("foo")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -290,6 +305,8 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
             .arg("FRiENDlY-...-_-BARd")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -328,6 +345,8 @@ optional-dependencies.foo = [
             .arg("bar")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -370,6 +389,8 @@ optional-dependencies.foo = [
             .arg("foobar")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -395,6 +416,8 @@ fn compile_requirements_file_extra() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .arg("--all-extras")
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir),
@@ -442,6 +465,8 @@ optional-dependencies.foo = [
             .arg("invalid name!")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -469,6 +494,8 @@ fn compile_python_312() -> Result<()> {
             .arg("py312")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -496,6 +523,8 @@ fn compile_python_37() -> Result<()> {
             .arg("py37")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -535,6 +564,8 @@ fn compile_numpy_py38() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .arg("--no-build")
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
@@ -571,6 +602,8 @@ fn compile_wheel_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -596,6 +629,8 @@ fn compile_sdist_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -626,6 +661,8 @@ fn compile_git_https_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -652,6 +689,8 @@ fn compile_git_branch_https_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -678,6 +717,8 @@ fn compile_git_tag_https_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -706,6 +747,8 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -732,6 +775,8 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -759,6 +804,8 @@ fn compile_git_refs_https_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -785,6 +832,8 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -812,6 +861,8 @@ fn compile_git_concurrent_access() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -839,6 +890,8 @@ fn compile_git_mismatched_name() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -865,6 +918,8 @@ fn mixed_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -891,6 +946,8 @@ fn conflicting_direct_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -917,6 +974,8 @@ fn compatible_direct_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -942,6 +1001,8 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -969,6 +1030,8 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -994,6 +1057,8 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -1021,6 +1086,8 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -1053,6 +1120,8 @@ fn allowed_transitive_url_dependency() -> Result<()> {
             .arg("constraints.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -1086,6 +1155,8 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
             .arg("constraints.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -1126,6 +1197,8 @@ optional-dependencies.bar = [
             .arg("--all-extras")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -1168,6 +1241,8 @@ optional-dependencies.bar = [
             .arg("foo")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir),
             @r###"
@@ -1213,6 +1288,8 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
             .arg("pyproject.toml")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
@@ -1247,6 +1324,8 @@ dependencies = ["django==300.1.4"]
             .arg("pyproject.toml")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
