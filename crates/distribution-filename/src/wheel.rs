@@ -1,3 +1,4 @@
+#[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -168,6 +169,7 @@ impl TryFrom<&Url> for WheelFilename {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for WheelFilename {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -178,6 +180,7 @@ impl<'de> Deserialize<'de> for WheelFilename {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for WheelFilename {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
