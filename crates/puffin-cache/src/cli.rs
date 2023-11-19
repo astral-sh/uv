@@ -50,6 +50,7 @@ impl TryFrom<CacheArgs> for CacheDir {
                 temp_dir: Some(temp_dir),
             })
         } else if let Some(cache_dir) = value.cache_dir {
+            fs::create_dir_all(&cache_dir)?;
             Ok(Self {
                 cache_dir: fs::canonicalize(cache_dir)?,
                 temp_dir: None,
@@ -60,8 +61,10 @@ impl TryFrom<CacheArgs> for CacheDir {
                 temp_dir: None,
             })
         } else {
+            let cache_dir = ".puffin_cache";
+            fs::create_dir_all(&cache_dir)?;
             Ok(Self {
-                cache_dir: fs::canonicalize(".puffin_cache")?,
+                cache_dir: fs::canonicalize(cache_dir)?,
                 temp_dir: None,
             })
         }
