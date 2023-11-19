@@ -7,9 +7,9 @@ info:
     - pyproject.toml
     - "--all-extras"
     - "--cache-dir"
-    - /tmp/.tmppDDssX
+    - /tmp/.tmpDaHryO
   env:
-    VIRTUAL_ENV: /tmp/.tmpf5JruZ/.venv
+    VIRTUAL_ENV: /tmp/.tmpTrcp45/.venv
 ---
 success: true
 exit_code: 0
@@ -20,7 +20,7 @@ anyio==4.0.0
     # via httpcore
 asgiref==3.7.2
     # via django
-certifi==2023.7.22
+certifi==2023.11.17
     # via httpcore
 django==5.0b1
 h11==0.14.0
