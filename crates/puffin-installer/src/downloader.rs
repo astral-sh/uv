@@ -10,9 +10,9 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 use url::Url;
 
+use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
+use distribution_types::{BuiltDist, Dist, RemoteSource, SourceDist};
 use puffin_client::RegistryClient;
-use puffin_distribution::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use puffin_distribution::{BuiltDist, Dist, RemoteSource, SourceDist};
 use puffin_git::GitSource;
 
 use crate::locks::Locks;

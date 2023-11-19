@@ -8,7 +8,7 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use tracing::debug;
 
-use puffin_distribution::{Dist, Metadata, RemoteSource};
+use distribution_types::{Dist, Metadata, RemoteSource};
 use puffin_traits::BuildContext;
 
 use crate::downloader::{DiskWheel, SourceDistDownload, WheelDownload};

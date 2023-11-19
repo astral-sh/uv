@@ -3,9 +3,9 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use tracing::debug;
 
+use distribution_types::direct_url::DirectUrl;
+use distribution_types::{CachedDist, InstalledDist};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::direct_url::DirectUrl;
-use puffin_distribution::{CachedDist, InstalledDist};
 use puffin_interpreter::Virtualenv;
 
 use crate::url_index::UrlIndex;

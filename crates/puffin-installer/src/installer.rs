@@ -1,7 +1,7 @@
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use puffin_distribution::CachedDist;
+use distribution_types::CachedDist;
 use puffin_interpreter::Virtualenv;
 
 pub struct Installer<'a> {

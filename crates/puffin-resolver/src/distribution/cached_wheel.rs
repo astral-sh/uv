@@ -5,9 +5,9 @@ use anyhow::{format_err, Result};
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
+use distribution_types::Identifier;
 use install_wheel_rs::find_dist_info;
 use platform_tags::Tags;
-use puffin_distribution::Identifier;
 use pypi_types::Metadata21;
 
 /// A cached wheel built from a remote source.

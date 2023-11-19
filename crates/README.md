@@ -58,7 +58,7 @@ Development utilities for Puffin.
 A centralized `struct` for resolving and building source distributions in isolated environments.
 Implements the traits defined in `puffin-traits`.
 
-## [puffin-distribution](./puffin-distribution)
+## [distribution-types](./distribution-types)
 
 Abstractions for representing built distributions (wheels) and source distributions (sdists), and
 the sources from which they can be downloaded.

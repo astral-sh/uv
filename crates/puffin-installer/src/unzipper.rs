@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use tracing::debug;
 use zip::ZipArchive;
 
-use puffin_distribution::{CachedDist, Dist, Identifier};
+use distribution_types::{CachedDist, Dist, Identifier};
 
 use crate::cache::WheelCache;
 use crate::downloader::WheelDownload;

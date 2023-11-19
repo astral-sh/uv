@@ -11,11 +11,11 @@ use anyhow::{bail, Context};
 use itertools::{Either, Itertools};
 use tracing::{debug, instrument};
 
+use distribution_types::Metadata;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
-use puffin_distribution::Metadata;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
