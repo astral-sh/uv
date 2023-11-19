@@ -1,5 +1,6 @@
 #![cfg(feature = "clap")]
 
+use fs_err as fs;
 use std::io;
 use std::path::PathBuf;
 
@@ -37,6 +38,8 @@ impl TryFrom<CacheArgs> for CacheDir {
     /// 2. The specific cache directory specified by the user via `--cache-dir` or `PUFFIN_CACHE_DIR`.
     /// 3. The system-appropriate cache directory.
     /// 4. A `.puffin_cache` directory in the current working directory.
+    ///
+    /// Returns an absolute cache dir.
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
         let project_dirs = ProjectDirs::from("", "", "puffin");
         if value.no_cache {
@@ -48,7 +51,7 @@ impl TryFrom<CacheArgs> for CacheDir {
             })
         } else if let Some(cache_dir) = value.cache_dir {
             Ok(Self {
-                cache_dir,
+                cache_dir: fs::canonicalize(cache_dir)?,
                 temp_dir: None,
             })
         } else if let Some(project_dirs) = project_dirs {
@@ -58,7 +61,7 @@ impl TryFrom<CacheArgs> for CacheDir {
             })
         } else {
             Ok(Self {
-                cache_dir: PathBuf::from(".puffin_cache"),
+                cache_dir: fs::canonicalize(".puffin_cache")?,
                 temp_dir: None,
             })
         }
