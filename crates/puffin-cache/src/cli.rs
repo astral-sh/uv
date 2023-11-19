@@ -62,7 +62,7 @@ impl TryFrom<CacheArgs> for CacheDir {
             })
         } else {
             let cache_dir = ".puffin_cache";
-            fs::create_dir_all(&cache_dir)?;
+            fs::create_dir_all(cache_dir)?;
             Ok(Self {
                 cache_dir: fs::canonicalize(cache_dir)?,
                 temp_dir: None,
