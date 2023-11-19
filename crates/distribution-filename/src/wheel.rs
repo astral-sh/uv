@@ -1,3 +1,4 @@
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -8,7 +9,7 @@ use pep440_rs::Version;
 use platform_tags::{TagPriority, Tags};
 use puffin_normalize::{InvalidNameError, PackageName};
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
@@ -164,6 +165,25 @@ impl TryFrom<&Url> for WheelFilename {
                 )
             })?;
         Self::from_str(filename)
+    }
+}
+
+impl<'de> Deserialize<'de> for WheelFilename {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for WheelFilename {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
 
