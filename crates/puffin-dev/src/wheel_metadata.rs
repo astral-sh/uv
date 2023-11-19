@@ -5,6 +5,7 @@ use url::Url;
 
 use anyhow::Result;
 use distribution_filename::WheelFilename;
+use puffin_cache::metadata::WheelMetadataCacheShard;
 use puffin_cache::{CacheArgs, CacheDir};
 use puffin_client::RegistryClientBuilder;
 
@@ -28,7 +29,9 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
             .1,
     )?;
 
-    let metadata = client.wheel_metadata_no_index(&filename, &args.url).await?;
+    let metadata = client
+        .wheel_metadata_no_pep658(&filename, &args.url, WheelMetadataCacheShard::Url)
+        .await?;
     println!("{metadata:?}");
     Ok(())
 }

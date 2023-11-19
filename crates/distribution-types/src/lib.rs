@@ -1,6 +1,8 @@
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use distribution_filename::WheelFilename;
 use url::Url;
 
 use pep440_rs::Version;
@@ -68,7 +70,9 @@ pub struct RegistryBuiltDist {
 /// A built distribution (wheel) that exists at an arbitrary URL.
 #[derive(Debug, Clone)]
 pub struct DirectUrlBuiltDist {
-    pub name: PackageName,
+    /// We require that wheel urls end in the full wheel filename, e.g.
+    /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
+    pub filename: WheelFilename,
     pub url: Url,
 }
 
@@ -84,6 +88,8 @@ pub struct RegistrySourceDist {
 /// A source distribution that exists at an arbitrary URL.
 #[derive(Debug, Clone)]
 pub struct DirectUrlSourceDist {
+    /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
+    /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     pub url: Url,
 }
@@ -120,13 +126,15 @@ impl Dist {
 
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: Url) -> Self {
+        // The part after the last slash
+        let filename = url
+            .path()
+            .rsplit_once('/')
+            .map_or(url.path(), |(_path, filename)| filename);
         if url.scheme().starts_with("git+") {
             Self::Source(SourceDist::Git(GitSourceDist { name, url }))
-        } else if Path::new(url.path())
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-        {
-            Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist { name, url }))
+        } else if let Ok(filename) = WheelFilename::from_str(filename) {
+            Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist { filename, url }))
         } else {
             Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist { name, url }))
         }
@@ -145,7 +153,7 @@ impl Dist {
         match self {
             Self::Built(built) => Self::Built(match built {
                 BuiltDist::DirectUrl(dist) => BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                    name: dist.name,
+                    filename: dist.filename,
                     url,
                 }),
                 dist @ BuiltDist::Registry(_) => dist,
@@ -197,7 +205,7 @@ impl Metadata for RegistryBuiltDist {
 
 impl Metadata for DirectUrlBuiltDist {
     fn name(&self) -> &PackageName {
-        &self.name
+        &self.filename.name
     }
 
     fn version_or_url(&self) -> VersionOrUrl {

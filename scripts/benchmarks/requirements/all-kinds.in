@@ -1,0 +1,5 @@
+# All kinds of dependencies
+flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
+django_allauth==0.51.0
+pandas
+pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git

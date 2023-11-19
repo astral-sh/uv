@@ -80,7 +80,7 @@ impl CachedDist {
                 path,
             }),
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
-                name: dist.name,
+                name: dist.filename.name,
                 url: dist.url,
                 path,
             }),

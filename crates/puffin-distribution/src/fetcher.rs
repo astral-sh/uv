@@ -72,7 +72,9 @@ impl<'a> Fetcher<'a> {
         match dist {
             // Fetch the metadata directly from the registry.
             Dist::Built(BuiltDist::Registry(wheel)) => {
-                let metadata = client.wheel_metadata(wheel.file.clone()).await?;
+                let metadata = client
+                    .wheel_metadata(wheel.index.clone(), wheel.file.clone())
+                    .await?;
                 Ok(metadata)
             }
             // Fetch the distribution, then read the metadata (for built distributions), or build

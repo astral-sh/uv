@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use url::Url;
 
 /// The url of an index, newtype'd to avoid mixing it with file urls
@@ -13,5 +14,13 @@ impl From<Url> for IndexUrl {
 impl From<IndexUrl> for Url {
     fn from(index: IndexUrl) -> Self {
         index.0
+    }
+}
+
+impl Deref for IndexUrl {
+    type Target = Url;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
