@@ -14,7 +14,7 @@ pep440_rs = { path = "../pep440-rs" }
 platform-tags = { path = "../platform-tags" }
 puffin-normalize = { path = "../puffin-normalize" }
 
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 
