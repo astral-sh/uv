@@ -4,6 +4,8 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 
+use anyhow::Result;
+
 use pep508_rs::Requirement;
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 
@@ -68,7 +70,7 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<Requirement>>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>>;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base python as [`BuildContext::base_python`]
@@ -76,7 +78,7 @@ pub trait BuildContext {
         &'a self,
         requirements: &'a [Requirement],
         venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
     /// Build a source distribution into a wheel from an archive.
     ///
@@ -89,5 +91,5 @@ pub trait BuildContext {
         subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
         package_id: &'a str,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>;
 }

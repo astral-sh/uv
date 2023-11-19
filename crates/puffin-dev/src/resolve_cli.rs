@@ -3,7 +3,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use anstream::println;
-use anyhow::Context;
+use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use fs_err::File;
 use itertools::Itertools;
@@ -41,7 +41,7 @@ pub(crate) struct ResolveCliArgs {
     cache_args: CacheArgs,
 }
 
-pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> anyhow::Result<()> {
+pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let cache_dir = CacheDir::try_from(args.cache_args)?;
 
     let platform = Platform::current()?;

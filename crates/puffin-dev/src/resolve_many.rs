@@ -42,9 +42,9 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let data = fs::read_to_string(&args.list)?;
     let lines = data.lines().map(Requirement::from_str);
     let requirements: Vec<Requirement> = if let Some(limit) = args.limit {
-        lines.take(limit).collect::<anyhow::Result<_, _>>()?
+        lines.take(limit).collect::<Result<_, _>>()?
     } else {
-        lines.collect::<anyhow::Result<_, _>>()?
+        lines.collect::<Result<_, _>>()?
     };
 
     let platform = Platform::current()?;
