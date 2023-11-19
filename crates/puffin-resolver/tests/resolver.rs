@@ -9,6 +9,7 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use tempfile::tempdir;
 
@@ -21,6 +22,13 @@ use puffin_resolver::{
     Graph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::BuildContext;
+
+// Exclude any packages uploaded after this date.
+static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
+    DateTime::parse_from_rfc3339("2023-11-18T12:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc)
+});
 
 struct DummyContext {
     interpreter_info: InterpreterInfo,
@@ -96,14 +104,13 @@ async fn black() -> Result<()> {
         vec![],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -120,14 +127,13 @@ async fn black_colorama() -> Result<()> {
         vec![],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -144,14 +150,13 @@ async fn black_python_310() -> Result<()> {
         vec![],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_310,
-        &TAGS_310,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_310, &TAGS_310).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -170,14 +175,13 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -196,14 +200,13 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -222,14 +225,13 @@ async fn black_flake8() -> Result<()> {
         vec![],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -246,7 +248,11 @@ async fn black_lowest() -> Result<()> {
         vec![],
         None,
     );
-    let options = ResolutionOptions::new(ResolutionMode::Lowest, PreReleaseMode::default(), None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::Lowest,
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
@@ -268,7 +274,7 @@ async fn black_lowest_direct() -> Result<()> {
     let options = ResolutionOptions::new(
         ResolutionMode::LowestDirect,
         PreReleaseMode::default(),
-        None,
+        Some(*EXCLUDE_NEWER),
     );
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
@@ -288,14 +294,13 @@ async fn black_respect_preference() -> Result<()> {
         vec![Requirement::from_str("black==23.9.0").unwrap()],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -312,14 +317,13 @@ async fn black_ignore_preference() -> Result<()> {
         vec![Requirement::from_str("black==23.9.2").unwrap()],
         None,
     );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
 
-    let resolution = resolve(
-        manifest,
-        ResolutionOptions::default(),
-        &MARKERS_311,
-        &TAGS_311,
-    )
-    .await?;
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
     insta::assert_display_snapshot!(resolution);
 
@@ -336,7 +340,11 @@ async fn black_disallow_prerelease() -> Result<()> {
         vec![],
         None,
     );
-    let options = ResolutionOptions::new(ResolutionMode::default(), PreReleaseMode::Disallow, None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::Disallow,
+        Some(*EXCLUDE_NEWER),
+    );
 
     let err = resolve(manifest, options, &MARKERS_311, &TAGS_311)
         .await
@@ -357,8 +365,11 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         vec![],
         None,
     );
-    let options =
-        ResolutionOptions::new(ResolutionMode::default(), PreReleaseMode::IfNecessary, None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::IfNecessary,
+        Some(*EXCLUDE_NEWER),
+    );
 
     let err = resolve(manifest, options, &MARKERS_311, &TAGS_311)
         .await
@@ -379,7 +390,11 @@ async fn pylint_disallow_prerelease() -> Result<()> {
         vec![],
         None,
     );
-    let options = ResolutionOptions::new(ResolutionMode::default(), PreReleaseMode::Disallow, None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::Disallow,
+        Some(*EXCLUDE_NEWER),
+    );
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
@@ -398,7 +413,11 @@ async fn pylint_allow_prerelease() -> Result<()> {
         vec![],
         None,
     );
-    let options = ResolutionOptions::new(ResolutionMode::default(), PreReleaseMode::Allow, None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::Allow,
+        Some(*EXCLUDE_NEWER),
+    );
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
@@ -420,7 +439,11 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
         vec![],
         None,
     );
-    let options = ResolutionOptions::new(ResolutionMode::default(), PreReleaseMode::Explicit, None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::Explicit,
+        Some(*EXCLUDE_NEWER),
+    );
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
@@ -442,7 +465,11 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
         vec![],
         None,
     );
-    let options = ResolutionOptions::new(ResolutionMode::default(), PreReleaseMode::Explicit, None);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::Explicit,
+        Some(*EXCLUDE_NEWER),
+    );
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
