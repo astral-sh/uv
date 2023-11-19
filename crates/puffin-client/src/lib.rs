@@ -1,3 +1,4 @@
+pub use cached_client::{CachedClient, CachedClientError};
 pub use client::{RegistryClient, RegistryClientBuilder};
 pub use error::Error;
 

@@ -1,7 +1,7 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/source.rs>
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use reqwest::Client;
@@ -120,15 +120,20 @@ pub struct Fetch {
     path: PathBuf,
 }
 
-impl From<Fetch> for GitUrl {
-    fn from(fetch: Fetch) -> Self {
-        fetch.git
+impl Fetch {
+    pub fn git(&self) -> &GitUrl {
+        &self.git
     }
-}
 
-impl From<Fetch> for PathBuf {
-    fn from(fetch: Fetch) -> Self {
-        fetch.path
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn into_git(self) -> GitUrl {
+        self.git
+    }
+
+    pub fn into_path(self) -> PathBuf {
+        self.path
     }
 }
 

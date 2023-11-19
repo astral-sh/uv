@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
 use async_zip::tokio::read::seek::ZipFileReader;
-use futures::{AsyncRead, StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
@@ -12,19 +12,19 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use tempfile::tempfile;
 use tokio::io::BufWriter;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, trace};
 use url::Url;
 
 use distribution_filename::WheelFilename;
+use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
-use puffin_cache::metadata::WheelMetadataCache;
+use puffin_cache::WheelMetadataCache;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
-use crate::cached_client::CachedClient;
-use crate::error::Error;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::{CachedClient, CachedClientError, Error};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -114,18 +114,20 @@ impl RegistryClientBuilder {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(self.retries);
         let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
 
-        let uncached_client_builder =
-            reqwest_middleware::ClientBuilder::new(client_raw.clone()).with(retry_strategy);
+        let uncached_client = reqwest_middleware::ClientBuilder::new(client_raw.clone())
+            .with(retry_strategy)
+            .build();
 
+        let cached_client = CachedClient::new(uncached_client.clone());
         RegistryClient {
             index: self.index,
             extra_index: self.extra_index,
             no_index: self.no_index,
             client: client_builder.build(),
             client_raw: client_raw.clone(),
-            uncached_client: uncached_client_builder.build(),
+            uncached_client,
             cache: self.cache,
-            cached_client: CachedClient::new(client_raw),
+            cached_client,
         }
     }
 }
@@ -147,6 +149,10 @@ pub struct RegistryClient {
 }
 
 impl RegistryClient {
+    pub fn cached_client(&self) -> &CachedClient {
+        &self.cached_client
+    }
+
     /// Fetch a package from the `PyPI` simple API.
     pub async fn simple(&self, package_name: PackageName) -> Result<(IndexUrl, SimpleJson), Error> {
         if self.no_index {
@@ -197,8 +203,45 @@ impl RegistryClient {
             .await?)
     }
 
+    /// Fetch the metadata for a remote wheel file.
+    ///
+    /// For a remote wheel, we try the following ways to fetch the metadata:  
+    /// 1. From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
+    /// 2. From a remote wheel by partial zip reading
+    /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
+    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
+        let metadata = match &built_dist {
+            BuiltDist::Registry(wheel) => {
+                self.wheel_metadata_registry(wheel.index.clone(), wheel.file.clone())
+                    .await?
+            }
+            BuiltDist::DirectUrl(wheel) => {
+                self.wheel_metadata_no_pep658(&wheel.filename, &wheel.url, WheelMetadataCache::Url)
+                    .await?
+            }
+            BuiltDist::Path(wheel) => {
+                let reader = fs_err::tokio::File::open(&wheel.path).await?;
+                Self::metadata_from_async_read(&wheel.filename, built_dist.to_string(), reader)
+                    .await?
+            }
+        };
+
+        if metadata.name != *built_dist.name() {
+            return Err(Error::NameMismatch {
+                metadata: metadata.name,
+                given: built_dist.name().clone(),
+            });
+        }
+
+        Ok(metadata)
+    }
+
     /// Fetch the metadata from a wheel file.
-    pub async fn wheel_metadata(&self, index: IndexUrl, file: File) -> Result<Metadata21, Error> {
+    async fn wheel_metadata_registry(
+        &self,
+        index: IndexUrl,
+        file: File,
+    ) -> Result<Metadata21, Error> {
         if self.no_index {
             return Err(Error::NoIndex(file.filename));
         }
@@ -213,17 +256,18 @@ impl RegistryClient {
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            let cache_dir = WheelMetadataCache::Index(index).cache_dir(&self.cache, &url);
+            let cache_dir = WheelMetadataCache::Index(index).wheel_cache_dir(&self.cache, &url);
             let cache_file = format!("{}.json", filename.stem());
 
             let response_callback = |response: Response| async {
                 Metadata21::parse(response.bytes().await?.as_ref())
-                    .map_err(|err| Error::MetadataParseError(filename, url.clone(), err))
+                    .map_err(|err| Error::MetadataParseError(filename, url.to_string(), err))
             };
             let req = self.client_raw.get(url.clone()).build()?;
-            self.cached_client
+            Ok(self
+                .cached_client
                 .get_cached_with_callback(req, &cache_dir, &cache_file, response_callback)
-                .await
+                .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
@@ -234,7 +278,7 @@ impl RegistryClient {
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
-    pub async fn wheel_metadata_no_pep658(
+    async fn wheel_metadata_no_pep658(
         &self,
         filename: &WheelFilename,
         url: &Url,
@@ -244,7 +288,7 @@ impl RegistryClient {
             return Err(Error::NoIndex(url.to_string()));
         }
 
-        let cache_dir = cache_shard.cache_dir(&self.cache, url);
+        let cache_dir = cache_shard.wheel_cache_dir(&self.cache, url);
         let cache_file = format!("{}.json", filename.stem());
 
         // This response callback is special, we actually make a number of subsequent requests to
@@ -255,7 +299,7 @@ impl RegistryClient {
             trace!("Getting metadata for {filename} by range request");
             let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
             let metadata = Metadata21::parse(text.as_bytes())
-                .map_err(|err| Error::MetadataParseError(filename.clone(), url.clone(), err))?;
+                .map_err(|err| Error::MetadataParseError(filename.clone(), url.to_string(), err))?;
             Ok(metadata)
         };
 
@@ -274,10 +318,10 @@ impl RegistryClient {
             Ok(metadata) => {
                 return Ok(metadata);
             }
-            Err(Error::AsyncHttpRangeReader(
+            Err(CachedClientError::Client(Error::AsyncHttpRangeReader(
                 AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-            )) => {}
-            Err(err) => return Err(err),
+            ))) => {}
+            Err(err) => return Err(err.into()),
         }
 
         // The range request version failed (this is bad, the webserver should support this), fall
@@ -293,15 +337,23 @@ impl RegistryClient {
         let mut writer = BufWriter::new(tokio::fs::File::from_std(temp_download));
         let mut reader = self.stream_external(url).await?.compat();
         tokio::io::copy(&mut reader, &mut writer).await?;
-        let temp_download = writer.into_inner();
+        let reader = writer.into_inner();
 
-        let mut reader = ZipFileReader::new(temp_download.compat())
+        Self::metadata_from_async_read(filename, url.to_string(), reader).await
+    }
+
+    async fn metadata_from_async_read(
+        filename: &WheelFilename,
+        debug_source: String,
+        reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+    ) -> Result<Metadata21, Error> {
+        let mut zip_reader = ZipFileReader::with_tokio(reader)
             .await
             .map_err(|err| Error::Zip(filename.clone(), err))?;
 
         let (metadata_idx, _dist_info_dir) = find_dist_info(
             filename,
-            reader
+            zip_reader
                 .file()
                 .entries()
                 .iter()
@@ -311,7 +363,7 @@ impl RegistryClient {
 
         // Read the contents of the METADATA file
         let mut contents = Vec::new();
-        reader
+        zip_reader
             .reader_with_entry(metadata_idx)
             .await
             .map_err(|err| Error::Zip(filename.clone(), err))?
@@ -320,7 +372,7 @@ impl RegistryClient {
             .map_err(|err| Error::Zip(filename.clone(), err))?;
 
         let metadata = Metadata21::parse(&contents)
-            .map_err(|err| Error::MetadataParseError(filename.clone(), url.clone(), err))?;
+            .map_err(|err| Error::MetadataParseError(filename.clone(), debug_source, err))?;
         Ok(metadata)
     }
 
@@ -328,7 +380,7 @@ impl RegistryClient {
     pub async fn stream_external(
         &self,
         url: &Url,
-    ) -> Result<Box<dyn AsyncRead + Unpin + Send + Sync>, Error> {
+    ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
         if self.no_index {
             return Err(Error::NoIndex(url.to_string()));
         }
@@ -340,10 +392,7 @@ impl RegistryClient {
                 .await?
                 .error_for_status()?
                 .bytes_stream()
-                .map(|r| match r {
-                    Ok(bytes) => Ok(bytes),
-                    Err(err) => Err(std::io::Error::new(std::io::ErrorKind::Other, err)),
-                })
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
                 .into_async_read(),
         ))
     }

@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use bytesize::ByteSize;
 use fs_err::tokio as fs;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -13,15 +13,15 @@ use distribution_filename::WheelFilename;
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{BuiltDist, Dist, Identifier, Metadata, RemoteSource, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::metadata::WheelMetadataCache;
 use puffin_client::RegistryClient;
-use puffin_git::{GitSource, GitUrl};
+use puffin_git::GitSource;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
+use crate::download::BuiltWheel;
 use crate::error::Error;
 use crate::reporter::Facade;
-use crate::{DiskWheel, Download, InMemoryWheel, Reporter, SourceDistDownload, WheelDownload};
+use crate::{DiskWheel, Download, InMemoryWheel, LocalWheel, Reporter, SourceDistDownload};
 
 // The cache subdirectory in which to store Git repositories.
 const GIT_CACHE: &str = "git-v0";
@@ -60,59 +60,13 @@ impl<'a> Fetcher<'a> {
             .transpose()
     }
 
-    /// Fetch the [`Metadata21`] for a distribution.
-    ///
-    /// If the given [`Dist`] is a source distribution, the distribution will be downloaded, built,
-    /// and cached.
-    pub async fn fetch_metadata(
-        &self,
-        dist: &Dist,
-        client: &RegistryClient,
-        build_context: &impl BuildContext,
-    ) -> Result<Metadata21> {
-        match dist {
-            // Fetch the metadata directly from the registry.
-            Dist::Built(BuiltDist::Registry(wheel)) => {
-                let metadata = client
-                    .wheel_metadata(wheel.index.clone(), wheel.file.clone())
-                    .await?;
-                Ok(metadata)
-            }
-            // Fetch the metadata directly from the wheel URL.
-            Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                let metadata = client
-                    .wheel_metadata_no_pep658(&wheel.filename, &wheel.url, WheelMetadataCache::Url)
-                    .await?;
-                Ok(metadata)
-            }
-            // Fetch the distribution, then read the metadata (for built distributions), or build
-            // the distribution and _then_ read the metadata (for source distributions).
-            dist => {
-                // Optimization: Skip source dist download when we must not build them anyway
-                if build_context.no_build() && matches!(dist, Dist::Source(_)) {
-                    bail!("Building source distributions is disabled");
-                }
-                match self.fetch_dist(dist, client).await? {
-                    Download::Wheel(wheel) => {
-                        let metadata = wheel.read_dist_info()?;
-                        Ok(metadata)
-                    }
-                    Download::SourceDist(sdist) => {
-                        let wheel = self.build_sdist(sdist, build_context).await?;
-                        let metadata = wheel.read_dist_info()?;
-                        Ok(metadata)
-                    }
-                }
-            }
-        }
-    }
-
     /// Download a distribution.
     pub async fn fetch_dist(&self, dist: &Dist, client: &RegistryClient) -> Result<Download> {
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 // Fetch the wheel.
                 let url = Url::parse(&wheel.file.url)?;
+                let filename = WheelFilename::from_str(&wheel.file.filename)?;
                 let reader = client.stream_external(&url).await?;
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
@@ -137,8 +91,9 @@ impl<'a> Fetcher<'a> {
                     let mut reader = tokio::io::BufReader::new(reader.compat());
                     tokio::io::copy(&mut reader, &mut buffer).await?;
 
-                    Ok(Download::Wheel(WheelDownload::InMemory(InMemoryWheel {
+                    Ok(Download::Wheel(LocalWheel::InMemory(InMemoryWheel {
                         dist: dist.clone(),
+                        filename,
                         buffer,
                     })))
                 } else {
@@ -156,16 +111,24 @@ impl<'a> Fetcher<'a> {
                     let mut writer = tokio::fs::File::create(&wheel_file).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                    Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
+                    Ok(Download::Wheel(LocalWheel::Disk(DiskWheel {
                         dist: dist.clone(),
+                        filename,
                         path: wheel_file,
-                        temp_dir: None,
                     })))
                 }
             }
 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                 debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
+
+                let filename = wheel
+                    .url
+                    .path()
+                    .rsplit_once('/')
+                    .map_or(wheel.url.path(), |(_, filename)| filename)
+                    .to_string();
+                let filename = WheelFilename::from_str(&filename)?;
 
                 // Create a directory for the wheel.
                 let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
@@ -180,22 +143,22 @@ impl<'a> Fetcher<'a> {
                 let mut writer = tokio::fs::File::create(&wheel_file).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
-                Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
+                Ok(Download::Wheel(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
+                    filename,
                     path: wheel_file,
-                    temp_dir: None,
                 })))
             }
 
             Dist::Built(BuiltDist::Path(wheel)) => {
-                Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
+                Ok(Download::Wheel(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
                     path: wheel.path.clone(),
-                    temp_dir: None,
+                    filename: wheel.filename.clone(),
                 })))
             }
 
-            Dist::Source(SourceDist::Registry(sdist)) => {
+            Dist::Source(source_dist @ SourceDist::Registry(sdist)) => {
                 debug!(
                     "Fetching source distribution from registry: {}",
                     &sdist.file.url
@@ -212,14 +175,14 @@ impl<'a> Fetcher<'a> {
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                 Ok(Download::SourceDist(SourceDistDownload {
-                    dist: dist.clone(),
+                    dist: source_dist.clone(),
                     sdist_file,
                     subdirectory: None,
                     temp_dir: Some(temp_dir),
                 }))
             }
 
-            Dist::Source(SourceDist::DirectUrl(sdist)) => {
+            Dist::Source(source_dist @ SourceDist::DirectUrl(sdist)) => {
                 debug!("Fetching source distribution from URL: {}", sdist.url);
 
                 let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(&sdist.url);
@@ -235,14 +198,14 @@ impl<'a> Fetcher<'a> {
                 tokio::io::copy(&mut reader, &mut writer).await?;
 
                 Ok(Download::SourceDist(SourceDistDownload {
-                    dist: dist.clone(),
+                    dist: source_dist.clone(),
                     sdist_file,
                     subdirectory,
                     temp_dir: Some(temp_dir),
                 }))
             }
 
-            Dist::Source(SourceDist::Git(sdist)) => {
+            Dist::Source(source_dist @ SourceDist::Git(sdist)) => {
                 debug!("Fetching source distribution from Git: {}", sdist.url);
 
                 let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(&sdist.url)?;
@@ -251,22 +214,24 @@ impl<'a> Fetcher<'a> {
                 let source = GitSource::new(url, git_dir);
                 let sdist_file = tokio::task::spawn_blocking(move || source.fetch())
                     .await??
-                    .into();
+                    .into_path();
 
                 Ok(Download::SourceDist(SourceDistDownload {
-                    dist: dist.clone(),
+                    dist: source_dist.clone(),
                     sdist_file,
                     subdirectory,
                     temp_dir: None,
                 }))
             }
 
-            Dist::Source(SourceDist::Path(sdist)) => Ok(Download::SourceDist(SourceDistDownload {
-                dist: dist.clone(),
-                sdist_file: sdist.path.clone(),
-                subdirectory: None,
-                temp_dir: None,
-            })),
+            Dist::Source(source_dist @ SourceDist::Path(sdist)) => {
+                Ok(Download::SourceDist(SourceDistDownload {
+                    dist: source_dist.clone(),
+                    sdist_file: sdist.path.clone(),
+                    subdirectory: None,
+                    temp_dir: None,
+                }))
+            }
         }
     }
 
@@ -275,7 +240,7 @@ impl<'a> Fetcher<'a> {
         &self,
         dist: SourceDistDownload,
         build_context: &impl BuildContext,
-    ) -> Result<WheelDownload> {
+    ) -> Result<LocalWheel> {
         let task = self
             .reporter
             .as_ref()
@@ -300,7 +265,9 @@ impl<'a> Fetcher<'a> {
                 &dist.dist.to_string(),
             )
             .await?;
-        let wheel_filename = wheel_dir.join(disk_filename);
+        let wheel_path = wheel_dir.join(&disk_filename);
+
+        let filename = WheelFilename::from_str(&disk_filename)?;
 
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
@@ -308,10 +275,10 @@ impl<'a> Fetcher<'a> {
             }
         }
 
-        Ok(WheelDownload::Disk(DiskWheel {
-            dist: dist.dist,
-            path: wheel_filename,
-            temp_dir: None,
+        Ok(LocalWheel::Built(BuiltWheel {
+            dist: Dist::Source(dist.dist.clone()),
+            filename,
+            path: wheel_path,
         }))
     }
 
@@ -331,8 +298,8 @@ impl<'a> Fetcher<'a> {
             if filename.is_compatible(tags) {
                 return Some(DiskWheel {
                     dist: dist.clone(),
+                    filename,
                     path: entry.path(),
-                    temp_dir: None,
                 });
             }
         }
@@ -368,7 +335,7 @@ impl<'a> Fetcher<'a> {
             GitSource::new(url, git_dir)
         };
         let precise = tokio::task::spawn_blocking(move || source.fetch()).await??;
-        let url = GitUrl::from(precise);
+        let url = precise.into_git();
 
         // Re-encode as a URL.
         Ok(Some(DirectGitUrl { url, subdirectory }.into()))

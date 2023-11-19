@@ -1,12 +1,11 @@
 use std::path::PathBuf;
-use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tempfile::TempDir;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{Dist, RemoteSource};
+use distribution_types::{Dist, SourceDist};
 use install_wheel_rs::find_dist_info;
 use pypi_types::Metadata21;
 
@@ -17,6 +16,8 @@ use crate::error::Error;
 pub struct InMemoryWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
+    /// The parsed filename
+    pub(crate) filename: WheelFilename,
     /// The contents of the wheel.
     pub(crate) buffer: Vec<u8>,
 }
@@ -26,25 +27,36 @@ pub struct InMemoryWheel {
 pub struct DiskWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
+    /// The parsed filename
+    pub(crate) filename: WheelFilename,
     /// The path to the downloaded wheel.
     pub(crate) path: PathBuf,
-    /// The download location, to be dropped after use.
-    #[allow(dead_code)]
-    pub(crate) temp_dir: Option<TempDir>,
 }
 
-/// A downloaded wheel.
+/// A wheel built from a source distribution that's stored on-disk.
 #[derive(Debug)]
-pub enum WheelDownload {
+pub struct BuiltWheel {
+    /// The remote source distribution from which this wheel was built.
+    pub(crate) dist: Dist,
+    /// The parsed filename
+    pub(crate) filename: WheelFilename,
+    /// The path to the built wheel.
+    pub(crate) path: PathBuf,
+}
+
+/// A downloaded or built wheel.
+#[derive(Debug)]
+pub enum LocalWheel {
     InMemory(InMemoryWheel),
     Disk(DiskWheel),
+    Built(BuiltWheel),
 }
 
 /// A downloaded source distribution.
 #[derive(Debug)]
 pub struct SourceDistDownload {
     /// The remote distribution from which this source distribution was downloaded.
-    pub(crate) dist: Dist,
+    pub(crate) dist: SourceDist,
     /// The path to the downloaded archive or directory.
     pub(crate) sdist_file: PathBuf,
     /// The subdirectory within the archive or directory.
@@ -58,7 +70,7 @@ pub struct SourceDistDownload {
 /// A downloaded distribution, either a wheel or a source distribution.
 #[derive(Debug)]
 pub enum Download {
-    Wheel(WheelDownload),
+    Wheel(LocalWheel),
     SourceDist(SourceDistDownload),
 }
 
@@ -71,11 +83,12 @@ impl std::fmt::Display for Download {
     }
 }
 
-impl std::fmt::Display for WheelDownload {
+impl std::fmt::Display for LocalWheel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WheelDownload::InMemory(wheel) => write!(f, "{}", wheel.dist),
-            WheelDownload::Disk(wheel) => write!(f, "{}", wheel.dist),
+            LocalWheel::InMemory(wheel) => write!(f, "{} from {}", wheel.filename, wheel.dist),
+            LocalWheel::Disk(wheel) => write!(f, "{} from {}", wheel.filename, wheel.dist),
+            LocalWheel::Built(wheel) => write!(f, "{} from {}", wheel.filename, wheel.dist),
         }
     }
 }
@@ -90,13 +103,14 @@ impl InMemoryWheel {
     /// Read the [`Metadata21`] from a wheel.
     pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
         let mut archive = ZipArchive::new(std::io::Cursor::new(&self.buffer))?;
-        let filename = self
-            .filename()
-            .map_err(|err| Error::FilenameParse(self.dist.to_string(), err))?;
-        let dist_info_dir =
-            find_dist_info(&filename, archive.file_names().map(|name| (name, name)))
-                .map_err(|err| Error::DistInfo(self.dist.to_string(), err))?
-                .1;
+        let dist_info_dir = find_dist_info(
+            &self.filename,
+            archive.file_names().map(|name| (name, name)),
+        )
+        .map_err(|err| {
+            Error::DistInfo(Box::new(self.filename.clone()), self.dist.to_string(), err)
+        })?
+        .1;
         let dist_info =
             std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
         Ok(Metadata21::parse(dist_info.as_bytes())?)
@@ -107,25 +121,45 @@ impl DiskWheel {
     /// Read the [`Metadata21`] from a wheel.
     pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
         let mut archive = ZipArchive::new(fs_err::File::open(&self.path)?)?;
-        let filename = self
-            .filename()
-            .map_err(|err| Error::FilenameParse(self.dist.to_string(), err))?;
-        let dist_info_dir =
-            find_dist_info(&filename, archive.file_names().map(|name| (name, name)))
-                .map_err(|err| Error::DistInfo(self.dist.to_string(), err))?
-                .1;
+        let dist_info_dir = find_dist_info(
+            &self.filename,
+            archive.file_names().map(|name| (name, name)),
+        )
+        .map_err(|err| {
+            Error::DistInfo(Box::new(self.filename.clone()), self.dist.to_string(), err)
+        })?
+        .1;
         let dist_info =
             std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
         Ok(Metadata21::parse(dist_info.as_bytes())?)
     }
 }
 
-impl WheelDownload {
+impl BuiltWheel {
+    /// Read the [`Metadata21`] from a wheel.
+    pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
+        let mut archive = ZipArchive::new(fs_err::File::open(&self.path)?)?;
+        let dist_info_dir = find_dist_info(
+            &self.filename,
+            archive.file_names().map(|name| (name, name)),
+        )
+        .map_err(|err| {
+            Error::DistInfo(Box::new(self.filename.clone()), self.dist.to_string(), err)
+        })?
+        .1;
+        let dist_info =
+            std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
+        Ok(Metadata21::parse(dist_info.as_bytes())?)
+    }
+}
+
+impl LocalWheel {
     /// Read the [`Metadata21`] from a wheel.
     pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
         match self {
-            WheelDownload::InMemory(wheel) => wheel.read_dist_info(),
-            WheelDownload::Disk(wheel) => wheel.read_dist_info(),
+            LocalWheel::InMemory(wheel) => wheel.read_dist_info(),
+            LocalWheel::Disk(wheel) => wheel.read_dist_info(),
+            LocalWheel::Built(wheel) => wheel.read_dist_info(),
         }
     }
 }
@@ -135,20 +169,6 @@ impl DiskWheel {
     pub fn remote(&self) -> &Dist {
         &self.dist
     }
-
-    /// Return the [`WheelFilename`] of this wheel.
-    pub fn filename(&self) -> Result<WheelFilename> {
-        // If the wheel was downloaded to disk, it's either a download of a remote wheel, or a
-        // built source distribution, both of which imply a valid wheel filename.
-        let filename = WheelFilename::from_str(
-            self.path
-                .file_name()
-                .context("Missing filename")?
-                .to_str()
-                .context("Invalid filename")?,
-        )?;
-        Ok(filename)
-    }
 }
 
 impl InMemoryWheel {
@@ -156,37 +176,39 @@ impl InMemoryWheel {
     pub fn remote(&self) -> &Dist {
         &self.dist
     }
+}
 
-    /// Return the [`WheelFilename`] of this wheel.
-    pub fn filename(&self) -> Result<WheelFilename> {
-        // If the wheel is an in-memory buffer, it's assumed that the underlying distribution is
-        // itself a wheel, which in turn requires that the filename be parseable.
-        let filename = WheelFilename::from_str(self.dist.filename()?)?;
-        Ok(filename)
+impl BuiltWheel {
+    /// Return the [`Dist`] from which this source distribution that this wheel was built from was
+    /// downloaded.
+    pub fn remote(&self) -> &Dist {
+        &self.dist
     }
 }
 
-impl WheelDownload {
+impl LocalWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         match self {
-            WheelDownload::InMemory(wheel) => wheel.remote(),
-            WheelDownload::Disk(wheel) => wheel.remote(),
+            LocalWheel::InMemory(wheel) => wheel.remote(),
+            LocalWheel::Disk(wheel) => wheel.remote(),
+            LocalWheel::Built(wheel) => wheel.remote(),
         }
     }
 
     /// Return the [`WheelFilename`] of this wheel.
-    pub fn filename(&self) -> Result<WheelFilename> {
+    pub fn filename(&self) -> &WheelFilename {
         match self {
-            WheelDownload::InMemory(wheel) => wheel.filename(),
-            WheelDownload::Disk(wheel) => wheel.filename(),
+            LocalWheel::InMemory(wheel) => &wheel.filename,
+            LocalWheel::Disk(wheel) => &wheel.filename,
+            LocalWheel::Built(wheel) => &wheel.filename,
         }
     }
 }
 
 impl SourceDistDownload {
     /// Return the [`Dist`] from which this source distribution was downloaded.
-    pub fn remote(&self) -> &Dist {
+    pub fn remote(&self) -> &SourceDist {
         &self.dist
     }
 }

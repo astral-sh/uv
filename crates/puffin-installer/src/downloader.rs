@@ -86,16 +86,16 @@ impl<'a> Downloader<'a> {
                 let lock = self.locks.acquire(&dist).await;
                 let _guard = lock.lock().await;
 
-                let metadata = Fetcher::new(self.cache)
+                let download = Fetcher::new(self.cache)
                     .fetch_dist(&dist, self.client)
                     .await?;
-                Ok(metadata)
+                Ok(download)
             }
             Dist::Built(_) => {
-                let metadata = Fetcher::new(self.cache)
+                let download = Fetcher::new(self.cache)
                     .fetch_dist(&dist, self.client)
                     .await?;
-                Ok(metadata)
+                Ok(download)
             }
         }
     }

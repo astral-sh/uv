@@ -6,7 +6,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use distribution_types::{Dist, RemoteSource};
-use puffin_distribution::{Fetcher, SourceDistDownload, WheelDownload};
+use puffin_distribution::{Fetcher, LocalWheel, SourceDistDownload};
 use puffin_traits::BuildContext;
 
 pub struct Builder<'a, T: BuildContext + Send + Sync> {
@@ -33,7 +33,7 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
     }
 
     /// Build a set of source distributions.
-    pub async fn build(&self, dists: Vec<SourceDistDownload>) -> Result<Vec<WheelDownload>> {
+    pub async fn build(&self, dists: Vec<SourceDistDownload>) -> Result<Vec<LocalWheel>> {
         // Sort the distributions by size.
         let mut dists = dists;
         dists.sort_unstable_by_key(|distribution| {

@@ -3,13 +3,33 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
-use reqwest::{Client, Request, Response};
+use reqwest::{Request, Response};
+use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use tracing::{trace, warn};
 
-use crate::error::Error;
+/// Either a cached client error or a (user specified) error from the callback
+pub enum CachedClientError<CallbackError> {
+    Client(crate::Error),
+    Callback(CallbackError),
+}
+
+impl<CallbackError> From<crate::Error> for CachedClientError<CallbackError> {
+    fn from(error: crate::Error) -> Self {
+        CachedClientError::Client(error)
+    }
+}
+
+impl From<CachedClientError<crate::Error>> for crate::Error {
+    fn from(error: CachedClientError<crate::Error>) -> crate::Error {
+        match error {
+            CachedClientError::Client(error) => error,
+            CachedClientError::Callback(error) => error,
+        }
+    }
+}
 
 #[derive(Debug)]
 enum CachedResponse<Payload: Serialize> {
@@ -32,8 +52,8 @@ struct DataWithCachePolicy<Payload: Serialize> {
 
 /// Custom caching layer over [`reqwest::Client`] using `http-cache-semantics`.
 ///
-/// This effective middleware takes inspiration from the `http-cache` crate, but unlike this crate,
-/// we allow running an async callback on the response before caching. We use this to e.g. store a
+/// The implementation takes inspiration from the `http-cache` crate, but adds support for running
+/// an async callback on the response before caching. We use this to e.g. store a
 /// parsed version of the wheel metadata and for our remote zip reader. In the latter case, we want
 /// to read a single file from a remote zip using range requests (so we don't have to download the
 /// entire file). We send a HEAD request in the caching layer to check if the remote file has
@@ -44,21 +64,29 @@ struct DataWithCachePolicy<Payload: Serialize> {
 /// transparently switch to a faster/smaller format.
 ///
 /// Again unlike `http-cache`, the caller gets full control over the cache key with the assumption
-/// that it's a file. TODO(konstin): Centralize the cache bucket management.
+/// that it's a file.
 #[derive(Debug, Clone)]
-pub(crate) struct CachedClient(Client);
+pub struct CachedClient(ClientWithMiddleware);
 
 impl CachedClient {
-    pub(crate) fn new(client: Client) -> Self {
+    pub fn new(client: ClientWithMiddleware) -> Self {
         Self(client)
     }
 
-    /// Makes a cached request with a custom response transformation
+    /// The middleware is the retry strategy
+    pub fn uncached(&self) -> ClientWithMiddleware {
+        self.0.clone()
+    }
+
+    /// Make a cached request with a custom response transformation
     ///
     /// If a new response was received (no prior cached response or modified on the remote), the
-    /// response through `response_callback` and only the result is cached and returned
-    pub(crate) async fn get_cached_with_callback<
+    /// response is passed through `response_callback` and only the result is cached and returned.
+    /// The `response_callback` is allowed to make subsequent requests, e.g. through the uncached
+    /// client.
+    pub async fn get_cached_with_callback<
         Payload: Serialize + DeserializeOwned,
+        CallBackError,
         Callback,
         CallbackReturn,
     >(
@@ -67,10 +95,10 @@ impl CachedClient {
         cache_dir: &Path,
         filename: &str,
         response_callback: Callback,
-    ) -> Result<Payload, Error>
+    ) -> Result<Payload, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, Error>>,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let cache_file = cache_dir.join(filename);
         let cached = if let Ok(cached) = fs_err::tokio::read(&cache_file).await {
@@ -94,21 +122,33 @@ impl CachedClient {
         match cached_response {
             CachedResponse::FreshCache(data) => Ok(data),
             CachedResponse::NotModified(data_with_cache_policy) => {
-                let temp_file = NamedTempFile::new_in(cache_dir)?;
-                fs_err::tokio::write(&temp_file, &serde_json::to_vec(&data_with_cache_policy)?)
-                    .await?;
-                temp_file.persist(cache_file)?;
+                let temp_file = NamedTempFile::new_in(cache_dir).map_err(crate::Error::from)?;
+                fs_err::tokio::write(
+                    &temp_file,
+                    &serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
+                )
+                .await
+                .map_err(crate::Error::from)?;
+                temp_file.persist(cache_file).map_err(crate::Error::from)?;
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
-                let data = response_callback(res).await?;
+                let data = response_callback(res)
+                    .await
+                    .map_err(|err| CachedClientError::Callback(err))?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
-                    fs_err::tokio::create_dir_all(cache_dir).await?;
-                    let temp_file = NamedTempFile::new_in(cache_dir)?;
-                    fs_err::tokio::write(&temp_file, &serde_json::to_vec(&data_with_cache_policy)?)
-                        .await?;
-                    temp_file.persist(cache_file)?;
+                    fs_err::tokio::create_dir_all(cache_dir)
+                        .await
+                        .map_err(crate::Error::from)?;
+                    let temp_file = NamedTempFile::new_in(cache_dir).map_err(crate::Error::from)?;
+                    fs_err::tokio::write(
+                        &temp_file,
+                        &serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
+                    )
+                    .await
+                    .map_err(crate::Error::from)?;
+                    temp_file.persist(cache_file).map_err(crate::Error::from)?;
                     Ok(data_with_cache_policy.data)
                 } else {
                     Ok(data)
@@ -122,7 +162,7 @@ impl CachedClient {
         &self,
         mut req: Request,
         cached: Option<DataWithCachePolicy<T>>,
-    ) -> Result<CachedResponse<T>, Error> {
+    ) -> Result<CachedResponse<T>, crate::Error> {
         // The converted types are from the specific `reqwest` types to the more generic `http`
         // types
         let mut converted_req = http::Request::try_from(
@@ -196,7 +236,7 @@ impl CachedClient {
         &self,
         req: Request,
         converted_req: http::Request<reqwest::Body>,
-    ) -> Result<CachedResponse<T>, Error> {
+    ) -> Result<CachedResponse<T>, crate::Error> {
         trace!("{} {}", req.method(), req.url());
         let res = self.0.execute(req).await?.error_for_status()?;
         let mut converted_res = http::Response::new(());

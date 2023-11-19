@@ -6,6 +6,7 @@ use thiserror::Error;
 use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
+use puffin_normalize::PackageName;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -27,8 +28,8 @@ pub enum Error {
     PackageNotFound(String),
 
     /// The metadata file could not be parsed.
-    #[error("Couldn't parse metadata in {0} ({1})")]
-    MetadataParseError(WheelFilename, Url, #[source] pypi_types::Error),
+    #[error("Couldn't parse metadata of {0} from {1}")]
+    MetadataParseError(WheelFilename, String, #[source] pypi_types::Error),
 
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry at {1}.")]
@@ -55,6 +56,12 @@ pub enum Error {
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[from] WheelFilenameError),
+
+    #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
+    NameMismatch {
+        given: PackageName,
+        metadata: PackageName,
+    },
 
     #[error("The wheel {0} is not a valid zip file")]
     Zip(WheelFilename, #[source] ZipError),

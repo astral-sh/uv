@@ -6,12 +6,13 @@ pub use canonical_url::{CanonicalUrl, RepositoryUrl};
 #[cfg(feature = "clap")]
 pub use cli::{CacheArgs, CacheDir};
 pub use digest::digest;
+pub use metadata::WheelMetadataCache;
 
 mod cache_key;
 mod canonical_url;
 mod cli;
 mod digest;
-pub mod metadata;
+mod metadata;
 
 /// A trait for types that can be hashed in a stable way across versions and platforms.
 pub trait StableHash {

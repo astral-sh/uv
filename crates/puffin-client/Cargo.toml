@@ -5,13 +5,14 @@ edition = "2021"
 
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
+distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 
 async_http_range_reader = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 http = { workspace = true }

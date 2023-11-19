@@ -5,7 +5,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use distribution_types::{CachedDist, Dist, Identifier, RemoteSource};
-use puffin_distribution::{Unzip, WheelDownload};
+use puffin_distribution::{LocalWheel, Unzip};
 
 use crate::cache::WheelCache;
 
@@ -26,7 +26,7 @@ impl Unzipper {
     /// Unzip a set of downloaded wheels.
     pub async fn unzip(
         &self,
-        downloads: Vec<WheelDownload>,
+        downloads: Vec<LocalWheel>,
         target: &Path,
     ) -> Result<Vec<CachedDist>> {
         // Create the wheel cache subdirectory, if necessary.
