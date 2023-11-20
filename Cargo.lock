@@ -2623,8 +2623,10 @@ dependencies = [
 name = "puffin-macros"
 version = "0.0.1"
 dependencies = [
+ "colored",
  "fxhash",
  "once_cell",
+ "tracing",
 ]
 
 [[package]]

@@ -24,8 +24,8 @@ pub enum WheelMetadataCacheShard {
 impl WheelMetadataCacheShard {
     /// Cache structure:
     ///  * `<wheel metadata cache>/pypi/foo-1.0.0-py3-none-any.json`
-    ///  * `<wheel metadata cache>/<sha256(index-url)>/foo-1.0.0-py3-none-any.json`
-    ///  * `<wheel metadata cache>/url/<sha256(url)>/foo-1.0.0-py3-none-any.json`
+    ///  * `<wheel metadata cache>/<digest(index-url)>/foo-1.0.0-py3-none-any.json`
+    ///  * `<wheel metadata cache>/url/<digest(url)>/foo-1.0.0-py3-none-any.json`
     pub fn cache_dir(&self, cache: &Path, url: &Url) -> PathBuf {
         let cache_root = cache.join(WHEEL_METADATA_CACHE);
         match self {
