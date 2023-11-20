@@ -18,7 +18,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
-use puffin_cache::metadata::WheelMetadataCacheShard;
+use puffin_cache::metadata::WheelMetadataCache;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
@@ -37,12 +37,10 @@ pub struct RegistryClientBuilder {
     cache: PathBuf,
 }
 
-const PYPI_URL: &str = "https://pypi.org/simple";
-
 impl RegistryClientBuilder {
     pub fn new(cache: impl Into<PathBuf>) -> Self {
         Self {
-            index: IndexUrl::from(Url::parse(PYPI_URL).unwrap()),
+            index: IndexUrl::Pypi,
             extra_index: vec![],
             no_index: false,
             proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
@@ -205,12 +203,6 @@ impl RegistryClient {
             return Err(Error::NoIndex(file.filename));
         }
 
-        let cache_shard = if index.as_str() == PYPI_URL {
-            WheelMetadataCacheShard::Pypi
-        } else {
-            WheelMetadataCacheShard::Index(index)
-        };
-
         // If the metadata file is available at its own url (PEP 658), download it from there
         let url = Url::parse(&file.url)?;
         let filename = WheelFilename::from_str(&file.filename)?;
@@ -221,7 +213,7 @@ impl RegistryClient {
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            let cache_dir = cache_shard.cache_dir(&self.cache, &url);
+            let cache_dir = WheelMetadataCache::Index(index).cache_dir(&self.cache, &url);
             let cache_file = format!("{}.json", filename.stem());
 
             let response_callback = |response: Response| async {
@@ -236,7 +228,7 @@ impl RegistryClient {
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
         // into the cache and read from there
         } else {
-            self.wheel_metadata_no_pep658(&filename, &url, cache_shard)
+            self.wheel_metadata_no_pep658(&filename, &url, WheelMetadataCache::Index(index))
                 .await
         }
     }
@@ -246,7 +238,7 @@ impl RegistryClient {
         &self,
         filename: &WheelFilename,
         url: &Url,
-        cache_shard: WheelMetadataCacheShard,
+        cache_shard: WheelMetadataCache,
     ) -> Result<Metadata21, Error> {
         if self.no_index {
             return Err(Error::NoIndex(url.to_string()));

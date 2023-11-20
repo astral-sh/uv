@@ -5,7 +5,7 @@ use tempfile::tempdir;
 use url::Url;
 
 use distribution_filename::WheelFilename;
-use puffin_cache::metadata::WheelMetadataCacheShard;
+use puffin_cache::metadata::WheelMetadataCache;
 use puffin_client::RegistryClientBuilder;
 
 #[tokio::test]
@@ -21,7 +21,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
             .wheel_metadata_no_pep658(
                 &filename,
                 &Url::parse(url).unwrap(),
-                WheelMetadataCacheShard::Url,
+                WheelMetadataCache::Url,
             )
             .await
             .unwrap();

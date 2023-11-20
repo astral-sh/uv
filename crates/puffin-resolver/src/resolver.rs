@@ -21,7 +21,7 @@ use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_cache::metadata::WheelMetadataCacheShard;
+use puffin_cache::metadata::WheelMetadataCache;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::Fetcher;
@@ -619,7 +619,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                             .wheel_metadata_no_pep658(
                                 &wheel.filename,
                                 &wheel.url,
-                                WheelMetadataCacheShard::Url,
+                                WheelMetadataCache::Url,
                             )
                             .await?
                     }

@@ -1,10 +1,3 @@
-//! Cache all the wheel metadata cases:
-//! * Metadata we got from a remote wheel
-//!   * From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
-//!   * From a remote wheel by partial zip reading
-//!   * From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
-//! * Metadata we got from building a source dist, keyed by the wheel name since we can have multiple wheels per source dist (e.g. for python version specific builds)
-
 use std::path::{Path, PathBuf};
 
 use url::Url;
@@ -15,13 +8,19 @@ use crate::{digest, CanonicalUrl};
 
 const WHEEL_METADATA_CACHE: &str = "wheel-metadata-v0";
 
-pub enum WheelMetadataCacheShard {
-    Pypi,
+/// Cache wheel metadata.
+///
+/// Wheel metadata can come from a remote wheel or from building a source
+/// distribution. For a remote wheel, we try the following ways to fetch the metadata:  
+/// 1. From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
+/// 2. From a remote wheel by partial zip reading
+/// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
+pub enum WheelMetadataCache {
     Index(IndexUrl),
     Url,
 }
 
-impl WheelMetadataCacheShard {
+impl WheelMetadataCache {
     /// Cache structure:
     ///  * `<wheel metadata cache>/pypi/foo-1.0.0-py3-none-any.json`
     ///  * `<wheel metadata cache>/<digest(index-url)>/foo-1.0.0-py3-none-any.json`
@@ -29,13 +28,11 @@ impl WheelMetadataCacheShard {
     pub fn cache_dir(&self, cache: &Path, url: &Url) -> PathBuf {
         let cache_root = cache.join(WHEEL_METADATA_CACHE);
         match self {
-            WheelMetadataCacheShard::Pypi => cache_root.join("pypi"),
-            WheelMetadataCacheShard::Index(_) => cache_root
+            WheelMetadataCache::Index(IndexUrl::Pypi) => cache_root.join("pypi"),
+            WheelMetadataCache::Index(url) => cache_root
                 .join("index")
                 .join(digest(&CanonicalUrl::new(url))),
-            WheelMetadataCacheShard::Url => {
-                cache_root.join("url").join(digest(&CanonicalUrl::new(url)))
-            }
+            WheelMetadataCache::Url => cache_root.join("url").join(digest(&CanonicalUrl::new(url))),
         }
     }
 }
