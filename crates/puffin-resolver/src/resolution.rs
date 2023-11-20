@@ -1,22 +1,23 @@
 use std::hash::BuildHasherDefault;
 
+use anyhow::Result;
 use colored::Colorize;
+use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
 use fxhash::FxHashMap;
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{Requirement, VersionOrUrl};
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
+use puffin_normalize::PackageName;
+use pypi_types::{File, IndexUrl};
 use url::Url;
 use waitmap::WaitMap;
 
-use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_normalize::PackageName;
-use pypi_types::{File, IndexUrl};
-
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
+use crate::ResolveError;
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default)]
@@ -61,7 +62,7 @@ impl Graph {
         pins: &FxHashMap<PackageName, FxHashMap<Version, (IndexUrl, File)>>,
         redirects: &WaitMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
-    ) -> Self {
+    ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
         let mut graph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
@@ -88,7 +89,7 @@ impl Graph {
                     let url = redirects
                         .get(url)
                         .map_or_else(|| url.clone(), |url| url.value().clone());
-                    let pinned_package = Dist::from_url(package_name.clone(), url);
+                    let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
                     let index = graph.add_node(pinned_package);
                     inverse.insert(package_name, index);
@@ -124,7 +125,7 @@ impl Graph {
             }
         }
 
-        Self(graph)
+        Ok(Self(graph))
     }
 
     /// Return the number of packages in the graph.
