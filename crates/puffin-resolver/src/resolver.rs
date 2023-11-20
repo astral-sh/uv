@@ -21,7 +21,7 @@ use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_cache::metadata::WheelMetadataCache;
+
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::Fetcher;
@@ -173,12 +173,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                     })
             else {
                 let selection = state.partial_solution.extract_solution();
-                return Ok(Graph::from_state(
-                    &selection,
-                    &pins,
-                    &self.index.redirects,
-                    &state,
-                ));
+                return Graph::from_state(&selection, &pins, &self.index.redirects, &state);
             };
             next = highest_priority_pkg;
 
@@ -301,7 +296,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
                 if in_flight.insert_url(url) {
-                    let distribution = Dist::from_url(package_name.clone(), url.clone());
+                    let distribution = Dist::from_url(package_name.clone(), url.clone())?;
                     priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
@@ -606,32 +601,24 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                     .await
             }
 
-            // Fetch wheel metadata.
-            Request::Dist(Dist::Built(distribution)) => {
-                let metadata = match &distribution {
-                    BuiltDist::Registry(wheel) => {
-                        self.client
-                            .wheel_metadata(wheel.index.clone(), wheel.file.clone())
-                            .await?
-                    }
-                    BuiltDist::DirectUrl(wheel) => {
-                        self.client
-                            .wheel_metadata_no_pep658(
-                                &wheel.filename,
-                                &wheel.url,
-                                WheelMetadataCache::Url,
-                            )
-                            .await?
-                    }
-                };
+            // Fetch registry-based wheel metadata.
+            Request::Dist(Dist::Built(BuiltDist::Registry(wheel))) => {
+                let metadata = self
+                    .client
+                    .wheel_metadata(wheel.index.clone(), wheel.file.clone())
+                    .await?;
 
-                if metadata.name != *distribution.name() {
+                if metadata.name != *wheel.name() {
                     return Err(ResolveError::NameMismatch {
                         metadata: metadata.name,
-                        given: distribution.name().clone(),
+                        given: wheel.name().clone(),
                     });
                 }
-                Ok(Response::Dist(Dist::Built(distribution), metadata, None))
+                Ok(Response::Dist(
+                    Dist::Built(BuiltDist::Registry(wheel)),
+                    metadata,
+                    None,
+                ))
             }
 
             // Fetch distribution metadata.

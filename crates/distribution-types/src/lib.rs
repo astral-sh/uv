@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use distribution_filename::WheelFilename;
 use url::Url;
 
@@ -11,12 +11,14 @@ use pypi_types::{File, IndexUrl};
 
 pub use crate::any::*;
 pub use crate::cached::*;
+pub use crate::error::*;
 pub use crate::installed::*;
 pub use crate::traits::*;
 
 mod any;
 mod cached;
 pub mod direct_url;
+mod error;
 mod installed;
 mod traits;
 
@@ -125,18 +127,22 @@ impl Dist {
     }
 
     /// Create a [`Dist`] for a URL-based distribution.
-    pub fn from_url(name: PackageName, url: Url) -> Self {
-        // The part after the last slash
-        let filename = url
-            .path()
-            .rsplit_once('/')
-            .map_or(url.path(), |(_path, filename)| filename);
+    pub fn from_url(name: PackageName, url: Url) -> Result<Self, Error> {
         if url.scheme().starts_with("git+") {
-            Self::Source(SourceDist::Git(GitSourceDist { name, url }))
-        } else if let Ok(filename) = WheelFilename::from_str(filename) {
-            Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist { filename, url }))
+            Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
+        } else if Path::new(url.path())
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                filename: WheelFilename::from_str(url.filename()?)?,
+                url,
+            })))
         } else {
-            Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist { name, url }))
+            Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                name,
+                url,
+            })))
         }
     }
 
@@ -293,82 +299,84 @@ impl Metadata for Dist {
     }
 }
 
-impl RemoteSource for RegistryBuiltDist {
-    fn filename(&self) -> Result<&str> {
-        Ok(&self.file.filename)
+impl RemoteSource for File {
+    fn filename(&self) -> Result<&str, Error> {
+        Ok(&self.filename)
     }
 
     fn size(&self) -> Option<usize> {
-        self.file.size
+        self.size
+    }
+}
+
+impl RemoteSource for Url {
+    fn filename(&self) -> Result<&str, Error> {
+        self.path_segments()
+            .and_then(Iterator::last)
+            .ok_or_else(|| Error::UrlFilename(self.clone()))
+    }
+
+    fn size(&self) -> Option<usize> {
+        None
+    }
+}
+
+impl RemoteSource for RegistryBuiltDist {
+    fn filename(&self) -> Result<&str, Error> {
+        self.file.filename()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.file.size()
     }
 }
 
 impl RemoteSource for RegistrySourceDist {
-    fn filename(&self) -> Result<&str> {
-        Ok(&self.file.filename)
+    fn filename(&self) -> Result<&str, Error> {
+        self.file.filename()
     }
 
     fn size(&self) -> Option<usize> {
-        self.file.size
+        self.file.size()
     }
 }
 
 impl RemoteSource for DirectUrlBuiltDist {
-    fn filename(&self) -> Result<&str> {
-        self.url
-            .path_segments()
-            .and_then(Iterator::last)
-            .map(|filename| {
-                filename
-                    .rsplit_once('@')
-                    .map_or(filename, |(_, filename)| filename)
-            })
-            .with_context(|| format!("Could not parse filename from URL: {}", self.url))
+    fn filename(&self) -> Result<&str, Error> {
+        self.url.filename()
     }
 
     fn size(&self) -> Option<usize> {
-        None
+        self.url.size()
     }
 }
 
 impl RemoteSource for DirectUrlSourceDist {
-    fn filename(&self) -> Result<&str> {
-        self.url
-            .path_segments()
-            .and_then(Iterator::last)
-            .map(|filename| {
-                filename
-                    .rsplit_once('@')
-                    .map_or(filename, |(_, filename)| filename)
-            })
-            .with_context(|| format!("Could not parse filename from URL: {}", self.url))
+    fn filename(&self) -> Result<&str, Error> {
+        self.url.filename()
     }
 
     fn size(&self) -> Option<usize> {
-        None
+        self.url.size()
     }
 }
 
 impl RemoteSource for GitSourceDist {
-    fn filename(&self) -> Result<&str> {
-        self.url
-            .path_segments()
-            .and_then(Iterator::last)
-            .map(|filename| {
-                filename
-                    .rsplit_once('@')
-                    .map_or(filename, |(_, filename)| filename)
-            })
-            .with_context(|| format!("Could not parse filename from URL: {}", self.url))
+    fn filename(&self) -> Result<&str, Error> {
+        self.url.filename().map(|filename| {
+            filename
+                .rsplit_once('@')
+                .map_or(filename, |(_, filename)| filename)
+        })
     }
 
     fn size(&self) -> Option<usize> {
-        None
+        self.url.size()
     }
 }
 
 impl RemoteSource for SourceDist {
-    fn filename(&self) -> Result<&str> {
+    fn filename(&self) -> Result<&str, Error> {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
@@ -386,7 +394,7 @@ impl RemoteSource for SourceDist {
 }
 
 impl RemoteSource for BuiltDist {
-    fn filename(&self) -> Result<&str> {
+    fn filename(&self) -> Result<&str, Error> {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
@@ -402,7 +410,7 @@ impl RemoteSource for BuiltDist {
 }
 
 impl RemoteSource for Dist {
-    fn filename(&self) -> Result<&str> {
+    fn filename(&self) -> Result<&str, Error> {
         match self {
             Self::Built(dist) => dist.filename(),
             Self::Source(dist) => dist.filename(),

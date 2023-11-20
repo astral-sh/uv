@@ -883,6 +883,7 @@ dependencies = [
  "pypi-types",
  "serde",
  "serde_json",
+ "thiserror",
  "url",
 ]
 
@@ -2540,6 +2541,7 @@ dependencies = [
  "fs-err",
  "install-wheel-rs",
  "platform-tags",
+ "puffin-cache",
  "puffin-client",
  "puffin-git",
  "puffin-traits",

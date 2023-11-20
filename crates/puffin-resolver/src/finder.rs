@@ -87,7 +87,7 @@ impl<'a> DistFinder<'a> {
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     let package_name = requirement.name.clone();
-                    let package = Dist::from_url(package_name.clone(), url.clone());
+                    let package = Dist::from_url(package_name.clone(), url.clone())?;
                     resolution.insert(package_name, package);
                 }
             }

@@ -13,6 +13,7 @@ use distribution_filename::WheelFilename;
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{BuiltDist, Dist, Identifier, Metadata, RemoteSource, SourceDist};
 use platform_tags::Tags;
+use puffin_cache::metadata::WheelMetadataCache;
 use puffin_client::RegistryClient;
 use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
@@ -74,6 +75,13 @@ impl<'a> Fetcher<'a> {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 let metadata = client
                     .wheel_metadata(wheel.index.clone(), wheel.file.clone())
+                    .await?;
+                Ok(metadata)
+            }
+            // Fetch the metadata directly from the wheel URL.
+            Dist::Built(BuiltDist::DirectUrl(wheel)) => {
+                let metadata = client
+                    .wheel_metadata_no_pep658(&wheel.filename, &wheel.url, WheelMetadataCache::Url)
                     .await?;
                 Ok(metadata)
             }

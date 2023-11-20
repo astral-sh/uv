@@ -2,6 +2,7 @@ use anyhow::Result;
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 
+use crate::error::Error;
 use crate::{
     AnyDist, BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, GitSourceDist, InstalledDirectUrlDist, InstalledDist,
@@ -35,7 +36,7 @@ pub trait Metadata {
 
 pub trait RemoteSource {
     /// Return an appropriate filename for the distribution.
-    fn filename(&self) -> Result<&str>;
+    fn filename(&self) -> Result<&str, Error>;
 
     /// Return the size of the distribution, if known.
     fn size(&self) -> Option<usize>;

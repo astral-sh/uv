@@ -224,10 +224,10 @@ impl RegistryClient {
             self.cached_client
                 .get_cached_with_callback(req, &cache_dir, &cache_file, response_callback)
                 .await
-        // If we lack PEP 658 support, try using HTTP range requests to read only the
-        // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
-        // into the cache and read from there
         } else {
+            // If we lack PEP 658 support, try using HTTP range requests to read only the
+            // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
+            // into the cache and read from there
             self.wheel_metadata_no_pep658(&filename, &url, WheelMetadataCache::Index(index))
                 .await
         }
