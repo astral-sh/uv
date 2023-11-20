@@ -65,6 +65,10 @@ pub enum Error {
     Pep440,
     #[error("Invalid direct_url.json")]
     DirectUrlJson(#[from] serde_json::Error),
+    #[error("No .dist-info directory found")]
+    MissingDistInfo,
+    #[error("Multiple .dist-info directories found: {0}")]
+    MultipleDistInfo(String),
 }
 
 impl Error {
@@ -84,7 +88,7 @@ impl Error {
 pub fn find_dist_info<'a, T: Copy>(
     filename: &WheelFilename,
     files: impl Iterator<Item = (T, &'a str)>,
-) -> Result<(T, &'a str), String> {
+) -> Result<(T, &'a str), Error> {
     let metadatas: Vec<_> = files
         .filter_map(|(payload, path)| {
             let (dist_info_dir, file) = path.split_once('/')?;
@@ -102,17 +106,16 @@ pub fn find_dist_info<'a, T: Copy>(
         .collect();
     let (payload, dist_info_dir) = match metadatas[..] {
         [] => {
-            return Err("no .dist-info directory".to_string());
+            return Err(Error::MissingDistInfo);
         }
         [(payload, path)] => (payload, path),
         _ => {
-            return Err(format!(
-                "multiple .dist-info directories: {}",
+            return Err(Error::MultipleDistInfo(
                 metadatas
                     .into_iter()
                     .map(|(_, dist_info_dir)| dist_info_dir.to_string())
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(", "),
             ));
         }
     };

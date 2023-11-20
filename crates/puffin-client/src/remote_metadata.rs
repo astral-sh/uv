@@ -76,8 +76,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .iter()
             .enumerate()
             .filter_map(|(idx, e)| Some(((idx, e), e.entry().filename().as_str().ok()?))),
-    )
-    .map_err(|err| Error::InvalidDistInfo(filename.clone(), err))?;
+    )?;
 
     let offset = metadata_entry.header_offset();
     let size = metadata_entry.entry().compressed_size()

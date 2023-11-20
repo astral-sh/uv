@@ -2541,6 +2541,7 @@ dependencies = [
  "pypi-types",
  "rayon",
  "tempfile",
+ "thiserror",
  "tokio",
  "tokio-util",
  "tracing",

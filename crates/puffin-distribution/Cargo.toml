@@ -24,6 +24,7 @@ bytesize = { workspace = true }
 fs-err = { workspace = true }
 rayon = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
