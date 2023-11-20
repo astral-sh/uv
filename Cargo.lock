@@ -2576,6 +2576,7 @@ dependencies = [
  "distribution-filename",
  "distribution-types",
  "fs-err",
+ "futures",
  "fxhash",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
