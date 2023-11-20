@@ -3,7 +3,7 @@ use std::sync::Arc;
 use fxhash::FxHashMap;
 use tokio::sync::Mutex;
 
-use puffin_distribution::Identifier;
+use distribution_types::Identifier;
 
 /// A set of locks used to prevent concurrent access to the same resource.
 #[derive(Debug, Default)]

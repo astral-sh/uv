@@ -7,13 +7,13 @@ use fs_err as fs;
 use itertools::{Either, Itertools};
 use tracing::debug;
 
+use distribution_types::{AnyDist, Metadata};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_distribution::{AnyDist, Metadata};
 use puffin_installer::{Builder, InstallPlan};
 use puffin_interpreter::Virtualenv;
 use pypi_types::Yanked;

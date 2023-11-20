@@ -7,9 +7,9 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 
 use distribution_filename::WheelFilename;
+use distribution_types::{DirectUrlBuiltDist, Identifier, RemoteSource};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DirectUrlBuiltDist, Identifier, RemoteSource};
 use pypi_types::Metadata21;
 
 use crate::distribution::cached_wheel::CachedWheel;

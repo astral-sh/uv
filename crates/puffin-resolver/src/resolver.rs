@@ -17,14 +17,14 @@ use url::Url;
 use waitmap::WaitMap;
 
 use distribution_filename::WheelFilename;
+use distribution_types::{
+    BuiltDist, DirectUrlSourceDist, Dist, GitSourceDist, Identifier, Metadata, SourceDist,
+    VersionOrUrl,
+};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::{
-    BuiltDist, DirectUrlSourceDist, Dist, GitSourceDist, Identifier, Metadata, SourceDist,
-    VersionOrUrl,
-};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, Metadata21, SimpleJson};

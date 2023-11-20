@@ -10,9 +10,9 @@ use pubgrub::type_aliases::SelectedDependencies;
 use url::Url;
 use waitmap::WaitMap;
 
+use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_distribution::{BuiltDist, Dist, Metadata, SourceDist};
 use puffin_normalize::PackageName;
 use pypi_types::File;
 

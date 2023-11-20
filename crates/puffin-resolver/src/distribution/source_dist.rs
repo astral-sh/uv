@@ -12,10 +12,10 @@ use tracing::debug;
 use url::Url;
 
 use distribution_filename::WheelFilename;
+use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
+use distribution_types::{Identifier, RemoteSource, SourceDist};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
-use puffin_distribution::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use puffin_distribution::{Identifier, RemoteSource, SourceDist};
 use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;

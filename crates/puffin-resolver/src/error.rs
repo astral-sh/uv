@@ -5,8 +5,8 @@ use pubgrub::report::Reporter;
 use thiserror::Error;
 use url::Url;
 
+use distribution_types::{BuiltDist, SourceDist};
 use pep508_rs::Requirement;
-use puffin_distribution::{BuiltDist, SourceDist};
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use puffin_distribution::InstalledDist;
+use distribution_types::InstalledDist;
 
 /// Uninstall a package from the specified Python environment.
 pub async fn uninstall(dist: &InstalledDist) -> Result<install_wheel_rs::Uninstall> {

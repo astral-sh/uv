@@ -10,11 +10,11 @@ use futures::{StreamExt, TryFutureExt};
 use fxhash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
+use distribution_types::Dist;
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagPriority, Tags};
 use puffin_client::RegistryClient;
-use puffin_distribution::Dist;
 use puffin_interpreter::InterpreterInfo;
 use puffin_normalize::PackageName;
 use pypi_types::{File, SimpleJson};

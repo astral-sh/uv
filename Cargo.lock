@@ -870,6 +870,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "distribution-types"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "pep440_rs 0.3.12",
+ "puffin-cache",
+ "puffin-git",
+ "puffin-normalize",
+ "pypi-types",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2374,6 +2390,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
+ "distribution-types",
  "fs-err",
  "futures",
  "gourgeist",
@@ -2393,7 +2410,6 @@ dependencies = [
  "puffin-cache",
  "puffin-client",
  "puffin-dispatch",
- "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-normalize",
@@ -2486,6 +2502,7 @@ name = "puffin-dispatch"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "distribution-types",
  "gourgeist",
  "itertools 0.11.0",
  "pep508_rs",
@@ -2493,7 +2510,6 @@ dependencies = [
  "platform-tags",
  "puffin-build",
  "puffin-client",
- "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-resolver",
@@ -2501,22 +2517,6 @@ dependencies = [
  "pypi-types",
  "tempfile",
  "tracing",
-]
-
-[[package]]
-name = "puffin-distribution"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "fs-err",
- "pep440_rs 0.3.12",
- "puffin-cache",
- "puffin-git",
- "puffin-normalize",
- "pypi-types",
- "serde",
- "serde_json",
- "url",
 ]
 
 [[package]]
@@ -2546,6 +2546,7 @@ dependencies = [
  "bytesize",
  "cacache",
  "distribution-filename",
+ "distribution-types",
  "fs-err",
  "fxhash",
  "install-wheel-rs",
@@ -2553,7 +2554,6 @@ dependencies = [
  "pep508_rs",
  "puffin-cache",
  "puffin-client",
- "puffin-distribution",
  "puffin-git",
  "puffin-interpreter",
  "puffin-normalize",
@@ -2616,6 +2616,7 @@ dependencies = [
  "colored",
  "derivative",
  "distribution-filename",
+ "distribution-types",
  "fs-err",
  "futures",
  "fxhash",
@@ -2632,7 +2633,6 @@ dependencies = [
  "pubgrub",
  "puffin-cache",
  "puffin-client",
- "puffin-distribution",
  "puffin-git",
  "puffin-interpreter",
  "puffin-macros",
