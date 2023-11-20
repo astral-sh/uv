@@ -5,11 +5,13 @@
 //!   * From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
 //! * Metadata we got from building a source dist, keyed by the wheel name since we can have multiple wheels per source dist (e.g. for python version specific builds)
 
-use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+
 use url::Url;
 
 use pypi_types::IndexUrl;
+
+use crate::{digest, CanonicalUrl};
 
 const WHEEL_METADATA_CACHE: &str = "wheel-metadata-v0";
 
@@ -28,13 +30,11 @@ impl WheelMetadataCacheShard {
         let cache_root = cache.join(WHEEL_METADATA_CACHE);
         match self {
             WheelMetadataCacheShard::Pypi => cache_root.join("pypi"),
-            WheelMetadataCacheShard::Index(_) => {
-                let hash = Sha256::new().chain_update(url.as_str()).finalize();
-                cache_root.join("index").join(format!("{hash:x}"))
-            }
+            WheelMetadataCacheShard::Index(_) => cache_root
+                .join("index")
+                .join(digest(&CanonicalUrl::new(url))),
             WheelMetadataCacheShard::Url => {
-                let hash = Sha256::new().chain_update(url.as_str()).finalize();
-                cache_root.join("url").join(format!("{hash:x}"))
+                cache_root.join("url").join(digest(&CanonicalUrl::new(url)))
             }
         }
     }

@@ -299,9 +299,9 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                let distribution = Dist::from_url(package_name.clone(), url.clone());
                 // Emit a request to fetch the metadata for this distribution.
                 if in_flight.insert_url(url) {
+                    let distribution = Dist::from_url(package_name.clone(), url.clone());
                     priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }

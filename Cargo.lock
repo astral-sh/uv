@@ -2377,7 +2377,6 @@ dependencies = [
  "hex",
  "pypi-types",
  "seahash",
- "sha2",
  "tempfile",
  "url",
 ]
