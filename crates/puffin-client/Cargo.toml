@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
 install-wheel-rs = { path = "../install-wheel-rs" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 
@@ -21,6 +22,7 @@ reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }

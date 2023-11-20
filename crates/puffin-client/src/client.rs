@@ -18,14 +18,13 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
+use puffin_cache::metadata::WheelMetadataCache;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
 use crate::cached_client::CachedClient;
 use crate::error::Error;
-use crate::remote_metadata::{
-    wheel_metadata_from_remote_zip, WHEEL_METADATA_FROM_INDEX, WHEEL_METADATA_FROM_ZIP_CACHE,
-};
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -41,7 +40,7 @@ pub struct RegistryClientBuilder {
 impl RegistryClientBuilder {
     pub fn new(cache: impl Into<PathBuf>) -> Self {
         Self {
-            index: IndexUrl::from(Url::parse("https://pypi.org/simple").unwrap()),
+            index: IndexUrl::Pypi,
             extra_index: vec![],
             no_index: false,
             proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
@@ -199,7 +198,7 @@ impl RegistryClient {
     }
 
     /// Fetch the metadata from a wheel file.
-    pub async fn wheel_metadata(&self, file: File) -> Result<Metadata21, Error> {
+    pub async fn wheel_metadata(&self, index: IndexUrl, file: File) -> Result<Metadata21, Error> {
         if self.no_index {
             return Err(Error::NoIndex(file.filename));
         }
@@ -209,11 +208,12 @@ impl RegistryClient {
         let filename = WheelFilename::from_str(&file.filename)?;
         if file
             .dist_info_metadata
-            .is_some_and(|dist_info_metadata| dist_info_metadata.is_available())
+            .as_ref()
+            .is_some_and(pypi_types::Metadata::is_available)
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            let cache_dir = self.cache.join(WHEEL_METADATA_FROM_INDEX).join("pypi");
+            let cache_dir = WheelMetadataCache::Index(index).cache_dir(&self.cache, &url);
             let cache_file = format!("{}.json", filename.stem());
 
             let response_callback = |response: Response| async {
@@ -228,17 +228,23 @@ impl RegistryClient {
         // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
         // into the cache and read from there
         } else {
-            self.wheel_metadata_no_index(&filename, &url).await
+            self.wheel_metadata_no_pep658(&filename, &url, WheelMetadataCache::Index(index))
+                .await
         }
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
-    pub async fn wheel_metadata_no_index(
+    pub async fn wheel_metadata_no_pep658(
         &self,
         filename: &WheelFilename,
         url: &Url,
+        cache_shard: WheelMetadataCache,
     ) -> Result<Metadata21, Error> {
-        let cache_dir = self.cache.join(WHEEL_METADATA_FROM_ZIP_CACHE).join("pypi");
+        if self.no_index {
+            return Err(Error::NoIndex(url.to_string()));
+        }
+
+        let cache_dir = cache_shard.cache_dir(&self.cache, url);
         let cache_file = format!("{}.json", filename.stem());
 
         // This response callback is special, we actually make a number of subsequent requests to

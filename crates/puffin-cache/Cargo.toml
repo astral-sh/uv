@@ -11,6 +11,9 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+distribution-filename = { path = "../distribution-filename" }
+pypi-types = { path = "../pypi-types" }
+
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true }

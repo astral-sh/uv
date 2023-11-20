@@ -874,6 +874,7 @@ name = "distribution-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "distribution-filename",
  "fs-err",
  "pep440_rs 0.3.12",
  "puffin-cache",
@@ -2371,8 +2372,10 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "directories",
+ "distribution-filename",
  "fs-err",
  "hex",
+ "pypi-types",
  "seahash",
  "tempfile",
  "url",
@@ -2447,6 +2450,7 @@ dependencies = [
  "http-cache-reqwest",
  "http-cache-semantics",
  "install-wheel-rs",
+ "puffin-cache",
  "puffin-normalize",
  "pypi-types",
  "reqwest",
@@ -2454,6 +2458,7 @@ dependencies = [
  "reqwest-retry",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",
@@ -2618,8 +2623,10 @@ dependencies = [
 name = "puffin-macros"
 version = "0.0.1"
 dependencies = [
+ "colored",
  "fxhash",
  "once_cell",
+ "tracing",
 ]
 
 [[package]]

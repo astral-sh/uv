@@ -7,9 +7,6 @@ use install_wheel_rs::find_dist_info;
 
 use crate::Error;
 
-pub(crate) const WHEEL_METADATA_FROM_INDEX: &str = "wheel-metadat-index-v0";
-pub(crate) const WHEEL_METADATA_FROM_ZIP_CACHE: &str = "wheel-metadata-remote-v0";
-
 /// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
 /// entire wheel just for the one file.
 ///

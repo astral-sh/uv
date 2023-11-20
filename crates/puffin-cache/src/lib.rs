@@ -11,6 +11,7 @@ mod cache_key;
 mod canonical_url;
 mod cli;
 mod digest;
+pub mod metadata;
 
 /// A trait for types that can be hashed in a stable way across versions and platforms.
 pub trait StableHash {
