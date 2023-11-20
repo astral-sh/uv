@@ -988,10 +988,11 @@ dependencies = [
 
 [[package]]
 name = "fs-err"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0845fa252299212f0389d64ba26f34fa32cfe41588355f21ed507c59a0f64541"
+checksum = "fb5fd9bcbe8b1087cbd395b51498c01bc997cef73e778a80b77a811af5e2d29f"
 dependencies = [
+ "autocfg",
  "tokio",
 ]
 
@@ -2410,6 +2411,7 @@ dependencies = [
  "puffin-cache",
  "puffin-client",
  "puffin-dispatch",
+ "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-normalize",
@@ -2503,6 +2505,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "distribution-types",
+ "fs-err",
  "gourgeist",
  "itertools 0.11.0",
  "pep508_rs",
@@ -2510,13 +2513,39 @@ dependencies = [
  "platform-tags",
  "puffin-build",
  "puffin-client",
+ "puffin-distribution",
  "puffin-installer",
  "puffin-interpreter",
  "puffin-resolver",
  "puffin-traits",
  "pypi-types",
  "tempfile",
+ "tokio",
  "tracing",
+]
+
+[[package]]
+name = "puffin-distribution"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bytesize",
+ "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "install-wheel-rs",
+ "platform-tags",
+ "puffin-client",
+ "puffin-git",
+ "puffin-traits",
+ "pypi-types",
+ "rayon",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "zip",
 ]
 
 [[package]]
@@ -2543,8 +2572,6 @@ name = "puffin-installer"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "bytesize",
- "cacache",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -2554,6 +2581,7 @@ dependencies = [
  "pep508_rs",
  "puffin-cache",
  "puffin-client",
+ "puffin-distribution",
  "puffin-git",
  "puffin-interpreter",
  "puffin-normalize",
@@ -2563,10 +2591,8 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "tokio-util",
  "tracing",
  "url",
- "zip",
 ]
 
 [[package]]
@@ -2590,10 +2616,8 @@ dependencies = [
 name = "puffin-macros"
 version = "0.0.1"
 dependencies = [
- "colored",
  "fxhash",
  "once_cell",
- "tracing",
 ]
 
 [[package]]
@@ -2633,6 +2657,7 @@ dependencies = [
  "pubgrub",
  "puffin-cache",
  "puffin-client",
+ "puffin-distribution",
  "puffin-git",
  "puffin-interpreter",
  "puffin-macros",

@@ -1,5 +1,5 @@
 pub use builder::{Builder, Reporter as BuildReporter};
-pub use downloader::{Download, Downloader, Reporter as DownloadReporter};
+pub use downloader::{Downloader, Reporter as DownloadReporter};
 pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::InstallPlan;
 pub use registry_index::RegistryIndex;
@@ -18,4 +18,3 @@ mod site_packages;
 mod uninstall;
 mod unzipper;
 mod url_index;
-mod vendor;

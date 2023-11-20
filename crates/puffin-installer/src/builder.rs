@@ -1,19 +1,13 @@
 //! Build source distributions from downloaded archives.
-//!
-//! TODO(charlie): Unify with `crates/puffin-resolver/src/distribution/source_distribution.rs`.
 
 use std::cmp::Reverse;
 
 use anyhow::Result;
-use fs_err::tokio as fs;
 use tracing::debug;
 
-use distribution_types::{Dist, Metadata, RemoteSource};
+use distribution_types::{Dist, RemoteSource};
+use puffin_distribution::{Fetcher, SourceDistDownload, WheelDownload};
 use puffin_traits::BuildContext;
-
-use crate::downloader::{DiskWheel, SourceDistDownload, WheelDownload};
-
-const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 
 pub struct Builder<'a, T: BuildContext + Send + Sync> {
     build_context: &'a T,
@@ -43,7 +37,7 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
         // Sort the distributions by size.
         let mut dists = dists;
         dists.sort_unstable_by_key(|distribution| {
-            Reverse(distribution.dist.size().unwrap_or(usize::MAX))
+            Reverse(distribution.remote().size().unwrap_or(usize::MAX))
         });
 
         // Build the distributions serially.
@@ -51,7 +45,9 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
         for dist in dists {
             debug!("Building source distribution: {dist}");
 
-            let result = build_sdist(dist, self.build_context).await?;
+            let result = Fetcher::new(self.build_context.cache())
+                .build_sdist(dist, self.build_context)
+                .await?;
 
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_progress(result.remote());
@@ -66,39 +62,6 @@ impl<'a, T: BuildContext + Send + Sync> Builder<'a, T> {
 
         Ok(builds)
     }
-}
-
-/// Build a source distribution into a wheel.
-async fn build_sdist<T: BuildContext + Send + Sync>(
-    dist: SourceDistDownload,
-    build_context: &T,
-) -> Result<WheelDownload> {
-    // Create a directory for the wheel.
-    let wheel_dir = build_context
-        .cache()
-        .join(BUILT_WHEELS_CACHE)
-        .join(dist.dist.package_id());
-    fs::create_dir_all(&wheel_dir).await?;
-
-    // Build the wheel.
-    // TODO(charlie): If this is a Git dependency, we should do another checkout. If the same
-    // repository is used by multiple dependencies, at multiple commits, the local checkout may now
-    // point to the wrong commit.
-    let disk_filename = build_context
-        .build_source(
-            &dist.sdist_file,
-            dist.subdirectory.as_deref(),
-            &wheel_dir,
-            &dist.dist.to_string(),
-        )
-        .await?;
-    let wheel_filename = wheel_dir.join(disk_filename);
-
-    Ok(WheelDownload::Disk(DiskWheel {
-        dist: dist.dist,
-        path: wheel_filename,
-        temp_dir: None,
-    }))
 }
 
 pub trait Reporter: Send + Sync {

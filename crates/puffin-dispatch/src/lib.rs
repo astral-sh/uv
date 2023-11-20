@@ -164,8 +164,8 @@ impl BuildContext for BuildDispatch {
                 downloads
                     .into_iter()
                     .partition_map(|download| match download {
-                        puffin_installer::Download::Wheel(wheel) => Either::Left(wheel),
-                        puffin_installer::Download::SourceDist(sdist) => Either::Right(sdist),
+                        puffin_distribution::Download::Wheel(wheel) => Either::Left(wheel),
+                        puffin_distribution::Download::SourceDist(sdist) => Either::Right(sdist),
                     });
 
             // Build any missing source distributions.

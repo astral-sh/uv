@@ -139,6 +139,30 @@ impl Dist {
             Dist::Source(source) => source.file(),
         }
     }
+
+    #[must_use]
+    pub fn with_url(self, url: Url) -> Self {
+        match self {
+            Self::Built(built) => Self::Built(match built {
+                BuiltDist::DirectUrl(dist) => BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                    name: dist.name,
+                    url,
+                }),
+                dist @ BuiltDist::Registry(_) => dist,
+            }),
+            Self::Source(source) => Self::Source(match source {
+                SourceDist::DirectUrl(dist) => SourceDist::DirectUrl(DirectUrlSourceDist {
+                    name: dist.name,
+                    url,
+                }),
+                SourceDist::Git(dist) => SourceDist::Git(GitSourceDist {
+                    name: dist.name,
+                    url,
+                }),
+                dist @ SourceDist::Registry(_) => dist,
+            }),
+        }
+    }
 }
 
 impl BuiltDist {
