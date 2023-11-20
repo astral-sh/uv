@@ -114,7 +114,13 @@ impl FromStr for WheelFilename {
 
 impl Display for WheelFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}-{}.whl", self.name, self.version, self.get_tag())
+        write!(
+            f,
+            "{}-{}-{}.whl",
+            self.name.as_dist_info_name(),
+            self.version,
+            self.get_tag()
+        )
     }
 }
 
@@ -276,5 +282,20 @@ mod tests {
         insta::assert_debug_snapshot!(WheelFilename::from_str(
             "foo-1.2.3-build-python-abi-platform.whl"
         ));
+    }
+
+    #[test]
+    fn from_and_to_string() {
+        let wheel_names = &[
+            "django_allauth-0.51.0-py3-none-any.whl",
+            "osm2geojson-0.2.4-py3-none-any.whl",
+            "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        ];
+        for wheel_name in wheel_names {
+            assert_eq!(
+                WheelFilename::from_str(wheel_name).unwrap().to_string(),
+                *wheel_name
+            );
+        }
     }
 }
