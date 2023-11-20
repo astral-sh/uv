@@ -2783,6 +2783,7 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
+ "puffin-macros",
  "puffin-normalize",
  "regex",
  "rfc2047-decoder",
