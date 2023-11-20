@@ -930,8 +930,7 @@ pub fn install_wheel(
         ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
 
     debug!(name = name.as_ref(), "Getting wheel metadata");
-    let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))
-        .map_err(Error::InvalidWheel)?
+    let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))?
         .1
         .to_string();
     let (name, _version) = read_metadata(&dist_info_prefix, &mut archive)?;

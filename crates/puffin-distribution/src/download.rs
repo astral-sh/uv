@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result};
 use tempfile::TempDir;
 use zip::ZipArchive;
 
@@ -9,6 +9,8 @@ use distribution_filename::WheelFilename;
 use distribution_types::{Dist, RemoteSource};
 use install_wheel_rs::find_dist_info;
 use pypi_types::Metadata21;
+
+use crate::error::Error;
 
 /// A downloaded wheel that's stored in-memory.
 #[derive(Debug)]
@@ -86,12 +88,14 @@ impl std::fmt::Display for SourceDistDownload {
 
 impl InMemoryWheel {
     /// Read the [`Metadata21`] from a wheel.
-    pub fn read_dist_info(&self) -> Result<Metadata21> {
+    pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
         let mut archive = ZipArchive::new(std::io::Cursor::new(&self.buffer))?;
-        let filename = self.filename()?;
+        let filename = self
+            .filename()
+            .map_err(|err| Error::FilenameParse(self.dist.to_string(), err))?;
         let dist_info_dir =
             find_dist_info(&filename, archive.file_names().map(|name| (name, name)))
-                .map_err(|err| format_err!("Invalid wheel {filename}: {err}"))?
+                .map_err(|err| Error::DistInfo(self.dist.to_string(), err))?
                 .1;
         let dist_info =
             std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
@@ -101,12 +105,14 @@ impl InMemoryWheel {
 
 impl DiskWheel {
     /// Read the [`Metadata21`] from a wheel.
-    pub fn read_dist_info(&self) -> Result<Metadata21> {
+    pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
         let mut archive = ZipArchive::new(fs_err::File::open(&self.path)?)?;
-        let filename = self.filename()?;
+        let filename = self
+            .filename()
+            .map_err(|err| Error::FilenameParse(self.dist.to_string(), err))?;
         let dist_info_dir =
             find_dist_info(&filename, archive.file_names().map(|name| (name, name)))
-                .map_err(|err| format_err!("Invalid wheel {filename}: {err}"))?
+                .map_err(|err| Error::DistInfo(self.dist.to_string(), err))?
                 .1;
         let dist_info =
             std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
@@ -116,7 +122,7 @@ impl DiskWheel {
 
 impl WheelDownload {
     /// Read the [`Metadata21`] from a wheel.
-    pub fn read_dist_info(&self) -> Result<Metadata21> {
+    pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
         match self {
             WheelDownload::InMemory(wheel) => wheel.read_dist_info(),
             WheelDownload::Disk(wheel) => wheel.read_dist_info(),

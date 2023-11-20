@@ -13,6 +13,9 @@ pub enum Error {
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
 
+    #[error(transparent)]
+    InstallWheel(#[from] install_wheel_rs::Error),
+
     #[error("{0} isn't available locally, but making network requests to registries was banned.")]
     NoIndex(String),
 

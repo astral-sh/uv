@@ -4,6 +4,7 @@ pub use crate::reporter::Reporter;
 pub use crate::unzip::Unzip;
 
 mod download;
+mod error;
 mod fetcher;
 mod reporter;
 mod unzip;

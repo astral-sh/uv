@@ -18,6 +18,7 @@ use puffin_git::{GitSource, GitUrl};
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
+use crate::error::Error;
 use crate::reporter::Facade;
 use crate::{DiskWheel, Download, InMemoryWheel, Reporter, SourceDistDownload, WheelDownload};
 
@@ -52,7 +53,7 @@ impl<'a> Fetcher<'a> {
     }
 
     /// Return the [`Metadata21`] for a distribution, if it exists in the cache.
-    pub fn find_metadata(&self, dist: &Dist, tags: &Tags) -> Result<Option<Metadata21>> {
+    pub fn find_metadata(&self, dist: &Dist, tags: &Tags) -> Result<Option<Metadata21>, Error> {
         self.find_in_cache(dist, tags)
             .map(|wheel| wheel.read_dist_info())
             .transpose()
@@ -77,10 +78,14 @@ impl<'a> Fetcher<'a> {
             // Fetch the distribution, then read the metadata (for built distributions), or build
             // the distribution and _then_ read the metadata (for source distributions).
             dist => match self.fetch_dist(dist, client).await? {
-                Download::Wheel(wheel) => wheel.read_dist_info(),
+                Download::Wheel(wheel) => {
+                    let metadata = wheel.read_dist_info()?;
+                    Ok(metadata)
+                }
                 Download::SourceDist(sdist) => {
                     let wheel = self.build_sdist(sdist, build_context).await?;
-                    wheel.read_dist_info()
+                    let metadata = wheel.read_dist_info()?;
+                    Ok(metadata)
                 }
             },
         }

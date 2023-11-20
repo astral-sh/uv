@@ -301,8 +301,7 @@ impl RegistryClient {
                 .iter()
                 .enumerate()
                 .filter_map(|(idx, e)| Some((idx, e.entry().filename().as_str().ok()?))),
-        )
-        .map_err(|err| Error::InvalidDistInfo(filename.clone(), err))?;
+        )?;
 
         // Read the contents of the METADATA file
         let mut contents = Vec::new();
