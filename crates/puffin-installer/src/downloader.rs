@@ -1,9 +1,9 @@
 use std::cmp::Reverse;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{bail, Result};
-use tokio::task::JoinSet;
+use futures::StreamExt;
 
 use distribution_types::{Dist, RemoteSource};
 use puffin_client::RegistryClient;
@@ -55,27 +55,12 @@ impl<'a> Downloader<'a> {
         });
 
         // Fetch the distributions in parallel.
-        let mut fetches = JoinSet::new();
         let mut downloads = Vec::with_capacity(dists.len());
-        for dist in dists {
-            if self.no_build && matches!(dist, Dist::Source(_)) {
-                bail!(
-                    "Building source distributions is disabled, not downloading {}",
-                    dist
-                );
-            }
+        let mut fetches = futures::stream::iter(dists)
+            .map(|dist| self.fetch(dist))
+            .buffer_unordered(50);
 
-            fetches.spawn(fetch(
-                dist.clone(),
-                self.client.clone(),
-                self.cache.to_path_buf(),
-                self.locks.clone(),
-            ));
-        }
-
-        while let Some(result) = fetches.join_next().await.transpose()? {
-            let result = result?;
-
+        while let Some(result) = fetches.next().await.transpose()? {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_download_progress(&result);
             }
@@ -89,19 +74,31 @@ impl<'a> Downloader<'a> {
 
         Ok(downloads)
     }
-}
 
-/// Download a built distribution (wheel) or source distribution (sdist).
-async fn fetch(
-    dist: Dist,
-    client: RegistryClient,
-    cache: PathBuf,
-    locks: Arc<Locks>,
-) -> Result<Download> {
-    let lock = locks.acquire(&dist).await;
-    let _guard = lock.lock().await;
-    let metadata = Fetcher::new(&cache).fetch_dist(&dist, &client).await?;
-    Ok(metadata)
+    /// Download a built distribution (wheel) or source distribution (sdist).
+    async fn fetch(&self, dist: Dist) -> Result<Download> {
+        match dist {
+            Dist::Source(_) => {
+                if self.no_build {
+                    bail!("Building source distributions is disabled; skipping: {dist}");
+                }
+
+                let lock = self.locks.acquire(&dist).await;
+                let _guard = lock.lock().await;
+
+                let metadata = Fetcher::new(self.cache)
+                    .fetch_dist(&dist, self.client)
+                    .await?;
+                Ok(metadata)
+            }
+            Dist::Built(_) => {
+                let metadata = Fetcher::new(self.cache)
+                    .fetch_dist(&dist, self.client)
+                    .await?;
+                Ok(metadata)
+            }
+        }
+    }
 }
 
 pub trait Reporter: Send + Sync {
