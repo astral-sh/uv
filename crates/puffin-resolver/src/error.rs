@@ -128,6 +128,10 @@ impl ResolveError {
                 url: wheel.url.clone(),
                 err,
             },
+            Dist::Built(BuiltDist::Path(wheel)) => Self::UrlBuiltDist {
+                url: wheel.url.clone(),
+                err,
+            },
             Dist::Source(SourceDist::Registry(sdist)) => Self::RegistrySourceDist {
                 filename: sdist.file.filename.clone(),
                 err,
@@ -137,6 +141,10 @@ impl ResolveError {
                 err,
             },
             Dist::Source(SourceDist::Git(sdist)) => Self::UrlSourceDist {
+                url: sdist.url.clone(),
+                err,
+            },
+            Dist::Source(SourceDist::Path(sdist)) => Self::UrlBuiltDist {
                 url: sdist.url.clone(),
                 err,
             },

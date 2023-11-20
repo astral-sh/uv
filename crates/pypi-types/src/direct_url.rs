@@ -7,8 +7,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/direct-url-data-structure/>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", untagged)]
 pub enum DirectUrl {
+    /// The direct URL is a local directory. For example:
+    /// ```json
+    /// {"url": "file:///home/user/project", "dir_info": {}}
+    /// ```
+    LocalDirectory { url: String, dir_info: DirInfo },
     /// The direct URL is a path to an archive. For example:
     /// ```json
     /// {"archive_info": {"hash": "sha256=75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8", "hashes": {"sha256": "75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8"}}, "url": "https://files.pythonhosted.org/packages/b8/8b/31273bf66016be6ad22bb7345c37ff350276cfd46e389a0c2ac5da9d9073/wheel-0.41.2-py3-none-any.whl"}
@@ -29,6 +34,13 @@ pub enum DirectUrl {
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<PathBuf>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DirInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub editable: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

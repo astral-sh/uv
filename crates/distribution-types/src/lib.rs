@@ -1,10 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
-use distribution_filename::WheelFilename;
 use url::Url;
 
+use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl};
@@ -50,6 +50,7 @@ pub enum Dist {
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
     DirectUrl(DirectUrlBuiltDist),
+    Path(PathBuiltDist),
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +59,7 @@ pub enum SourceDist {
     Registry(RegistrySourceDist),
     DirectUrl(DirectUrlSourceDist),
     Git(GitSourceDist),
+    Path(PathSourceDist),
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
@@ -76,6 +78,14 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     pub url: Url,
+}
+
+/// A built distribution (wheel) that exists in a local directory.
+#[derive(Debug, Clone)]
+pub struct PathBuiltDist {
+    pub filename: WheelFilename,
+    pub url: Url,
+    pub path: PathBuf,
 }
 
 /// A source distribution that exists in a registry, like `PyPI`.
@@ -101,6 +111,14 @@ pub struct DirectUrlSourceDist {
 pub struct GitSourceDist {
     pub name: PackageName,
     pub url: Url,
+}
+
+/// A source distribution that exists in a local directory.
+#[derive(Debug, Clone)]
+pub struct PathSourceDist {
+    pub name: PackageName,
+    pub url: Url,
+    pub path: PathBuf,
 }
 
 impl Dist {
@@ -129,8 +147,34 @@ impl Dist {
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: Url) -> Result<Self, Error> {
         if url.scheme().starts_with("git+") {
-            Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
-        } else if Path::new(url.path())
+            return Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })));
+        }
+
+        if url.scheme().eq_ignore_ascii_case("file") {
+            // Store the canonicalized path.
+            let path = url
+                .to_file_path()
+                .map_err(|()| Error::UrlFilename(url.clone()))?
+                .canonicalize()?;
+            return if path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+            {
+                Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
+                    filename: WheelFilename::from_str(url.filename()?)?,
+                    url,
+                    path,
+                })))
+            } else {
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    url,
+                    path,
+                })))
+            };
+        }
+
+        if Path::new(url.path())
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
@@ -158,21 +202,18 @@ impl Dist {
     pub fn with_url(self, url: Url) -> Self {
         match self {
             Self::Built(built) => Self::Built(match built {
-                BuiltDist::DirectUrl(dist) => BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                    filename: dist.filename,
-                    url,
-                }),
+                BuiltDist::DirectUrl(dist) => {
+                    BuiltDist::DirectUrl(DirectUrlBuiltDist { url, ..dist })
+                }
+                BuiltDist::Path(dist) => BuiltDist::Path(PathBuiltDist { url, ..dist }),
                 dist @ BuiltDist::Registry(_) => dist,
             }),
             Self::Source(source) => Self::Source(match source {
-                SourceDist::DirectUrl(dist) => SourceDist::DirectUrl(DirectUrlSourceDist {
-                    name: dist.name,
-                    url,
-                }),
-                SourceDist::Git(dist) => SourceDist::Git(GitSourceDist {
-                    name: dist.name,
-                    url,
-                }),
+                SourceDist::DirectUrl(dist) => {
+                    SourceDist::DirectUrl(DirectUrlSourceDist { url, ..dist })
+                }
+                SourceDist::Git(dist) => SourceDist::Git(GitSourceDist { url, ..dist }),
+                SourceDist::Path(dist) => SourceDist::Path(PathSourceDist { url, ..dist }),
                 dist @ SourceDist::Registry(_) => dist,
             }),
         }
@@ -184,7 +225,7 @@ impl BuiltDist {
     pub fn file(&self) -> Option<&File> {
         match self {
             BuiltDist::Registry(registry) => Some(&registry.file),
-            BuiltDist::DirectUrl(_) => None,
+            BuiltDist::DirectUrl(_) | BuiltDist::Path(_) => None,
         }
     }
 }
@@ -194,7 +235,7 @@ impl SourceDist {
     pub fn file(&self) -> Option<&File> {
         match self {
             SourceDist::Registry(registry) => Some(&registry.file),
-            SourceDist::DirectUrl(_) | SourceDist::Git(_) => None,
+            SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
         }
     }
 }
@@ -210,6 +251,16 @@ impl Metadata for RegistryBuiltDist {
 }
 
 impl Metadata for DirectUrlBuiltDist {
+    fn name(&self) -> &PackageName {
+        &self.filename.name
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl Metadata for PathBuiltDist {
     fn name(&self) -> &PackageName {
         &self.filename.name
     }
@@ -249,12 +300,23 @@ impl Metadata for GitSourceDist {
     }
 }
 
+impl Metadata for PathSourceDist {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
 impl Metadata for SourceDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
             Self::DirectUrl(dist) => dist.name(),
             Self::Git(dist) => dist.name(),
+            Self::Path(dist) => dist.name(),
         }
     }
 
@@ -263,6 +325,7 @@ impl Metadata for SourceDist {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
             Self::Git(dist) => dist.version_or_url(),
+            Self::Path(dist) => dist.version_or_url(),
         }
     }
 }
@@ -272,6 +335,7 @@ impl Metadata for BuiltDist {
         match self {
             Self::Registry(dist) => dist.name(),
             Self::DirectUrl(dist) => dist.name(),
+            Self::Path(dist) => dist.name(),
         }
     }
 
@@ -279,6 +343,7 @@ impl Metadata for BuiltDist {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
+            Self::Path(dist) => dist.version_or_url(),
         }
     }
 }
@@ -375,12 +440,33 @@ impl RemoteSource for GitSourceDist {
     }
 }
 
+impl RemoteSource for PathBuiltDist {
+    fn filename(&self) -> Result<&str, Error> {
+        self.url.filename()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.url.size()
+    }
+}
+
+impl RemoteSource for PathSourceDist {
+    fn filename(&self) -> Result<&str, Error> {
+        self.url.filename()
+    }
+
+    fn size(&self) -> Option<usize> {
+        self.url.size()
+    }
+}
+
 impl RemoteSource for SourceDist {
     fn filename(&self) -> Result<&str, Error> {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
             Self::Git(dist) => dist.filename(),
+            Self::Path(dist) => dist.filename(),
         }
     }
 
@@ -389,6 +475,7 @@ impl RemoteSource for SourceDist {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
             Self::Git(dist) => dist.size(),
+            Self::Path(dist) => dist.size(),
         }
     }
 }
@@ -398,6 +485,7 @@ impl RemoteSource for BuiltDist {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
+            Self::Path(dist) => dist.filename(),
         }
     }
 
@@ -405,6 +493,7 @@ impl RemoteSource for BuiltDist {
         match self {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
+            Self::Path(dist) => dist.size(),
         }
     }
 }
@@ -442,6 +531,16 @@ impl Identifier for File {
 
     fn resource_id(&self) -> String {
         self.hashes.sha256.clone()
+    }
+}
+
+impl Identifier for Path {
+    fn distribution_id(&self) -> String {
+        puffin_cache::digest(&self)
+    }
+
+    fn resource_id(&self) -> String {
+        puffin_cache::digest(&self)
     }
 }
 
@@ -485,6 +584,26 @@ impl Identifier for DirectUrlSourceDist {
     }
 }
 
+impl Identifier for PathBuiltDist {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
+impl Identifier for PathSourceDist {
+    fn distribution_id(&self) -> String {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> String {
+        self.url.resource_id()
+    }
+}
+
 impl Identifier for GitSourceDist {
     fn distribution_id(&self) -> String {
         self.url.distribution_id()
@@ -501,6 +620,7 @@ impl Identifier for SourceDist {
             Self::Registry(dist) => dist.distribution_id(),
             Self::DirectUrl(dist) => dist.distribution_id(),
             Self::Git(dist) => dist.distribution_id(),
+            Self::Path(dist) => dist.distribution_id(),
         }
     }
 
@@ -509,6 +629,7 @@ impl Identifier for SourceDist {
             Self::Registry(dist) => dist.resource_id(),
             Self::DirectUrl(dist) => dist.resource_id(),
             Self::Git(dist) => dist.resource_id(),
+            Self::Path(dist) => dist.resource_id(),
         }
     }
 }
@@ -518,6 +639,7 @@ impl Identifier for BuiltDist {
         match self {
             Self::Registry(dist) => dist.distribution_id(),
             Self::DirectUrl(dist) => dist.distribution_id(),
+            Self::Path(dist) => dist.distribution_id(),
         }
     }
 
@@ -525,6 +647,7 @@ impl Identifier for BuiltDist {
         match self {
             Self::Registry(dist) => dist.resource_id(),
             Self::DirectUrl(dist) => dist.resource_id(),
+            Self::Path(dist) => dist.resource_id(),
         }
     }
 }

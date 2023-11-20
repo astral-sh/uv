@@ -7,8 +7,17 @@ use puffin_git::GitUrl;
 
 #[derive(Debug)]
 pub enum DirectUrl {
+    /// The direct URL is a path to a local directory or file.
+    LocalFile(LocalFileUrl),
+    /// The direct URL is path to a Git repository.
     Git(DirectGitUrl),
+    /// The direct URL is a URL to an archive.
     Archive(DirectArchiveUrl),
+}
+
+#[derive(Debug)]
+pub struct LocalFileUrl {
+    pub url: Url,
 }
 
 #[derive(Debug)]
@@ -21,6 +30,12 @@ pub struct DirectGitUrl {
 pub struct DirectArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
+}
+
+impl From<&Url> for LocalFileUrl {
+    fn from(url: &Url) -> Self {
+        Self { url: url.clone() }
+    }
 }
 
 impl TryFrom<&Url> for DirectGitUrl {
@@ -73,6 +88,8 @@ impl TryFrom<&Url> for DirectUrl {
                     "Unsupported URL prefix `{prefix}` in URL: {url}",
                 ))),
             }
+        } else if url.scheme().eq_ignore_ascii_case("file") {
+            Ok(Self::LocalFile(LocalFileUrl::from(url)))
         } else {
             Ok(Self::Archive(DirectArchiveUrl::from(url)))
         }
@@ -84,9 +101,21 @@ impl TryFrom<&DirectUrl> for pypi_types::DirectUrl {
 
     fn try_from(value: &DirectUrl) -> std::result::Result<Self, Self::Error> {
         match value {
+            DirectUrl::LocalFile(value) => pypi_types::DirectUrl::try_from(value),
             DirectUrl::Git(value) => pypi_types::DirectUrl::try_from(value),
             DirectUrl::Archive(value) => pypi_types::DirectUrl::try_from(value),
         }
+    }
+}
+
+impl TryFrom<&LocalFileUrl> for pypi_types::DirectUrl {
+    type Error = Error;
+
+    fn try_from(value: &LocalFileUrl) -> Result<Self, Self::Error> {
+        Ok(pypi_types::DirectUrl::LocalDirectory {
+            url: value.url.to_string(),
+            dir_info: pypi_types::DirInfo { editable: None },
+        })
     }
 }
 
@@ -124,9 +153,16 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
 impl From<DirectUrl> for Url {
     fn from(value: DirectUrl) -> Self {
         match value {
+            DirectUrl::LocalFile(value) => value.into(),
             DirectUrl::Git(value) => value.into(),
             DirectUrl::Archive(value) => value.into(),
         }
+    }
+}
+
+impl From<LocalFileUrl> for Url {
+    fn from(value: LocalFileUrl) -> Self {
+        value.url
     }
 }
 
@@ -160,6 +196,10 @@ mod tests {
 
     #[test]
     fn direct_url_from_url() -> Result<()> {
+        let expected = Url::parse("file:///path/to/directory")?;
+        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        assert_eq!(expected, actual);
+
         let expected = Url::parse("git+https://github.com/pallets/flask.git")?;
         let actual = Url::from(DirectUrl::try_from(&expected)?);
         assert_eq!(expected, actual);

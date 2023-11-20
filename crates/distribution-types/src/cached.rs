@@ -84,6 +84,11 @@ impl CachedDist {
                 url: dist.url,
                 path,
             }),
+            Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
+                name: dist.filename.name,
+                url: dist.url,
+                path,
+            }),
             Dist::Source(SourceDist::Registry(dist)) => Self::Registry(CachedRegistryDist {
                 name: dist.name,
                 version: dist.version,
@@ -95,6 +100,11 @@ impl CachedDist {
                 path,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+                name: dist.name,
+                url: dist.url,
+                path,
+            }),
+            Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 name: dist.name,
                 url: dist.url,
                 path,

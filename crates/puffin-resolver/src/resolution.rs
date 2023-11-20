@@ -163,6 +163,12 @@ impl Graph {
                     version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
                     marker: None,
                 },
+                Dist::Built(BuiltDist::Path(wheel)) => Requirement {
+                    name: wheel.filename.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
+                    marker: None,
+                },
                 Dist::Source(SourceDist::Registry(sdist)) => Requirement {
                     name: sdist.name.clone(),
                     extras: None,
@@ -178,6 +184,12 @@ impl Graph {
                     marker: None,
                 },
                 Dist::Source(SourceDist::Git(sdist)) => Requirement {
+                    name: sdist.name.clone(),
+                    extras: None,
+                    version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
+                    marker: None,
+                },
+                Dist::Source(SourceDist::Path(sdist)) => Requirement {
                     name: sdist.name.clone(),
                     extras: None,
                     version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
