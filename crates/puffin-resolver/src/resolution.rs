@@ -14,7 +14,7 @@ use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
-use pypi_types::File;
+use pypi_types::{File, IndexUrl};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 
@@ -58,7 +58,7 @@ impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
     pub fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
-        pins: &FxHashMap<PackageName, FxHashMap<Version, File>>,
+        pins: &FxHashMap<PackageName, FxHashMap<Version, (IndexUrl, File)>>,
         redirects: &WaitMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Self {
@@ -73,12 +73,13 @@ impl Graph {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     let version = Version::from(version.clone());
-                    let file = pins
+                    let (index, file) = pins
                         .get(package_name)
                         .and_then(|versions| versions.get(&version))
                         .unwrap()
                         .clone();
-                    let pinned_package = Dist::from_registry(package_name.clone(), version, file);
+                    let pinned_package =
+                        Dist::from_registry(package_name.clone(), version, file, index);
 
                     let index = graph.add_node(pinned_package);
                     inverse.insert(package_name, index);

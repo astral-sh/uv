@@ -27,7 +27,7 @@ use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
-use pypi_types::{File, Metadata21, SimpleJson};
+use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::distribution::{BuiltDistFetcher, SourceDistFetcher, SourceDistributionReporter};
@@ -330,7 +330,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             let Some(entry) = self.index.packages.get(package_name) else {
                 continue;
             };
-            let version_map = entry.value();
+            let (index, version_map) = entry.value();
 
             // Try to find a compatible version. If there aren't any compatible versions,
             // short-circuit and return `None`.
@@ -345,6 +345,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     candidate.package_name,
                     candidate.version.into(),
                     candidate.file.into(),
+                    index.clone(),
                 );
                 request_sink.unbounded_send(Request::Dist(distribution))?;
             }
@@ -358,7 +359,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         &self,
         package: &PubGrubPackage,
         range: &Range<PubGrubVersion>,
-        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, (IndexUrl, File)>>,
         in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Option<PubGrubVersion>, ResolveError> {
@@ -405,7 +406,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await.unwrap();
-                let version_map = entry.value();
+                let (index, version_map) = entry.value();
 
                 debug!("Searching for a compatible version of {package_name} ({range})");
 
@@ -428,7 +429,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                     .or_default()
                     .insert(
                         candidate.version.clone().into(),
-                        candidate.file.clone().into(),
+                        (index.clone(), candidate.file.clone().into()),
                     );
 
                 let version = candidate.version.clone();
@@ -439,6 +440,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         candidate.package_name,
                         candidate.version.into(),
                         candidate.file.into(),
+                        index.clone(),
                     );
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
@@ -453,7 +455,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
         &self,
         package: &PubGrubPackage,
         version: &PubGrubVersion,
-        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, File>>,
+        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, (IndexUrl, File)>>,
         priorities: &mut PubGrubPriorities,
         in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
@@ -498,7 +500,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         .unwrap(),
                     None => {
                         let versions = pins.get(package_name).unwrap();
-                        let file = versions.get(version.into()).unwrap();
+                        let (_index, file) = versions.get(version.into()).unwrap();
                         self.index
                             .distributions
                             .wait(&file.distribution_id())
@@ -550,7 +552,7 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
 
         while let Some(response) = response_stream.next().await {
             match response? {
-                Response::Package(package_name, metadata) => {
+                Response::Package(package_name, index, metadata) => {
                     trace!("Received package metadata for: {package_name}");
                     let version_map = VersionMap::from_metadata(
                         metadata,
@@ -559,7 +561,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
                         self.build_context.interpreter_info().version(),
                         self.exclude_newer.as_ref(),
                     );
-                    self.index.packages.insert(package_name, version_map);
+                    self.index
+                        .packages
+                        .insert(package_name, (index, version_map));
                 }
                 Response::Dist(Dist::Built(distribution), metadata, ..) => {
                     trace!("Received built distribution metadata for: {distribution}");
@@ -596,7 +600,9 @@ impl<'a, Context: BuildContext + Sync> Resolver<'a, Context> {
             Request::Package(package_name) => {
                 self.client
                     .simple(package_name.clone())
-                    .map_ok(move |metadata| Response::Package(package_name, metadata))
+                    .map_ok(move |(index, metadata)| {
+                        Response::Package(package_name, index, metadata)
+                    })
                     .map_err(ResolveError::Client)
                     .await
             }
@@ -803,7 +809,7 @@ enum Request {
 #[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, SimpleJson),
+    Package(PackageName, IndexUrl, SimpleJson),
     /// The returned metadata for a distribution.
     Dist(Dist, Metadata21, Option<Url>),
 }
@@ -839,8 +845,9 @@ impl InFlight {
 
 /// In-memory index of package metadata.
 struct Index {
-    /// A map from package name to the metadata for that package.
-    packages: WaitMap<PackageName, VersionMap>,
+    /// A map from package name to the metadata for that package and the index where the metadata
+    /// came from.
+    packages: WaitMap<PackageName, (IndexUrl, VersionMap)>,
 
     /// A map from distribution SHA to metadata for that distribution.
     distributions: WaitMap<String, Metadata21>,

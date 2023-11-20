@@ -2765,6 +2765,7 @@ dependencies = [
  "test-case",
  "thiserror",
  "tracing",
+ "url",
 ]
 
 [[package]]
