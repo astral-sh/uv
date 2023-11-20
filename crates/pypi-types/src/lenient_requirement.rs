@@ -3,10 +3,10 @@ use std::str::FromStr;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
-use tracing::warn;
 
 use pep440_rs::{Pep440Error, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
+use puffin_macros::warn_once;
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -19,6 +19,29 @@ static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap
 /// Ex) `>=3.6,`
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+,$").unwrap());
 
+/// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
+/// fixed
+static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
+    // Given `>=7.2.0<8.0.0`, rewrite to `>=7.2.0,<8.0.0`.
+    (&MISSING_COMMA, r"$1,$2", "Inserting missing comma"),
+    // Given `!=~5.0,>=4.12`, rewrite to `!=5.0.*,>=4.12`.
+    (
+        &NOT_EQUAL_TILDE,
+        r"!=${1}.*",
+        "Replacing invalid tilde with wildcard",
+    ),
+    // Given `>=1.9.*`, rewrite to `>=1.9`.
+    (
+        &GREATER_THAN_STAR,
+        r">=${1}",
+        "Removing star after greater equal",
+    ),
+    // Given `!=3.0*`, rewrite to `!=3.0.*`.
+    (&MISSING_DOT, r"${1}.*", "Inserting missing dot"),
+    // Given `>=3.6,`, rewrite to `>=3.6`
+    (&TRAILING_COMMA, r"${1}", "Removing trailing comma"),
+];
+
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct LenientRequirement(Requirement);
@@ -26,62 +49,19 @@ pub struct LenientRequirement(Requirement);
 impl FromStr for LenientRequirement {
     type Err = Pep508Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Requirement::from_str(s) {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match Requirement::from_str(input) {
             Ok(requirement) => Ok(Self(requirement)),
             Err(err) => {
-                // Given `elasticsearch-dsl (>=7.2.0<8.0.0)`, rewrite to `elasticsearch-dsl (>=7.2.0,<8.0.0)`.
-                let patched = MISSING_COMMA.replace_all(s, r"$1,$2");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Inserting missing comma into invalid requirement (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                // Given `jupyter-core (!=~5.0,>=4.12)`, rewrite to `jupyter-core (!=5.0.*,>=4.12)`.
-                let patched = NOT_EQUAL_TILDE.replace_all(s, r"!=${1}.*");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Adding wildcard after invalid tilde operator (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                // Given `torch (>=1.9.*)`, rewrite to `torch (>=1.9)`.
-                let patched = GREATER_THAN_STAR.replace_all(s, r">=${1}");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Removing star after greater equal operator (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                // Given `pyzmq (!=3.0*)`, rewrite to `pyzmq (!=3.0.*)`.
-                let patched = MISSING_DOT.replace_all(s, r"${1}.*");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Inserting missing dot into invalid requirement (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
-                    }
-                }
-
-                // Given `pyzmq (>=3.6,)`, rewrite to `pyzmq (>=3.6)`
-                let patched = TRAILING_COMMA.replace_all(s, r"${1}");
-                if patched != s {
-                    if let Ok(requirement) = Requirement::from_str(&patched) {
-                        warn!(
-                        "Removing trailing comma from invalid requirement (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(requirement));
+                for (matcher, replacement, message) in FIXUPS {
+                    let patched = matcher.replace_all(input, *replacement);
+                    if patched != input {
+                        if let Ok(requirement) = Requirement::from_str(&patched) {
+                            warn_once!(
+                                "{message} to fix invalid requirement (before: `{input}`; after: `{patched}`)",
+                            );
+                            return Ok(Self(requirement));
+                        }
                     }
                 }
 
@@ -106,62 +86,19 @@ pub struct LenientVersionSpecifiers(VersionSpecifiers);
 impl FromStr for LenientVersionSpecifiers {
     type Err = Pep440Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match VersionSpecifiers::from_str(s) {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match VersionSpecifiers::from_str(input) {
             Ok(specifiers) => Ok(Self(specifiers)),
             Err(err) => {
-                // Given `>=7.2.0<8.0.0`, rewrite to `>=7.2.0,<8.0.0`.
-                let patched = MISSING_COMMA.replace_all(s, r"$1,$2");
-                if patched != s {
-                    if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
-                        warn!(
-                        "Inserting missing comma into invalid specifier (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(specifiers));
-                    }
-                }
-
-                // Given `!=~5.0,>=4.12`, rewrite to `!=5.0.*,>=4.12`.
-                let patched = NOT_EQUAL_TILDE.replace_all(s, r"!=${1}.*");
-                if patched != s {
-                    if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
-                        warn!(
-                        "Adding wildcard after invalid tilde operator (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(specifiers));
-                    }
-                }
-
-                // Given `>=1.9.*`, rewrite to `>=1.9`.
-                let patched = GREATER_THAN_STAR.replace_all(s, r">=${1}");
-                if patched != s {
-                    if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
-                        warn!(
-                        "Removing star after greater equal operator (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(specifiers));
-                    }
-                }
-
-                // Given `!=3.0*`, rewrite to `!=3.0.*`.
-                let patched = MISSING_DOT.replace_all(s, r"${1}.*");
-                if patched != s {
-                    if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
-                        warn!(
-                        "Inserting missing dot into invalid specifier (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(specifiers));
-                    }
-                }
-
-                // Given `>=3.6,`, rewrite to `>=3.6`
-                let patched = TRAILING_COMMA.replace_all(s, r"${1}");
-                if patched != s {
-                    if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
-                        warn!(
-                        "Removing trailing comma from invalid specifier (before: `{s}`; after: `{patched}`)",
-                    );
-                        return Ok(Self(specifiers));
+                for (matcher, replacement, message) in FIXUPS {
+                    let patched = matcher.replace_all(input, *replacement);
+                    if patched != input {
+                        if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
+                            warn_once!(
+                                "{message} to fix invalid specifiers (before: `{input}`; after: `{patched}`)",
+                            );
+                            return Ok(Self(specifiers));
+                        }
                     }
                 }
 
