@@ -287,7 +287,7 @@ impl RegistryClient {
         // TODO(konstin): Download the wheel into a cache shared with the installer instead
         // Note that this branch is only hit when you're not using and the server where
         // you host your wheels for some reasons doesn't support range requests
-        // (tbh we should probably warn here and tekk users to get a better registry because
+        // (tbh we should probably warn here and tell users to get a better registry because
         // their current one makes resolution unnecessary slow)
         let temp_download = tempfile()?;
         let mut writer = BufWriter::new(tokio::fs::File::from_std(temp_download));

@@ -227,7 +227,6 @@ impl SourceBuild {
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
 
-        // TODO(konstin): Parse and verify filenames
         let source_root = if fs::metadata(source)?.is_dir() {
             source.to_path_buf()
         } else {
@@ -563,7 +562,6 @@ async fn create_pep517_build_environment(
             .all(|req| pep517_backend.requirements.contains(req))
     {
         debug!("Installing extra requirements for build backend");
-        // TODO(konstin): Do we need to resolve them together?
         let requirements: Vec<Requirement> = pep517_backend
             .requirements
             .iter()
@@ -585,7 +583,6 @@ async fn create_pep517_build_environment(
 /// Returns the directory with the `pyproject.toml`/`setup.py`
 #[instrument(skip_all, fields(path))]
 fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {
-    // TODO(konstin): Simplify this with camino paths?
     if sdist
         .extension()
         .is_some_and(|extension| extension == "zip")
