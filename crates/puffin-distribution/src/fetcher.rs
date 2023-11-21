@@ -181,6 +181,14 @@ impl<'a> Fetcher<'a> {
                 })))
             }
 
+            Dist::Built(BuiltDist::Path(wheel)) => {
+                Ok(Download::Wheel(WheelDownload::Disk(DiskWheel {
+                    dist: dist.clone(),
+                    path: wheel.path.clone(),
+                    temp_dir: None,
+                })))
+            }
+
             Dist::Source(SourceDist::Registry(sdist)) => {
                 debug!(
                     "Fetching source distribution from registry: {}",
@@ -246,6 +254,13 @@ impl<'a> Fetcher<'a> {
                     temp_dir: None,
                 }))
             }
+
+            Dist::Source(SourceDist::Path(sdist)) => Ok(Download::SourceDist(SourceDistDownload {
+                dist: dist.clone(),
+                sdist_file: sdist.path.clone(),
+                subdirectory: None,
+                temp_dir: None,
+            })),
         }
     }
 

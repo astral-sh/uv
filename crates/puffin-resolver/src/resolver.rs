@@ -578,6 +578,9 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                             SourceDist::Git(sdist) => {
                                 self.index.redirects.insert(sdist.url.clone(), precise);
                             }
+                            SourceDist::Path(sdist) => {
+                                self.index.redirects.insert(sdist.url.clone(), precise);
+                            }
                             SourceDist::Registry(_) => {}
                         }
                     }

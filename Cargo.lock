@@ -2424,6 +2424,7 @@ dependencies = [
  "pypi-types",
  "pyproject-toml",
  "requirements-txt",
+ "reqwest",
  "tempfile",
  "textwrap",
  "thiserror",

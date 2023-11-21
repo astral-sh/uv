@@ -1421,3 +1421,77 @@ fn compile_exclude_newer() -> Result<()> {
 
     Ok(())
 }
+
+/// Resolve a local path dependency on a specific wheel.
+#[test]
+fn compile_wheel_path_dependency() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = make_venv_py312(&temp_dir, &cache_dir);
+
+    // Download a wheel.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
+    let flask_wheel = temp_dir.child("flask-3.0.0-py3-none-any.whl");
+    let mut flask_wheel_file = std::fs::File::create(&flask_wheel)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Resolve a local path dependency on a specific source distribution.
+#[test]
+fn compile_source_distribution_path_dependency() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = make_venv_py312(&temp_dir, &cache_dir);
+
+    // Download a source distribution.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
+    let flask_wheel = temp_dir.child("flask-3.0.0.tar.gz");
+    let mut flask_wheel_file = std::fs::File::create(&flask_wheel)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}

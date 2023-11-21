@@ -1,4 +1,4 @@
-pub use direct_url::{ArchiveInfo, DirectUrl, VcsInfo, VcsKind};
+pub use direct_url::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 pub use index_url::IndexUrl;
 pub use lenient_requirement::LenientVersionSpecifiers;
 pub use metadata::{Error, Metadata21};

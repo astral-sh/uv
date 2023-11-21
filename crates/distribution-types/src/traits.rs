@@ -6,7 +6,8 @@ use crate::error::Error;
 use crate::{
     AnyDist, BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, GitSourceDist, InstalledDirectUrlDist, InstalledDist,
-    InstalledRegistryDist, RegistryBuiltDist, RegistrySourceDist, SourceDist, VersionOrUrl,
+    InstalledRegistryDist, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistrySourceDist,
+    SourceDist, VersionOrUrl,
 };
 
 pub trait Metadata {
@@ -124,6 +125,18 @@ impl std::fmt::Display for InstalledDirectUrlDist {
 }
 
 impl std::fmt::Display for InstalledRegistryDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
+impl std::fmt::Display for PathBuiltDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
+impl std::fmt::Display for PathSourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

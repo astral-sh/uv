@@ -47,6 +47,7 @@ impl WheelCache {
 pub(crate) enum CacheShard {
     Registry,
     Url,
+    Local,
 }
 
 impl CacheShard {
@@ -54,6 +55,7 @@ impl CacheShard {
         match self {
             Self::Registry => "registry",
             Self::Url => "url",
+            Self::Local => "local",
         }
     }
 }
@@ -63,9 +65,11 @@ impl From<&Dist> for CacheShard {
         match dist {
             Dist::Built(BuiltDist::Registry(_)) => Self::Registry,
             Dist::Built(BuiltDist::DirectUrl(_)) => Self::Url,
+            Dist::Built(BuiltDist::Path(_)) => Self::Local,
             Dist::Source(SourceDist::Registry(_)) => Self::Registry,
             Dist::Source(SourceDist::DirectUrl(_)) => Self::Url,
             Dist::Source(SourceDist::Git(_)) => Self::Url,
+            Dist::Source(SourceDist::Path(_)) => Self::Local,
         }
     }
 }

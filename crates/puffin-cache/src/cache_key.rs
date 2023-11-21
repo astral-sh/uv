@@ -5,6 +5,7 @@ use std::num::{
     NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroU128, NonZeroU16,
     NonZeroU32, NonZeroU64, NonZeroU8,
 };
+use std::path::{Path, PathBuf};
 
 use seahash::SeaHasher;
 
@@ -193,6 +194,20 @@ impl CacheKey for String {
     #[inline]
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.hash(&mut *state);
+    }
+}
+
+impl CacheKey for Path {
+    #[inline]
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(&mut *state);
+    }
+}
+
+impl CacheKey for PathBuf {
+    #[inline]
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.as_path().cache_key(state);
     }
 }
 

@@ -32,7 +32,8 @@ with a minimal barrier to adoption. Try it today in lieu of `pip` and `pip-tools
 Puffin does not yet support:
 
 - Windows
-- Path dependencies
+- Editable installs (`pip install -e ...`)
+- Package-less requirements (`pip install https://...`)
 - `--find-links`
 - ...
 

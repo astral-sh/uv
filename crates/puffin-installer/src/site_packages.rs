@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fs_err as fs;
 
 use distribution_types::{InstalledDist, Metadata};
@@ -18,7 +18,11 @@ impl SitePackages {
         for entry in fs::read_dir(venv.site_packages())? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
-                if let Some(dist_info) = InstalledDist::try_from_path(&entry.path())? {
+                if let Some(dist_info) =
+                    InstalledDist::try_from_path(&entry.path()).with_context(|| {
+                        format!("Failed to read metadata: from {}", entry.path().display())
+                    })?
+                {
                     index.insert(dist_info.name().clone(), dist_info);
                 }
             }
