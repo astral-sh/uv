@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpTtWuay
+    - /tmp/.tmpjWbdb2
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpdSdhVI/.venv
+    VIRTUAL_ENV: /tmp/.tmpoyAf1w/.venv
 ---
 success: true
 exit_code: 0
@@ -16,8 +16,7 @@ exit_code: 0
 
 ----- stderr -----
 Resolved 1 package in [TIME]
-Downloaded 1 package in [TIME]
-Built 1 package in [TIME]
+Downloaded 1 package and built 1 package in [TIME]
 Unzipped 1 package in [TIME]
 Installed 1 package in [TIME]
  + werkzeug==0.9.6

@@ -18,13 +18,11 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
     for _ in 0..2 {
         let url = "https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl";
         let filename = WheelFilename::from_str(url.rsplit_once('/').unwrap().1)?;
-        let metadata = client
-            .wheel_metadata(&BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                filename,
-                url: Url::parse(url).unwrap(),
-            }))
-            .await
-            .unwrap();
+        let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
+            filename,
+            url: Url::parse(url).unwrap(),
+        });
+        let metadata = client.wheel_metadata(&dist).await.unwrap();
         assert_eq!(metadata.version.to_string(), "4.66.1");
     }
 

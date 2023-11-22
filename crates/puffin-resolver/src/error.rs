@@ -5,9 +5,9 @@ use pubgrub::report::Reporter;
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::SourceDist;
+use distribution_types::{BuiltDist, SourceDist};
 use pep508_rs::Requirement;
-use puffin_distribution::SourceDistError;
+use puffin_distribution::FetchAndBuildError;
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
@@ -54,8 +54,11 @@ pub enum ResolveError {
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),
 
-    #[error("Failed to download and build source distribution {0}")]
-    SourceDistError(Box<SourceDist>, #[source] SourceDistError),
+    #[error("Failed to download {0}")]
+    Fetch(Box<BuiltDist>, #[source] FetchAndBuildError),
+
+    #[error("Failed to download and build {0}")]
+    FetchAndBuild(Box<SourceDist>, #[source] FetchAndBuildError),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {

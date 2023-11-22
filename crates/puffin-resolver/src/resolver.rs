@@ -22,7 +22,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::SourceDistCachedBuilder;
+use puffin_distribution::{Download, FetchAndBuild};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
@@ -30,7 +30,6 @@ use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
 use crate::file::DistFile;
-use crate::locks::Locks;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
@@ -50,8 +49,7 @@ pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
     selector: CandidateSelector,
     index: Arc<Index>,
     exclude_newer: Option<DateTime<Utc>>,
-    // Ensure we don't build the same source distribution twice at the same time
-    locks: Arc<Locks>,
+    fetcher: FetchAndBuild<'a, Context>,
     build_context: &'a Context,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -68,7 +66,6 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
     ) -> Self {
         Self {
             index: Arc::new(Index::default()),
-            locks: Arc::new(Locks::default()),
             selector: CandidateSelector::for_resolution(&manifest, options),
             allowed_urls: manifest
                 .requirements
@@ -89,6 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
             markers,
             tags,
             client,
+            fetcher: FetchAndBuild::new(build_context.cache(), tags, client, build_context),
             build_context,
             reporter: None,
         }
@@ -603,52 +601,18 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                     .await
             }
 
-            // Fetch wheel metadata.
-            Request::Dist(Dist::Built(built_dist)) => {
-                let metadata = self.client.wheel_metadata(&built_dist).await?;
-
-                if metadata.name != *built_dist.name() {
-                    return Err(ResolveError::NameMismatch {
-                        metadata: metadata.name,
-                        given: built_dist.name().clone(),
-                    });
-                }
-
-                Ok(Response::Dist(Dist::Built(built_dist), metadata, None))
-            }
-
-            // Fetch source distribution metadata.
-            Request::Dist(Dist::Source(source_dist)) => {
-                // This lock prevents us from running into the file lock and blocking
-                let lock = self.locks.acquire(&source_dist).await;
-                let _guard = lock.lock().await;
-
-                let fetcher = if let Some(reporter) = &self.reporter {
-                    SourceDistCachedBuilder::new(
-                        self.build_context,
-                        self.client.cached_client(),
-                        self.tags,
-                    )
-                    .with_reporter(Facade {
-                        reporter: reporter.clone(),
-                    })
-                } else {
-                    SourceDistCachedBuilder::new(
-                        self.build_context,
-                        self.client.cached_client(),
-                        self.tags,
-                    )
-                };
-
-                let (metadata, precise) =
-                    fetcher
-                        .download_and_build(&source_dist)
-                        .await
-                        .map_err(|err| {
-                            ResolveError::SourceDistError(Box::new(source_dist.clone()), err)
-                        })?;
-
-                Ok(Response::Dist(Dist::Source(source_dist), metadata, precise))
+            Request::Dist(dist) => {
+                let (metadata, precise) = self
+                    .fetcher
+                    .get_or_build_wheel_metadata(&dist)
+                    .await
+                    .map_err(|err| match dist.clone() {
+                        Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
+                        Dist::Source(source_dist) => {
+                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                        }
+                    })?;
+                Ok(Response::Dist(dist, metadata, precise))
             }
         }
     }
@@ -684,6 +648,9 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
+    /// Callback to invoke when a wheel is downloaded.
+    fn on_download_progress(&self, download: &Download);
+
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
 
@@ -692,6 +659,9 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when a source distribution build is complete.
     fn on_build_complete(&self, dist: &SourceDist, id: usize);
+
+    /// Callback to invoke when the operation is complete.
+    fn on_download_and_build_complete(&self);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -706,12 +676,20 @@ struct Facade {
 }
 
 impl puffin_distribution::Reporter for Facade {
+    fn on_download_progress(&self, download: &Download) {
+        self.reporter.on_download_progress(download);
+    }
+
     fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }
 
     fn on_build_complete(&self, dist: &SourceDist, id: usize) {
         self.reporter.on_build_complete(dist, id);
+    }
+
+    fn on_download_and_build_complete(&self) {
+        self.reporter.on_download_and_build_complete();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {

@@ -10,7 +10,8 @@ use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use fxhash::FxHashMap;
 use reqwest::Response;
-use tempfile::{tempdir, TempDir};
+use serde::{Deserialize, Serialize};
+use tempfile::TempDir;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -18,32 +19,32 @@ use tracing::debug;
 use url::Url;
 use zip::ZipArchive;
 
-use crate::download::BuiltWheel;
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{Dist, GitSourceDist, Identifier, RemoteSource, SourceDist};
 use install_wheel_rs::find_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{RepositoryUrl, WheelMetadataCache};
+use puffin_cache::{digest, CanonicalUrl, WheelMetadataCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
-use crate::Reporter;
-
-type Metadata21s = FxHashMap<WheelFilename, Metadata21>;
+use crate::download::BuiltWheel;
+use crate::locks::LockedFile;
+use crate::{Download, Reporter, SourceDistDownload};
 
 const BUILT_WHEELS_CACHE: &str = "built-wheels-v0";
 const GIT_CACHE: &str = "git-v0";
 
+/// The caller is responsible for adding the source dist information to the error chain
 #[derive(Debug, Error)]
 pub enum SourceDistError {
     // Network error
     #[error("Failed to parse url '{0}'")]
     UrlParse(String, #[source] url::ParseError),
-    #[error("Git operation failed for {0}")]
+    #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
     #[error(transparent)]
     Request(#[from] reqwest::Error),
@@ -57,7 +58,7 @@ pub enum SourceDistError {
     Serde(#[from] serde_json::Error),
 
     // Build error
-    #[error("Failed to build {0}")]
+    #[error("Failed to build")]
     Build(#[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
@@ -69,9 +70,47 @@ pub enum SourceDistError {
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] crate::error::Error),
 
-    // Should not occur, i've only seen it when another task panicked
+    /// Should not occur, i've only seen it when another task panicked
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DiskFilenameAndMetadata {
+    /// Relative, un-normalized wheel filename in the cache, which can be different than
+    /// `WheelFilename::to_string`.
+    disk_filename: String,
+    metadata: Metadata21,
+}
+
+type Metadata21s = FxHashMap<WheelFilename, DiskFilenameAndMetadata>;
+
+/// The information about the wheel we either just built or got from the cache
+#[derive(Debug, Clone)]
+pub struct BuiltWheelMetadata {
+    pub path: PathBuf,
+    pub filename: WheelFilename,
+    pub metadata: Metadata21,
+}
+
+impl BuiltWheelMetadata {
+    fn from_cached(
+        filename: &WheelFilename,
+        cached_data: &DiskFilenameAndMetadata,
+        cache: &Path,
+        source_dist: &SourceDist,
+    ) -> Self {
+        // TODO(konstin): Change this when the built wheel naming scheme is fixed
+        let wheel_dir = cache
+            .join(BUILT_WHEELS_CACHE)
+            .join(source_dist.distribution_id());
+
+        Self {
+            path: wheel_dir.join(&cached_data.disk_filename),
+            filename: filename.clone(),
+            metadata: cached_data.metadata.clone(),
+        }
+    }
 }
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
@@ -97,9 +136,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
     /// Set the [`Reporter`] to use for this source distribution fetcher.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
-            reporter: Some(Arc::new(reporter)),
+            reporter: Some(reporter),
             ..self
         }
     }
@@ -107,10 +146,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     pub async fn download_and_build(
         &self,
         source_dist: &SourceDist,
-    ) -> Result<(Metadata21, Option<Url>), SourceDistError> {
+    ) -> Result<(BuiltWheelMetadata, Option<Url>), SourceDistError> {
         let precise = self.precise(source_dist).await?;
 
-        let (metadata, precise) = match &source_dist {
+        let built_wheel_metadata = match &source_dist {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
                     .filename()
@@ -119,49 +158,41 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let DirectArchiveUrl { url, subdirectory } =
                     DirectArchiveUrl::from(&direct_url_source_dist.url);
 
-                let metadata = self
-                    .url(
-                        source_dist,
-                        &filename,
-                        &url,
-                        WheelMetadataCache::Url,
-                        subdirectory.as_deref(),
-                    )
-                    .await?;
-                (
-                    metadata,
-                    Some(
-                        precise
-                            .clone()
-                            .unwrap_or_else(|| direct_url_source_dist.url.clone()),
-                    ),
+                self.url(
+                    source_dist,
+                    &filename,
+                    &url,
+                    WheelMetadataCache::Url,
+                    subdirectory.as_deref(),
                 )
+                .await?
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = Url::parse(&registry_source_dist.file.url).map_err(|err| {
                     SourceDistError::UrlParse(registry_source_dist.file.url.to_string(), err)
                 })?;
-                let metadata = self
-                    .url(
-                        source_dist,
-                        &registry_source_dist.file.filename,
-                        &url,
-                        WheelMetadataCache::Index(registry_source_dist.index.clone()),
-                        None,
-                    )
-                    .await?;
-                (
-                    metadata,
-                    Some(precise.clone().unwrap_or_else(|| url.clone())),
+                self.url(
+                    source_dist,
+                    &registry_source_dist.file.filename,
+                    &url,
+                    WheelMetadataCache::Index(registry_source_dist.index.clone()),
+                    None,
                 )
+                .await?
             }
             SourceDist::Git(git_source_dist) => {
-                let metadata = self.git(source_dist, git_source_dist).await?;
-                (metadata, precise)
+                // TODO(konstin): return precise git reference
+                self.git(source_dist, git_source_dist).await?
             }
             SourceDist::Path(path_source_dist) => {
                 // TODO: Add caching here. See also https://github.com/astral-sh/puffin/issues/478
-                let temp_dir = tempdir()?;
+                // TODO(konstin): Change this when the built wheel naming scheme is fixed
+                let wheel_dir = self
+                    .build_context
+                    .cache()
+                    .join(BUILT_WHEELS_CACHE)
+                    .join(source_dist.distribution_id());
+                fs::create_dir_all(&wheel_dir).await?;
 
                 // Build the wheel.
                 let disk_filename = self
@@ -169,7 +200,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     .build_source(
                         &path_source_dist.path,
                         None,
-                        temp_dir.path(),
+                        &wheel_dir,
                         &path_source_dist.to_string(),
                     )
                     .await
@@ -178,18 +209,23 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 // Read the metadata from the wheel.
                 let filename = WheelFilename::from_str(&disk_filename)?;
 
+                // TODO(konstin): https://github.com/astral-sh/puffin/issues/484
                 let metadata = BuiltWheel {
                     dist: Dist::Source(source_dist.clone()),
-                    filename,
-                    path: temp_dir.path().join(disk_filename),
+                    filename: filename.clone(),
+                    path: wheel_dir.join(&disk_filename),
                 }
                 .read_dist_info()?;
 
-                (metadata, precise)
+                BuiltWheelMetadata {
+                    path: wheel_dir.join(disk_filename),
+                    filename,
+                    metadata,
+                }
             }
         };
 
-        Ok((metadata, precise))
+        Ok((built_wheel_metadata, precise))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -200,22 +236,33 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         url: &Url,
         cache_shard: WheelMetadataCache,
         subdirectory: Option<&Path>,
-    ) -> Result<Metadata21, SourceDistError> {
+    ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_dir =
             cache_shard.built_wheel_cache_dir(self.build_context.cache(), filename, url);
         let cache_file = METADATA_JSON;
 
         let response_callback = |response| async {
             debug!("Downloading and building source distribution: {source_dist}");
+
             let task = self
                 .reporter
                 .as_ref()
                 .map(|reporter| reporter.on_build_start(source_dist));
             let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
-            let (wheel_filename, metadata) = self
+
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_download_progress(&Download::SourceDist(SourceDistDownload {
+                    dist: source_dist.clone(),
+                    sdist_file: sdist_file.clone(),
+                    subdirectory: subdirectory.map(Path::to_path_buf),
+                }));
+            }
+
+            let (disk_filename, wheel_filename, metadata) = self
                 .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
                 .await
                 .map_err(SourceDistError::Build)?;
+
             if let Some(task) = task {
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_build_complete(source_dist, task);
@@ -223,7 +270,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
 
             let mut metadatas = Metadata21s::default();
-            metadatas.insert(wheel_filename, metadata);
+            metadatas.insert(
+                wheel_filename,
+                DiskFilenameAndMetadata {
+                    disk_filename,
+                    metadata,
+                },
+            );
             Ok(metadatas)
         };
         let req = self.cached_client.uncached().get(url.clone()).build()?;
@@ -236,11 +289,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 CachedClientError::Client(err) => SourceDistError::Client(err),
             })?;
 
-        if let Some((_key, metadata)) = metadatas
+        if let Some((filename, cached_data)) = metadatas
             .iter()
-            .find(|(key, _metadata)| key.is_compatible(self.tags))
+            .find(|(filename, _metadata)| filename.is_compatible(self.tags))
         {
-            return Ok(metadata.clone());
+            return Ok(BuiltWheelMetadata::from_cached(
+                filename,
+                cached_data,
+                self.build_context.cache(),
+                source_dist,
+            ));
         }
 
         // At this point, we're seeing cached metadata (fresh source dist) but the
@@ -257,7 +315,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .await
             .map_err(puffin_client::Error::RequestMiddlewareError)?;
         let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
-        let (wheel_filename, metadata) = self
+        let (disk_filename, wheel_filename, metadata) = self
             .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
             .await
             .map_err(SourceDistError::Build)?;
@@ -267,26 +325,39 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
         }
 
-        // Not elegant that we have to read again here, but also not too relevant given that we
-        // have to build a source dist next
-        let Ok(cached) = fs::read(cache_dir.join(cache_file)).await else {
-            // Just return if the response wasn't cacheable or there was another errors that
-            // `CachedClient` already complained about
-            return Ok(metadata.clone());
+        let cached_data = DiskFilenameAndMetadata {
+            disk_filename: disk_filename.clone(),
+            metadata: metadata.clone(),
         };
-        // If the file exists and it was just read or written by `CachedClient`, we assume it must
-        // be correct.
-        let mut cached = serde_json::from_slice::<DataWithCachePolicy<Metadata21s>>(&cached)?;
-        cached.data.insert(wheel_filename, metadata.clone());
-        fs::write(cache_file, serde_json::to_vec(&cached)?).await?;
-        Ok(metadata.clone())
+
+        // Not elegant that we have to read again here, but also not too relevant given that we
+        // have to build a source dist next.
+        // Just return if the response wasn't cacheable or there was another errors that
+        // `CachedClient` already complained about
+        if let Ok(cached) = fs::read(cache_dir.join(cache_file)).await {
+            // If the file exists and it was just read or written by `CachedClient`, we assume it must
+            // be correct.
+            let mut cached = serde_json::from_slice::<DataWithCachePolicy<Metadata21s>>(&cached)?;
+
+            cached
+                .data
+                .insert(wheel_filename.clone(), cached_data.clone());
+            fs::write(cache_file, serde_json::to_vec(&cached)?).await?;
+        };
+
+        Ok(BuiltWheelMetadata::from_cached(
+            &wheel_filename,
+            &cached_data,
+            self.build_context.cache(),
+            source_dist,
+        ))
     }
 
     async fn git(
         &self,
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
-    ) -> Result<Metadata21, SourceDistError> {
+    ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let task = self
             .reporter
             .as_ref()
@@ -302,26 +373,42 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .precise()
             .expect("Exact commit after checkout")
             .to_string();
-        let cache_dir = WheelMetadataCache::Git(RepositoryUrl::new(&git_source_dist.url))
-            .built_wheel_cache_dir(self.build_context.cache(), &git_sha, &git_source_dist.url);
+        let cache_dir = WheelMetadataCache::Git(git_source_dist.url.clone()).built_wheel_cache_dir(
+            self.build_context.cache(),
+            &git_sha,
+            &git_source_dist.url,
+        );
         let cache_file = cache_dir.join(METADATA_JSON);
-        // TODO(konstin): Should we lock this file for parallel processes?
+
+        // TODO(konstin): Change this when the built wheel naming scheme is fixed
+        let wheel_dir = self
+            .build_context
+            .cache()
+            .join(BUILT_WHEELS_CACHE)
+            .join(source_dist.distribution_id());
+        fs::create_dir_all(&wheel_dir).await?;
+
         let mut metadatas = if cache_file.is_file() {
             let cached = fs::read(&cache_file).await?;
             let metadatas = serde_json::from_slice::<Metadata21s>(&cached)?;
             // Do we have previous compatible build of this source dist?
-            if let Some((_key, metadata)) = metadatas
+            if let Some((filename, cached_data)) = metadatas
                 .iter()
-                .find(|(key, _metadata)| key.is_compatible(self.tags))
+                .find(|(filename, _metadata)| filename.is_compatible(self.tags))
             {
-                return Ok(metadata.clone());
+                return Ok(BuiltWheelMetadata::from_cached(
+                    filename,
+                    cached_data,
+                    self.build_context.cache(),
+                    source_dist,
+                ));
             }
             metadatas
         } else {
             Metadata21s::default()
         };
 
-        let (filename, metadata) = self
+        let (disk_filename, filename, metadata) = self
             .build_source_dist(source_dist, None, fetch.path(), subdirectory.as_deref())
             .await
             .map_err(SourceDistError::Build)?;
@@ -334,7 +421,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Store the metadata for this build along with all the other builds
-        metadatas.insert(filename, metadata.clone());
+        metadatas.insert(
+            filename.clone(),
+            DiskFilenameAndMetadata {
+                disk_filename: disk_filename.clone(),
+                metadata: metadata.clone(),
+            },
+        );
         let cached = serde_json::to_vec(&metadatas)?;
         fs::create_dir_all(cache_dir).await?;
         fs::write(cache_file, cached).await?;
@@ -345,7 +438,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
         }
 
-        Ok(metadata)
+        Ok(BuiltWheelMetadata {
+            path: wheel_dir.join(&disk_filename),
+            filename,
+            metadata,
+        })
     }
 
     async fn download_source_dist_url(
@@ -372,11 +469,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         url: Url,
     ) -> Result<(Fetch, Option<PathBuf>), SourceDistError> {
         debug!("Fetching source distribution from Git: {}", url);
+        let git_dir = self.build_context.cache().join(GIT_CACHE);
+
+        // Avoid races between different processes, too
+        let locks_dir = git_dir.join("locks");
+        fs::create_dir_all(&locks_dir).await?;
+        let _lockfile = LockedFile::new(locks_dir.join(digest(&CanonicalUrl::new(&url))))?;
 
         let DirectGitUrl { url, subdirectory } =
             DirectGitUrl::try_from(&url).map_err(SourceDistError::Git)?;
 
-        let git_dir = self.build_context.cache().join(GIT_CACHE);
         let source = if let Some(reporter) = &self.reporter {
             GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
         } else {
@@ -389,13 +491,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 
     /// Build a source distribution, storing the built wheel in the cache.
+    ///
+    /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
     async fn build_source_dist(
         &self,
         dist: &SourceDist,
         temp_dir: Option<TempDir>,
         source_dist: &Path,
         subdirectory: Option<&Path>,
-    ) -> anyhow::Result<(WheelFilename, Metadata21)> {
+    ) -> anyhow::Result<(String, WheelFilename, Metadata21)> {
         debug!("Building: {dist}");
 
         if self.build_context.no_build() {
@@ -403,8 +507,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Create a directory for the wheel.
-        // TODO(konstin): Unzip the wheels and store them with the other unzipped wheels, after
-        // adding index and compatibility tags to the cache location.
         let wheel_dir = self
             .build_context
             .cache()
@@ -425,7 +527,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
 
-        let mut archive = ZipArchive::new(fs_err::File::open(wheel_dir.join(disk_filename))?)?;
+        let mut archive = ZipArchive::new(fs_err::File::open(wheel_dir.join(&disk_filename))?)?;
         let dist_info_dir =
             find_dist_info(&filename, archive.file_names().map(|name| (name, name)))?.1;
         let dist_info =
@@ -433,7 +535,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let metadata = Metadata21::parse(dist_info.as_bytes())?;
 
         debug!("Finished building: {dist}");
-        Ok((filename, metadata))
+        Ok((disk_filename, filename, metadata))
     }
 
     /// Given a remote source distribution, return a precise variant, if possible.
@@ -448,6 +550,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let SourceDist::Git(source_dist) = dist else {
             return Ok(None);
         };
+        let git_dir = self.build_context.cache().join(GIT_CACHE);
+
+        // Avoid races between different processes
+        let locks = git_dir.join("locks");
+        fs::create_dir_all(&locks).await?;
+        let _lockfile = LockedFile::new(locks.join(digest(&CanonicalUrl::new(&source_dist.url))))?;
 
         let DirectGitUrl { url, subdirectory } =
             DirectGitUrl::try_from(&source_dist.url).map_err(SourceDistError::Git)?;
@@ -458,7 +566,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
-        // commit, etc.).
         let git_dir = self.build_context.cache().join(GIT_CACHE);
         let source = if let Some(reporter) = &self.reporter {
             GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))

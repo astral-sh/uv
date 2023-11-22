@@ -4,7 +4,6 @@ use url::Url;
 
 use pypi_types::IndexUrl;
 
-use crate::RepositoryUrl;
 use crate::{digest, CanonicalUrl};
 
 /// Cache for metadata from (remote) wheels files
@@ -26,7 +25,7 @@ pub enum WheelMetadataCache {
     ///
     /// Note that this variant only exists for source distributions, wheels can't be delivered
     /// through git.
-    Git(RepositoryUrl),
+    Git(Url),
 }
 
 impl WheelMetadataCache {

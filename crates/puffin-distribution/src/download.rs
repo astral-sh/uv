@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use tempfile::TempDir;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
@@ -12,7 +11,7 @@ use pypi_types::Metadata21;
 use crate::error::Error;
 
 /// A downloaded wheel that's stored in-memory.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InMemoryWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
@@ -23,7 +22,7 @@ pub struct InMemoryWheel {
 }
 
 /// A downloaded wheel that's stored on-disk.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiskWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
@@ -34,7 +33,7 @@ pub struct DiskWheel {
 }
 
 /// A wheel built from a source distribution that's stored on-disk.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BuiltWheel {
     /// The remote source distribution from which this wheel was built.
     pub(crate) dist: Dist,
@@ -45,7 +44,7 @@ pub struct BuiltWheel {
 }
 
 /// A downloaded or built wheel.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LocalWheel {
     InMemory(InMemoryWheel),
     Disk(DiskWheel),
@@ -53,7 +52,7 @@ pub enum LocalWheel {
 }
 
 /// A downloaded source distribution.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceDistDownload {
     /// The remote distribution from which this source distribution was downloaded.
     pub(crate) dist: SourceDist,
@@ -61,10 +60,6 @@ pub struct SourceDistDownload {
     pub(crate) sdist_file: PathBuf,
     /// The subdirectory within the archive or directory.
     pub(crate) subdirectory: Option<PathBuf>,
-    /// We can't use source dist archives, we build them into wheels which we persist and then drop
-    /// the source distribution. This field is non for git dependencies, which we keep in the cache.
-    #[allow(dead_code)]
-    pub(crate) temp_dir: Option<TempDir>,
 }
 
 /// A downloaded distribution, either a wheel or a source distribution.

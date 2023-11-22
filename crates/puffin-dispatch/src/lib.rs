@@ -8,7 +8,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use anyhow::{bail, Context};
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use tracing::{debug, instrument};
 
 use distribution_types::Metadata;
@@ -16,7 +16,8 @@ use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
-use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
+use puffin_distribution::FetchAndBuild;
+use puffin_installer::{InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::BuildContext;
@@ -145,57 +146,34 @@ impl BuildContext for BuildDispatch {
             };
 
             // Download any missing distributions.
-            let downloads = if remote.is_empty() {
+            let wheels = if remote.is_empty() {
                 vec![]
             } else {
+                // TODO(konstin): Check that there is no endless recursion
+                let fetcher = FetchAndBuild::new(self.cache(), &tags, &self.client, self);
                 debug!(
-                    "Downloading build requirement{}: {}",
+                    "Downloading and building requirement{} for build: {}",
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
-                Downloader::new(&self.client, &self.cache)
-                    .with_no_build(self.no_build)
-                    .download(remote)
+
+                fetcher
+                    .get_wheels(remote)
                     .await
-                    .context("Failed to download build dependencies")?
+                    .context("Failed to download and build distributions")?
             };
-
-            let (wheels, sdists): (Vec<_>, Vec<_>) =
-                downloads
-                    .into_iter()
-                    .partition_map(|download| match download {
-                        puffin_distribution::Download::Wheel(wheel) => Either::Left(wheel),
-                        puffin_distribution::Download::SourceDist(sdist) => Either::Right(sdist),
-                    });
-
-            // Build any missing source distributions.
-            let sdists = if sdists.is_empty() {
-                vec![]
-            } else {
-                debug!(
-                    "Building source distributions{}: {}",
-                    if sdists.len() == 1 { "" } else { "s" },
-                    sdists.iter().map(ToString::to_string).join(", ")
-                );
-                Builder::new(self)
-                    .build(sdists)
-                    .await
-                    .context("Failed to build source distributions")?
-            };
-
-            let downloads = wheels.into_iter().chain(sdists).collect::<Vec<_>>();
 
             // Unzip any downloaded distributions.
-            let unzips = if downloads.is_empty() {
+            let unzips = if wheels.is_empty() {
                 vec![]
             } else {
                 debug!(
                     "Unzipping build requirement{}: {}",
-                    if downloads.len() == 1 { "" } else { "s" },
-                    downloads.iter().map(ToString::to_string).join(", ")
+                    if wheels.len() == 1 { "" } else { "s" },
+                    wheels.iter().map(ToString::to_string).join(", ")
                 );
                 Unzipper::default()
-                    .unzip(downloads, &self.cache)
+                    .unzip(wheels, &self.cache)
                     .await
                     .context("Failed to unpack build dependencies")?
             };
