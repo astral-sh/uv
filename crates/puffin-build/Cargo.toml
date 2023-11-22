@@ -10,6 +10,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lints]
+workspace = true
+
 [dependencies]
 gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }

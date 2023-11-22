@@ -489,7 +489,7 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir).unwrap();
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
@@ -521,7 +521,7 @@ mod test {
         // Write to a new file.
         let temp_dir = tempdir().unwrap();
         let requirements_txt = temp_dir.path().join(path);
-        fs::write(&requirements_txt, &contents).unwrap();
+        fs::write(&requirements_txt, contents).unwrap();
 
         let actual = RequirementsTxt::parse(&requirements_txt, &working_dir).unwrap();
 

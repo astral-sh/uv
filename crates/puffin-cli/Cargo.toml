@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "puffin"
 path = "src/main.rs"

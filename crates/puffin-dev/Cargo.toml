@@ -10,6 +10,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lints]
+workspace = true
+
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
 gourgeist = { path = "../gourgeist" }

@@ -13,6 +13,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lints]
+workspace = true
+
 [lib]
 name = "install_wheel_rs"
 

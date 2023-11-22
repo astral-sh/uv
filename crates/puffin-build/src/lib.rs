@@ -646,13 +646,13 @@ mod test {
     fn missing_header() {
         let output = Output {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform gated
-            stdout: indoc!(r#"
+            stdout: indoc!(r"
                 running bdist_wheel
                 running build
                 [...]
                 creating build/temp.linux-x86_64-cpython-39/pygraphviz
                 gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -fPIC -DSWIG_PYTHON_STRICT_BYTE_CHAR -I/tmp/.tmpy6vVes/.venv/include -I/home/konsti/.pyenv/versions/3.9.18/include/python3.9 -c pygraphviz/graphviz_wrap.c -o build/temp.linux-x86_64-cpython-39/pygraphviz/graphviz_wrap.o
-                "#
+                "
             ).as_bytes().to_vec(),
             stderr: indoc!(r#"
                 warning: no files found matching '*.png' under directory 'doc'
