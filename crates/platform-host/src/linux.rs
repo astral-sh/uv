@@ -139,21 +139,21 @@ mod tests {
     #[test]
     fn parse_ldd_output() {
         let ver_str = ldd_output_to_version_str(
-            r#"ldd (GNU libc) 2.12
+            r"ldd (GNU libc) 2.12
 Copyright (C) 2010 Free Software Foundation, Inc.
 This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-Written by Roland McGrath and Ulrich Drepper."#,
+Written by Roland McGrath and Ulrich Drepper.",
         )
         .unwrap();
         assert_eq!(ver_str, "2.12");
 
         let ver_str = ldd_output_to_version_str(
-            r#"ldd (Ubuntu GLIBC 2.31-0ubuntu9.2) 2.31
+            r"ldd (Ubuntu GLIBC 2.31-0ubuntu9.2) 2.31
   Copyright (C) 2020 Free Software Foundation, Inc.
   This is free software; see the source for copying conditions.  There is NO
   warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  Written by Roland McGrath and Ulrich Drepper."#,
+  Written by Roland McGrath and Ulrich Drepper.",
         )
         .unwrap();
         assert_eq!(ver_str, "2.31");
