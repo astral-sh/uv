@@ -17,7 +17,7 @@ static GREATER_THAN_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r">=(\d+\.\d+)\.
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
-static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+,$").unwrap());
+static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.(\d|\*))+,$").unwrap());
 /// Ex) `>= '2.7'`
 static INVALID_QUOTES: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"((?:~=|==|!=|<=|>=|<|>|===) )*'(\d(?:\.\d)*)'").unwrap());
@@ -26,26 +26,53 @@ static INVALID_QUOTES: Lazy<Regex> =
 /// fixed
 static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     // Given `>=7.2.0<8.0.0`, rewrite to `>=7.2.0,<8.0.0`.
-    (&MISSING_COMMA, r"$1,$2", "Inserting missing comma"),
+    (&MISSING_COMMA, r"$1,$2", "inserting missing comma"),
     // Given `!=~5.0,>=4.12`, rewrite to `!=5.0.*,>=4.12`.
     (
         &NOT_EQUAL_TILDE,
         r"!=${1}.*",
-        "Replacing invalid tilde with wildcard",
+        "replacing invalid tilde with wildcard",
     ),
     // Given `>=1.9.*`, rewrite to `>=1.9`.
     (
         &GREATER_THAN_STAR,
         r">=${1}",
-        "Removing star after greater equal",
+        "removing star after greater equal",
     ),
     // Given `!=3.0*`, rewrite to `!=3.0.*`.
-    (&MISSING_DOT, r"${1}.*", "Inserting missing dot"),
+    (&MISSING_DOT, r"${1}.*", "inserting missing dot"),
     // Given `>=3.6,`, rewrite to `>=3.6`
-    (&TRAILING_COMMA, r"${1}", "Removing trailing comma"),
+    (&TRAILING_COMMA, r"${1}", "removing trailing comma"),
     // Given `>= '2.7'`, rewrite to `>= 2.7`
-    (&INVALID_QUOTES, r"${1}${2}", "Removing invalid quotes"),
+    (&INVALID_QUOTES, r"${1}${2}", "removing invalid quotes"),
 ];
+
+fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
+    match T::from_str(input) {
+        Ok(requirement) => Ok(requirement),
+        Err(err) => {
+            let mut patched_input = input.to_string();
+            let mut messages = Vec::new();
+            for (matcher, replacement, message) in FIXUPS {
+                let patched = matcher.replace_all(patched_input.as_ref(), *replacement);
+                if patched != patched_input {
+                    messages.push(*message);
+                    patched_input = patched.to_string();
+                }
+            }
+
+            if let Ok(requirement) = T::from_str(&patched_input) {
+                warn_once!(
+                    "{} to fix invalid {type_name} (before: `{input}`; after: `{patched_input}`)",
+                    messages.join(" and ")
+                );
+                return Ok(requirement);
+            }
+
+            Err(err)
+        }
+    }
+}
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -55,24 +82,7 @@ impl FromStr for LenientRequirement {
     type Err = Pep508Error;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Requirement::from_str(input) {
-            Ok(requirement) => Ok(Self(requirement)),
-            Err(err) => {
-                for (matcher, replacement, message) in FIXUPS {
-                    let patched = matcher.replace_all(input, *replacement);
-                    if patched != input {
-                        if let Ok(requirement) = Requirement::from_str(&patched) {
-                            warn_once!(
-                                "{message} to fix invalid requirement (before: `{input}`; after: `{patched}`)",
-                            );
-                            return Ok(Self(requirement));
-                        }
-                    }
-                }
-
-                Err(err)
-            }
-        }
+        Ok(Self(parse_with_fixups(input, "requirement")?))
     }
 }
 
@@ -92,24 +102,7 @@ impl FromStr for LenientVersionSpecifiers {
     type Err = Pep440Error;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match VersionSpecifiers::from_str(input) {
-            Ok(specifiers) => Ok(Self(specifiers)),
-            Err(err) => {
-                for (matcher, replacement, message) in FIXUPS {
-                    let patched = matcher.replace_all(input, *replacement);
-                    if patched != input {
-                        if let Ok(specifiers) = VersionSpecifiers::from_str(&patched) {
-                            warn_once!(
-                                "{message} to fix invalid specifiers (before: `{input}`; after: `{patched}`)",
-                            );
-                            return Ok(Self(specifiers));
-                        }
-                    }
-                }
-
-                Err(err)
-            }
-        }
+        Ok(Self(parse_with_fixups(input, "version specifier")?))
     }
 }
 
@@ -131,11 +124,12 @@ impl<'de> Deserialize<'de> for LenientVersionSpecifiers {
 
 #[cfg(test)]
 mod tests {
-    use pep440_rs::VersionSpecifiers;
     use std::str::FromStr;
 
-    use crate::LenientVersionSpecifiers;
+    use pep440_rs::VersionSpecifiers;
     use pep508_rs::Requirement;
+
+    use crate::LenientVersionSpecifiers;
 
     use super::LenientRequirement;
 
@@ -250,6 +244,20 @@ mod tests {
             .unwrap()
             .into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">= 2.7").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://pypi.org/simple/celery/?format=application/vnd.pypi.simple.v1+json>
+    #[test]
+    fn specifier_multi_fix() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(
+            ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*,",
+        )
+        .unwrap()
+        .into();
+        let expected: VersionSpecifiers =
+            VersionSpecifiers::from_str(">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*")
+                .unwrap();
         assert_eq!(actual, expected);
     }
 }
