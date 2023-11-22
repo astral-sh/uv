@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use bytesize::ByteSize;
 use fs_err::tokio as fs;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -87,17 +87,23 @@ impl<'a> Fetcher<'a> {
             }
             // Fetch the distribution, then read the metadata (for built distributions), or build
             // the distribution and _then_ read the metadata (for source distributions).
-            dist => match self.fetch_dist(dist, client).await? {
-                Download::Wheel(wheel) => {
-                    let metadata = wheel.read_dist_info()?;
-                    Ok(metadata)
+            dist => {
+                // Optimization: Skip source dist download when we must not build them anyway
+                if build_context.no_build() && matches!(dist, Dist::Source(_)) {
+                    bail!("Building source distributions is disabled");
                 }
-                Download::SourceDist(sdist) => {
-                    let wheel = self.build_sdist(sdist, build_context).await?;
-                    let metadata = wheel.read_dist_info()?;
-                    Ok(metadata)
+                match self.fetch_dist(dist, client).await? {
+                    Download::Wheel(wheel) => {
+                        let metadata = wheel.read_dist_info()?;
+                        Ok(metadata)
+                    }
+                    Download::SourceDist(sdist) => {
+                        let wheel = self.build_sdist(sdist, build_context).await?;
+                        let metadata = wheel.read_dist_info()?;
+                        Ok(metadata)
+                    }
                 }
-            },
+            }
         }
     }
 
