@@ -45,8 +45,8 @@ enum CachedResponse<Payload: Serialize> {
 
 /// Serialize the actual payload together with its caching information
 #[derive(Debug, Deserialize, Serialize)]
-struct DataWithCachePolicy<Payload: Serialize> {
-    data: Payload,
+pub struct DataWithCachePolicy<Payload: Serialize> {
+    pub data: Payload,
     cache_policy: CachePolicy,
 }
 

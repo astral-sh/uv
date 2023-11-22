@@ -11,15 +11,12 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use distribution_types::{BuiltDist, Dist, Identifier, Metadata, RemoteSource, SourceDist};
-use platform_tags::Tags;
+use distribution_types::{BuiltDist, Dist, Metadata, RemoteSource, SourceDist};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
-use pypi_types::Metadata21;
 
 use crate::download::BuiltWheel;
-use crate::error::Error;
 use crate::reporter::Facade;
 use crate::{DiskWheel, Download, InMemoryWheel, LocalWheel, Reporter, SourceDistDownload};
 
@@ -51,13 +48,6 @@ impl<'a> Fetcher<'a> {
             reporter: Some(Arc::new(reporter)),
             ..self
         }
-    }
-
-    /// Return the [`Metadata21`] for a distribution, if it exists in the cache.
-    pub fn find_metadata(&self, dist: &Dist, tags: &Tags) -> Result<Option<Metadata21>, Error> {
-        self.find_in_cache(dist, tags)
-            .map(|wheel| wheel.read_dist_info())
-            .transpose()
     }
 
     /// Download a distribution.
@@ -280,30 +270,6 @@ impl<'a> Fetcher<'a> {
             filename,
             path: wheel_path,
         }))
-    }
-
-    /// Find a built wheel in the cache.
-    fn find_in_cache(&self, dist: &Dist, tags: &Tags) -> Option<DiskWheel> {
-        let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(dist.distribution_id());
-        let read_dir = fs_err::read_dir(wheel_dir).ok()?;
-        for entry in read_dir {
-            let Ok(entry) = entry else {
-                continue;
-            };
-            let Ok(filename) =
-                WheelFilename::from_str(entry.file_name().to_string_lossy().as_ref())
-            else {
-                continue;
-            };
-            if filename.is_compatible(tags) {
-                return Some(DiskWheel {
-                    dist: dist.clone(),
-                    filename,
-                    path: entry.path(),
-                });
-            }
-        }
-        None
     }
 
     /// Given a remote source distribution, return a precise variant, if possible.

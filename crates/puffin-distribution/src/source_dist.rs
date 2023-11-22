@@ -10,7 +10,7 @@ use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use fxhash::FxHashMap;
 use reqwest::Response;
-use tempfile::TempDir;
+use tempfile::{tempdir, TempDir};
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -18,13 +18,14 @@ use tracing::debug;
 use url::Url;
 use zip::ZipArchive;
 
-use distribution_filename::WheelFilename;
+use crate::download::BuiltWheel;
+use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use distribution_types::{GitSourceDist, Identifier, SourceDist};
+use distribution_types::{Dist, GitSourceDist, Identifier, RemoteSource, SourceDist};
 use install_wheel_rs::find_dist_info;
 use platform_tags::Tags;
 use puffin_cache::{RepositoryUrl, WheelMetadataCache};
-use puffin_client::{CachedClient, CachedClientError};
+use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
@@ -41,11 +42,11 @@ const GIT_CACHE: &str = "git-v0";
 pub enum SourceDistError {
     // Network error
     #[error("Failed to parse url '{0}'")]
-    UrlParseError(String, #[source] url::ParseError),
+    UrlParse(String, #[source] url::ParseError),
     #[error("Git operation failed for {0}")]
-    GitErr(#[source] anyhow::Error),
+    Git(#[source] anyhow::Error),
     #[error(transparent)]
-    RequestError(#[from] reqwest::Error),
+    Request(#[from] reqwest::Error),
     #[error(transparent)]
     Client(#[from] puffin_client::Error),
 
@@ -57,16 +58,20 @@ pub enum SourceDistError {
 
     // Build error
     #[error("Failed to build {0}")]
-    BuildError(#[source] anyhow::Error),
+    Build(#[source] anyhow::Error),
+    #[error("Built wheel has an invalid filename")]
+    WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
         given: PackageName,
         metadata: PackageName,
     },
+    #[error("Failed to parse metadata from built wheel")]
+    Metadata(#[from] crate::error::Error),
 
     // Should not occur, i've only seen it when another task panicked
     #[error("The task executor is broken, did some other task panic?")]
-    JoinError(#[from] JoinError),
+    Join(#[from] JoinError),
 }
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
@@ -108,21 +113,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (metadata, precise) = match &source_dist {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
-                    .url
-                    .path()
-                    .rsplit_once('/')
-                    .map_or(direct_url_source_dist.url.path(), |(_, filename)| filename)
+                    .filename()
+                    .unwrap_or(direct_url_source_dist.url.path())
                     .to_string();
-                let DirectArchiveUrl {
-                    url: _,
-                    subdirectory,
-                } = DirectArchiveUrl::from(&direct_url_source_dist.url);
+                let DirectArchiveUrl { url, subdirectory } =
+                    DirectArchiveUrl::from(&direct_url_source_dist.url);
 
                 let metadata = self
                     .url(
                         source_dist,
                         &filename,
-                        &direct_url_source_dist.url,
+                        &url,
                         WheelMetadataCache::Url,
                         subdirectory.as_deref(),
                     )
@@ -138,7 +139,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = Url::parse(&registry_source_dist.file.url).map_err(|err| {
-                    SourceDistError::UrlParseError(registry_source_dist.file.url.to_string(), err)
+                    SourceDistError::UrlParse(registry_source_dist.file.url.to_string(), err)
                 })?;
                 let metadata = self
                     .url(
@@ -158,8 +159,33 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let metadata = self.git(source_dist, git_source_dist).await?;
                 (metadata, precise)
             }
-            SourceDist::Path(_path_source_dist) => {
-                todo!()
+            SourceDist::Path(path_source_dist) => {
+                // TODO: Add caching here. See also https://github.com/astral-sh/puffin/issues/478
+                let temp_dir = tempdir()?;
+
+                // Build the wheel.
+                let disk_filename = self
+                    .build_context
+                    .build_source(
+                        &path_source_dist.path,
+                        None,
+                        temp_dir.path(),
+                        &path_source_dist.to_string(),
+                    )
+                    .await
+                    .map_err(SourceDistError::Build)?;
+
+                // Read the metadata from the wheel.
+                let filename = WheelFilename::from_str(&disk_filename)?;
+
+                let metadata = BuiltWheel {
+                    dist: Dist::Source(source_dist.clone()),
+                    filename,
+                    path: temp_dir.path().join(disk_filename),
+                }
+                .read_dist_info()?;
+
+                (metadata, precise)
             }
         };
 
@@ -189,7 +215,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             let (wheel_filename, metadata) = self
                 .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
                 .await
-                .map_err(SourceDistError::BuildError)?;
+                .map_err(SourceDistError::Build)?;
             if let Some(task) = task {
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_build_complete(source_dist, task);
@@ -234,7 +260,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (wheel_filename, metadata) = self
             .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
             .await
-            .map_err(SourceDistError::BuildError)?;
+            .map_err(SourceDistError::Build)?;
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_build_complete(source_dist, task);
@@ -243,10 +269,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Not elegant that we have to read again here, but also not too relevant given that we
         // have to build a source dist next
-        // TODO(konstin): Make this non-fatal
-        let cached = fs::read(cache_dir.join(cache_file)).await?;
-        let mut cached = serde_json::from_slice::<Metadata21s>(&cached)?;
-        cached.insert(wheel_filename, metadata.clone());
+        let Ok(cached) = fs::read(cache_dir.join(cache_file)).await else {
+            // Just return if the response wasn't cacheable or there was another errors that
+            // `CachedClient` already complained about
+            return Ok(metadata.clone());
+        };
+        // If the file exists and it was just read or written by `CachedClient`, we assume it must
+        // be correct.
+        let mut cached = serde_json::from_slice::<DataWithCachePolicy<Metadata21s>>(&cached)?;
+        cached.data.insert(wheel_filename, metadata.clone());
         fs::write(cache_file, serde_json::to_vec(&cached)?).await?;
         Ok(metadata.clone())
     }
@@ -293,7 +324,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (filename, metadata) = self
             .build_source_dist(source_dist, None, fetch.path(), subdirectory.as_deref())
             .await
-            .map_err(SourceDistError::BuildError)?;
+            .map_err(SourceDistError::Build)?;
 
         if metadata.name != git_source_dist.name {
             return Err(SourceDistError::NameMismatch {
@@ -343,7 +374,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         debug!("Fetching source distribution from Git: {}", url);
 
         let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(&url).map_err(SourceDistError::GitErr)?;
+            DirectGitUrl::try_from(&url).map_err(SourceDistError::Git)?;
 
         let git_dir = self.build_context.cache().join(GIT_CACHE);
         let source = if let Some(reporter) = &self.reporter {
@@ -353,7 +384,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
-            .map_err(SourceDistError::GitErr)?;
+            .map_err(SourceDistError::Git)?;
         Ok((fetch, subdirectory))
     }
 
@@ -419,7 +450,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(&source_dist.url).map_err(SourceDistError::GitErr)?;
+            DirectGitUrl::try_from(&source_dist.url).map_err(SourceDistError::Git)?;
 
         // If the commit already contains a complete SHA, short-circuit.
         if url.precise().is_some() {
@@ -436,7 +467,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
         let precise = tokio::task::spawn_blocking(move || source.fetch())
             .await?
-            .map_err(SourceDistError::GitErr)?;
+            .map_err(SourceDistError::Git)?;
         let url = precise.into_git();
 
         // Re-encode as a URL.
