@@ -47,7 +47,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 zip = { workspace = true }
-derivative = { version = "2.2.0" }
+derivative = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]

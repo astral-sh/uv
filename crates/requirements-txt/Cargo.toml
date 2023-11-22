@@ -23,7 +23,7 @@ tracing = { workspace = true }
 unscanny = { workspace = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
+anyhow = { version = "1.0.75" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.34.0" }
 serde_json = { version = "1.0.108" }
