@@ -20,7 +20,7 @@ path = "benches/distribution_filename.rs"
 harness = false
 
 [dependencies]
-criterion = { version = "0.5.1", default-features = false }
+distribution-filename = { path = "../distribution-filename" }
+platform-tags = { path = "../platform-tags" }
 
-distribution-filename.path = "../distribution-filename"
-platform-tags.path = "../platform-tags"
+criterion = { version = "0.5.1", default-features = false }

@@ -18,12 +18,11 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 once_cell = { workspace = true }
+pyo3 = { workspace = true, optional = true, features = ["extension-module", "abi3-py37"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
-
-pyo3 = { version = "0.20", optional = true, features = ["extension-module", "abi3-py37"] }
 
 [dev-dependencies]
 indoc = "2.0.4"
