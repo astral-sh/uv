@@ -18,6 +18,9 @@ static GREATER_THAN_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r">=(\d+\.\d+)\.
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+,$").unwrap());
+/// Ex) `>= '2.7'`
+static INVALID_QUOTES: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"((?:~=|==|!=|<=|>=|<|>|===) )*'(\d(?:\.\d)*)'").unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -40,6 +43,8 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     (&MISSING_DOT, r"${1}.*", "Inserting missing dot"),
     // Given `>=3.6,`, rewrite to `>=3.6`
     (&TRAILING_COMMA, r"${1}", "Removing trailing comma"),
+    // Given `>= '2.7'`, rewrite to `>= 2.7`
+    (&INVALID_QUOTES, r"${1}${2}", "Removing invalid quotes"),
 ];
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
@@ -235,6 +240,16 @@ mod tests {
         let actual: VersionSpecifiers =
             LenientVersionSpecifiers::from_str(">=3.6,").unwrap().into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.6").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://pypi.org/simple/shellingham/?format=application/vnd.pypi.simple.v1+json>
+    #[test]
+    fn specifier_invalid_quotes() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">= '2.7'")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">= 2.7").unwrap();
         assert_eq!(actual, expected);
     }
 }
