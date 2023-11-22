@@ -216,8 +216,12 @@ impl RegistryClient {
                     .await?
             }
             BuiltDist::DirectUrl(wheel) => {
-                self.wheel_metadata_no_pep658(&wheel.filename, &wheel.url, WheelMetadataCache::Url)
-                    .await?
+                self.wheel_metadata_no_pep658(
+                    &wheel.filename,
+                    &wheel.url,
+                    WheelMetadataCache::Url(wheel.url.clone()),
+                )
+                .await?
             }
             BuiltDist::Path(wheel) => {
                 let reader = fs_err::tokio::File::open(&wheel.path).await?;
@@ -256,7 +260,9 @@ impl RegistryClient {
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            let cache_dir = WheelMetadataCache::Index(index).wheel_cache_dir(&self.cache, &url);
+            let cache_dir = self
+                .cache
+                .join(WheelMetadataCache::Index(index).wheel_dir());
             let cache_file = format!("{}.json", filename.stem());
 
             let response_callback = |response: Response| async {
@@ -288,7 +294,7 @@ impl RegistryClient {
             return Err(Error::NoIndex(url.to_string()));
         }
 
-        let cache_dir = cache_shard.wheel_cache_dir(&self.cache, url);
+        let cache_dir = self.cache.join(cache_shard.wheel_dir());
         let cache_file = format!("{}.json", filename.stem());
 
         // This response callback is special, we actually make a number of subsequent requests to

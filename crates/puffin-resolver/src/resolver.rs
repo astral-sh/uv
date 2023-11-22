@@ -22,7 +22,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::{Download, FetchAndBuild};
+use puffin_distribution::{DistributionDatabase, Download};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
@@ -49,7 +49,7 @@ pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
     selector: CandidateSelector,
     index: Arc<Index>,
     exclude_newer: Option<DateTime<Utc>>,
-    fetcher: FetchAndBuild<'a, Context>,
+    fetcher: DistributionDatabase<'a, Context>,
     build_context: &'a Context,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -86,7 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
             markers,
             tags,
             client,
-            fetcher: FetchAndBuild::new(build_context.cache(), tags, client, build_context),
+            fetcher: DistributionDatabase::new(build_context.cache(), tags, client, build_context),
             build_context,
             reporter: None,
         }
@@ -95,8 +95,10 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        let reporter = Arc::new(reporter);
         Self {
-            reporter: Some(Arc::new(reporter)),
+            reporter: Some(reporter.clone()),
+            fetcher: self.fetcher.with_reporter(Facade { reporter }),
             ..self
         }
     }

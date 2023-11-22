@@ -7,7 +7,7 @@ use url::Url;
 
 use distribution_types::{BuiltDist, SourceDist};
 use pep508_rs::Requirement;
-use puffin_distribution::FetchAndBuildError;
+use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
@@ -55,10 +55,10 @@ pub enum ResolveError {
     DistributionType(#[from] distribution_types::Error),
 
     #[error("Failed to download {0}")]
-    Fetch(Box<BuiltDist>, #[source] FetchAndBuildError),
+    Fetch(Box<BuiltDist>, #[source] DistributionDatabaseError),
 
     #[error("Failed to download and build {0}")]
-    FetchAndBuild(Box<SourceDist>, #[source] FetchAndBuildError),
+    FetchAndBuild(Box<SourceDist>, #[source] DistributionDatabaseError),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {

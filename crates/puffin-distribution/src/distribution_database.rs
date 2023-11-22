@@ -17,18 +17,17 @@ use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
 use distribution_types::{BuiltDist, Dist, Metadata, RemoteSource, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::{digest, CanonicalUrl};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
 use crate::download::BuiltWheel;
-use crate::locks::{LockedFile, Locks};
+use crate::locks::Locks;
 use crate::reporter::Facade;
 use crate::{
     DiskWheel, Download, InMemoryWheel, LocalWheel, Reporter, SourceDistCachedBuilder,
-    SourceDistDownload, SourceDistError,
+    SourceDistError,
 };
 
 // The cache subdirectory in which to store Git repositories.
@@ -38,7 +37,7 @@ const GIT_CACHE: &str = "git-v0";
 const ARCHIVES_CACHE: &str = "archives-v0";
 
 #[derive(Debug, Error)]
-pub enum FetchAndBuildError {
+pub enum DistributionDatabaseError {
     #[error("Failed to parse '{0}' as url")]
     Url(String, #[source] url::ParseError),
     #[error(transparent)]
@@ -74,7 +73,7 @@ pub enum FetchAndBuildError {
 ///
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially.
-pub struct FetchAndBuild<'a, Context: BuildContext + Send + Sync> {
+pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     cache: &'a Path,
     reporter: Option<Arc<dyn Reporter>>,
     locks: Arc<Locks>,
@@ -83,7 +82,7 @@ pub struct FetchAndBuild<'a, Context: BuildContext + Send + Sync> {
     builder: SourceDistCachedBuilder<'a, Context>,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
+impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> {
     pub fn new(
         cache: &'a Path,
         tags: &'a Tags,
@@ -115,7 +114,7 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
     pub async fn get_wheels(
         &self,
         dists: Vec<Dist>,
-    ) -> Result<Vec<LocalWheel>, FetchAndBuildError> {
+    ) -> Result<Vec<LocalWheel>, DistributionDatabaseError> {
         // Sort the distributions by size.
         let mut dists = dists;
         dists.sort_unstable_by_key(|distribution| {
@@ -125,7 +124,7 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
         // Optimization: Skip source dist download when we must not build them anyway
         if self.build_context.no_build() && dists.iter().any(|dist| matches!(dist, Dist::Source(_)))
         {
-            return Err(FetchAndBuildError::NoBuild);
+            return Err(DistributionDatabaseError::NoBuild);
         }
 
         // Fetch the distributions in parallel.
@@ -146,12 +145,16 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
     }
 
     /// Either fetch the wheel or fetch and build the source distribution
-    async fn get_or_build_wheel(&self, dist: Dist) -> Result<LocalWheel, FetchAndBuildError> {
+    async fn get_or_build_wheel(
+        &self,
+        dist: Dist,
+    ) -> Result<LocalWheel, DistributionDatabaseError> {
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 // Fetch the wheel.
-                let url = Url::parse(&wheel.file.url)
-                    .map_err(|err| FetchAndBuildError::Url(wheel.file.url.to_string(), err))?;
+                let url = Url::parse(&wheel.file.url).map_err(|err| {
+                    DistributionDatabaseError::Url(wheel.file.url.to_string(), err)
+                })?;
                 let filename = WheelFilename::from_str(&wheel.file.filename)?;
                 let reader = self.client.stream_external(&url).await?;
 
@@ -188,6 +191,7 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
                     // Create a directory for the wheel.
+                    // TODO(konstin): Change this when the built wheel naming scheme is fixed
                     let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
                     fs::create_dir_all(&wheel_dir).await?;
 
@@ -214,15 +218,8 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                 debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
 
-                let filename = wheel
-                    .url
-                    .path()
-                    .rsplit_once('/')
-                    .map_or(wheel.url.path(), |(_, filename)| filename)
-                    .to_string();
-                let filename = WheelFilename::from_str(&filename)?;
-
                 // Create a directory for the wheel.
+                // TODO(konstin): Change this when the built wheel naming scheme is fixed
                 let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
                 fs::create_dir_all(&wheel_dir).await?;
 
@@ -237,7 +234,7 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
 
                 let local_wheel = LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
-                    filename,
+                    filename: wheel.filename.clone(),
                     path: wheel_file,
                 });
 
@@ -273,13 +270,13 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-    ) -> Result<(Metadata21, Option<Url>), FetchAndBuildError> {
+    ) -> Result<(Metadata21, Option<Url>), DistributionDatabaseError> {
         match dist {
             Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
             Dist::Source(source_dist) => {
                 // Optimization: Skip source dist download when we must not build them anyway
                 if self.build_context.no_build() {
-                    return Err(FetchAndBuildError::NoBuild);
+                    return Err(DistributionDatabaseError::NoBuild);
                 }
 
                 let lock = self.locks.acquire(dist).await;
@@ -291,54 +288,6 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
         }
     }
 
-    /// Build a downloaded source distribution.
-    pub async fn build_sdist(
-        &self,
-        dist: &SourceDistDownload,
-    ) -> Result<LocalWheel, FetchAndBuildError> {
-        let task = self
-            .reporter
-            .as_ref()
-            .map(|reporter| reporter.on_build_start(&dist.dist));
-
-        // Create a directory for the wheel.
-        let wheel_dir = self
-            .cache
-            .join(ARCHIVES_CACHE)
-            .join(dist.remote().package_id());
-        fs::create_dir_all(&wheel_dir).await?;
-
-        // Build the wheel.
-        // TODO(charlie): If this is a Git dependency, we should do another checkout. If the same
-        // repository is used by multiple dependencies, at multiple commits, the local checkout may now
-        // point to the wrong commit.
-        let disk_filename = self
-            .build_context
-            .build_source(
-                &dist.sdist_file,
-                dist.subdirectory.as_deref(),
-                &wheel_dir,
-                &dist.dist.to_string(),
-            )
-            .await
-            .map_err(FetchAndBuildError::Build)?;
-        let wheel_path = wheel_dir.join(&disk_filename);
-
-        let filename = WheelFilename::from_str(&disk_filename)?;
-
-        if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_build_complete(&dist.dist, task);
-            }
-        }
-
-        Ok(LocalWheel::Built(BuiltWheel {
-            dist: Dist::Source(dist.dist.clone()),
-            filename,
-            path: wheel_path,
-        }))
-    }
-
     /// Given a remote source distribution, return a precise variant, if possible.
     ///
     /// For example, given a Git dependency with a reference to a branch or tag, return a URL
@@ -347,22 +296,14 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub async fn precise(&self, dist: &Dist) -> Result<Option<Url>, FetchAndBuildError> {
+    pub async fn precise(&self, dist: &Dist) -> Result<Option<Url>, DistributionDatabaseError> {
         let Dist::Source(SourceDist::Git(source_dist)) = dist else {
             return Ok(None);
         };
         let git_dir = self.cache.join(GIT_CACHE);
 
-        let lock = self.locks.acquire(dist).await;
-        let _guard = lock.lock().await;
-        // Avoid races between different processes, too
-        let locks_dir = git_dir.join("locks");
-        fs::create_dir_all(&locks_dir).await?;
-        let _lockfile =
-            LockedFile::new(locks_dir.join(digest(&CanonicalUrl::new(&source_dist.url))))?;
-
         let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(&source_dist.url).map_err(FetchAndBuildError::Git)?;
+            DirectGitUrl::try_from(&source_dist.url).map_err(DistributionDatabaseError::Git)?;
 
         // If the commit already contains a complete SHA, short-circuit.
         if url.precise().is_some() {
@@ -371,6 +312,7 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
 
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
+        // Git locks internally (https://stackoverflow.com/a/62841655/3549270)
         let source = if let Some(reporter) = self.reporter.clone() {
             GitSource::new(url, git_dir).with_reporter(Facade::from(reporter))
         } else {
@@ -378,7 +320,7 @@ impl<'a, Context: BuildContext + Send + Sync> FetchAndBuild<'a, Context> {
         };
         let precise = tokio::task::spawn_blocking(move || source.fetch())
             .await?
-            .map_err(FetchAndBuildError::Git)?;
+            .map_err(DistributionDatabaseError::Git)?;
         let url = precise.into_git();
 
         // Re-encode as a URL.

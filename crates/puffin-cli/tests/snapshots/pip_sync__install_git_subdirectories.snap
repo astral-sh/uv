@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /tmp/.tmpZ2DHhz
+    - /tmp/.tmpLAs2NP
   env:
-    VIRTUAL_ENV: /tmp/.tmpGuGBJR/.venv
+    VIRTUAL_ENV: /tmp/.tmpVSMTrb/.venv
 ---
 success: true
 exit_code: 0
@@ -16,7 +16,7 @@ exit_code: 0
 
 ----- stderr -----
 Resolved 2 packages in [TIME]
-Downloaded 2 packages and built 2 packages in [TIME]
+Downloaded 2 packages in [TIME]
 Unzipped 2 packages in [TIME]
 Installed 2 packages in [TIME]
  + example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a

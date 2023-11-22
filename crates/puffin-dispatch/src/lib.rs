@@ -16,7 +16,7 @@ use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
-use puffin_distribution::FetchAndBuild;
+use puffin_distribution::DistributionDatabase;
 use puffin_installer::{InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{InterpreterInfo, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
@@ -150,7 +150,7 @@ impl BuildContext for BuildDispatch {
                 vec![]
             } else {
                 // TODO(konstin): Check that there is no endless recursion
-                let fetcher = FetchAndBuild::new(self.cache(), &tags, &self.client, self);
+                let fetcher = DistributionDatabase::new(self.cache(), &tags, &self.client, self);
                 debug!(
                     "Downloading and building requirement{} for build: {}",
                     if remote.len() == 1 { "" } else { "s" },

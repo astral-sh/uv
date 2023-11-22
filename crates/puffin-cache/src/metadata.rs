@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use url::Url;
 
@@ -13,14 +13,14 @@ const BUILT_WHEEL_METADATA_CACHE: &str = "built-wheel-metadata-v0";
 
 /// Cache wheel metadata, both from remote wheels and built from source distributions.
 ///
-/// See [`WheelMetadataCache::wheel_cache_dir`] for remote wheel metadata caching and
-/// [`WheelMetadataCache::built_wheel_cache_dir`] for caching of metadata of built source
+/// See [`WheelMetadataCache::wheel_dir`] for remote wheel metadata caching and
+/// [`WheelMetadataCache::built_wheel_dir`] for caching of metadata of built source
 /// distributions.
 pub enum WheelMetadataCache {
     /// Either pypi or an alternative index, which we key by index url
     Index(IndexUrl),
     /// A direct url dependency, which we key by url
-    Url,
+    Url(Url),
     /// A git dependency, which we key by repository url. We use the revision as filename.
     ///
     /// Note that this variant only exists for source distributions, wheels can't be delivered
@@ -29,18 +29,18 @@ pub enum WheelMetadataCache {
 }
 
 impl WheelMetadataCache {
-    fn append_to_bucket(&self, cache_with_bucket: &Path, url: &Url) -> PathBuf {
+    fn bucket(&self) -> PathBuf {
         match self {
-            WheelMetadataCache::Index(IndexUrl::Pypi) => cache_with_bucket.join("pypi"),
-            WheelMetadataCache::Index(url) => cache_with_bucket
-                .join("index")
-                .join(digest(&CanonicalUrl::new(url))),
-            WheelMetadataCache::Url => cache_with_bucket
-                .join("url")
-                .join(digest(&CanonicalUrl::new(url))),
-            WheelMetadataCache::Git(url) => cache_with_bucket
-                .join("git")
-                .join(digest(&CanonicalUrl::new(url))),
+            WheelMetadataCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),
+            WheelMetadataCache::Index(url) => {
+                PathBuf::from("index").join(digest(&CanonicalUrl::new(url)))
+            }
+            WheelMetadataCache::Url(url) => {
+                PathBuf::from("url").join(digest(&CanonicalUrl::new(url)))
+            }
+            WheelMetadataCache::Git(url) => {
+                PathBuf::from("git").join(digest(&CanonicalUrl::new(url)))
+            }
         }
     }
 
@@ -72,9 +72,8 @@ impl WheelMetadataCache {
     ///     └── 4b8be67c801a7ecb
     ///         └── flask-3.0.0-py3-none-any.json
     /// ```
-    pub fn wheel_cache_dir(&self, cache: &Path, url: &Url) -> PathBuf {
-        let cache_with_bucket = cache.join(WHEEL_METADATA_CACHE);
-        self.append_to_bucket(&cache_with_bucket, url)
+    pub fn wheel_dir(&self) -> PathBuf {
+        PathBuf::from(WHEEL_METADATA_CACHE).join(self.bucket())
     }
 
     /// Metadata of a built source distribution
@@ -126,9 +125,9 @@ impl WheelMetadataCache {
     ///   }
     /// }
     /// ```
-    pub fn built_wheel_cache_dir(&self, cache: &Path, filename: &str, url: &Url) -> PathBuf {
-        let cache_with_bucket = cache.join(BUILT_WHEEL_METADATA_CACHE);
-        self.append_to_bucket(&cache_with_bucket, url)
+    pub fn built_wheel_dir(&self, filename: &str) -> PathBuf {
+        PathBuf::from(BUILT_WHEEL_METADATA_CACHE)
+            .join(self.bucket())
             .join(filename)
     }
 }

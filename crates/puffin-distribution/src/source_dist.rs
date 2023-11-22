@@ -162,7 +162,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     source_dist,
                     &filename,
                     &url,
-                    WheelMetadataCache::Url,
+                    WheelMetadataCache::Url(url.clone()),
                     subdirectory.as_deref(),
                 )
                 .await?
@@ -237,8 +237,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         cache_shard: WheelMetadataCache,
         subdirectory: Option<&Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let cache_dir =
-            cache_shard.built_wheel_cache_dir(self.build_context.cache(), filename, url);
+        let cache_dir = self
+            .build_context
+            .cache()
+            .join(cache_shard.built_wheel_dir(filename));
         let cache_file = METADATA_JSON;
 
         let response_callback = |response| async {
@@ -250,16 +252,23 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .map(|reporter| reporter.on_build_start(source_dist));
             let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
 
+            let download = SourceDistDownload {
+                dist: source_dist.clone(),
+                sdist_file: sdist_file.clone(),
+                subdirectory: subdirectory.map(Path::to_path_buf),
+            };
+
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_download_progress(&Download::SourceDist(SourceDistDownload {
-                    dist: source_dist.clone(),
-                    sdist_file: sdist_file.clone(),
-                    subdirectory: subdirectory.map(Path::to_path_buf),
-                }));
+                reporter.on_download_progress(&Download::SourceDist(download.clone()));
             }
 
             let (disk_filename, wheel_filename, metadata) = self
-                .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
+                .build_source_dist(
+                    &download.dist,
+                    temp_dir,
+                    &download.sdist_file,
+                    download.subdirectory.as_deref(),
+                )
                 .await
                 .map_err(SourceDistError::Build)?;
 
@@ -358,11 +367,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let task = self
-            .reporter
-            .as_ref()
-            .map(|reporter| reporter.on_build_start(source_dist));
-
         // TODO(konstin): Can we special case when we have a git sha so we know there is no change?
         let (fetch, subdirectory) = self
             .download_source_dist_git(git_source_dist.url.clone())
@@ -373,11 +377,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .precise()
             .expect("Exact commit after checkout")
             .to_string();
-        let cache_dir = WheelMetadataCache::Git(git_source_dist.url.clone()).built_wheel_cache_dir(
-            self.build_context.cache(),
-            &git_sha,
-            &git_source_dist.url,
-        );
+        let cache_shard = WheelMetadataCache::Git(git_source_dist.url.clone());
+        let cache_dir = self
+            .build_context
+            .cache()
+            .join(cache_shard.built_wheel_dir(&git_sha));
         let cache_file = cache_dir.join(METADATA_JSON);
 
         // TODO(konstin): Change this when the built wheel naming scheme is fixed
@@ -407,6 +411,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         } else {
             Metadata21s::default()
         };
+
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source_dist));
 
         let (disk_filename, filename, metadata) = self
             .build_source_dist(source_dist, None, fetch.path(), subdirectory.as_deref())

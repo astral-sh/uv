@@ -14,7 +14,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_distribution::{FetchAndBuild, LocalWheel};
+use puffin_distribution::DistributionDatabase;
 use puffin_installer::InstallPlan;
 use puffin_interpreter::Virtualenv;
 use pypi_types::Yanked;
@@ -190,7 +190,7 @@ pub(crate) async fn sync_requirements(
         );
 
         // TODO(konstin): no_build
-        let fetcher = FetchAndBuild::new(cache, &tags, &client, &build_dispatch)
+        let fetcher = DistributionDatabase::new(cache, &tags, &client, &build_dispatch)
             .with_reporter(FetcherReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = fetcher
@@ -198,36 +198,17 @@ pub(crate) async fn sync_requirements(
             .await
             .context("Failed to download and build distributions")?;
 
-        let build_count = wheels
-            .iter()
-            .filter(|wheel| matches!(wheel, LocalWheel::Built(_)))
-            .count();
         let download_s = if wheels.len() == 1 { "" } else { "s" };
-        let build_s = if build_count == 1 { "" } else { "s" };
-        if build_count > 0 {
-            writeln!(
-                printer,
-                "{}",
-                format!(
-                    "Downloaded {} and built {} in {}",
-                    format!("{} package{download_s}", wheels.len()).bold(),
-                    format!("{build_count} package{build_s}").bold(),
-                    elapsed(start.elapsed())
-                )
-                .dimmed()
-            )?;
-        } else {
-            writeln!(
-                printer,
-                "{}",
-                format!(
-                    "Downloaded {} in {}",
-                    format!("{} package{}", wheels.len(), download_s).bold(),
-                    elapsed(start.elapsed())
-                )
-                .dimmed()
-            )?;
-        }
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Downloaded {} in {}",
+                format!("{} package{}", wheels.len(), download_s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
 
         wheels
     };
