@@ -1,6 +1,5 @@
 //! Derived from `pypi_types_crate`.
 
-use std::collections::HashMap;
 use std::io;
 use std::str::FromStr;
 
@@ -12,13 +11,14 @@ use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
 use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
 
-use crate::lenient_requirement::{LenientRequirement, LenientVersionSpecifiers};
+use crate::lenient_requirement::LenientRequirement;
+use crate::LenientVersionSpecifiers;
 
 /// Python Package Metadata 2.1 as specified in
-/// <https://packaging.python.org/specifications/core-metadata/>
+/// <https://packaging.python.org/specifications/core-metadata/>.
 ///
-/// One addition is the requirements fixup which insert missing commas e.g. in
-/// `elasticsearch-dsl (>=7.2.0<8.0.0)`
+/// This is a subset of the full metadata specification, and only includes the
+/// fields that are relevant to dependency resolution.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata21 {
@@ -27,26 +27,8 @@ pub struct Metadata21 {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub platforms: Vec<String>,
-    pub supported_platforms: Vec<String>,
-    pub summary: Option<String>,
-    pub description: Option<String>,
-    pub description_content_type: Option<String>,
-    pub keywords: Option<String>,
-    pub home_page: Option<String>,
-    pub download_url: Option<String>,
-    pub author: Option<String>,
-    pub author_email: Option<String>,
-    pub maintainer: Option<String>,
-    pub maintainer_email: Option<String>,
-    pub license: Option<String>,
-    pub classifiers: Vec<String>,
     pub requires_dist: Vec<Requirement>,
-    pub provides_dist: Vec<PackageName>,
-    pub obsoletes_dist: Vec<String>,
     pub requires_python: Option<VersionSpecifiers>,
-    pub requires_external: Vec<String>,
-    pub project_urls: HashMap<String, String>,
     pub provides_extras: Vec<ExtraName>,
 }
 
@@ -99,6 +81,7 @@ impl Metadata21 {
 
         let msg = mailparse::parse_mail(&mail)?;
         let headers = msg.get_headers();
+
         let get_first_value = |name| {
             headers.get_first_header(name).and_then(|header| {
                 match rfc2047_decoder::decode(header.get_value_raw()) {
@@ -114,13 +97,12 @@ impl Metadata21 {
             })
         };
         let get_all_values = |name| {
-            let values: Vec<String> = headers
+            headers
                 .get_all_values(name)
                 .into_iter()
                 .filter(|value| value != "UNKNOWN")
-                .collect();
-            values
         };
+
         let metadata_version = headers
             .get_first_value("Metadata-Version")
             .ok_or(Error::FieldNotFound("Metadata-Version"))?;
@@ -135,75 +117,26 @@ impl Metadata21 {
                 .ok_or(Error::FieldNotFound("Version"))?,
         )
         .map_err(Error::Pep440VersionError)?;
-        let platforms = get_all_values("Platform");
-        let supported_platforms = get_all_values("Supported-Platform");
-        let summary = get_first_value("Summary");
-        let body = msg.get_body()?;
-        let description = if body.trim().is_empty() {
-            get_first_value("Description")
-        } else {
-            Some(body)
-        };
-        let keywords = get_first_value("Keywords");
-        let home_page = get_first_value("Home-Page");
-        let download_url = get_first_value("Download-URL");
-        let author = get_first_value("Author");
-        let author_email = get_first_value("Author-email");
-        let license = get_first_value("License");
-        let classifiers = get_all_values("Classifier");
         let requires_dist = get_all_values("Requires-Dist")
-            .iter()
-            .map(|requires_dist| LenientRequirement::from_str(requires_dist).map(Requirement::from))
+            .map(|requires_dist| {
+                LenientRequirement::from_str(&requires_dist).map(Requirement::from)
+            })
             .collect::<Result<Vec<_>, _>>()?;
-        let provides_dist = get_all_values("Provides-Dist")
-            .into_iter()
-            .map(PackageName::new)
-            .collect::<Result<Vec<_>, _>>()?;
-        let obsoletes_dist = get_all_values("Obsoletes-Dist");
-        let maintainer = get_first_value("Maintainer");
-        let maintainer_email = get_first_value("Maintainer-email");
         let requires_python = get_first_value("Requires-Python")
             .map(|requires_python| {
                 LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
             })
             .transpose()?;
-        let requires_external = get_all_values("Requires-External");
-        let project_urls = get_all_values("Project-URL")
-            .iter()
-            .map(|name_value| match name_value.split_once(',') {
-                None => Err(Error::InvalidProjectUrl(name_value.clone())),
-                Some((name, value)) => Ok((name.to_string(), value.trim().to_string())),
-            })
-            .collect::<Result<_, _>>()?;
         let provides_extras = get_all_values("Provides-Extra")
-            .into_iter()
             .map(ExtraName::new)
             .collect::<Result<Vec<_>, _>>()?;
-        let description_content_type = get_first_value("Description-Content-Type");
+
         Ok(Metadata21 {
             metadata_version,
             name,
             version,
-            platforms,
-            supported_platforms,
-            summary,
-            description,
-            description_content_type,
-            keywords,
-            home_page,
-            download_url,
-            author,
-            author_email,
-            maintainer,
-            maintainer_email,
-            license,
-            classifiers,
             requires_dist,
-            provides_dist,
-            obsoletes_dist,
             requires_python,
-            requires_external,
-            project_urls,
             provides_extras,
         })
     }
