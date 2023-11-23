@@ -41,7 +41,7 @@ impl<'a> Installer<'a> {
             wheels.par_iter().try_for_each(|wheel| {
                 let location = install_wheel_rs::InstallLocation::new(
                     self.venv.root(),
-                    self.venv.interpreter_info().simple_version(),
+                    self.venv.interpreter().simple_version(),
                 );
 
                 install_wheel_rs::linker::install_wheel(

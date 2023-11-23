@@ -1,10 +1,8 @@
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::UNIX_EPOCH;
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tracing::debug;
 
 use pep440_rs::Version;
@@ -12,10 +10,11 @@ use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 
 use crate::python_platform::PythonPlatform;
+use crate::Error;
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
-pub struct InterpreterInfo {
+pub struct Interpreter {
     pub(crate) platform: PythonPlatform,
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
@@ -23,9 +22,13 @@ pub struct InterpreterInfo {
     pub(crate) sys_executable: PathBuf,
 }
 
-impl InterpreterInfo {
+impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(executable: &Path, platform: Platform, cache: Option<&Path>) -> Result<Self> {
+    pub fn query(
+        executable: &Path,
+        platform: Platform,
+        cache: Option<&Path>,
+    ) -> Result<Self, Error> {
         let info = if let Some(cache) = cache {
             InterpreterQueryResult::query_cached(executable, cache)?
         } else {
@@ -65,7 +68,7 @@ impl InterpreterInfo {
     }
 }
 
-impl InterpreterInfo {
+impl Interpreter {
     /// Returns the path to the Python virtual environment.
     pub fn platform(&self) -> &Platform {
         &self.platform
@@ -106,18 +109,6 @@ impl InterpreterInfo {
     }
 }
 
-#[derive(Debug, Error)]
-pub(crate) enum InterpreterQueryError {
-    #[error(transparent)]
-    IO(#[from] io::Error),
-    #[error("Failed to query python interpreter at {interpreter}")]
-    PythonSubcommand {
-        interpreter: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-}
-
 #[derive(Deserialize, Serialize)]
 pub(crate) struct InterpreterQueryResult {
     pub(crate) markers: MarkerEnvironment,
@@ -128,11 +119,11 @@ pub(crate) struct InterpreterQueryResult {
 
 impl InterpreterQueryResult {
     /// Return the resolved [`InterpreterQueryResult`] for the given Python executable.
-    pub(crate) fn query(interpreter: &Path) -> Result<Self, InterpreterQueryError> {
+    pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
         let output = Command::new(interpreter)
             .args(["-c", include_str!("get_interpreter_info.py")])
             .output()
-            .map_err(|err| InterpreterQueryError::PythonSubcommand {
+            .map_err(|err| Error::PythonSubcommandLaunch {
                 interpreter: interpreter.to_path_buf(),
                 err,
             })?;
@@ -140,35 +131,27 @@ impl InterpreterQueryResult {
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
         if !output.status.success() || !output.stderr.is_empty() {
-            return Err(InterpreterQueryError::PythonSubcommand {
-                interpreter: interpreter.to_path_buf(),
-                err: io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "Querying python at {} failed with status {}:\n--- stdout:\n{}\n--- stderr:\n{}",
-                        interpreter.display(),
-                        output.status,
-                        String::from_utf8_lossy(&output.stdout).trim(),
-                        String::from_utf8_lossy(&output.stderr).trim()
-                    ),
+            return Err(Error::PythonSubcommandOutput {
+                message: format!(
+                    "Querying python at {} failed with status {}",
+                    interpreter.display(),
+                    output.status,
                 ),
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
         }
-        let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err|
-            InterpreterQueryError::PythonSubcommand {
-                interpreter: interpreter.to_path_buf(),
-                err: io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "Querying python at {} did not return the expected data ({}):\n--- stdout:\n{}\n--- stderr:\n{}",
-                        interpreter.display(),
-                        err,
-                        String::from_utf8_lossy(&output.stdout).trim(),
-                        String::from_utf8_lossy(&output.stderr).trim()
-                    ),
+        let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err| {
+            Error::PythonSubcommandOutput {
+                message: format!(
+                    "Querying python at {} did not return the expected data: {}",
+                    interpreter.display(),
+                    err,
                 ),
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
-        )?;
+        })?;
 
         Ok(data)
     }
@@ -178,7 +161,7 @@ impl InterpreterQueryResult {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: &Path) -> Result<Self> {
+    pub(crate) fn query_cached(executable: &Path, cache: &Path) -> Result<Self, Error> {
         // Read from the cache.
         let key = if let Ok(key) = cache_key(executable) {
             if let Ok(data) = cacache::read_sync(cache, &key) {
@@ -211,11 +194,15 @@ impl InterpreterQueryResult {
 
 /// Create a cache key for the Python executable, consisting of the executable's
 /// last modified time and the executable's path.
-fn cache_key(executable: &Path) -> Result<String> {
-    let modified = executable
-        .metadata()?
+fn cache_key(executable: &Path) -> Result<String, Error> {
+    let modified = fs_err::metadata(executable)?
+        // Note: This is infallible on windows and unix (i.e. all platforms we support)
         .modified()?
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_millis();
-    Ok(format!("puffin:v0:{}:{}", executable.display(), modified))
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| Error::SystemTime(executable.to_path_buf(), err))?;
+    Ok(format!(
+        "puffin:v0:{}:{}",
+        executable.display(),
+        modified.as_millis()
+    ))
 }

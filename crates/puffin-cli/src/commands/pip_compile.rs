@@ -116,24 +116,24 @@ pub(crate) async fn pip_compile(
 
     debug!(
         "Using Python {} at {}",
-        venv.interpreter_info().markers().python_version,
+        venv.interpreter().markers().python_version,
         venv.python_executable().display()
     );
 
     // Determine the compatible platform tags.
     let tags = Tags::from_env(
-        venv.interpreter_info().platform(),
-        venv.interpreter_info().simple_version(),
+        venv.interpreter().platform(),
+        venv.interpreter().simple_version(),
     )?;
 
     // Determine the markers to use for resolution.
     let markers = python_version.map_or_else(
-        || Cow::Borrowed(venv.interpreter_info().markers()),
-        |python_version| Cow::Owned(python_version.markers(venv.interpreter_info().markers())),
+        || Cow::Borrowed(venv.interpreter().markers()),
+        |python_version| Cow::Owned(python_version.markers(venv.interpreter().markers())),
     );
     // Inject the fake python version if necessary
     let interpreter_info = venv
-        .interpreter_info()
+        .interpreter()
         .clone()
         .patch_markers(markers.clone().into_owned());
 

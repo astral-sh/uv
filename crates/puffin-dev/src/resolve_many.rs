@@ -52,7 +52,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let build_dispatch = BuildDispatch::new(
         RegistryClientBuilder::new(cache_dir.path().clone()).build(),
         cache_dir.path().clone(),
-        venv.interpreter_info().clone(),
+        venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,
     );
