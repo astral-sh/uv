@@ -50,15 +50,15 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let build_dispatch = BuildDispatch::new(
         client.clone(),
         cache_dir.path().clone(),
-        venv.interpreter_info().clone(),
+        venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,
     );
 
     // Copied from `BuildDispatch`
     let tags = Tags::from_env(
-        venv.interpreter_info().platform(),
-        venv.interpreter_info().simple_version(),
+        venv.interpreter().platform(),
+        venv.interpreter().simple_version(),
     )?;
     let resolver = Resolver::new(
         Manifest::new(
@@ -68,7 +68,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
             None,
         ),
         ResolutionOptions::default(),
-        venv.interpreter_info().markers(),
+        venv.interpreter().markers(),
         &tags,
         &client,
         &build_dispatch,

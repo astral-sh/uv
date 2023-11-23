@@ -7,7 +7,7 @@ use std::pin::Pin;
 use anyhow::Result;
 
 use pep508_rs::Requirement;
-use puffin_interpreter::{InterpreterInfo, Virtualenv};
+use puffin_interpreter::{Interpreter, Virtualenv};
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -54,7 +54,7 @@ pub trait BuildContext {
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).
-    fn interpreter_info(&self) -> &InterpreterInfo;
+    fn interpreter(&self) -> &Interpreter;
 
     /// The system (or conda) python interpreter to create venvs.
     fn base_python(&self) -> &Path;

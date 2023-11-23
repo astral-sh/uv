@@ -5,9 +5,10 @@ use anyhow::Result;
 use colored::Colorize;
 use fs_err as fs;
 use miette::{Diagnostic, IntoDiagnostic};
-use platform_host::Platform;
-use puffin_interpreter::InterpreterInfo;
 use thiserror::Error;
+
+use platform_host::Platform;
+use puffin_interpreter::Interpreter;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -43,7 +44,7 @@ enum VenvError {
 
     #[error("Failed to extract Python interpreter info")]
     #[diagnostic(code(puffin::venv::interpreter))]
-    InterpreterError(#[source] anyhow::Error),
+    InterpreterError(#[source] puffin_interpreter::Error),
 
     #[error("Failed to create virtual environment")]
     #[diagnostic(code(puffin::venv::creation))]
@@ -73,8 +74,8 @@ fn venv_impl(
     };
 
     let platform = Platform::current().into_diagnostic()?;
-    let interpreter_info = InterpreterInfo::query(&base_python, platform, None)
-        .map_err(VenvError::InterpreterError)?;
+    let interpreter_info =
+        Interpreter::query(&base_python, platform, None).map_err(VenvError::InterpreterError)?;
 
     writeln!(
         printer,

@@ -17,7 +17,7 @@ use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_client::RegistryClient;
 use puffin_installer::{Builder, Downloader, InstallPlan, Installer, Unzipper};
-use puffin_interpreter::{InterpreterInfo, Virtualenv};
+use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::BuildContext;
 
@@ -26,7 +26,7 @@ use puffin_traits::BuildContext;
 pub struct BuildDispatch {
     client: RegistryClient,
     cache: PathBuf,
-    interpreter_info: InterpreterInfo,
+    interpreter: Interpreter,
     base_python: PathBuf,
     no_build: bool,
     source_build_context: SourceBuildContext,
@@ -37,14 +37,14 @@ impl BuildDispatch {
     pub fn new(
         client: RegistryClient,
         cache: PathBuf,
-        interpreter_info: InterpreterInfo,
+        interpreter: Interpreter,
         base_python: PathBuf,
         no_build: bool,
     ) -> Self {
         Self {
             client,
             cache,
-            interpreter_info,
+            interpreter,
             base_python,
             no_build,
             source_build_context: SourceBuildContext::default(),
@@ -64,8 +64,8 @@ impl BuildContext for BuildDispatch {
         self.cache.as_path()
     }
 
-    fn interpreter_info(&self) -> &InterpreterInfo {
-        &self.interpreter_info
+    fn interpreter(&self) -> &Interpreter {
+        &self.interpreter
     }
 
     fn base_python(&self) -> &Path {
@@ -83,13 +83,13 @@ impl BuildContext for BuildDispatch {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>> {
         Box::pin(async {
             let tags = Tags::from_env(
-                self.interpreter_info.platform(),
-                self.interpreter_info.simple_version(),
+                self.interpreter.platform(),
+                self.interpreter.simple_version(),
             )?;
             let resolver = Resolver::new(
                 Manifest::new(requirements.to_vec(), Vec::default(), Vec::default(), None),
                 self.options,
-                self.interpreter_info.markers(),
+                self.interpreter.markers(),
                 &tags,
                 &self.client,
                 self,
@@ -124,8 +124,8 @@ impl BuildContext for BuildDispatch {
             } = InstallPlan::try_from_requirements(requirements, &self.cache, venv)?;
 
             let tags = Tags::from_env(
-                self.interpreter_info.platform(),
-                self.interpreter_info.simple_version(),
+                self.interpreter.platform(),
+                self.interpreter.simple_version(),
             )?;
 
             // Resolve the dependencies.
@@ -137,7 +137,7 @@ impl BuildContext for BuildDispatch {
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
-                let resolution = DistFinder::new(&tags, &self.client, self.interpreter_info())
+                let resolution = DistFinder::new(&tags, &self.client, self.interpreter())
                     .resolve(&remote)
                     .await
                     .context("Failed to resolve build dependencies")?;
@@ -249,7 +249,7 @@ impl BuildContext for BuildDispatch {
             let builder = SourceBuild::setup(
                 source,
                 subdirectory,
-                &self.interpreter_info,
+                &self.interpreter,
                 self,
                 self.source_build_context.clone(),
                 package_id,

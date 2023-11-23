@@ -11,7 +11,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use gourgeist::{create_bare_venv, parse_python_cli};
 use platform_host::Platform;
-use puffin_interpreter::InterpreterInfo;
+use puffin_interpreter::Interpreter;
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -25,7 +25,7 @@ fn run() -> Result<(), gourgeist::Error> {
     let location = cli.path.unwrap_or(Utf8PathBuf::from(".venv"));
     let python = parse_python_cli(cli.python)?;
     let platform = Platform::current()?;
-    let info = InterpreterInfo::query(python.as_std_path(), platform, None).unwrap();
+    let info = Interpreter::query(python.as_std_path(), platform, None).unwrap();
     create_bare_venv(&location, &info)?;
     Ok(())
 }
