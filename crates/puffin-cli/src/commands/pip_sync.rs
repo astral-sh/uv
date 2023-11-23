@@ -189,7 +189,6 @@ pub(crate) async fn sync_requirements(
             no_build,
         );
 
-        // TODO(konstin): no_build
         let fetcher = DistributionDatabase::new(cache, &tags, &client, &build_dispatch)
             .with_reporter(FetcherReporter::from(printer).with_length(remote.len() as u64));
 
