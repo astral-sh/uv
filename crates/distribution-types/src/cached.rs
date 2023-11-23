@@ -11,7 +11,7 @@ use puffin_normalize::PackageName;
 
 use crate::direct_url::DirectUrl;
 
-/// A built distribution (wheel) that exists in a local cache.
+/// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone)]
 pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.

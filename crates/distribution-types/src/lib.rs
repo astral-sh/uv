@@ -1,3 +1,41 @@
+//! ## Type hierarchy
+//!
+//! When we receive the requirements from `pip-sync`, we check which requirements already fulfilled
+//! in the users environment ([`InstalledDist`]), whether the matching package is in our wheel cache
+//! ([`CachedDist`]) or whether we need to download, (potentially build) and install it ([`Dist`]).
+//! These three variants make up [`AnyDist`].
+//!
+//! ## `Dist`
+//! A [`Dist`] is either a built distribution (a wheel), or a source distribution that exists at
+//! some location. We translate every PEP 508 requirement e.g. from `requirements.txt` or from
+//! `pyproject.toml`'s `[project] dependencies` into a [`Dist`] by checking each index.
+//! * [`BuiltDist`]: A wheel, with its three possible origins:
+//!   * [`RegistryBuiltDist`]
+//!   * [`DirectUrlBuiltDist`]
+//!   * [`PathBuiltDist`]
+//! * [`SourceDist`]: A source distribution, with its four possible origins:
+//!   * [`RegistrySourceDist`]
+//!   * [`DirectUrlSourceDist`]
+//!   * [`GitSourceDist`]
+//!   * [`PathSourceDist`]
+//!
+//! ## `CachedDist`
+//! A [`CachedDist`] is a built distribution (wheel) that exists in the local cache, with the two
+//! possible origins we currently track:
+//! * [`CachedRegistryDist`]
+//! * [`CachedDirectUrlDist`]
+//!
+//! TODO(konstin): Track all kinds from [`Dist`]
+//!
+//! ## `InstalledDist`
+//! An [`InstalledDist`] is built distribution (wheel) that is installed in a virtual environment,
+//! with the two possible origins we currently track:
+//! * [`InstalledRegistryDist`]
+//! * [`InstalledDirectUrlDist`]
+//!
+//! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
+//!
+//! TODO(konstin): Track all kinds from [`Dist`]
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -39,12 +77,16 @@ impl std::fmt::Display for VersionOrUrl<'_> {
     }
 }
 
+/// Either a built distribution, a wheel, or a source distribution that exists at some location
+///
+/// The location can be index, url or path (wheel) or index, url, path or git (source distribution)
 #[derive(Debug, Clone)]
 pub enum Dist {
     Built(BuiltDist),
     Source(SourceDist),
 }
 
+/// A wheel, with its three possible origins (index, url, path)
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum BuiltDist {
@@ -53,6 +95,7 @@ pub enum BuiltDist {
     Path(PathBuiltDist),
 }
 
+/// A source distribution, with its three possible origins (index, url, path, git)
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum SourceDist {
