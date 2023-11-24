@@ -9,7 +9,7 @@ use pypi_types::DirectUrl;
 
 use crate::{Metadata, VersionOrUrl};
 
-/// A built distribution (wheel) that exists in a virtual environment.
+/// A built distribution (wheel) that is installed in a virtual environment.
 #[derive(Debug, Clone)]
 pub enum InstalledDist {
     /// The distribution was derived from a registry, like `PyPI`.

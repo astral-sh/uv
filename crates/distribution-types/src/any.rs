@@ -5,7 +5,7 @@ use crate::installed::InstalledDist;
 use crate::traits::Metadata;
 use crate::{Dist, VersionOrUrl};
 
-/// A distribution which either exists remotely or locally.
+/// A distribution which is either installable, is a wheel in our cache or is already installed.
 #[derive(Debug, Clone)]
 pub enum AnyDist {
     Remote(Dist),

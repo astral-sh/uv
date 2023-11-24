@@ -4,6 +4,7 @@ use anyhow::{Error, Result};
 use fxhash::FxHashMap;
 
 use platform_host::{Arch, Os, Platform, PlatformError};
+use puffin_interpreter::Interpreter;
 
 /// A set of compatible tags for a given Python version and platform.
 ///
@@ -31,6 +32,10 @@ impl Tags {
                 .or_insert(TagPriority::try_from(index).expect("valid tag priority"));
         }
         Self { map }
+    }
+
+    pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self, PlatformError> {
+        Self::from_env(interpreter.platform(), interpreter.simple_version())
     }
 
     /// Returns the compatible tags for the given Python version and platform.

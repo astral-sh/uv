@@ -103,10 +103,7 @@ pub(crate) async fn sync_requirements(
     }
 
     // Determine the current environment markers.
-    let tags = Tags::from_env(
-        venv.interpreter_info().platform(),
-        venv.interpreter_info().simple_version(),
-    )?;
+    let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Instantiate a client.
     let client = {
@@ -128,9 +125,8 @@ pub(crate) async fn sync_requirements(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder =
-            puffin_resolver::DistFinder::new(&tags, &client, venv.interpreter_info())
-                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder = puffin_resolver::DistFinder::new(&tags, &client, venv.interpreter())
+            .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
@@ -184,7 +180,7 @@ pub(crate) async fn sync_requirements(
         let build_dispatch = BuildDispatch::new(
             client.clone(),
             cache.to_path_buf(),
-            venv.interpreter_info().clone(),
+            venv.interpreter().clone(),
             fs::canonicalize(venv.python_executable())?,
             no_build,
         );

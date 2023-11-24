@@ -15,7 +15,7 @@ use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagPriority, Tags};
 use puffin_client::RegistryClient;
-use puffin_interpreter::InterpreterInfo;
+use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, SimpleJson};
 
@@ -26,21 +26,17 @@ pub struct DistFinder<'a> {
     tags: &'a Tags,
     client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
-    interpreter_info: &'a InterpreterInfo,
+    interpreter: &'a Interpreter,
 }
 
 impl<'a> DistFinder<'a> {
     /// Initialize a new distribution finder.
-    pub fn new(
-        tags: &'a Tags,
-        client: &'a RegistryClient,
-        interpreter_info: &'a InterpreterInfo,
-    ) -> Self {
+    pub fn new(tags: &'a Tags, client: &'a RegistryClient, interpreter: &'a Interpreter) -> Self {
         Self {
             tags,
             client,
             reporter: None,
-            interpreter_info,
+            interpreter,
         }
     }
 
@@ -157,7 +153,7 @@ impl<'a> DistFinder<'a> {
                 .requires_python
                 .as_ref()
                 .map_or(true, |requires_python| {
-                    requires_python.contains(self.interpreter_info.version())
+                    requires_python.contains(self.interpreter.version())
                 })
             {
                 continue;

@@ -17,7 +17,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
-use puffin_interpreter::{InterpreterInfo, Virtualenv};
+use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
     Graph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
 };
@@ -32,7 +32,7 @@ static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
 
 struct DummyContext {
     cache: PathBuf,
-    interpreter_info: InterpreterInfo,
+    interpreter: Interpreter,
 }
 
 impl BuildContext for DummyContext {
@@ -40,8 +40,8 @@ impl BuildContext for DummyContext {
         &self.cache
     }
 
-    fn interpreter_info(&self) -> &InterpreterInfo {
-        &self.interpreter_info
+    fn interpreter(&self) -> &Interpreter {
+        &self.interpreter
     }
 
     fn base_python(&self) -> &Path {
@@ -84,7 +84,7 @@ async fn resolve(
     let client = RegistryClientBuilder::new(temp_dir.path()).build();
     let build_context = DummyContext {
         cache: temp_dir.path().to_path_buf(),
-        interpreter_info: InterpreterInfo::artificial(
+        interpreter: Interpreter::artificial(
             Platform::current()?,
             markers.clone(),
             PathBuf::from("/dev/null"),

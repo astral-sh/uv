@@ -10,7 +10,7 @@ use fs_err::os::unix::fs::symlink;
 use fs_err::File;
 use tracing::info;
 
-use puffin_interpreter::InterpreterInfo;
+use puffin_interpreter::Interpreter;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -56,8 +56,8 @@ pub struct VenvPaths {
 }
 
 /// Write all the files that belong to a venv without any packages installed.
-pub fn create_bare_venv(location: &Utf8Path, info: &InterpreterInfo) -> io::Result<VenvPaths> {
-    let base_python: &Utf8Path = info
+pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::Result<VenvPaths> {
+    let base_python: &Utf8Path = interpreter
         .sys_executable()
         .try_into()
         .map_err(|err: FromPathError| err.into_io_error())?;
@@ -113,14 +113,14 @@ pub fn create_bare_venv(location: &Utf8Path, info: &InterpreterInfo) -> io::Resu
         symlink(base_python, &venv_python)?;
         symlink(
             "python",
-            bin_dir.join(format!("python{}", info.simple_version().0)),
+            bin_dir.join(format!("python{}", interpreter.simple_version().0)),
         )?;
         symlink(
             "python",
             bin_dir.join(format!(
                 "python{}.{}",
-                info.simple_version().0,
-                info.simple_version().1
+                interpreter.simple_version().0,
+                interpreter.simple_version().1
             )),
         )?;
     }
@@ -133,8 +133,8 @@ pub fn create_bare_venv(location: &Utf8Path, info: &InterpreterInfo) -> io::Resu
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
                     "../lib/python{}.{}/site-packages",
-                    info.simple_version().0,
-                    info.simple_version().1
+                    interpreter.simple_version().0,
+                    interpreter.simple_version().1
                 ),
             );
         fs::write(bin_dir.join(name), activator)?;
@@ -153,17 +153,20 @@ pub fn create_bare_venv(location: &Utf8Path, info: &InterpreterInfo) -> io::Resu
     let pyvenv_cfg_data = &[
         ("home", python_home),
         ("implementation", "CPython".to_string()),
-        ("version_info", info.markers().python_version.string.clone()),
+        (
+            "version_info",
+            interpreter.markers().python_version.string.clone(),
+        ),
         ("gourgeist", env!("CARGO_PKG_VERSION").to_string()),
         // I wouldn't allow this option anyway
         ("include-system-site-packages", "false".to_string()),
         (
             "base-prefix",
-            info.base_prefix().to_string_lossy().to_string(),
+            interpreter.base_prefix().to_string_lossy().to_string(),
         ),
         (
             "base-exec-prefix",
-            info.base_exec_prefix().to_string_lossy().to_string(),
+            interpreter.base_exec_prefix().to_string_lossy().to_string(),
         ),
         ("base-executable", base_python.to_string()),
     ];
@@ -176,8 +179,8 @@ pub fn create_bare_venv(location: &Utf8Path, info: &InterpreterInfo) -> io::Resu
         .join("lib")
         .join(format!(
             "python{}.{}",
-            info.simple_version().0,
-            info.simple_version().1
+            interpreter.simple_version().0,
+            interpreter.simple_version().1
         ))
         .join("site-packages");
     fs::create_dir_all(&site_packages)?;

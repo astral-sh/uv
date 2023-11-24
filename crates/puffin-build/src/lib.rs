@@ -27,7 +27,7 @@ use tracing::{debug, instrument};
 use zip::ZipArchive;
 
 use pep508_rs::Requirement;
-use puffin_interpreter::{InterpreterInfo, Virtualenv};
+use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_traits::BuildContext;
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
@@ -220,7 +220,7 @@ impl SourceBuild {
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
-        interpreter_info: &InterpreterInfo,
+        interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         package_id: &str,
@@ -250,7 +250,7 @@ impl SourceBuild {
             None
         };
 
-        let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter_info)?;
+        let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter)?;
 
         // There are packages such as DTLSSocket 0.1.16 that say
         // ```toml

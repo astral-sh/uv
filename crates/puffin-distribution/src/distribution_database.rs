@@ -191,7 +191,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
                     // Create a directory for the wheel.
-                    // TODO(konstin): Change this when the built wheel naming scheme is fixed
+                    // TODO(konstin): Change this when the built wheel naming scheme is fixed.
                     let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
                     fs::create_dir_all(&wheel_dir).await?;
 
@@ -219,7 +219,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
 
                 // Create a directory for the wheel.
-                // TODO(konstin): Change this when the built wheel naming scheme is fixed
+                // TODO(konstin): Change this when the built wheel naming scheme is fixed.
                 let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
                 fs::create_dir_all(&wheel_dir).await?;
 

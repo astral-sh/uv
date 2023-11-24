@@ -6,7 +6,7 @@ use thiserror::Error;
 
 pub use interpreter::parse_python_cli;
 use platform_host::PlatformError;
-use puffin_interpreter::{InterpreterInfo, Virtualenv};
+use puffin_interpreter::{Interpreter, Virtualenv};
 
 pub use crate::bare::create_bare_venv;
 
@@ -24,10 +24,13 @@ pub enum Error {
 }
 
 /// Create a virtualenv.
-pub fn create_venv(location: &Path, info: &InterpreterInfo) -> Result<Virtualenv, Error> {
+pub fn create_venv(location: &Path, interpreter: &Interpreter) -> Result<Virtualenv, Error> {
     let location: &Utf8Path = location
         .try_into()
         .map_err(|err: FromPathError| err.into_io_error())?;
-    let paths = create_bare_venv(location, info)?;
-    Ok(Virtualenv::new_prefix(paths.root.as_std_path(), info))
+    let paths = create_bare_venv(location, interpreter)?;
+    Ok(Virtualenv::new_prefix(
+        paths.root.as_std_path(),
+        interpreter,
+    ))
 }
