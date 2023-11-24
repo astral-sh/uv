@@ -16,19 +16,19 @@ const BUILT_WHEEL_METADATA_CACHE: &str = "built-wheel-metadata-v0";
 /// See [`WheelMetadataCache::wheel_dir`] for remote wheel metadata caching and
 /// [`WheelMetadataCache::built_wheel_dir`] for caching of metadata of built source
 /// distributions.
-pub enum WheelMetadataCache {
+pub enum WheelMetadataCache<'a> {
     /// Either pypi or an alternative index, which we key by index url
-    Index(IndexUrl),
+    Index(&'a IndexUrl),
     /// A direct url dependency, which we key by url
-    Url(Url),
+    Url(&'a Url),
     /// A git dependency, which we key by repository url. We use the revision as filename.
     ///
     /// Note that this variant only exists for source distributions, wheels can't be delivered
     /// through git.
-    Git(Url),
+    Git(&'a Url),
 }
 
-impl WheelMetadataCache {
+impl<'a> WheelMetadataCache<'a> {
     fn bucket(&self) -> PathBuf {
         match self {
             WheelMetadataCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),

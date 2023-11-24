@@ -41,7 +41,7 @@ const GIT_CACHE: &str = "git-v0";
 #[derive(Debug, Error)]
 pub enum SourceDistError {
     // Network error
-    #[error("Failed to parse url '{0}'")]
+    #[error("Failed to parse URL: `{0}`")]
     UrlParse(String, #[source] url::ParseError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
@@ -158,20 +158,20 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     source_dist,
                     filename,
                     &url,
-                    WheelMetadataCache::Url(url.clone()),
+                    WheelMetadataCache::Url(&url),
                     subdirectory.as_deref(),
                 )
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = Url::parse(&registry_source_dist.file.url).map_err(|err| {
-                    SourceDistError::UrlParse(registry_source_dist.file.url.to_string(), err)
+                    SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
                 })?;
                 self.url(
                     source_dist,
                     &registry_source_dist.file.filename,
                     &url,
-                    WheelMetadataCache::Index(registry_source_dist.index.clone()),
+                    WheelMetadataCache::Index(&registry_source_dist.index),
                     None,
                 )
                 .await?
@@ -223,13 +223,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn url(
+    async fn url<'data>(
         &self,
-        source_dist: &SourceDist,
-        filename: &str,
-        url: &Url,
-        cache_shard: WheelMetadataCache,
-        subdirectory: Option<&Path>,
+        source_dist: &'data SourceDist,
+        filename: &'data str,
+        url: &'data Url,
+        cache_shard: WheelMetadataCache<'data>,
+        subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_dir = self
             .build_context
@@ -368,7 +368,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .precise()
             .expect("Exact commit after checkout")
             .to_string();
-        let cache_shard = WheelMetadataCache::Git(git_source_dist.url.clone());
+        let cache_shard = WheelMetadataCache::Git(&git_source_dist.url);
         let cache_dir = self
             .build_context
             .cache()
