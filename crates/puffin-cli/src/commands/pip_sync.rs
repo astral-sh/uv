@@ -104,10 +104,7 @@ pub(crate) async fn sync_requirements(
     }
 
     // Determine the current environment markers.
-    let tags = Tags::from_env(
-        venv.interpreter().platform(),
-        venv.interpreter().simple_version(),
-    )?;
+    let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Instantiate a client.
     let client = {

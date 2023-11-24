@@ -2208,6 +2208,7 @@ dependencies = [
  "anyhow",
  "fxhash",
  "platform-host",
+ "puffin-interpreter",
 ]
 
 [[package]]
