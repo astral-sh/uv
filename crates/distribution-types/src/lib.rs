@@ -260,6 +260,18 @@ impl SourceDist {
             SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
         }
     }
+
+    #[must_use]
+    pub fn with_url(self, url: Url) -> Self {
+        match self {
+            SourceDist::DirectUrl(dist) => {
+                SourceDist::DirectUrl(DirectUrlSourceDist { url, ..dist })
+            }
+            SourceDist::Git(dist) => SourceDist::Git(GitSourceDist { url, ..dist }),
+            SourceDist::Path(dist) => SourceDist::Path(PathSourceDist { url, ..dist }),
+            dist @ SourceDist::Registry(_) => dist,
+        }
+    }
 }
 
 impl Metadata for RegistryBuiltDist {

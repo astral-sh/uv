@@ -24,6 +24,8 @@ impl Locks {
     }
 }
 
+/// A file lock that is automatically released when dropped.
+#[derive(Debug)]
 pub(crate) struct LockedFile(File);
 
 impl LockedFile {
@@ -40,7 +42,7 @@ impl Drop for LockedFile {
     fn drop(&mut self) {
         if let Err(err) = self.0.file().unlock() {
             error!(
-                "Failed to unlock {}, the program might be stuck! Error: {}",
+                "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),
                 err
             );

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::io;
 use std::path::Path;
@@ -255,7 +256,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let lock = self.locks.acquire(&dist).await;
                 let _guard = lock.lock().await;
 
-                let (built_wheel, _) = self.builder.download_and_build(source_dist).await?;
+                let built_wheel = self.builder.download_and_build(source_dist).await?;
                 Ok(LocalWheel::Built(BuiltWheel {
                     dist: dist.clone(),
                     filename: built_wheel.filename,
@@ -266,7 +267,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or
-    /// fetch and build the source distribution
+    /// fetch and build the source distribution.
+    ///
+    /// Returns the [`Metadata21`], along with a "precise" URL for the source distribution, if
+    /// possible. For example, given a Git dependency with a reference to a branch or tag, return a
+    /// URL with a precise reference to the current commit of that branch or tag.
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
@@ -282,7 +287,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let lock = self.locks.acquire(dist).await;
                 let _guard = lock.lock().await;
 
-                let (built_wheel, precise) = self.builder.download_and_build(source_dist).await?;
+                // Insert the `precise` URL, if it exists.
+                let precise = self.precise(source_dist).await?;
+                let source_dist = match precise.as_ref() {
+                    Some(url) => Cow::Owned(source_dist.clone().with_url(url.clone())),
+                    None => Cow::Borrowed(source_dist),
+                };
+
+                let built_wheel = self.builder.download_and_build(&source_dist).await?;
                 Ok((built_wheel.metadata, precise))
             }
         }
@@ -296,8 +308,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub async fn precise(&self, dist: &Dist) -> Result<Option<Url>, DistributionDatabaseError> {
-        let Dist::Source(SourceDist::Git(source_dist)) = dist else {
+    pub async fn precise(
+        &self,
+        dist: &SourceDist,
+    ) -> Result<Option<Url>, DistributionDatabaseError> {
+        let SourceDist::Git(source_dist) = dist else {
             return Ok(None);
         };
         let git_dir = self.cache.join(GIT_CACHE);
@@ -312,7 +327,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
-        // Git locks internally (https://stackoverflow.com/a/62841655/3549270)
         let source = if let Some(reporter) = self.reporter.clone() {
             GitSource::new(url, git_dir).with_reporter(Facade::from(reporter))
         } else {
