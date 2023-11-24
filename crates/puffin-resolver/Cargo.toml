@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-filename = { path = "../distribution-filename" }
+distribution-filename = { path = "../distribution-filename", features = ["serde"] }
 install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
@@ -32,16 +32,21 @@ pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
 bitflags = { workspace = true }
-clap = { workspace = true, features = ["derive"], optional = true }
 chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
 colored = { workspace = true }
+derivative = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 fxhash = { workspace = true }
+http-cache-semantics = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -50,8 +55,6 @@ tracing = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 zip = { workspace = true }
-derivative = { workspace = true }
-sha2 = { workspace = true }
 
 [dev-dependencies]
 gourgeist = { path = "../gourgeist" }

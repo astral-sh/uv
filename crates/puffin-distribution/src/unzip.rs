@@ -5,18 +5,13 @@ use anyhow::Result;
 use rayon::prelude::*;
 use zip::ZipArchive;
 
+use crate::download::BuiltWheel;
 use crate::vendor::{CloneableSeekableReader, HasLength};
-use crate::{DiskWheel, InMemoryWheel, WheelDownload};
+use crate::{DiskWheel, InMemoryWheel, LocalWheel};
 
 pub trait Unzip {
     /// Unzip a wheel into the target directory.
     fn unzip(&self, target: &Path) -> Result<()>;
-}
-
-impl Unzip for DiskWheel {
-    fn unzip(&self, target: &Path) -> Result<()> {
-        unzip_archive(fs_err::File::open(&self.path)?, target)
-    }
 }
 
 impl Unzip for InMemoryWheel {
@@ -25,11 +20,24 @@ impl Unzip for InMemoryWheel {
     }
 }
 
-impl Unzip for WheelDownload {
+impl Unzip for DiskWheel {
+    fn unzip(&self, target: &Path) -> Result<()> {
+        unzip_archive(fs_err::File::open(&self.path)?, target)
+    }
+}
+
+impl Unzip for BuiltWheel {
+    fn unzip(&self, target: &Path) -> Result<()> {
+        unzip_archive(fs_err::File::open(&self.path)?, target)
+    }
+}
+
+impl Unzip for LocalWheel {
     fn unzip(&self, target: &Path) -> Result<()> {
         match self {
-            WheelDownload::InMemory(wheel) => wheel.unzip(target),
-            WheelDownload::Disk(wheel) => wheel.unzip(target),
+            LocalWheel::InMemory(wheel) => wheel.unzip(target),
+            LocalWheel::Disk(wheel) => wheel.unzip(target),
+            LocalWheel::Built(wheel) => wheel.unzip(target),
         }
     }
 }

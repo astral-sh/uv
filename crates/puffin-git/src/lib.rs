@@ -1,7 +1,7 @@
 use url::Url;
 
-use crate::git::GitReference;
-pub use crate::source::{GitSource, Reporter};
+use git::GitReference;
+pub use source::{Fetch, GitSource, Reporter};
 
 mod git;
 mod source;

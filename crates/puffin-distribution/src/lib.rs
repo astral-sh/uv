@@ -1,11 +1,14 @@
-pub use crate::download::{DiskWheel, Download, InMemoryWheel, SourceDistDownload, WheelDownload};
-pub use crate::fetcher::Fetcher;
-pub use crate::reporter::Reporter;
-pub use crate::unzip::Unzip;
+pub use distribution_database::{DistributionDatabase, DistributionDatabaseError};
+pub use download::{DiskWheel, Download, InMemoryWheel, LocalWheel, SourceDistDownload};
+pub use reporter::Reporter;
+pub use source_dist::{SourceDistCachedBuilder, SourceDistError};
+pub use unzip::Unzip;
 
+mod distribution_database;
 mod download;
 mod error;
-mod fetcher;
+mod locks;
 mod reporter;
+mod source_dist;
 mod unzip;
 mod vendor;

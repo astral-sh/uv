@@ -31,12 +31,13 @@ static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
 });
 
 struct DummyContext {
+    cache: PathBuf,
     interpreter: Interpreter,
 }
 
 impl BuildContext for DummyContext {
     fn cache(&self) -> &Path {
-        panic!("The test should not need to build source distributions")
+        &self.cache
     }
 
     fn interpreter(&self) -> &Interpreter {
@@ -82,6 +83,7 @@ async fn resolve(
     let temp_dir = tempdir()?;
     let client = RegistryClientBuilder::new(temp_dir.path()).build();
     let build_context = DummyContext {
+        cache: temp_dir.path().to_path_buf(),
         interpreter: Interpreter::artificial(
             Platform::current()?,
             markers.clone(),

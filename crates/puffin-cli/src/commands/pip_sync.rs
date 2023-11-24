@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use colored::Colorize;
 use fs_err as fs;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use tracing::debug;
 
 use distribution_types::{AnyDist, Metadata};
@@ -14,13 +14,12 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Builder, InstallPlan};
+use puffin_distribution::DistributionDatabase;
+use puffin_installer::InstallPlan;
 use puffin_interpreter::Virtualenv;
 use pypi_types::Yanked;
 
-use crate::commands::reporters::{
-    BuildReporter, DownloadReporter, FinderReporter, InstallReporter, UnzipReporter,
-};
+use crate::commands::reporters::{FetcherReporter, FinderReporter, InstallReporter, UnzipReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
@@ -173,72 +172,34 @@ pub(crate) async fn sync_requirements(
     }
 
     // Download any missing distributions.
-    let downloads = if remote.is_empty() {
-        vec![]
-    } else {
-        let start = std::time::Instant::now();
-
-        let downloader = puffin_installer::Downloader::new(&client, cache)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64))
-            .with_no_build(no_build);
-
-        let downloads = downloader
-            .download(remote)
-            .await
-            .context("Failed to download distributions")?;
-
-        let s = if downloads.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer,
-            "{}",
-            format!(
-                "Downloaded {} in {}",
-                format!("{} package{}", downloads.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        downloads
-    };
-
-    let (wheels, sdists): (Vec<_>, Vec<_>) =
-        downloads
-            .into_iter()
-            .partition_map(|download| match download {
-                puffin_distribution::Download::Wheel(wheel) => Either::Left(wheel),
-                puffin_distribution::Download::SourceDist(sdist) => Either::Right(sdist),
-            });
-
-    // Build any missing source distributions.
-    let sdists = if sdists.is_empty() {
+    let wheels = if remote.is_empty() {
         vec![]
     } else {
         let start = std::time::Instant::now();
 
         let build_dispatch = BuildDispatch::new(
-            client,
+            client.clone(),
             cache.to_path_buf(),
             venv.interpreter().clone(),
             fs::canonicalize(venv.python_executable())?,
             no_build,
         );
 
-        let builder = Builder::new(&build_dispatch)
-            .with_reporter(BuildReporter::from(printer).with_length(sdists.len() as u64));
+        let fetcher = DistributionDatabase::new(cache, &tags, &client, &build_dispatch)
+            .with_reporter(FetcherReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = builder
-            .build(sdists)
+        let wheels = fetcher
+            .get_wheels(remote)
             .await
-            .context("Failed to build source distributions")?;
+            .context("Failed to download and build distributions")?;
 
-        let s = if wheels.len() == 1 { "" } else { "s" };
+        let download_s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
-                "Built {} in {}",
-                format!("{} package{}", wheels.len(), s).bold(),
+                "Downloaded {} in {}",
+                format!("{} package{}", wheels.len(), download_s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
@@ -247,19 +208,17 @@ pub(crate) async fn sync_requirements(
         wheels
     };
 
-    let downloads = wheels.into_iter().chain(sdists).collect::<Vec<_>>();
-
     // Unzip any downloaded distributions.
-    let unzips = if downloads.is_empty() {
+    let unzips = if wheels.is_empty() {
         vec![]
     } else {
         let start = std::time::Instant::now();
 
         let unzipper = puffin_installer::Unzipper::default()
-            .with_reporter(UnzipReporter::from(printer).with_length(downloads.len() as u64));
+            .with_reporter(UnzipReporter::from(printer).with_length(wheels.len() as u64));
 
         let unzips = unzipper
-            .unzip(downloads, cache)
+            .unzip(wheels, cache)
             .await
             .context("Failed to unpack wheels")?;
 

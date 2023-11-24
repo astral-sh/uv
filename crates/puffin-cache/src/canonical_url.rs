@@ -1,4 +1,6 @@
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
+
 use url::Url;
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
@@ -130,6 +132,14 @@ impl Hash for RepositoryUrl {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
         self.0.as_str().hash(state);
+    }
+}
+
+impl Deref for RepositoryUrl {
+    type Target = Url;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

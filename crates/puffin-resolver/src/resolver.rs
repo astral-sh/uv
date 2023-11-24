@@ -1,6 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -18,13 +17,12 @@ use url::Url;
 use waitmap::WaitMap;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
+use distribution_types::{Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::Fetcher;
+use puffin_distribution::{DistributionDatabase, Download};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
@@ -32,7 +30,6 @@ use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
 use crate::file::DistFile;
-use crate::locks::Locks;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
@@ -52,7 +49,7 @@ pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
     selector: CandidateSelector,
     index: Arc<Index>,
     exclude_newer: Option<DateTime<Utc>>,
-    locks: Arc<Locks>,
+    fetcher: DistributionDatabase<'a, Context>,
     build_context: &'a Context,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -69,7 +66,6 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
     ) -> Self {
         Self {
             index: Arc::new(Index::default()),
-            locks: Arc::new(Locks::default()),
             selector: CandidateSelector::for_resolution(&manifest, options),
             allowed_urls: manifest
                 .requirements
@@ -90,6 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
             markers,
             tags,
             client,
+            fetcher: DistributionDatabase::new(build_context.cache(), tags, client, build_context),
             build_context,
             reporter: None,
         }
@@ -98,8 +95,10 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        let reporter = Arc::new(reporter);
         Self {
-            reporter: Some(Arc::new(reporter)),
+            reporter: Some(reporter.clone()),
+            fetcher: self.fetcher.with_reporter(Facade { reporter }),
             ..self
         }
     }
@@ -604,72 +603,18 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                     .await
             }
 
-            // Fetch registry-based wheel metadata.
-            Request::Dist(Dist::Built(BuiltDist::Registry(wheel))) => {
-                let metadata = self
-                    .client
-                    .wheel_metadata(wheel.index.clone(), wheel.file.clone())
-                    .await?;
-
-                if metadata.name != *wheel.name() {
-                    return Err(ResolveError::NameMismatch {
-                        metadata: metadata.name,
-                        given: wheel.name().clone(),
-                    });
-                }
-                Ok(Response::Dist(
-                    Dist::Built(BuiltDist::Registry(wheel)),
-                    metadata,
-                    None,
-                ))
-            }
-
-            // Fetch distribution metadata.
-            Request::Dist(distribution) => {
-                let lock = self.locks.acquire(&distribution).await;
-                let _guard = lock.lock().await;
-
-                let fetcher = if let Some(reporter) = self.reporter.clone() {
-                    Fetcher::new(self.build_context.cache()).with_reporter(Facade { reporter })
-                } else {
-                    Fetcher::new(self.build_context.cache())
-                };
-
-                let precise_url = fetcher
-                    .precise(&distribution)
+            Request::Dist(dist) => {
+                let (metadata, precise) = self
+                    .fetcher
+                    .get_or_build_wheel_metadata(&dist)
                     .await
-                    .map_err(|err| ResolveError::from_dist(distribution.clone(), err))?;
-
-                // Insert the `precise`, if it exists.
-                let precise_distribution = match precise_url.as_ref() {
-                    Some(url) => Cow::Owned(distribution.clone().with_url(url.clone())),
-                    None => Cow::Borrowed(&distribution),
-                };
-
-                // Fetch the metadata for the distribution.
-                let metadata = {
-                    if let Ok(Some(metadata)) =
-                        fetcher.find_metadata(&precise_distribution, self.tags)
-                    {
-                        debug!("Found distribution metadata in cache: {precise_distribution}");
-                        metadata
-                    } else {
-                        debug!("Downloading distribution: {precise_distribution}");
-                        fetcher
-                            .fetch_metadata(&precise_distribution, self.client, self.build_context)
-                            .await
-                            .map_err(|err| ResolveError::from_dist(distribution.clone(), err))?
-                    }
-                };
-
-                if metadata.name != *distribution.name() {
-                    return Err(ResolveError::NameMismatch {
-                        metadata: metadata.name,
-                        given: distribution.name().clone(),
-                    });
-                }
-
-                Ok(Response::Dist(distribution, metadata, precise_url))
+                    .map_err(|err| match dist.clone() {
+                        Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
+                        Dist::Source(source_dist) => {
+                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                        }
+                    })?;
+                Ok(Response::Dist(dist, metadata, precise))
             }
         }
     }
@@ -705,14 +650,20 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
+    /// Callback to invoke when a wheel is downloaded.
+    fn on_download_progress(&self, download: &Download);
+
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &Dist) -> usize;
+    fn on_build_start(&self, dist: &SourceDist) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &Dist, id: usize);
+    fn on_build_complete(&self, dist: &SourceDist, id: usize);
+
+    /// Callback to invoke when the operation is complete.
+    fn on_download_and_build_complete(&self);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -721,18 +672,26 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to  [`puffin_distribution::Reporter`].
+/// A facade for converting from [`Reporter`] to [`puffin_distribution::Reporter`].
 struct Facade {
     reporter: Arc<dyn Reporter>,
 }
 
 impl puffin_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &Dist) -> usize {
+    fn on_download_progress(&self, download: &Download) {
+        self.reporter.on_download_progress(download);
+    }
+
+    fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }
 
-    fn on_build_complete(&self, dist: &Dist, id: usize) {
+    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
         self.reporter.on_build_complete(dist, id);
+    }
+
+    fn on_download_and_build_complete(&self) {
+        self.reporter.on_download_and_build_complete();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {

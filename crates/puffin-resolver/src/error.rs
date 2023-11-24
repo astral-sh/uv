@@ -5,8 +5,9 @@ use pubgrub::report::Reporter;
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{BuiltDist, Dist, SourceDist};
+use distribution_types::{BuiltDist, SourceDist};
 use pep508_rs::Requirement;
+use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
@@ -53,37 +54,11 @@ pub enum ResolveError {
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),
 
-    #[error("Failed to fetch wheel metadata from: {filename}")]
-    RegistryBuiltDist {
-        filename: String,
-        // TODO(konstin): Gives this a proper error type
-        #[source]
-        err: anyhow::Error,
-    },
+    #[error("Failed to download {0}")]
+    Fetch(Box<BuiltDist>, #[source] DistributionDatabaseError),
 
-    #[error("Failed to fetch wheel metadata from: {url}")]
-    UrlBuiltDist {
-        url: Url,
-        // TODO(konstin): Gives this a proper error type
-        #[source]
-        err: anyhow::Error,
-    },
-
-    #[error("Failed to build distribution: {filename}")]
-    RegistrySourceDist {
-        filename: String,
-        // TODO(konstin): Gives this a proper error type
-        #[source]
-        err: anyhow::Error,
-    },
-
-    #[error("Failed to build distribution from URL: {url}")]
-    UrlSourceDist {
-        url: Url,
-        // TODO(konstin): Gives this a proper error type
-        #[source]
-        err: anyhow::Error,
-    },
+    #[error("Failed to download and build {0}")]
+    FetchAndBuild(Box<SourceDist>, #[source] DistributionDatabaseError),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
@@ -114,40 +89,5 @@ impl std::fmt::Display for RichPubGrubError {
 impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
     fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
         ResolveError::PubGrub(RichPubGrubError { source: value })
-    }
-}
-
-impl ResolveError {
-    pub fn from_dist(dist: Dist, err: anyhow::Error) -> Self {
-        match dist {
-            Dist::Built(BuiltDist::Registry(wheel)) => Self::RegistryBuiltDist {
-                filename: wheel.file.filename.clone(),
-                err,
-            },
-            Dist::Built(BuiltDist::DirectUrl(wheel)) => Self::UrlBuiltDist {
-                url: wheel.url.clone(),
-                err,
-            },
-            Dist::Built(BuiltDist::Path(wheel)) => Self::UrlBuiltDist {
-                url: wheel.url.clone(),
-                err,
-            },
-            Dist::Source(SourceDist::Registry(sdist)) => Self::RegistrySourceDist {
-                filename: sdist.file.filename.clone(),
-                err,
-            },
-            Dist::Source(SourceDist::DirectUrl(sdist)) => Self::UrlSourceDist {
-                url: sdist.url.clone(),
-                err,
-            },
-            Dist::Source(SourceDist::Git(sdist)) => Self::UrlSourceDist {
-                url: sdist.url.clone(),
-                err,
-            },
-            Dist::Source(SourceDist::Path(sdist)) => Self::UrlBuiltDist {
-                url: sdist.url.clone(),
-                err,
-            },
-        }
     }
 }

@@ -15,6 +15,11 @@ pub enum DirectUrl {
     Archive(DirectArchiveUrl),
 }
 
+/// A git repository url
+///
+/// Examples:
+/// * `git+https://git.example.com/MyProject.git`
+/// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
 #[derive(Debug)]
 pub struct LocalFileUrl {
     pub url: Url,
@@ -26,6 +31,12 @@ pub struct DirectGitUrl {
     pub subdirectory: Option<PathBuf>,
 }
 
+/// An archive url
+///
+/// Examples:
+/// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
+/// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
+/// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
 #[derive(Debug)]
 pub struct DirectArchiveUrl {
     pub url: Url,
@@ -42,14 +53,7 @@ impl TryFrom<&Url> for DirectGitUrl {
     type Error = Error;
 
     fn try_from(url: &Url) -> Result<Self, Self::Error> {
-        // If the URL points to a subdirectory, extract it, as in:
-        //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
-        //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-        let subdirectory = url.fragment().and_then(|fragment| {
-            fragment
-                .split('&')
-                .find_map(|fragment| fragment.strip_prefix("subdirectory=").map(PathBuf::from))
-        });
+        let subdirectory = get_subdirectory(url);
 
         let url = url
             .as_str()
@@ -63,18 +67,25 @@ impl TryFrom<&Url> for DirectGitUrl {
 
 impl From<&Url> for DirectArchiveUrl {
     fn from(url: &Url) -> Self {
-        // If the URL points to a subdirectory, extract it, as in:
-        //   `https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
-        //   `https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-        let subdirectory = url.fragment().and_then(|fragment| {
-            fragment
-                .split('&')
-                .find_map(|fragment| fragment.strip_prefix("subdirectory=").map(PathBuf::from))
-        });
-
-        let url = url.clone();
-        Self { url, subdirectory }
+        Self {
+            url: url.clone(),
+            subdirectory: get_subdirectory(url),
+        }
     }
+}
+
+/// If the URL points to a subdirectory, extract it, as in (git):
+///   `git+https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
+///   `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
+/// or (direct archive url):
+///   `https://github.com/foo-labs/foo/archive/master.zip#subdirectory=packages/bar`
+///   `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
+fn get_subdirectory(url: &Url) -> Option<PathBuf> {
+    let fragment = url.fragment()?;
+    let subdirectory = fragment
+        .split('&')
+        .find_map(|fragment| fragment.strip_prefix("subdirectory="))?;
+    Some(PathBuf::from(subdirectory))
 }
 
 impl TryFrom<&Url> for DirectUrl {

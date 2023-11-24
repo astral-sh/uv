@@ -6,14 +6,17 @@ info:
     - pip-compile
     - requirements.in
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpGuzVHM
+    - /tmp/.tmpR1rZex
+    - "--exclude-newer"
+    - "2023-11-18T12:00:00Z"
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpwgTo7l/.venv
+    VIRTUAL_ENV: /tmp/.tmpy0g4rP/.venv
 ---
 success: false
 exit_code: 2
 ----- stdout -----
 
 ----- stderr -----
-error: Package metadata name `flask` does not match given name `dask`
+error: Failed to download and build dask @ git+https://github.com/pallets/flask.git@3.0.0
+  Caused by: Package metadata name `flask` does not match given name `dask`
 
