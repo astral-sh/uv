@@ -121,10 +121,7 @@ pub(crate) async fn pip_compile(
     );
 
     // Determine the compatible platform tags.
-    let tags = Tags::from_env(
-        venv.interpreter().platform(),
-        venv.interpreter().simple_version(),
-    )?;
+    let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Determine the markers to use for resolution.
     let markers = python_version.map_or_else(

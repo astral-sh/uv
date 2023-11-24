@@ -56,10 +56,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     );
 
     // Copied from `BuildDispatch`
-    let tags = Tags::from_env(
-        venv.interpreter().platform(),
-        venv.interpreter().simple_version(),
-    )?;
+    let tags = Tags::from_interpreter(venv.interpreter())?;
     let resolver = Resolver::new(
         Manifest::new(
             args.requirements.clone(),

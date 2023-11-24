@@ -82,10 +82,7 @@ impl BuildContext for BuildDispatch {
         requirements: &'a [Requirement],
     ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>> {
         Box::pin(async {
-            let tags = Tags::from_env(
-                self.interpreter.platform(),
-                self.interpreter.simple_version(),
-            )?;
+            let tags = Tags::from_interpreter(&self.interpreter)?;
             let resolver = Resolver::new(
                 Manifest::new(requirements.to_vec(), Vec::default(), Vec::default(), None),
                 self.options,
@@ -123,10 +120,7 @@ impl BuildContext for BuildDispatch {
                 extraneous,
             } = InstallPlan::try_from_requirements(requirements, &self.cache, venv)?;
 
-            let tags = Tags::from_env(
-                self.interpreter.platform(),
-                self.interpreter.simple_version(),
-            )?;
+            let tags = Tags::from_interpreter(&self.interpreter)?;
 
             // Resolve the dependencies.
             let remote = if remote.is_empty() {
