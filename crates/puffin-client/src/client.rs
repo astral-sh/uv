@@ -219,7 +219,7 @@ impl RegistryClient {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,
                     &wheel.url,
-                    WheelMetadataCache::Url(wheel.url.clone()),
+                    WheelMetadataCache::Url(&wheel.url),
                 )
                 .await?
             }
@@ -262,7 +262,7 @@ impl RegistryClient {
 
             let cache_dir = self
                 .cache
-                .join(WheelMetadataCache::Index(index).wheel_dir());
+                .join(WheelMetadataCache::Index(&index).wheel_dir());
             let cache_file = format!("{}.json", filename.stem());
 
             let response_callback = |response: Response| async {
@@ -278,17 +278,17 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, &url, WheelMetadataCache::Index(index))
+            self.wheel_metadata_no_pep658(&filename, &url, WheelMetadataCache::Index(&index))
                 .await
         }
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
-    async fn wheel_metadata_no_pep658(
+    async fn wheel_metadata_no_pep658<'data>(
         &self,
-        filename: &WheelFilename,
-        url: &Url,
-        cache_shard: WheelMetadataCache,
+        filename: &'data WheelFilename,
+        url: &'data Url,
+        cache_shard: WheelMetadataCache<'data>,
     ) -> Result<Metadata21, Error> {
         if self.no_index {
             return Err(Error::NoIndex(url.to_string()));
