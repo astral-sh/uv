@@ -128,6 +128,7 @@ impl Fetch {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
     pub fn into_git(self) -> GitUrl {
         self.git
     }

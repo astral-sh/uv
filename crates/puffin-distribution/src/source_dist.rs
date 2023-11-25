@@ -1,6 +1,5 @@
 //! Fetch and build source distributions from remote sources.
 
-use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -53,7 +52,7 @@ pub enum SourceDistError {
 
     // Cache writing error
     #[error(transparent)]
-    Io(#[from] io::Error),
+    Io(#[from] std::io::Error),
     #[error("Cache (de)serialization failed")]
     Serde(#[from] serde_json::Error),
 
@@ -146,21 +145,18 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     pub async fn download_and_build(
         &self,
         source_dist: &SourceDist,
-    ) -> Result<(BuiltWheelMetadata, Option<Url>), SourceDistError> {
-        let precise = self.precise(source_dist).await?;
-
+    ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let built_wheel_metadata = match &source_dist {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
                     .filename()
-                    .unwrap_or(direct_url_source_dist.url.path())
-                    .to_string();
+                    .unwrap_or(direct_url_source_dist.url.path());
                 let DirectArchiveUrl { url, subdirectory } =
                     DirectArchiveUrl::from(&direct_url_source_dist.url);
 
                 self.url(
                     source_dist,
-                    &filename,
+                    filename,
                     &url,
                     WheelMetadataCache::Url(url.clone()),
                     subdirectory.as_deref(),
@@ -180,13 +176,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 )
                 .await?
             }
-            SourceDist::Git(git_source_dist) => {
-                // TODO(konstin): return precise git reference
-                self.git(source_dist, git_source_dist).await?
-            }
+            SourceDist::Git(git_source_dist) => self.git(source_dist, git_source_dist).await?,
             SourceDist::Path(path_source_dist) => {
-                // TODO: Add caching here. See also https://github.com/astral-sh/puffin/issues/478
                 // TODO(konstin): Change this when the built wheel naming scheme is fixed
+                // See: https://github.com/astral-sh/puffin/issues/478
                 let wheel_dir = self
                     .build_context
                     .cache()
@@ -209,7 +202,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 // Read the metadata from the wheel.
                 let filename = WheelFilename::from_str(&disk_filename)?;
 
-                // TODO(konstin): https://github.com/astral-sh/puffin/issues/484
+                // TODO(konstin): Remove duplicated `.dist-info` read.
+                // See: https://github.com/astral-sh/puffin/issues/484
                 let metadata = BuiltWheel {
                     dist: Dist::Source(source_dist.clone()),
                     filename: filename.clone(),
@@ -225,7 +219,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
         };
 
-        Ok((built_wheel_metadata, precise))
+        Ok(built_wheel_metadata)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -367,10 +361,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        // TODO(konstin): Can we special case when we have a git sha so we know there is no change?
-        let (fetch, subdirectory) = self
-            .download_source_dist_git(git_source_dist.url.clone())
-            .await?;
+        let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
         let git_sha = fetch
             .git()
@@ -384,12 +375,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .join(cache_shard.built_wheel_dir(&git_sha));
         let cache_file = cache_dir.join(METADATA_JSON);
 
-        // TODO(konstin): Change this when the built wheel naming scheme is fixed
+        // TODO(konstin): Change this when the built wheel naming scheme is fixed.
         let wheel_dir = self
             .build_context
             .cache()
             .join(BUILT_WHEELS_CACHE)
-            .join(source_dist.distribution_id());
+            .join(git_source_dist.distribution_id());
         fs::create_dir_all(&wheel_dir).await?;
 
         let mut metadatas = if cache_file.is_file() {
@@ -461,7 +452,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<(Option<TempDir>, PathBuf), puffin_client::Error> {
         let reader = response
             .bytes_stream()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
             .into_async_read();
         let mut reader = tokio::io::BufReader::new(reader.compat());
 
@@ -475,18 +466,18 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
     async fn download_source_dist_git(
         &self,
-        url: Url,
+        url: &Url,
     ) -> Result<(Fetch, Option<PathBuf>), SourceDistError> {
-        debug!("Fetching source distribution from Git: {}", url);
+        debug!("Fetching source distribution from Git: {url}");
         let git_dir = self.build_context.cache().join(GIT_CACHE);
 
-        // Avoid races between different processes, too
+        // Avoid races between different processes, too.
         let locks_dir = git_dir.join("locks");
         fs::create_dir_all(&locks_dir).await?;
-        let _lockfile = LockedFile::new(locks_dir.join(digest(&CanonicalUrl::new(&url))))?;
+        let _lockfile = LockedFile::new(locks_dir.join(digest(&CanonicalUrl::new(url))))?;
 
         let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(&url).map_err(SourceDistError::Git)?;
+            DirectGitUrl::try_from(url).map_err(SourceDistError::Git)?;
 
         let source = if let Some(reporter) = &self.reporter {
             GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
@@ -545,49 +536,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         debug!("Finished building: {dist}");
         Ok((disk_filename, filename, metadata))
-    }
-
-    /// Given a remote source distribution, return a precise variant, if possible.
-    ///
-    /// For example, given a Git dependency with a reference to a branch or tag, return a URL
-    /// with a precise reference to the current commit of that branch or tag.
-    ///
-    /// This method takes into account various normalizations that are independent from the Git
-    /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
-    /// prefix kinds.
-    async fn precise(&self, dist: &SourceDist) -> Result<Option<Url>, SourceDistError> {
-        let SourceDist::Git(source_dist) = dist else {
-            return Ok(None);
-        };
-        let git_dir = self.build_context.cache().join(GIT_CACHE);
-
-        // Avoid races between different processes
-        let locks = git_dir.join("locks");
-        fs::create_dir_all(&locks).await?;
-        let _lockfile = LockedFile::new(locks.join(digest(&CanonicalUrl::new(&source_dist.url))))?;
-
-        let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(&source_dist.url).map_err(SourceDistError::Git)?;
-
-        // If the commit already contains a complete SHA, short-circuit.
-        if url.precise().is_some() {
-            return Ok(None);
-        }
-
-        // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
-        let git_dir = self.build_context.cache().join(GIT_CACHE);
-        let source = if let Some(reporter) = &self.reporter {
-            GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
-        } else {
-            GitSource::new(url, git_dir)
-        };
-        let precise = tokio::task::spawn_blocking(move || source.fetch())
-            .await?
-            .map_err(SourceDistError::Git)?;
-        let url = precise.into_git();
-
-        // Re-encode as a URL.
-        Ok(Some(DirectGitUrl { url, subdirectory }.into()))
     }
 }
 
