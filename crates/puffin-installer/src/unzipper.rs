@@ -44,6 +44,7 @@ impl Unzipper {
         let mut wheels = Vec::with_capacity(downloads.len());
         for download in downloads {
             let remote = download.remote().clone();
+            let filename = download.filename().clone();
 
             debug!("Unpacking wheel: {remote}");
 
@@ -55,7 +56,7 @@ impl Unzipper {
             .await??;
 
             // Write the unzipped wheel to the target directory.
-            let target = wheel_cache.entry(&remote);
+            let target = wheel_cache.entry(&remote, &filename);
             if let Some(parent) = target.parent() {
                 fs_err::create_dir_all(parent)?;
             }
@@ -65,7 +66,7 @@ impl Unzipper {
             if let Err(err) = result {
                 // If the renaming failed because another instance was faster, that's fine
                 // (`DirectoryNotEmpty` is not stable so we can't match on it)
-                if !wheel_cache.entry(&remote).is_dir() {
+                if !wheel_cache.entry(&remote, &filename).is_dir() {
                     return Err(err.into());
                 }
             }
@@ -74,8 +75,8 @@ impl Unzipper {
                 reporter.on_unzip_progress(&remote);
             }
 
-            let path = wheel_cache.entry(&remote);
-            wheels.push(CachedDist::from_remote(remote, path));
+            let path = wheel_cache.entry(&remote, &filename);
+            wheels.push(CachedDist::from_remote(remote, filename, path));
         }
 
         if let Some(reporter) = self.reporter.as_ref() {

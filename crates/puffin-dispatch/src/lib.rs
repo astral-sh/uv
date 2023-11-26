@@ -115,13 +115,13 @@ impl BuildContext for BuildDispatch {
                 venv.root().display(),
             );
 
+            let tags = Tags::from_interpreter(&self.interpreter)?;
+
             let InstallPlan {
                 local,
                 remote,
                 extraneous,
-            } = InstallPlan::try_from_requirements(requirements, &self.cache, venv)?;
-
-            let tags = Tags::from_interpreter(&self.interpreter)?;
+            } = InstallPlan::try_from_requirements(requirements, &self.cache, venv, &tags)?;
 
             // Resolve the dependencies.
             let remote = if remote.is_empty() {
