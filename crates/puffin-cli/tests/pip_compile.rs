@@ -1,6 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
@@ -10,36 +9,19 @@ use assert_fs::TempDir;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{BIN_NAME, INSTA_FILTERS};
+use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
 
-fn make_venv_py312(temp_dir: &TempDir, cache_dir: &TempDir) -> PathBuf {
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
-    venv.to_path_buf()
-}
-
 /// Resolve a specific version of Django from a `requirements.in` file.
 #[test]
 fn compile_requirements_in() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
@@ -103,7 +85,7 @@ fn missing_venv() -> Result<()> {
 fn compile_pyproject_toml() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -140,7 +122,7 @@ dependencies = [
 fn compile_constraints_txt() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
@@ -172,7 +154,7 @@ fn compile_constraints_txt() -> Result<()> {
 fn compile_constraints_inline() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
@@ -204,7 +186,7 @@ fn compile_constraints_inline() -> Result<()> {
 fn compile_constraints_markers() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
@@ -239,7 +221,7 @@ fn compile_constraints_markers() -> Result<()> {
 fn compile_pyproject_toml_extra() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -279,7 +261,7 @@ optional-dependencies.foo = [
 fn compile_pyproject_toml_extra_name_normalization() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -319,7 +301,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
 fn compile_pyproject_toml_extra_missing() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -359,7 +341,7 @@ optional-dependencies.foo = [
 fn compile_pyproject_toml_extras_missing() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -403,7 +385,7 @@ optional-dependencies.foo = [
 fn compile_requirements_file_extra() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
@@ -439,7 +421,7 @@ fn compile_requirements_file_extra() -> Result<()> {
 fn invalid_extra_name() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -479,7 +461,7 @@ optional-dependencies.foo = [
 fn compile_python_312() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
@@ -508,7 +490,7 @@ fn compile_python_312() -> Result<()> {
 fn compile_python_37() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
@@ -589,7 +571,7 @@ fn compile_numpy_py38() -> Result<()> {
 fn compile_wheel_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
@@ -616,7 +598,7 @@ fn compile_wheel_url_dependency() -> Result<()> {
 fn compile_sdist_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
@@ -644,7 +626,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
 fn compile_git_https_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git")?;
@@ -676,7 +658,7 @@ fn compile_git_https_dependency() -> Result<()> {
 fn compile_git_branch_https_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@1.0.x")?;
@@ -704,7 +686,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
 fn compile_git_tag_https_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@3.0.0")?;
@@ -732,7 +714,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
 fn compile_git_long_commit_https_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str(
@@ -762,7 +744,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
 fn compile_git_short_commit_https_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@d92b64a")?;
@@ -790,7 +772,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
 fn compile_git_refs_https_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in
@@ -819,7 +801,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
 fn compile_git_subdirectory_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a")?;
@@ -847,7 +829,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
 fn compile_git_concurrent_access() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in
@@ -876,7 +858,7 @@ fn compile_git_concurrent_access() -> Result<()> {
 fn compile_git_mismatched_name() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in
@@ -905,7 +887,7 @@ fn compile_git_mismatched_name() -> Result<()> {
 fn mixed_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl")?;
@@ -933,7 +915,7 @@ fn mixed_url_dependency() -> Result<()> {
 fn conflicting_direct_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -961,7 +943,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 fn compatible_direct_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -988,7 +970,7 @@ fn compatible_direct_url_dependency() -> Result<()> {
 fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug @ https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -1017,7 +999,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
 fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -1044,7 +1026,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
 fn conflicting_transitive_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -1073,7 +1055,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 fn disallowed_transitive_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
@@ -1102,7 +1084,7 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
 fn allowed_transitive_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
@@ -1137,7 +1119,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
 fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
@@ -1169,7 +1151,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
 fn compile_pyproject_toml_all_extras() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1211,7 +1193,7 @@ optional-dependencies.bar = [
 fn compile_does_not_allow_both_extra_and_all_extras() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1267,7 +1249,7 @@ optional-dependencies.bar = [
 fn compile_unsolvable_requirements() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1303,7 +1285,7 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
 fn compile_unsolvable_requirements_version_not_available() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1338,7 +1320,7 @@ dependencies = ["django==300.1.4"]
 fn compile_exclude_newer() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
@@ -1427,7 +1409,7 @@ fn compile_exclude_newer() -> Result<()> {
 fn compile_wheel_path_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
@@ -1464,7 +1446,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 fn compile_source_distribution_path_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = make_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Download a source distribution.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
