@@ -56,10 +56,11 @@ def resolve_pip(targets: list[str], pip_compile: Path) -> list[str]:
     return pip_deps
 
 
-def resolve_puffin(targets: list[str], venv: Path, profile: str = "debug") -> list[str]:
+def resolve_puffin(targets: list[str], venv: Path, profile: str = "dev") -> list[str]:
+    target_profile = profile if profile != "dev" else "debug"
     output = check_output(
         [
-            project_root.joinpath("target").joinpath(profile).joinpath("puffin-dev"),
+            project_root.joinpath("target").joinpath(target_profile).joinpath("puffin-dev"),
             "resolve-cli",
             "--format",
             "expanded",
@@ -80,7 +81,7 @@ def resolve_puffin(targets: list[str], venv: Path, profile: str = "debug") -> li
 
 
 def compare_for_python_version(
-    python_major: int, python_minor: int, targets: list[str], profile: str = "debug"
+    python_major: int, python_minor: int, targets: list[str], profile: str = "dev"
 ):
     venvs = data_root.joinpath("venvs")
     venvs.mkdir(exist_ok=True)
@@ -207,7 +208,7 @@ def main():
     if args.release:
         profile = "release"
     else:
-        profile = "debug"
+        profile = "dev"
 
     check_call(["cargo", "build", "--bin", "puffin-dev", "--profile", profile])
 
