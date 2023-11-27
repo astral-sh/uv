@@ -8,6 +8,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use thiserror::Error;
 
 use platform_host::Platform;
+use puffin_cache::{Cache, CacheBucket};
 use puffin_interpreter::Interpreter;
 
 use crate::commands::ExitStatus;
@@ -18,9 +19,10 @@ use crate::printer::Printer;
 pub(crate) fn venv(
     path: &Path,
     base_python: Option<&Path>,
+    cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    match venv_impl(path, base_python, printer) {
+    match venv_impl(path, base_python, cache, printer) {
         Ok(status) => Ok(status),
         Err(err) => {
             #[allow(clippy::print_stderr)]
@@ -55,6 +57,7 @@ enum VenvError {
 fn venv_impl(
     path: &Path,
     base_python: Option<&Path>,
+    cache: &Cache,
     mut printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
@@ -74,8 +77,12 @@ fn venv_impl(
     };
 
     let platform = Platform::current().into_diagnostic()?;
-    let interpreter_info =
-        Interpreter::query(&base_python, platform, None).map_err(VenvError::InterpreterError)?;
+    let interpreter_info = Interpreter::query(
+        &base_python,
+        platform,
+        &cache.bucket(CacheBucket::Interpreter),
+    )
+    .map_err(VenvError::InterpreterError)?;
 
     writeln!(
         printer,

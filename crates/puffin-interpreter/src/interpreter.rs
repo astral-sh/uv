@@ -24,16 +24,8 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(
-        executable: &Path,
-        platform: Platform,
-        cache: Option<&Path>,
-    ) -> Result<Self, Error> {
-        let info = if let Some(cache) = cache {
-            InterpreterQueryResult::query_cached(executable, cache)?
-        } else {
-            InterpreterQueryResult::query(executable)?
-        };
+    pub fn query(executable: &Path, platform: Platform, cache: &Path) -> Result<Self, Error> {
+        let info = InterpreterQueryResult::query_cached(executable, cache)?;
         debug_assert!(
             info.base_prefix == info.base_exec_prefix,
             "Not a venv python: {}, prefix: {}",

@@ -20,6 +20,7 @@ pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 puffin-build = { path = "../puffin-build" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
 puffin-distribution = { path = "../puffin-distribution" }
 puffin-installer = { path = "../puffin-installer" }

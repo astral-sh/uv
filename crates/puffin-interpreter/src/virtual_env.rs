@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use platform_host::Platform;
+use puffin_cache::{Cache, CacheBucket};
 
 use crate::python_platform::PythonPlatform;
 use crate::{Error, Interpreter};
@@ -17,13 +18,17 @@ pub struct Virtualenv {
 
 impl Virtualenv {
     /// Venv the current Python executable from the host environment.
-    pub fn from_env(platform: Platform, cache: Option<&Path>) -> Result<Self, Error> {
+    pub fn from_env(platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform);
         let Some(venv) = detect_virtual_env(&platform)? else {
             return Err(Error::NotFound);
         };
         let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+        let interpreter = Interpreter::query(
+            &executable,
+            platform.0,
+            &cache.bucket(CacheBucket::Interpreter),
+        )?;
 
         Ok(Self {
             root: venv,
@@ -31,14 +36,14 @@ impl Virtualenv {
         })
     }
 
-    pub fn from_virtualenv(
-        platform: Platform,
-        root: &Path,
-        cache: Option<&Path>,
-    ) -> Result<Self, Error> {
+    pub fn from_virtualenv(platform: Platform, root: &Path, cache: &Cache) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform);
         let executable = platform.venv_python(root);
-        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+        let interpreter = Interpreter::query(
+            &executable,
+            platform.0,
+            &cache.bucket(CacheBucket::Interpreter),
+        )?;
 
         Ok(Self {
             root: root.to_path_buf(),

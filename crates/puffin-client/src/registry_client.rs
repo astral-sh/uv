@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::path::PathBuf;
+use std::path::Path;
 use std::str::FromStr;
 
 use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
@@ -17,14 +17,12 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
-use puffin_cache::{digest, CanonicalUrl, WheelMetadataCache};
+use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelMetadataCache};
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::{CachedClient, CachedClientError, Error};
-
-const SIMPLE_CACHE: &str = "simple-v0";
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -34,17 +32,17 @@ pub struct RegistryClientBuilder {
     no_index: bool,
     proxy: Url,
     retries: u32,
-    cache: PathBuf,
+    cache: Cache,
 }
 
 impl RegistryClientBuilder {
-    pub fn new(cache: impl Into<PathBuf>) -> Self {
+    pub fn new(cache: Cache) -> Self {
         Self {
             index: IndexUrl::Pypi,
             extra_index: vec![],
             no_index: false,
             proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
-            cache: cache.into(),
+            cache,
             retries: 0,
         }
     }
@@ -82,8 +80,8 @@ impl RegistryClientBuilder {
     }
 
     #[must_use]
-    pub fn cache<T>(mut self, cache: impl Into<PathBuf>) -> Self {
-        self.cache = cache.into();
+    pub fn cache<T>(mut self, cache: Cache) -> Self {
+        self.cache = cache;
         self
     }
 
@@ -129,7 +127,7 @@ pub struct RegistryClient {
     /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
     pub(crate) client_raw: Client,
     /// Used for the remote wheel METADATA cache
-    pub(crate) cache: PathBuf,
+    pub(crate) cache: Cache,
 }
 
 impl RegistryClient {
@@ -160,11 +158,14 @@ impl RegistryClient {
                 url
             );
 
-            let cache_dir = self.cache.join(SIMPLE_CACHE).join(match index {
-                IndexUrl::Pypi => "pypi".to_string(),
-                IndexUrl::Url(url) => digest(&CanonicalUrl::new(url)),
-            });
-            let cache_file = format!("{}.json", package_name.as_ref());
+            let cache_entry = self.cache.entry(
+                CacheBucket::Simple,
+                Path::new(&match index {
+                    IndexUrl::Pypi => "pypi".to_string(),
+                    IndexUrl::Url(url) => digest(&CanonicalUrl::new(url)),
+                }),
+                format!("{}.json", package_name.as_ref()),
+            );
 
             let simple_request = self
                 .client
@@ -180,12 +181,7 @@ impl RegistryClient {
             };
             let result = self
                 .client
-                .get_cached_with_callback(
-                    simple_request,
-                    &cache_dir,
-                    &cache_file,
-                    parse_simple_response,
-                )
+                .get_cached_with_callback(simple_request, &cache_entry, parse_simple_response)
                 .await;
 
             // Fetch from the index.
@@ -265,10 +261,11 @@ impl RegistryClient {
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
-            let cache_dir = self
-                .cache
-                .join(WheelMetadataCache::Index(&index).wheel_dir());
-            let cache_file = format!("{}.json", filename.stem());
+            let cache_entry = self.cache.entry(
+                CacheBucket::WheelMetadata,
+                WheelMetadataCache::Index(&index).wheel_dir(),
+                format!("{}.json", filename.stem()),
+            );
 
             let response_callback = |response: Response| async {
                 Metadata21::parse(response.bytes().await?.as_ref())
@@ -277,7 +274,7 @@ impl RegistryClient {
             let req = self.client.uncached().get(url.clone()).build()?;
             Ok(self
                 .client
-                .get_cached_with_callback(req, &cache_dir, &cache_file, response_callback)
+                .get_cached_with_callback(req, &cache_entry, response_callback)
                 .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
@@ -299,8 +296,11 @@ impl RegistryClient {
             return Err(Error::NoIndex(url.to_string()));
         }
 
-        let cache_dir = self.cache.join(cache_shard.wheel_dir());
-        let cache_file = format!("{}.json", filename.stem());
+        let cache_entry = self.cache.entry(
+            CacheBucket::WheelMetadata,
+            cache_shard.wheel_dir(),
+            format!("{}.json", filename.stem()),
+        );
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
@@ -317,12 +317,7 @@ impl RegistryClient {
         let req = self.client.uncached().head(url.clone()).build()?;
         let result = self
             .client
-            .get_cached_with_callback(
-                req,
-                &cache_dir,
-                &cache_file,
-                read_metadata_from_initial_response,
-            )
+            .get_cached_with_callback(req, &cache_entry, read_metadata_from_initial_response)
             .await;
 
         match result {

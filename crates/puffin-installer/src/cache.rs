@@ -4,9 +4,7 @@ use fs_err as fs;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Dist, Metadata, SourceDist, VersionOrUrl};
-use puffin_cache::{digest, CanonicalUrl};
-
-static WHEEL_CACHE: &str = "wheels-v0";
+use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl};
 
 #[derive(Debug)]
 pub(crate) struct WheelCache {
@@ -15,9 +13,9 @@ pub(crate) struct WheelCache {
 
 impl WheelCache {
     /// Create a handle to the wheel cache.
-    pub(crate) fn new(root: &Path) -> Self {
+    pub(crate) fn new(cache: &Cache) -> Self {
         Self {
-            root: root.join(WHEEL_CACHE),
+            root: cache.bucket(CacheBucket::Wheels),
         }
     }
 

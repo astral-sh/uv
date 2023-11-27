@@ -1,10 +1,10 @@
 use std::cmp::Reverse;
-use std::path::Path;
 
 use anyhow::Result;
 use tracing::debug;
 
 use distribution_types::{CachedDist, Dist, Identifier, RemoteSource};
+use puffin_cache::Cache;
 use puffin_distribution::{LocalWheel, Unzip};
 
 use crate::cache::WheelCache;
@@ -27,10 +27,10 @@ impl Unzipper {
     pub async fn unzip(
         &self,
         downloads: Vec<LocalWheel>,
-        target: &Path,
+        cache: &Cache,
     ) -> Result<Vec<CachedDist>> {
         // Create the wheel cache subdirectory, if necessary.
-        let wheel_cache = WheelCache::new(target);
+        let wheel_cache = WheelCache::new(cache);
         wheel_cache.init()?;
 
         // Sort the wheels by size.

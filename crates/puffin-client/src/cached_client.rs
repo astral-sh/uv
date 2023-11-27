@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::path::Path;
 use std::time::SystemTime;
 
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
@@ -9,6 +8,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use tracing::{debug, trace, warn};
+
+use puffin_cache::CacheEntry;
 
 /// Either a cached client error or a (user specified) error from the callback
 pub enum CachedClientError<CallbackError> {
@@ -92,24 +93,22 @@ impl CachedClient {
     >(
         &self,
         req: Request,
-        cache_dir: &Path,
-        cache_file: &str,
+        cache_entry: &CacheEntry,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
-        let cache_path = cache_dir.join(cache_file);
-        let cached = if let Ok(cached) = fs_err::tokio::read(&cache_path).await {
+        let cached = if let Ok(cached) = fs_err::tokio::read(cache_entry.path()).await {
             match serde_json::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
                 Ok(data) => Some(data),
                 Err(err) => {
                     warn!(
                         "Broken cache entry at {}, removing: {err}",
-                        cache_path.display()
+                        cache_entry.path().display()
                     );
-                    let _ = fs_err::tokio::remove_file(&cache_path).await;
+                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
                     None
                 }
             }
@@ -122,14 +121,17 @@ impl CachedClient {
         match cached_response {
             CachedResponse::FreshCache(data) => Ok(data),
             CachedResponse::NotModified(data_with_cache_policy) => {
-                let temp_file = NamedTempFile::new_in(cache_dir).map_err(crate::Error::from)?;
+                let temp_file =
+                    NamedTempFile::new_in(&cache_entry.dir).map_err(crate::Error::from)?;
                 fs_err::tokio::write(
                     &temp_file,
                     &serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
                 )
                 .await
                 .map_err(crate::Error::from)?;
-                temp_file.persist(cache_path).map_err(crate::Error::from)?;
+                temp_file
+                    .persist(cache_entry.path())
+                    .map_err(crate::Error::from)?;
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
@@ -138,17 +140,20 @@ impl CachedClient {
                     .map_err(|err| CachedClientError::Callback(err))?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
-                    fs_err::tokio::create_dir_all(cache_dir)
+                    fs_err::tokio::create_dir_all(&cache_entry.dir)
                         .await
                         .map_err(crate::Error::from)?;
-                    let temp_file = NamedTempFile::new_in(cache_dir).map_err(crate::Error::from)?;
+                    let temp_file =
+                        NamedTempFile::new_in(&cache_entry.dir).map_err(crate::Error::from)?;
                     fs_err::tokio::write(
                         &temp_file,
                         &serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
                     )
                     .await
                     .map_err(crate::Error::from)?;
-                    temp_file.persist(cache_path).map_err(crate::Error::from)?;
+                    temp_file
+                        .persist(cache_entry.path())
+                        .map_err(crate::Error::from)?;
                     Ok(data_with_cache_policy.data)
                 } else {
                     Ok(data)

@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
@@ -7,6 +6,7 @@ use tracing::debug;
 
 use distribution_types::Metadata;
 use platform_host::Platform;
+use puffin_cache::Cache;
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::{elapsed, ExitStatus};
@@ -16,7 +16,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
-    cache: &Path,
+    cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -31,7 +31,7 @@ pub(crate) async fn pip_uninstall(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(cache))?;
+    let venv = Virtualenv::from_env(platform, &cache)?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()

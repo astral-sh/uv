@@ -16,6 +16,7 @@ workspace = true
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
+puffin-cache = { path = "../puffin-cache" }
 
 cacache = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

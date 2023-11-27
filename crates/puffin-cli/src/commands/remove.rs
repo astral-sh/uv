@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use miette::{Diagnostic, IntoDiagnostic};
-use puffin_normalize::PackageName;
 use thiserror::Error;
 use tracing::info;
 
+use puffin_normalize::PackageName;
 use puffin_workspace::WorkspaceError;
 
 use crate::commands::ExitStatus;

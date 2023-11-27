@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::path::Path;
 
 use fs_err as fs;
 use tracing::warn;
 
 use distribution_types::{CachedRegistryDist, Metadata};
 use platform_tags::Tags;
+use puffin_cache::Cache;
 use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
@@ -16,10 +16,10 @@ pub struct RegistryIndex(HashMap<PackageName, CachedRegistryDist>);
 
 impl RegistryIndex {
     /// Build an index of cached distributions from a directory.
-    pub fn try_from_directory(path: &Path, tags: &Tags) -> Self {
+    pub fn try_from_directory(cache: &Cache, tags: &Tags) -> Self {
         let mut index = HashMap::new();
 
-        let cache = WheelCache::new(path);
+        let cache = WheelCache::new(cache);
         let Ok(dir) = cache.read_dir(CacheShard::Registry) else {
             return Self(index);
         };
@@ -31,7 +31,7 @@ impl RegistryIndex {
                     Err(err) => {
                         warn!(
                             "Failed to read entry of cache at {}: {}",
-                            path.display(),
+                            cache.root().display(),
                             err
                         );
                         continue;

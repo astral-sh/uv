@@ -1191,6 +1191,7 @@ dependencies = [
  "puffin-interpreter",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tracing",
  "tracing-subscriber",
@@ -2466,6 +2467,7 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "puffin-build",
+ "puffin-cache",
  "puffin-client",
  "puffin-distribution",
  "puffin-installer",
@@ -2570,6 +2572,7 @@ dependencies = [
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",
+ "puffin-cache",
  "serde",
  "serde_json",
  "thiserror",
@@ -2651,6 +2654,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "pep508_rs",
+ "puffin-cache",
  "puffin-interpreter",
 ]
 

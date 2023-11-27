@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use fxhash::FxHashMap;
 use tracing::warn;
@@ -6,6 +6,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{CachedDirectUrlDist, Identifier};
+use puffin_cache::Cache;
 
 use crate::cache::{CacheShard, WheelCache};
 
@@ -16,10 +17,10 @@ pub(crate) struct UrlIndex(FxHashMap<String, PathBuf>);
 
 impl UrlIndex {
     /// Build an index of cached distributions from a directory.
-    pub(crate) fn try_from_directory(path: &Path) -> Self {
+    pub(crate) fn try_from_directory(cache: &Cache) -> Self {
         let mut index = FxHashMap::default();
 
-        let cache = WheelCache::new(path);
+        let cache = WheelCache::new(cache);
         let Ok(dir) = cache.read_dir(CacheShard::Url) else {
             return Self(index);
         };
@@ -30,7 +31,7 @@ impl UrlIndex {
                 Err(err) => {
                     warn!(
                         "Failed to read entry of cache at {}: {}",
-                        path.display(),
+                        cache.root().display(),
                         err
                     );
                     continue;
