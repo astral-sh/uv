@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
@@ -8,9 +9,18 @@ use assert_fs::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{BIN_NAME, INSTA_FILTERS};
+use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
 
 mod common;
+
+fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg(command)
+        .current_dir(temp_dir)
+        .assert()
+        .success();
+}
 
 #[test]
 fn missing_requirements_txt() -> Result<()> {
@@ -55,19 +65,7 @@ fn missing_venv() -> Result<()> {
 fn install() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -85,12 +83,7 @@ fn install() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import markupsafe", &temp_dir);
 
     Ok(())
 }
@@ -100,19 +93,7 @@ fn install() -> Result<()> {
 fn install_copy() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -132,12 +113,7 @@ fn install_copy() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import markupsafe", &temp_dir);
 
     Ok(())
 }
@@ -147,19 +123,7 @@ fn install_copy() -> Result<()> {
 fn install_hardlink() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -179,12 +143,7 @@ fn install_hardlink() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import markupsafe", &temp_dir);
 
     Ok(())
 }
@@ -194,19 +153,7 @@ fn install_hardlink() -> Result<()> {
 fn install_many() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -224,12 +171,7 @@ fn install_many() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe; import tomli")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import markupsafe; import tomli", &cache_dir);
 
     Ok(())
 }
@@ -239,19 +181,7 @@ fn install_many() -> Result<()> {
 fn noop() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -279,12 +209,7 @@ fn noop() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import markupsafe", &temp_dir);
 
     Ok(())
 }
@@ -295,19 +220,7 @@ fn noop() -> Result<()> {
 fn link() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv1 = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -318,15 +231,15 @@ fn link() -> Result<()> {
         .arg("requirements.txt")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("VIRTUAL_ENV", venv1.as_os_str())
         .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let venv = temp_dir.child(".venv");
+    let venv2 = temp_dir.child(".venv2");
     Command::new(get_cargo_bin(BIN_NAME))
         .arg("venv")
-        .arg(venv.as_os_str())
+        .arg(venv2.as_os_str())
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--python")
@@ -334,7 +247,7 @@ fn link() -> Result<()> {
         .current_dir(&temp_dir)
         .assert()
         .success();
-    venv.assert(predicates::path::is_dir());
+    venv2.assert(predicates::path::is_dir());
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -344,16 +257,11 @@ fn link() -> Result<()> {
             .arg("requirements.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("VIRTUAL_ENV", venv2.as_os_str())
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv2, "import markupsafe", &temp_dir);
 
     Ok(())
 }
@@ -364,19 +272,7 @@ fn link() -> Result<()> {
 fn add_remove() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -408,12 +304,7 @@ fn add_remove() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import tomli")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import tomli", &temp_dir);
 
     Command::new(venv.join("bin").join("python"))
         .arg("-c")
@@ -431,19 +322,7 @@ fn add_remove() -> Result<()> {
 fn install_sequential() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -475,12 +354,7 @@ fn install_sequential() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import markupsafe; import tomli")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import markupsafe; import tomli", &cache_dir);
 
     Ok(())
 }
@@ -491,19 +365,7 @@ fn install_sequential() -> Result<()> {
 fn upgrade() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -535,12 +397,7 @@ fn upgrade() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import tomli")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import tomli", &temp_dir);
 
     Ok(())
 }
@@ -550,19 +407,7 @@ fn upgrade() -> Result<()> {
 fn install_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -582,12 +427,7 @@ fn install_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -598,19 +438,7 @@ fn install_url() -> Result<()> {
 fn install_git_commit() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -630,12 +458,7 @@ fn install_git_commit() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -646,19 +469,7 @@ fn install_git_commit() -> Result<()> {
 fn install_git_tag() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -678,12 +489,7 @@ fn install_git_tag() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -694,19 +500,7 @@ fn install_git_tag() -> Result<()> {
 fn install_git_subdirectories() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -726,12 +520,7 @@ fn install_git_subdirectories() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import example_pkg")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import example_pkg", &temp_dir);
 
     Ok(())
 }
@@ -741,19 +530,7 @@ fn install_git_subdirectories() -> Result<()> {
 fn install_sdist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -773,12 +550,7 @@ fn install_sdist() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -789,19 +561,7 @@ fn install_sdist() -> Result<()> {
 fn install_url_then_install_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -831,12 +591,7 @@ fn install_url_then_install_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -847,19 +602,7 @@ fn install_url_then_install_url() -> Result<()> {
 fn install_url_then_install_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -893,12 +636,7 @@ fn install_url_then_install_version() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -909,19 +647,7 @@ fn install_url_then_install_version() -> Result<()> {
 fn install_version_then_install_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -955,12 +681,7 @@ fn install_version_then_install_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import werkzeug")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import werkzeug", &temp_dir);
 
     Ok(())
 }
@@ -1002,12 +723,7 @@ fn install_numpy_py38() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    Command::new(venv.join("bin").join("python"))
-        .arg("-c")
-        .arg("import numpy")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
+    check_command(&venv, "import numpy", &temp_dir);
 
     Ok(())
 }
@@ -1016,19 +732,7 @@ fn install_numpy_py38() -> Result<()> {
 fn warn_on_yanked_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_in = temp_dir.child("requirements.txt");
     requirements_in.touch()?;
@@ -1055,19 +759,7 @@ fn warn_on_yanked_version() -> Result<()> {
 fn install_local_wheel() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
@@ -1102,19 +794,7 @@ fn install_local_wheel() -> Result<()> {
 fn install_local_source_distribution() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Download a source distribution.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
