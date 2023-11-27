@@ -5,9 +5,7 @@ use std::str::FromStr;
 use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
 use async_zip::tokio::read::seek::ZipFileReader;
 use futures::TryStreamExt;
-use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
-use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use tempfile::tempfile;
@@ -19,12 +17,14 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
-use puffin_cache::WheelMetadataCache;
+use puffin_cache::{digest, CanonicalUrl, WheelMetadataCache};
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
 
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::{CachedClient, CachedClientError, Error};
+
+const SIMPLE_CACHE: &str = "simple-v0";
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -100,34 +100,18 @@ impl RegistryClientBuilder {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(self.retries);
         let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
 
-        let mut client_builder =
-            reqwest_middleware::ClientBuilder::new(client_raw.clone()).with(retry_strategy);
-
-        client_builder = client_builder.with(Cache(HttpCache {
-            mode: CacheMode::Default,
-            manager: CACacheManager {
-                path: self.cache.clone(),
-            },
-            options: HttpCacheOptions::default(),
-        }));
-
-        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(self.retries);
-        let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
-
         let uncached_client = reqwest_middleware::ClientBuilder::new(client_raw.clone())
             .with(retry_strategy)
             .build();
 
-        let cached_client = CachedClient::new(uncached_client.clone());
+        let client = CachedClient::new(uncached_client.clone());
         RegistryClient {
             index: self.index,
             extra_index: self.extra_index,
             no_index: self.no_index,
-            client: client_builder.build(),
             client_raw: client_raw.clone(),
-            uncached_client,
             cache: self.cache,
-            cached_client,
+            client,
         }
     }
 }
@@ -140,20 +124,24 @@ pub struct RegistryClient {
     pub(crate) extra_index: Vec<IndexUrl>,
     /// Ignore the package index, instead relying on local archives and caches.
     pub(crate) no_index: bool,
-    pub(crate) client: ClientWithMiddleware,
-    pub(crate) uncached_client: ClientWithMiddleware,
+    pub(crate) client: CachedClient,
+    /// Don't use this client, it only exists because `async_http_range_reader` needs
+    /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
     pub(crate) client_raw: Client,
-    pub(crate) cached_client: CachedClient,
     /// Used for the remote wheel METADATA cache
     pub(crate) cache: PathBuf,
 }
 
 impl RegistryClient {
     pub fn cached_client(&self) -> &CachedClient {
-        &self.cached_client
+        &self.client
     }
 
     /// Fetch a package from the `PyPI` simple API.
+    ///
+    /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
+    /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
+    /// which the pypi json api approximately implements.
     pub async fn simple(&self, package_name: PackageName) -> Result<(IndexUrl, SimpleJson), Error> {
         if self.no_index {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
@@ -172,35 +160,52 @@ impl RegistryClient {
                 url
             );
 
+            let cache_dir = self.cache.join(SIMPLE_CACHE).join(match index {
+                IndexUrl::Pypi => "pypi".to_string(),
+                IndexUrl::Url(url) => digest(&CanonicalUrl::new(url)),
+            });
+            let cache_file = format!("{}.json", package_name.as_ref());
+
+            let simple_request = self
+                .client
+                .uncached()
+                .get(url.clone())
+                .header("Accept-Encoding", "gzip")
+                .build()?;
+            let parse_simple_response = |response: Response| async {
+                let bytes = response.bytes().await?;
+                let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
+                    .map_err(|err| Error::from_json_err(err, url))?;
+                Ok(data)
+            };
+            let result = self
+                .client
+                .get_cached_with_callback(
+                    simple_request,
+                    &cache_dir,
+                    &cache_file,
+                    parse_simple_response,
+                )
+                .await;
+
             // Fetch from the index.
-            match self.simple_impl(&url).await {
-                Ok(text) => {
-                    let data = serde_json::from_str(&text)
-                        .map_err(move |e| Error::from_json_err(e, url))?;
-                    return Ok((index.clone(), data));
+            match result {
+                Ok(simple_json) => {
+                    return Ok((index.clone(), simple_json));
                 }
-                Err(err) => {
+                Err(CachedClientError::Client(Error::RequestError(err))) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {
                         continue;
                     }
+                    return Err(err.into());
+                }
+                Err(err) => {
                     return Err(err.into());
                 }
             }
         }
 
         Err(Error::PackageNotFound(package_name.as_ref().to_string()))
-    }
-
-    async fn simple_impl(&self, url: &Url) -> Result<String, reqwest_middleware::Error> {
-        Ok(self
-            .client
-            .get(url.clone())
-            .header("Accept-Encoding", "gzip")
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?)
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -269,9 +274,9 @@ impl RegistryClient {
                 Metadata21::parse(response.bytes().await?.as_ref())
                     .map_err(|err| Error::MetadataParseError(filename, url.to_string(), err))
             };
-            let req = self.client_raw.get(url.clone()).build()?;
+            let req = self.client.uncached().get(url.clone()).build()?;
             Ok(self
-                .cached_client
+                .client
                 .get_cached_with_callback(req, &cache_dir, &cache_file, response_callback)
                 .await?)
         } else {
@@ -309,9 +314,9 @@ impl RegistryClient {
             Ok(metadata)
         };
 
-        let req = self.client_raw.head(url.clone()).build()?;
+        let req = self.client.uncached().head(url.clone()).build()?;
         let result = self
-            .cached_client
+            .client
             .get_cached_with_callback(
                 req,
                 &cache_dir,
@@ -392,7 +397,8 @@ impl RegistryClient {
         }
 
         Ok(Box::new(
-            self.uncached_client
+            self.client
+                .uncached()
                 .get(url.to_string())
                 .send()
                 .await?

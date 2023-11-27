@@ -1,0 +1,4 @@
+# Use this with https://storage.googleapis.com/jax-releases/jax_cuda_releases.html as extra index url (broken atm, needs
+# https://github.com/astral-sh/puffin/issues/412)
+
+jax[cuda12_pip]

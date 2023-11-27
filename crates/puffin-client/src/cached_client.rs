@@ -8,7 +8,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 /// Either a cached client error or a (user specified) error from the callback
 pub enum CachedClientError<CallbackError> {
@@ -93,23 +93,23 @@ impl CachedClient {
         &self,
         req: Request,
         cache_dir: &Path,
-        filename: &str,
+        cache_file: &str,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
-        let cache_file = cache_dir.join(filename);
-        let cached = if let Ok(cached) = fs_err::tokio::read(&cache_file).await {
+        let cache_path = cache_dir.join(cache_file);
+        let cached = if let Ok(cached) = fs_err::tokio::read(&cache_path).await {
             match serde_json::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
                 Ok(data) => Some(data),
                 Err(err) => {
                     warn!(
                         "Broken cache entry at {}, removing: {err}",
-                        cache_file.display()
+                        cache_path.display()
                     );
-                    let _ = fs_err::tokio::remove_file(&cache_file).await;
+                    let _ = fs_err::tokio::remove_file(&cache_path).await;
                     None
                 }
             }
@@ -129,7 +129,7 @@ impl CachedClient {
                 )
                 .await
                 .map_err(crate::Error::from)?;
-                temp_file.persist(cache_file).map_err(crate::Error::from)?;
+                temp_file.persist(cache_path).map_err(crate::Error::from)?;
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
@@ -148,7 +148,7 @@ impl CachedClient {
                     )
                     .await
                     .map_err(crate::Error::from)?;
-                    temp_file.persist(cache_file).map_err(crate::Error::from)?;
+                    temp_file.persist(cache_path).map_err(crate::Error::from)?;
                     Ok(data_with_cache_policy.data)
                 } else {
                     Ok(data)
@@ -169,26 +169,24 @@ impl CachedClient {
             req.try_clone()
                 .expect("You can't use streaming request bodies with this function"),
         )?;
+        let url = req.url().clone();
         let cached_response = if let Some(cached) = cached {
             match cached
                 .cache_policy
                 .before_request(&converted_req, SystemTime::now())
             {
                 BeforeRequest::Fresh(_) => {
-                    trace!("Fresh cache for {}", req.url());
+                    debug!("Fresh {}", url);
                     CachedResponse::FreshCache(cached.data)
                 }
                 BeforeRequest::Stale { request, matches } => {
                     if !matches {
                         // This should not happen
-                        warn!(
-                            "Cached request doesn't match current request for {}",
-                            req.url(),
-                        );
+                        warn!("Cached request doesn't match current request for {}", url);
                         // This will override the bogus cache
                         return self.fresh_request(req, converted_req).await;
                     }
-                    trace!("Revalidation request for {}", req.url());
+                    debug!("Sending revalidation request for {}", url);
                     for header in &request.headers {
                         req.headers_mut().insert(header.0.clone(), header.1.clone());
                         converted_req
@@ -211,12 +209,14 @@ impl CachedClient {
                     );
                     match after_response {
                         AfterResponse::NotModified(new_policy, _parts) => {
+                            debug!("Not modified {}", url);
                             CachedResponse::NotModified(DataWithCachePolicy {
                                 data: cached.data,
                                 cache_policy: new_policy,
                             })
                         }
                         AfterResponse::Modified(new_policy, _parts) => {
+                            debug!("Modified {}", url);
                             CachedResponse::ModifiedOrNew(
                                 res,
                                 new_policy.is_storable().then_some(new_policy),
@@ -226,6 +226,7 @@ impl CachedClient {
                 }
             }
         } else {
+            debug!("Not cached {}", url);
             // No reusable cache
             self.fresh_request(req, converted_req).await?
         };

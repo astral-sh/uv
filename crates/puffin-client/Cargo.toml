@@ -16,7 +16,6 @@ async_zip = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 http = { workspace = true }
-http-cache-reqwest = { workspace = true }
 http-cache-semantics = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }

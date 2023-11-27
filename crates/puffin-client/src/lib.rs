@@ -1,8 +1,8 @@
 pub use cached_client::{CachedClient, CachedClientError, DataWithCachePolicy};
-pub use client::{RegistryClient, RegistryClientBuilder};
 pub use error::Error;
+pub use registry_client::{RegistryClient, RegistryClientBuilder};
 
 mod cached_client;
-mod client;
 mod error;
+mod registry_client;
 mod remote_metadata;

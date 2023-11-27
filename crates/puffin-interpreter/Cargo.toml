@@ -17,7 +17,6 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
 
-anyhow = { workspace = true }
 cacache = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 serde_json = { workspace = true }
