@@ -12,12 +12,18 @@ use tracing::trace;
 
 // glibc version is taken from std/sys/unix/os.rs
 fn glibc_version_from_ldd() -> Result<Os, PlatformError> {
-    trace!("falling back to `ldd --version` to detect OS libc version");
+    trace!("Falling back to `ldd --version` to detect OS libc version");
     let output = Command::new("ldd")
         .args(["--version"])
         .output()
-        .expect("failed to execute ldd");
-    let output_str = std::str::from_utf8(&output.stdout).unwrap();
+        .map_err(|err| {
+            PlatformError::OsVersionDetectionError(format!("Failed to execute ldd: {err}"))
+        })?;
+    let output_str = std::str::from_utf8(&output.stdout).map_err(|err| {
+        PlatformError::OsVersionDetectionError(format!(
+            "Failed to parse ldd output as UTF-8: {err}"
+        ))
+    })?;
     let version_str = ldd_output_to_version_str(output_str)?;
 
     parse_glibc_version(version_str).ok_or_else(|| {
@@ -51,10 +57,10 @@ pub(crate) fn detect_linux_libc() -> Result<Os, PlatformError> {
     let libc = find_libc()?;
     let linux = if let Ok(Some((major, minor))) = get_musl_version(&libc) {
         Os::Musllinux { major, minor }
-    } else if let Some(osversion) = detect_linux_libc_from_ld_symlink(&libc) {
-        return Ok(osversion);
-    } else if let Ok(osversion) = glibc_version_from_ldd() {
-        return Ok(osversion);
+    } else if let Some(os_version) = detect_linux_libc_from_ld_symlink(&libc) {
+        return Ok(os_version);
+    } else if let Ok(os_version) = glibc_version_from_ldd() {
+        return Ok(os_version);
     } else {
         let msg = "\
             Couldn't detect either glibc version nor musl libc version, \
