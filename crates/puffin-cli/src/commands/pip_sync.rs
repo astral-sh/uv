@@ -76,6 +76,8 @@ pub(crate) async fn sync_requirements(
         "Using Python interpreter: {}",
         venv.python_executable().display()
     );
+    // Determine the current environment markers.
+    let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
@@ -83,7 +85,8 @@ pub(crate) async fn sync_requirements(
         local,
         remote,
         extraneous,
-    } = InstallPlan::try_from_requirements(requirements, cache, &venv)?;
+    } = InstallPlan::try_from_requirements(requirements, cache, &venv, &tags)
+        .context("Failed to determine installation plan")?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && extraneous.is_empty() {
@@ -101,9 +104,6 @@ pub(crate) async fn sync_requirements(
 
         return Ok(ExitStatus::Success);
     }
-
-    // Determine the current environment markers.
-    let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Instantiate a client.
     let client = {

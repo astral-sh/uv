@@ -4,8 +4,8 @@ use fxhash::FxHashMap;
 use tracing::warn;
 use url::Url;
 
+use distribution_filename::WheelFilename;
 use distribution_types::{CachedDirectUrlDist, Identifier};
-use puffin_normalize::PackageName;
 
 use crate::cache::{CacheShard, WheelCache};
 
@@ -49,13 +49,13 @@ impl UrlIndex {
     }
 
     /// Returns a distribution from the index, if it exists.
-    pub(crate) fn get(&self, name: &PackageName, url: &Url) -> Option<CachedDirectUrlDist> {
+    pub(crate) fn get(&self, filename: WheelFilename, url: &Url) -> Option<CachedDirectUrlDist> {
         // TODO(charlie): This takes advantage of the fact that for URL dependencies, the package ID
         // and distribution ID are identical. We should either change the cache layout to use
         // distribution IDs, or implement package ID for URL.
         let path = self.0.get(&url.distribution_id())?;
         Some(CachedDirectUrlDist::from_url(
-            name.clone(),
+            filename,
             url.clone(),
             path.clone(),
         ))
