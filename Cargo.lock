@@ -2393,6 +2393,7 @@ dependencies = [
  "puffin-client",
  "puffin-dispatch",
  "puffin-interpreter",
+ "puffin-normalize",
  "puffin-resolver",
  "puffin-traits",
  "pypi-types",

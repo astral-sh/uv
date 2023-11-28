@@ -8,17 +8,19 @@ use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
+use tokio::sync::Semaphore;
+use tokio::time::Instant;
+use tracing::{info, info_span, span, Level, Span};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
+
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
+use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
-use tokio::sync::Semaphore;
-use tokio::time::Instant;
-use tracing::{info, info_span, span, Level, Span};
-use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
@@ -68,7 +70,11 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
 
     let _header_span_enter = header_span.enter();
 
+    let tf_models_nightly = PackageName::from_str("tf-models-nightly").unwrap();
     for requirement in requirements {
+        if requirement.name == tf_models_nightly {
+            continue;
+        }
         let build_dispatch_arc = build_dispatch_arc.clone();
         let semaphore = semaphore.clone();
         tasks.push(tokio::spawn(async move {
