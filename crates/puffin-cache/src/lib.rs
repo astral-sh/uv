@@ -20,6 +20,7 @@ mod metadata;
 mod stable_hash;
 
 /// A cache entry which may or may not exist yet.
+#[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub dir: PathBuf,
     pub file: String,
@@ -90,18 +91,21 @@ impl Cache {
 pub enum CacheBucket {
     /// Downloaded remote wheel archives.
     Archives,
-    /// Metadata of a built source distribution
+    /// Metadata of a built source distribution.
     ///
     /// Cache structure:
     ///  * `<build wheel metadata cache>/pypi/foo-1.0.0.zip/metadata.json`
     ///  * `<build wheel metadata cache>/<sha256(index-url)>/foo-1.0.0.zip/metadata.json`
     ///  * `<build wheel metadata cache>/url/<sha256(url)>/foo-1.0.0.zip/metadata.json`
+    ///
     /// But the url filename does not need to be a valid source dist filename
     /// (<https://github.com/search?q=path%3A**%2Frequirements.txt+master.zip&type=code>),
     /// so it could also be the following and we have to take any string as filename:
     ///  * `<build wheel metadata cache>/url/<sha256(url)>/master.zip/metadata.json`
     ///
     /// # Example
+    ///
+    /// The following requirements:
     /// ```text
     /// # git source dist
     /// pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git    
@@ -110,7 +114,8 @@ pub enum CacheBucket {
     /// # url source dist
     /// werkzeug @ https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz
     /// ```
-    /// may be cached as
+    ///
+    /// ...may be cached as:
     /// ```text
     /// built-wheel-metadata-v0
     /// ├── git
@@ -140,7 +145,7 @@ pub enum CacheBucket {
     /// }
     /// ```
     BuiltWheelMetadata,
-    /// Wheel archives built from source distributions
+    /// Wheel archives built from source distributions.
     BuiltWheels,
     /// Git repositories.
     Git,
@@ -148,7 +153,7 @@ pub enum CacheBucket {
     Interpreter,
     /// Index responses through the simple metadata API.
     Simple,
-    /// Metadata of a remote wheel
+    /// Metadata of a remote wheel.
     ///
     /// Cache structure:
     ///  * `wheel-metadata-v0/pypi/foo-1.0.0-py3-none-any.json`
@@ -159,13 +164,16 @@ pub enum CacheBucket {
     /// is fetched.
     ///
     /// # Example
+    ///
+    /// The following requirements:
     /// ```text
     /// # pypi wheel
     /// pandas
     /// # url wheel
     /// flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
     /// ```
-    /// may be cached as
+    ///
+    /// ...may be cached as:
     /// ```text
     /// wheel-metadata-v0
     /// ├── pypi
@@ -177,7 +185,7 @@ pub enum CacheBucket {
     ///         └── flask-3.0.0-py3-none-any.json
     /// ```
     WheelMetadata,
-    /// Unzipped wheels, ready for installation by reflink/copy.
+    /// Unzipped wheels, ready for installation via reflinking, symlinking, or copying.
     Wheels,
 }
 
