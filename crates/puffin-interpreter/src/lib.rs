@@ -38,7 +38,5 @@ pub enum Error {
         stderr: String,
     },
     #[error("Failed to write to cache")]
-    Cacache(#[from] cacache::Error),
-    #[error("Failed to write to cache")]
     Serde(#[from] serde_json::Error),
 }

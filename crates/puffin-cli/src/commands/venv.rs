@@ -8,7 +8,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use thiserror::Error;
 
 use platform_host::Platform;
-use puffin_cache::{Cache, CacheBucket};
+use puffin_cache::Cache;
 use puffin_interpreter::Interpreter;
 
 use crate::commands::ExitStatus;
@@ -77,12 +77,8 @@ fn venv_impl(
     };
 
     let platform = Platform::current().into_diagnostic()?;
-    let interpreter_info = Interpreter::query(
-        &base_python,
-        platform,
-        &cache.bucket(CacheBucket::Interpreter),
-    )
-    .map_err(VenvError::InterpreterError)?;
+    let interpreter_info =
+        Interpreter::query(&base_python, platform, cache).map_err(VenvError::InterpreterError)?;
 
     writeln!(
         printer,

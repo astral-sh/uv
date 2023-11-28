@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 platform-host = { path = "../platform-host" }
+puffin-cache = { path = "../puffin-cache" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
 camino = { workspace = true }
