@@ -151,9 +151,9 @@ pub enum CacheBucket {
     Git,
     /// Information about an interpreter at a path.
     ///
-    /// To avoid caching pyenv hims, bash scripts which may redirect to a new python version without
-    /// the shim itself changing, we only cache when the path equals `sys.executable`, i.e. the
-    /// path we're running is the python executable itself and not a shim.
+    /// To avoid caching pyenv shims, bash scripts which may redirect to a new python version
+    /// without the shim itself changing, we only cache when the path equals `sys.executable`, i.e.
+    /// the path we're running is the python executable itself and not a shim.
     ///
     /// Cache structure: `interpreter-v0/<digest(path)>.json`
     ///
