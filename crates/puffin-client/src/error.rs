@@ -14,6 +14,7 @@ pub enum Error {
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
 
+    /// Dist-info error
     #[error(transparent)]
     InstallWheel(#[from] install_wheel_rs::Error),
 
