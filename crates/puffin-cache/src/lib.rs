@@ -150,6 +150,43 @@ pub enum CacheBucket {
     /// Git repositories.
     Git,
     /// Information about an interpreter at a path.
+    ///
+    /// To avoid caching pyenv shims, bash scripts which may redirect to a new python version
+    /// without the shim itself changing, we only cache when the path equals `sys.executable`, i.e.
+    /// the path we're running is the python executable itself and not a shim.
+    ///
+    /// Cache structure: `interpreter-v0/<digest(path)>.json`
+    ///
+    /// # Example
+    ///
+    /// The contents of each of the json files has a timestamp field in unix time, the [PEP 508]
+    /// markers and some information from the `sys`/`sysconfig` modules.
+    ///
+    /// ```json
+    /// {
+    ///   "timestamp": 1698047994491,
+    ///   "data": {
+    ///     "markers": {
+    ///       "implementation_name": "cpython",
+    ///       "implementation_version": "3.12.0",
+    ///       "os_name": "posix",
+    ///       "platform_machine": "x86_64",
+    ///       "platform_python_implementation": "CPython",
+    ///       "platform_release": "6.5.0-13-generic",
+    ///       "platform_system": "Linux",
+    ///       "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
+    ///       "python_full_version": "3.12.0",
+    ///       "python_version": "3.12",
+    ///       "sys_platform": "linux"
+    ///     },
+    ///     "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+    ///     "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+    ///     "sys_executable": "/home/ferris/projects/puffin/.venv/bin/python"
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// [PEP 508]: https://peps.python.org/pep-0508/#environment-markers
     Interpreter,
     /// Index responses through the simple metadata API.
     Simple,

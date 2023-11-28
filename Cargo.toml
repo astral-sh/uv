@@ -18,7 +18,6 @@ async_http_range_reader = { git = "https://github.com/baszalmstra/async_http_ran
 async_zip = { version = "0.0.15", features = ["tokio", "deflate"] }
 bitflags = { version = "2.4.1" }
 bytesize = { version = "1.3.0" }
-cacache = { version = "12.0.0", default-features = false, features = ["tokio-runtime"] }
 camino = { version = "1.1.6", features = ["serde1"] }
 cargo-util = { version = "0.2.6" }
 chrono = { version = "0.4.31" }

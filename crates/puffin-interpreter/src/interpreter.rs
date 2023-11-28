@@ -2,12 +2,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
 
+use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
+use puffin_cache::{digest, Cache, CacheBucket};
 
 use crate::python_platform::PythonPlatform;
 use crate::Error;
@@ -24,7 +26,7 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(executable: &Path, platform: Platform, cache: &Path) -> Result<Self, Error> {
+    pub fn query(executable: &Path, platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterQueryResult::query_cached(executable, cache)?;
         debug_assert!(
             info.base_prefix == info.base_exec_prefix,
@@ -101,12 +103,18 @@ impl Interpreter {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub(crate) struct InterpreterQueryResult {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
     pub(crate) sys_executable: PathBuf,
+}
+
+#[derive(Deserialize, Serialize)]
+pub(crate) struct CachedByTimestamp<T> {
+    pub(crate) timestamp: u128,
+    pub(crate) data: T,
 }
 
 impl InterpreterQueryResult {
@@ -153,48 +161,43 @@ impl InterpreterQueryResult {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: &Path) -> Result<Self, Error> {
+    pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+        let executable_bytes = executable.as_os_str().as_encoded_bytes();
+        let cache_dir = cache.bucket(CacheBucket::Interpreter);
+        let cache_path = cache_dir.join(format!("{}.json", digest(&executable_bytes)));
+
         // Read from the cache.
-        let key = if let Ok(key) = cache_key(executable) {
-            if let Ok(data) = cacache::read_sync(cache, &key) {
-                if let Ok(info) = serde_json::from_slice::<Self>(&data) {
-                    debug!("Using cached markers for {}", executable.display());
-                    return Ok(info);
-                }
+        if let Ok(data) = fs::read(&cache_path) {
+            if let Ok(cached) = serde_json::from_slice::<CachedByTimestamp<Self>>(&data) {
+                debug!("Using cached markers for {}", executable.display());
+                return Ok(cached.data);
             }
-            Some(key)
-        } else {
-            None
-        };
+        }
 
         // Otherwise, run the Python script.
         debug!("Detecting markers for {}", executable.display());
         let info = Self::query(executable)?;
 
-        // If the executable is actually a pyenv shim, a bash script that redirects to the activated
-        // python, we're not allowed to cache the interpreter info
+        let modified = fs_err::metadata(executable)?
+            // Note: This is infallible on windows and unix (i.e. all platforms we support)
+            .modified()?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| Error::SystemTime(executable.to_path_buf(), err))?;
+
+        // If `executable` is a pyenv shim, a bash script that redirects to the activated
+        // python executable at another path, we're not allowed to cache the interpreter info
         if executable == info.sys_executable {
+            fs::create_dir_all(cache_dir)?;
             // Write to the cache.
-            if let Some(key) = key {
-                cacache::write_sync(cache, key, serde_json::to_vec(&info)?)?;
-            }
+            fs::write(
+                cache_path,
+                serde_json::to_vec(&CachedByTimestamp {
+                    timestamp: modified.as_millis(),
+                    data: info.clone(),
+                })?,
+            )?;
         }
 
         Ok(info)
     }
-}
-
-/// Create a cache key for the Python executable, consisting of the executable's
-/// last modified time and the executable's path.
-fn cache_key(executable: &Path) -> Result<String, Error> {
-    let modified = fs_err::metadata(executable)?
-        // Note: This is infallible on windows and unix (i.e. all platforms we support)
-        .modified()?
-        .duration_since(UNIX_EPOCH)
-        .map_err(|err| Error::SystemTime(executable.to_path_buf(), err))?;
-    Ok(format!(
-        "puffin:v0:{}:{}",
-        executable.display(),
-        modified.as_millis()
-    ))
 }

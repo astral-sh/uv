@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use platform_host::Platform;
-use puffin_cache::{Cache, CacheBucket};
+use puffin_cache::Cache;
 
 use crate::python_platform::PythonPlatform;
 use crate::{Error, Interpreter};
@@ -24,11 +24,7 @@ impl Virtualenv {
             return Err(Error::NotFound);
         };
         let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(
-            &executable,
-            platform.0,
-            &cache.bucket(CacheBucket::Interpreter),
-        )?;
+        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
 
         Ok(Self {
             root: venv,
@@ -39,11 +35,7 @@ impl Virtualenv {
     pub fn from_virtualenv(platform: Platform, root: &Path, cache: &Cache) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform);
         let executable = platform.venv_python(root);
-        let interpreter = Interpreter::query(
-            &executable,
-            platform.0,
-            &cache.bucket(CacheBucket::Interpreter),
-        )?;
+        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
 
         Ok(Self {
             root: root.to_path_buf(),

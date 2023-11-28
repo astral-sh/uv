@@ -392,31 +392,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e368af43e418a04d52505cf3dbc23dda4e3407ae2fa99fd0e4f308ce546acc"
 
 [[package]]
-name = "cacache"
-version = "12.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "142316461ed3a3dfcba10417317472da5bfd0461e4d276bf7c07b330766d9490"
-dependencies = [
- "digest",
- "either",
- "futures",
- "hex",
- "miette 5.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "reflink-copy",
- "serde",
- "serde_derive",
- "serde_json",
- "sha1",
- "sha2",
- "ssri",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-stream",
- "walkdir",
-]
-
-[[package]]
 name = "camino"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1188,6 +1163,7 @@ dependencies = [
  "clap",
  "fs-err",
  "platform-host",
+ "puffin-cache",
  "puffin-interpreter",
  "serde",
  "serde_json",
@@ -1756,24 +1732,12 @@ dependencies = [
 [[package]]
 name = "miette"
 version = "5.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59bb584eaeeab6bd0226ccf3509a69d7936d148cf3d036ad350abe35e8c6856e"
-dependencies = [
- "miette-derive 5.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "once_cell",
- "thiserror",
- "unicode-width",
-]
-
-[[package]]
-name = "miette"
-version = "5.10.0"
 source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
 dependencies = [
  "backtrace",
  "backtrace-ext",
  "is-terminal",
- "miette-derive 5.10.0 (git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6)",
+ "miette-derive",
  "once_cell",
  "owo-colors",
  "supports-color",
@@ -1783,17 +1747,6 @@ dependencies = [
  "textwrap",
  "thiserror",
  "unicode-width",
-]
-
-[[package]]
-name = "miette-derive"
-version = "5.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49e7bc1560b95a3c4a25d03de42fe76ca718ab92d1a22a55b9b4cf67b3ae635c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.39",
 ]
 
 [[package]]
@@ -2338,7 +2291,6 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "bitflags 2.4.1",
- "cacache",
  "chrono",
  "clap",
  "colored",
@@ -2351,7 +2303,7 @@ dependencies = [
  "insta-cmd",
  "install-wheel-rs",
  "itertools 0.11.0",
- "miette 5.10.0 (git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6)",
+ "miette",
  "mimalloc",
  "pep440_rs 0.3.12",
  "pep508_rs",
@@ -2567,7 +2519,6 @@ dependencies = [
 name = "puffin-interpreter"
 version = "0.0.1"
 dependencies = [
- "cacache",
  "fs-err",
  "pep440_rs 0.3.12",
  "pep508_rs",
@@ -3263,28 +3214,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha-1"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5058ada175748e33390e40e872bd0fe59a19f265d0158daa551c5a88a76009c"
-dependencies = [
- "cfg-if 1.0.0",
- "cpufeatures",
- "digest",
-]
-
-[[package]]
-name = "sha1"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
-dependencies = [
- "cfg-if 1.0.0",
- "cpufeatures",
- "digest",
-]
-
-[[package]]
 name = "sha2"
 version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3362,23 +3291,6 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
-
-[[package]]
-name = "ssri"
-version = "9.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da7a2b3c2bc9693bcb40870c4e9b5bf0d79f9cb46273321bf855ec513e919082"
-dependencies = [
- "base64 0.21.5",
- "digest",
- "hex",
- "miette 5.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "sha-1",
- "sha2",
- "thiserror",
- "xxhash-rust",
-]
 
 [[package]]
 name = "stacker"
@@ -4439,12 +4351,6 @@ checksum = "f4686009f71ff3e5c4dbcf1a282d0a44db3f021ba69350cd42086b3e5f1c6985"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "xxhash-rust"
-version = "0.8.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9828b178da53440fa9c766a3d2f73f7cf5d0ac1fe3980c1e5018d899fd19e07b"
 
 [[package]]
 name = "yaml-rust"
