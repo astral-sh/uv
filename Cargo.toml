@@ -40,7 +40,6 @@ glob = { version = "0.3.1" }
 goblin = { version = "0.7.1" }
 hex = { version = "0.4.3" }
 http = { version = "0.2.9" }
-http-cache-reqwest = { version = "0.12.0" }
 http-cache-semantics = { version = "1.0.1" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
