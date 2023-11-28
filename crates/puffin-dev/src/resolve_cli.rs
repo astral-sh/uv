@@ -12,7 +12,7 @@ use petgraph::dot::{Config as DotConfig, Dot};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::{CacheArgs, CacheDir};
+use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
@@ -42,14 +42,14 @@ pub(crate) struct ResolveCliArgs {
 }
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
-    let cache_dir = CacheDir::try_from(args.cache_args)?;
+    let cache = Cache::try_from(args.cache_args)?;
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(cache_dir.path()))?;
-    let client = RegistryClientBuilder::new(cache_dir.path().clone()).build();
+    let venv = Virtualenv::from_env(platform, &cache)?;
+    let client = RegistryClientBuilder::new(cache.clone()).build();
     let build_dispatch = BuildDispatch::new(
         client.clone(),
-        cache_dir.path().clone(),
+        cache.clone(),
         venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,

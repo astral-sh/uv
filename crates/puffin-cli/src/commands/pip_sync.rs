@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::path::Path;
 
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -12,6 +11,7 @@ use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
+use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_distribution::DistributionDatabase;
@@ -31,7 +31,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     index_urls: Option<IndexUrls>,
     no_build: bool,
-    cache: &Path,
+    cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Read all requirements from the provided sources.
@@ -52,7 +52,7 @@ pub(crate) async fn pip_sync(
         link_mode,
         index_urls,
         no_build,
-        cache,
+        &cache,
         printer,
     )
     .await
@@ -64,14 +64,14 @@ pub(crate) async fn sync_requirements(
     link_mode: LinkMode,
     index_urls: Option<IndexUrls>,
     no_build: bool,
-    cache: &Path,
+    cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(cache))?;
+    let venv = Virtualenv::from_env(platform, cache)?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()
@@ -107,7 +107,7 @@ pub(crate) async fn sync_requirements(
 
     // Instantiate a client.
     let client = {
-        let mut builder = RegistryClientBuilder::new(cache);
+        let mut builder = RegistryClientBuilder::new(cache.clone());
         if let Some(IndexUrls { index, extra_index }) = index_urls {
             if let Some(index) = index {
                 builder = builder.index(index);
@@ -179,7 +179,7 @@ pub(crate) async fn sync_requirements(
 
         let build_dispatch = BuildDispatch::new(
             client.clone(),
-            cache.to_path_buf(),
+            cache.clone(),
             venv.interpreter().clone(),
             fs::canonicalize(venv.python_executable())?,
             no_build,

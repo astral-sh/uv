@@ -7,6 +7,7 @@ use std::pin::Pin;
 use anyhow::Result;
 
 use pep508_rs::Requirement;
+use puffin_cache::Cache;
 use puffin_interpreter::{Interpreter, Virtualenv};
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
@@ -49,8 +50,7 @@ use puffin_interpreter::{Interpreter, Virtualenv};
 
 // TODO(konstin): Proper error types
 pub trait BuildContext {
-    // TODO(konstin): Add a cache abstraction
-    fn cache(&self) -> &Path;
+    fn cache(&self) -> &Cache;
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).

@@ -1,14 +1,14 @@
-use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
-use distribution_filename::WheelFilename;
 use tracing::debug;
 
+use distribution_filename::WheelFilename;
 use distribution_types::direct_url::DirectUrl;
 use distribution_types::{CachedDist, InstalledDist, RemoteSource};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
+use puffin_cache::Cache;
 use puffin_interpreter::Virtualenv;
 
 use crate::url_index::UrlIndex;
@@ -34,7 +34,7 @@ impl InstallPlan {
     /// need to be downloaded, and those that should be removed.
     pub fn try_from_requirements(
         requirements: &[Requirement],
-        cache: &Path,
+        cache: &Cache,
         venv: &Virtualenv,
         tags: &Tags,
     ) -> Result<Self> {

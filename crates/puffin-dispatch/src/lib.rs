@@ -15,6 +15,7 @@ use distribution_types::Metadata;
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
+use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_distribution::DistributionDatabase;
 use puffin_installer::{InstallPlan, Installer, Unzipper};
@@ -26,7 +27,7 @@ use puffin_traits::BuildContext;
 /// documentation.
 pub struct BuildDispatch {
     client: RegistryClient,
-    cache: PathBuf,
+    cache: Cache,
     interpreter: Interpreter,
     base_python: PathBuf,
     no_build: bool,
@@ -37,7 +38,7 @@ pub struct BuildDispatch {
 impl BuildDispatch {
     pub fn new(
         client: RegistryClient,
-        cache: PathBuf,
+        cache: Cache,
         interpreter: Interpreter,
         base_python: PathBuf,
         no_build: bool,
@@ -61,8 +62,8 @@ impl BuildDispatch {
 }
 
 impl BuildContext for BuildDispatch {
-    fn cache(&self) -> &Path {
-        self.cache.as_path()
+    fn cache(&self) -> &Cache {
+        &self.cache
     }
 
     fn interpreter(&self) -> &Interpreter {
@@ -121,7 +122,7 @@ impl BuildContext for BuildDispatch {
                 local,
                 remote,
                 extraneous,
-            } = InstallPlan::try_from_requirements(requirements, &self.cache, venv, &tags)?;
+            } = InstallPlan::try_from_requirements(requirements, self.cache(), venv, &tags)?;
 
             // Resolve the dependencies.
             let remote = if remote.is_empty() {
@@ -167,7 +168,7 @@ impl BuildContext for BuildDispatch {
                     wheels.iter().map(ToString::to_string).join(", ")
                 );
                 Unzipper::default()
-                    .unzip(wheels, &self.cache)
+                    .unzip(wheels, self.cache())
                     .await
                     .context("Failed to unpack build dependencies")?
             };

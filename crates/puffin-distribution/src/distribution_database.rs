@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::io;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -18,6 +17,7 @@ use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
 use distribution_types::{BuiltDist, Dist, Metadata, RemoteSource, SourceDist};
 use platform_tags::Tags;
+use puffin_cache::{Cache, CacheBucket};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
@@ -30,12 +30,6 @@ use crate::{
     DiskWheel, Download, InMemoryWheel, LocalWheel, Reporter, SourceDistCachedBuilder,
     SourceDistError,
 };
-
-// The cache subdirectory in which to store Git repositories.
-const GIT_CACHE: &str = "git-v0";
-
-// The cache subdirectory in which to store downloaded wheel archives.
-const ARCHIVES_CACHE: &str = "archives-v0";
 
 #[derive(Debug, Error)]
 pub enum DistributionDatabaseError {
@@ -75,7 +69,7 @@ pub enum DistributionDatabaseError {
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially.
 pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
-    cache: &'a Path,
+    cache: &'a Cache,
     reporter: Option<Arc<dyn Reporter>>,
     locks: Arc<Locks>,
     client: &'a RegistryClient,
@@ -85,7 +79,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
 
 impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> {
     pub fn new(
-        cache: &'a Path,
+        cache: &'a Cache,
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
@@ -193,7 +187,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     // Create a directory for the wheel.
                     // TODO(konstin): Change this when the built wheel naming scheme is fixed.
-                    let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
+                    let wheel_dir = self
+                        .cache
+                        .bucket(CacheBucket::Archives)
+                        .join(wheel.package_id());
                     fs::create_dir_all(&wheel_dir).await?;
 
                     // Download the wheel to a temporary file.
@@ -221,7 +218,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Create a directory for the wheel.
                 // TODO(konstin): Change this when the built wheel naming scheme is fixed.
-                let wheel_dir = self.cache.join(ARCHIVES_CACHE).join(wheel.package_id());
+                let wheel_dir = self
+                    .cache
+                    .bucket(CacheBucket::Archives)
+                    .join(wheel.package_id());
                 fs::create_dir_all(&wheel_dir).await?;
 
                 // Fetch the wheel.
@@ -315,7 +315,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let SourceDist::Git(source_dist) = dist else {
             return Ok(None);
         };
-        let git_dir = self.cache.join(GIT_CACHE);
+        let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
 
         let DirectGitUrl { url, subdirectory } =
             DirectGitUrl::try_from(&source_dist.url).map_err(DistributionDatabaseError::Git)?;

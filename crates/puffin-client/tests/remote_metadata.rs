@@ -1,17 +1,17 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use tempfile::tempdir;
 use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, DirectUrlBuiltDist};
+use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
-    let temp_cache = tempdir()?;
-    let client = RegistryClientBuilder::new(temp_cache.path().to_path_buf()).build();
+    let cache = Cache::temp()?;
+    let client = RegistryClientBuilder::new(cache).build();
 
     // The first run is without cache (the tempdir is empty), the second has the cache from the
     // first run.

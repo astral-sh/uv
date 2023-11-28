@@ -8,7 +8,7 @@ use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use url::Url;
 
-use puffin_cache::{CacheArgs, CacheDir};
+use puffin_cache::{Cache, CacheArgs};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use requirements::ExtrasSpecification;
@@ -249,7 +249,7 @@ async fn inner() -> Result<ExitStatus> {
         printer::Printer::Default
     };
 
-    let cache_dir = CacheDir::try_from(cli.cache_args)?;
+    let cache = Cache::try_from(cli.cache_args)?;
 
     match cli.command {
         Commands::PipCompile(args) => {
@@ -286,7 +286,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.no_build,
                 args.python_version,
                 args.exclude_newer,
-                cache_dir.path(),
+                cache,
                 printer,
             )
             .await
@@ -304,7 +304,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.link_mode.unwrap_or_default(),
                 index_urls,
                 args.no_build,
-                cache_dir.path(),
+                cache,
                 printer,
             )
             .await
@@ -316,11 +316,11 @@ async fn inner() -> Result<ExitStatus> {
                 .map(RequirementsSource::from)
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, cache_dir.path(), printer).await
+            commands::pip_uninstall(&sources, cache, printer).await
         }
-        Commands::Clean => commands::clean(cache_dir.path(), printer),
-        Commands::Freeze => commands::freeze(cache_dir.path(), printer),
-        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), printer),
+        Commands::Clean => commands::clean(&cache, printer),
+        Commands::Freeze => commands::freeze(&cache, printer),
+        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),
     }

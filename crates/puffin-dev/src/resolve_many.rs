@@ -10,7 +10,7 @@ use futures::StreamExt;
 use indicatif::ProgressStyle;
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_cache::{CacheArgs, CacheDir};
+use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
@@ -37,7 +37,7 @@ pub(crate) struct ResolveManyArgs {
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
-    let cache_dir = CacheDir::try_from(args.cache_args)?;
+    let cache = Cache::try_from(args.cache_args)?;
 
     let data = fs::read_to_string(&args.list)?;
     let lines = data.lines().map(Requirement::from_str);
@@ -48,10 +48,10 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     };
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(cache_dir.path()))?;
+    let venv = Virtualenv::from_env(platform, &cache)?;
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::new(cache_dir.path().clone()).build(),
-        cache_dir.path().clone(),
+        RegistryClientBuilder::new(cache.clone()).build(),
+        cache.clone(),
         venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,

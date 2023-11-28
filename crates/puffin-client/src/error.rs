@@ -14,6 +14,7 @@ pub enum Error {
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
 
+    /// Dist-info error
     #[error(transparent)]
     InstallWheel(#[from] install_wheel_rs::Error),
 
@@ -66,7 +67,7 @@ pub enum Error {
     #[error("The wheel {0} is not a valid zip file")]
     Zip(WheelFilename, #[source] ZipError),
 
-    #[error(transparent)]
+    #[error("Failed to write to the client cache")]
     IO(#[from] io::Error),
 
     /// An [`io::Error`] with a filename attached

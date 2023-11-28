@@ -15,6 +15,7 @@ use tracing::debug;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
+use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
@@ -44,7 +45,7 @@ pub(crate) async fn pip_compile(
     no_build: bool,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
-    cache: &Path,
+    cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     miette::set_hook(Box::new(|_| {
@@ -112,7 +113,7 @@ pub(crate) async fn pip_compile(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, Some(cache))?;
+    let venv = Virtualenv::from_env(platform, &cache)?;
 
     debug!(
         "Using Python {} at {}",
@@ -136,7 +137,7 @@ pub(crate) async fn pip_compile(
 
     // Instantiate a client.
     let client = {
-        let mut builder = RegistryClientBuilder::new(cache);
+        let mut builder = RegistryClientBuilder::new(cache.clone());
         if let Some(IndexUrls { index, extra_index }) = index_urls {
             if let Some(index) = index {
                 builder = builder.index(index);
@@ -150,7 +151,7 @@ pub(crate) async fn pip_compile(
 
     let build_dispatch = BuildDispatch::new(
         client.clone(),
-        cache.to_path_buf(),
+        cache.clone(),
         interpreter_info,
         fs::canonicalize(venv.python_executable())?,
         no_build,

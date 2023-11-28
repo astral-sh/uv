@@ -11,11 +11,11 @@ use std::str::FromStr;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use tempfile::tempdir;
 
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
+use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
@@ -31,12 +31,12 @@ static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
 });
 
 struct DummyContext {
-    cache: PathBuf,
+    cache: Cache,
     interpreter: Interpreter,
 }
 
 impl BuildContext for DummyContext {
-    fn cache(&self) -> &Path {
+    fn cache(&self) -> &Cache {
         &self.cache
     }
 
@@ -80,10 +80,9 @@ async fn resolve(
     markers: &'static MarkerEnvironment,
     tags: &Tags,
 ) -> Result<Graph> {
-    let temp_dir = tempdir()?;
-    let client = RegistryClientBuilder::new(temp_dir.path()).build();
+    let client = RegistryClientBuilder::new(Cache::temp()?).build();
     let build_context = DummyContext {
-        cache: temp_dir.path().to_path_buf(),
+        cache: Cache::temp()?,
         interpreter: Interpreter::artificial(
             Platform::current()?,
             markers.clone(),
