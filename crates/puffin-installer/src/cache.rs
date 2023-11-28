@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use fs_err as fs;
 
-use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
+use distribution_filename::WheelFilename;
+use distribution_types::{BuiltDist, Dist, Metadata, SourceDist, VersionOrUrl};
+use puffin_cache::{digest, CanonicalUrl};
 
 static WHEEL_CACHE: &str = "wheels-v0";
 
@@ -25,10 +27,13 @@ impl WheelCache {
     }
 
     /// Return the path at which a given [`Dist`] would be stored.
-    pub(crate) fn entry(&self, dist: &Dist) -> PathBuf {
-        self.root
-            .join(CacheShard::from(dist).segment())
-            .join(dist.package_id())
+    pub(crate) fn entry(&self, dist: &Dist, filename: &WheelFilename) -> PathBuf {
+        let mut path = self.root.join(CacheShard::from(dist).segment());
+        // TODO(konstin): Use `WheelMetadataCache` instead
+        if let VersionOrUrl::Url(url) = dist.version_or_url() {
+            path.push(digest(&CanonicalUrl::new(url)));
+        }
+        path.join(filename.to_string())
     }
 
     /// Returns a handle to the wheel cache directory.

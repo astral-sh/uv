@@ -1,11 +1,14 @@
 use std::path::Path;
+use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use distribution_filename::WheelFilename;
 use tracing::debug;
 
 use distribution_types::direct_url::DirectUrl;
-use distribution_types::{CachedDist, InstalledDist};
+use distribution_types::{CachedDist, InstalledDist, RemoteSource};
 use pep508_rs::{Requirement, VersionOrUrl};
+use platform_tags::Tags;
 use puffin_interpreter::Virtualenv;
 
 use crate::url_index::UrlIndex;
@@ -33,13 +36,14 @@ impl InstallPlan {
         requirements: &[Requirement],
         cache: &Path,
         venv: &Virtualenv,
+        tags: &Tags,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
         let mut site_packages =
             SitePackages::try_from_executable(venv).context("Failed to list installed packages")?;
 
         // Index all the already-downloaded wheels in the cache.
-        let registry_index = RegistryIndex::try_from_directory(cache);
+        let registry_index = RegistryIndex::try_from_directory(cache, tags);
         let url_index = UrlIndex::try_from_directory(cache);
 
         let mut local = vec![];
@@ -86,7 +90,7 @@ impl InstallPlan {
                 None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                     if let Some(distribution) = registry_index
                         .get(&requirement.name)
-                        .filter(|dist| requirement.is_satisfied_by(&dist.version))
+                        .filter(|dist| requirement.is_satisfied_by(&dist.filename.version))
                     {
                         debug!("Requirement already cached: {distribution}");
                         local.push(CachedDist::Registry(distribution.clone()));
@@ -94,10 +98,24 @@ impl InstallPlan {
                     }
                 }
                 Some(VersionOrUrl::Url(url)) => {
-                    if let Some(distribution) = url_index.get(&requirement.name, url) {
-                        debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDist::Url(distribution.clone()));
-                        continue;
+                    // Only consider wheel urls
+                    if let Some(filename) = url
+                        .filename()
+                        .ok()
+                        .and_then(|filename| WheelFilename::from_str(filename).ok())
+                    {
+                        if requirement.name != filename.name {
+                            bail!(
+                                "Given name `{}` does not match url name `{}`",
+                                requirement.name,
+                                url
+                            );
+                        }
+                        if let Some(distribution) = url_index.get(filename, url) {
+                            debug!("Requirement already cached: {distribution}");
+                            local.push(CachedDist::Url(distribution.clone()));
+                            continue;
+                        }
                     }
                 }
             }

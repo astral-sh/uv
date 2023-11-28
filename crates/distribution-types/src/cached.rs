@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use url::Url;
 
-use crate::traits::Metadata;
-use crate::{BuiltDist, Dist, SourceDist, VersionOrUrl};
-use pep440_rs::Version;
+use distribution_filename::WheelFilename;
 use puffin_normalize::PackageName;
 
 use crate::direct_url::DirectUrl;
+use crate::traits::Metadata;
+use crate::{BuiltDist, Dist, SourceDist, VersionOrUrl};
 
 /// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone)]
@@ -22,31 +22,30 @@ pub enum CachedDist {
 
 #[derive(Debug, Clone)]
 pub struct CachedRegistryDist {
-    pub name: PackageName,
-    pub version: Version,
+    pub filename: WheelFilename,
     pub path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
 pub struct CachedDirectUrlDist {
-    pub name: PackageName,
+    pub filename: WheelFilename,
     pub url: Url,
     pub path: PathBuf,
 }
 
 impl Metadata for CachedRegistryDist {
     fn name(&self) -> &PackageName {
-        &self.name
+        &self.filename.name
     }
 
     fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
+        VersionOrUrl::Version(&self.filename.version)
     }
 }
 
 impl Metadata for CachedDirectUrlDist {
     fn name(&self) -> &PackageName {
-        &self.name
+        &self.filename.name
     }
 
     fn version_or_url(&self) -> VersionOrUrl {
@@ -72,40 +71,36 @@ impl Metadata for CachedDist {
 
 impl CachedDist {
     /// Initialize a [`CachedDist`] from a [`Dist`].
-    pub fn from_remote(remote: Dist, path: PathBuf) -> Self {
+    pub fn from_remote(remote: Dist, filename: WheelFilename, path: PathBuf) -> Self {
         match remote {
-            Dist::Built(BuiltDist::Registry(dist)) => Self::Registry(CachedRegistryDist {
-                name: dist.name,
-                version: dist.version,
-                path,
-            }),
+            Dist::Built(BuiltDist::Registry(_dist)) => {
+                Self::Registry(CachedRegistryDist { filename, path })
+            }
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
-                name: dist.filename.name,
+                filename,
                 url: dist.url,
                 path,
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
-                name: dist.filename.name,
+                filename,
                 url: dist.url,
                 path,
             }),
-            Dist::Source(SourceDist::Registry(dist)) => Self::Registry(CachedRegistryDist {
-                name: dist.name,
-                version: dist.version,
-                path,
-            }),
+            Dist::Source(SourceDist::Registry(_dist)) => {
+                Self::Registry(CachedRegistryDist { filename, path })
+            }
             Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
-                name: dist.name,
+                filename,
                 url: dist.url,
                 path,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
-                name: dist.name,
+                filename,
                 url: dist.url,
                 path,
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
-                name: dist.name,
+                filename,
                 url: dist.url,
                 path,
             }),
@@ -130,8 +125,12 @@ impl CachedDist {
 }
 
 impl CachedDirectUrlDist {
-    pub fn from_url(name: PackageName, url: Url, path: PathBuf) -> Self {
-        Self { name, url, path }
+    pub fn from_url(filename: WheelFilename, url: Url, path: PathBuf) -> Self {
+        Self {
+            filename,
+            url,
+            path,
+        }
     }
 }
 
@@ -144,18 +143,12 @@ impl CachedRegistryDist {
         let Some(file_name) = file_name.to_str() else {
             return Ok(None);
         };
-        let Some((name, version)) = file_name.rsplit_once('-') else {
+        let Ok(filename) = WheelFilename::from_str(file_name) else {
             return Ok(None);
         };
 
-        let name = PackageName::from_str(name)?;
-        let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
         let path = path.to_path_buf();
 
-        Ok(Some(Self {
-            name,
-            version,
-            path,
-        }))
+        Ok(Some(Self { filename, path }))
     }
 }
