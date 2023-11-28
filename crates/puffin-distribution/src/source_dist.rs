@@ -49,7 +49,7 @@ pub enum SourceDistError {
     Client(#[from] puffin_client::Error),
 
     // Cache writing error
-    #[error(transparent)]
+    #[error("Failed to write to source dist cache")]
     Io(#[from] std::io::Error),
     #[error("Cache (de)serialization failed")]
     Serde(#[from] serde_json::Error),
@@ -447,7 +447,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let mut reader = tokio::io::BufReader::new(reader.compat());
 
         // Download the source distribution.
-        let temp_dir = tempfile::tempdir_in(self.build_context.cache().bucket(BuiltWheels))?;
+        let cache_dir = self.build_context.cache().bucket(BuiltWheels);
+        fs::create_dir_all(&cache_dir).await?;
+        let temp_dir = tempfile::tempdir_in(cache_dir)?;
         let sdist_file = temp_dir.path().join(source_dist_filename);
         let mut writer = tokio::fs::File::create(&sdist_file).await?;
         tokio::io::copy(&mut reader, &mut writer).await?;

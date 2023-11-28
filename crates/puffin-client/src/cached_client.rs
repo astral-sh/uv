@@ -145,12 +145,11 @@ impl CachedClient {
                         .map_err(crate::Error::from)?;
                     let temp_file =
                         NamedTempFile::new_in(&cache_entry.dir).map_err(crate::Error::from)?;
-                    fs_err::tokio::write(
-                        &temp_file,
-                        &serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
-                    )
-                    .await
-                    .map_err(crate::Error::from)?;
+                    let data =
+                        serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
+                    fs_err::tokio::write(&temp_file, &data)
+                        .await
+                        .map_err(crate::Error::from)?;
                     temp_file
                         .persist(cache_entry.path())
                         .map_err(crate::Error::from)?;

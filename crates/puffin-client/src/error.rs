@@ -66,7 +66,7 @@ pub enum Error {
     #[error("The wheel {0} is not a valid zip file")]
     Zip(WheelFilename, #[source] ZipError),
 
-    #[error(transparent)]
+    #[error("Failed to write to the client cache")]
     IO(#[from] io::Error),
 
     /// An [`io::Error`] with a filename attached
