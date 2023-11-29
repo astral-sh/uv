@@ -23,7 +23,7 @@ use tar::Archive;
 use tempfile::{tempdir, TempDir};
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+use tracing::{debug, info_span, instrument};
 use zip::ZipArchive;
 
 use pep508_rs::Requirement;
@@ -216,14 +216,14 @@ impl SourceBuild {
     /// Create a virtual environment in which to build a source distribution, extracting the
     /// contents from an archive if necessary.
     ///
-    /// `package_id` is for error reporting only.
+    /// `source_dist` is for error reporting only.
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        package_id: &str,
+        source_dist: &str,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
 
@@ -321,7 +321,7 @@ impl SourceBuild {
                 &venv,
                 pep517_backend,
                 build_context,
-                package_id,
+                source_dist,
             )
             .await?;
         } else {
@@ -339,7 +339,7 @@ impl SourceBuild {
             pep517_backend,
             venv,
             metadata_directory: None,
-            package_id: package_id.to_string(),
+            package_id: source_dist.to_string(),
         })
     }
 
@@ -370,7 +370,13 @@ impl SourceBuild {
                 print()
             "#, pep517_backend.backend_import(), escape_path_for_python(&metadata_directory)
         };
+        let span = info_span!(
+            "run_python_script",
+            name="prepare_metadata_for_build_wheel",
+            python_version = %self.venv.interpreter().version()
+        );
         let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
+        drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
@@ -409,7 +415,7 @@ impl SourceBuild {
     /// dir.
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
-    #[instrument(skip(self))]
+    #[instrument(skip(self, wheel_dir), fields(package_id = self.package_id))]
     pub fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path
         let wheel_dir = fs::canonicalize(wheel_dir)?;
@@ -470,7 +476,13 @@ impl SourceBuild {
             print(backend.build_wheel("{}", metadata_directory={}))
             "#, pep517_backend.backend_import(), escaped_wheel_dir, metadata_directory 
         };
+        let span = info_span!(
+            "run_python_script",
+            name="build_wheel",
+            python_version = %self.venv.interpreter().version()
+        );
         let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
+        drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to build wheel through `build_wheel()`".to_string(),
@@ -524,7 +536,13 @@ async fn create_pep517_build_environment(
             print(json.dumps(requires))
         "#, pep517_backend.backend_import()
     };
+    let span = info_span!(
+        "get_requires_for_build_wheel",
+        name="build_wheel",
+        python_version = %venv.interpreter().version()
+    );
     let output = run_python_script(&venv.python_executable(), &script, source_tree)?;
+    drop(span);
     if !output.status.success() {
         return Err(Error::from_command_output(
             "Build backend failed to determine extras requires with `get_requires_for_build_wheel`"
@@ -581,7 +599,7 @@ async fn create_pep517_build_environment(
     Ok(())
 }
 /// Returns the directory with the `pyproject.toml`/`setup.py`
-#[instrument(skip_all, fields(path))]
+#[instrument(skip_all, fields(sdist = ?sdist.file_name().unwrap_or(sdist.as_os_str())))]
 fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {
     if sdist
         .extension()
@@ -621,7 +639,7 @@ fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> 
     Ok(root.path())
 }
 
-#[instrument(skip(script, source_tree))]
+/// It is the caller's responsibility to create an informative span.
 fn run_python_script(
     python_interpreter: &Path,
     script: &str,

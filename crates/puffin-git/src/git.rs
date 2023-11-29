@@ -11,7 +11,7 @@ use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
 use reqwest::Client;
 use reqwest::StatusCode;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::util::retry;
@@ -409,7 +409,7 @@ impl<'a> GitCheckout<'a> {
     fn reset(&self) -> Result<()> {
         let ok_file = self.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
-        info!("reset {} to {}", self.repo.path().display(), self.revision);
+        debug!("reset {} to {}", self.repo.path().display(), self.revision);
 
         // Ensure libgit2 won't mess with newlines when we vendor.
         if let Ok(mut git_config) = self.repo.config() {

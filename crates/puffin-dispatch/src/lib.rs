@@ -103,7 +103,13 @@ impl BuildContext for BuildDispatch {
         })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(
+        skip(self, requirements, venv),
+        fields(
+            requirements = requirements.iter().map(ToString::to_string).join(", "),
+            venv = ?venv.root()
+        )
+    )]
     fn install<'a>(
         &'a self,
         requirements: &'a [Requirement],
@@ -207,13 +213,13 @@ impl BuildContext for BuildDispatch {
         })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(source_dist = source_dist, subdirectory = ?subdirectory))]
     fn build_source<'a>(
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         wheel_dir: &'a Path,
-        package_id: &'a str,
+        source_dist: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
             if self.no_build {
@@ -225,7 +231,7 @@ impl BuildContext for BuildDispatch {
                 &self.interpreter,
                 self,
                 self.source_build_context.clone(),
-                package_id,
+                source_dist,
             )
             .await?;
             Ok(builder.build(wheel_dir)?)
