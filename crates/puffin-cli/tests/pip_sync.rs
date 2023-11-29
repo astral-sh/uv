@@ -521,6 +521,8 @@ fn install_git_subdirectories() -> Result<()> {
     });
 
     check_command(&venv, "import example_pkg", &temp_dir);
+    check_command(&venv, "import example_pkg.a", &temp_dir);
+    check_command(&venv, "import example_pkg.b", &temp_dir);
 
     Ok(())
 }
