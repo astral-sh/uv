@@ -315,6 +315,7 @@ fn clone_wheel_files(
 
 fn clone_recursive(from: PathBuf, to: PathBuf) -> Result<(), Error> {
     // Attempt to copy the file or directory
+    debug!("Cloning {} to {}", from.display(), to.display());
     let reflink = reflink_copy::reflink(&from, &to);
 
     // If copying fails and the directory exists already, it must be merged recursively
