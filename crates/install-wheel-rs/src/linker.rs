@@ -1,7 +1,7 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -297,7 +297,8 @@ fn clone_wheel_files(
 
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
-    // subdirectory.
+    // subdirectory unless the subdirectory exists already in which case we'll need to recursively
+    // merge its contents with the existing direcotry.
     for entry in fs::read_dir(wheel.as_ref())? {
         let entry = entry?;
         let from = entry.path();
@@ -305,18 +306,35 @@ fn clone_wheel_files(
             .as_ref()
             .join(from.strip_prefix(&wheel).unwrap());
 
-        // Delete the destination if it already exists.
-        fs::remove_dir_all(&to)
-            .or_else(|_| fs::remove_file(&to))
-            .ok();
-
-        // Copy the file.
-        reflink_copy::reflink(&from, &to).map_err(|err| Error::Reflink { from, to, err })?;
-
+        clone_recursive(from, to)?;
         count += 1;
     }
 
     Ok(count)
+}
+
+fn clone_recursive(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+    // Attempt to copy the file or directory
+    let reflink = reflink_copy::reflink(&from, &to);
+
+    // If copying fails and the directory exists already, it must be merged recursively
+    if from.is_dir()
+        && reflink
+            .as_ref()
+            .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
+    {
+        for entry in fs::read_dir(from.clone())? {
+            let entry = entry?;
+            let child_from = entry.path();
+            let child_to = to.join(child_from.strip_prefix(from.clone()).unwrap());
+            clone_recursive(child_from, child_to)?;
+        }
+    } else {
+        // Other errors should be tracked
+        reflink.map_err(|err| Error::Reflink { from, to, err })?;
+    }
+
+    Ok(())
 }
 
 /// Extract a wheel by copying all of its files into site packages.
