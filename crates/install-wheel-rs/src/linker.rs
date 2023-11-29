@@ -1,7 +1,7 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -306,17 +306,17 @@ fn clone_wheel_files(
             .as_ref()
             .join(from.strip_prefix(&wheel).unwrap());
 
-        clone_recursive(from, to)?;
+        clone_recursive(&from, &to)?;
         count += 1;
     }
 
     Ok(count)
 }
 
-fn clone_recursive(from: PathBuf, to: PathBuf) -> Result<(), Error> {
+fn clone_recursive(from: &Path, to: &Path) -> Result<(), Error> {
     // Attempt to copy the file or directory
     debug!("Cloning {} to {}", from.display(), to.display());
-    let reflink = reflink_copy::reflink(&from, &to);
+    let reflink = reflink_copy::reflink(from, to);
 
     // If copying fails and the directory exists already, it must be merged recursively
     if from.is_dir()
@@ -324,15 +324,19 @@ fn clone_recursive(from: PathBuf, to: PathBuf) -> Result<(), Error> {
             .as_ref()
             .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
     {
-        for entry in fs::read_dir(from.clone())? {
+        for entry in fs::read_dir(from)? {
             let entry = entry?;
             let child_from = entry.path();
-            let child_to = to.join(child_from.strip_prefix(from.clone()).unwrap());
-            clone_recursive(child_from, child_to)?;
+            let child_to = to.join(child_from.strip_prefix(from).unwrap());
+            clone_recursive(child_from.as_path(), child_to.as_path())?;
         }
     } else {
         // Other errors should be tracked
-        reflink.map_err(|err| Error::Reflink { from, to, err })?;
+        reflink.map_err(|err| Error::Reflink {
+            from: from.to_path_buf(),
+            to: to.to_path_buf(),
+            err,
+        })?;
     }
 
     Ok(())
