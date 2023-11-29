@@ -1,6 +1,7 @@
 //! Takes a wheel and installs it into a venv..
 
 use std::io;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use distribution_filename::WheelFilename;
@@ -29,10 +30,19 @@ mod script;
 mod uninstall;
 mod wheel;
 
+/// Note: The caller is responsible for adding the path of the wheel we're installing.
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
+    /// Custom error type to add a path to error reading a file from a zip
+    #[error("Failed to reflink {from} to {to}")]
+    Reflink {
+        from: PathBuf,
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     /// Tags/metadata didn't match platform
     #[error("The wheel is incompatible with the current platform {os} {arch}")]
     IncompatibleWheel { os: Os, arch: Arch },
@@ -45,7 +55,8 @@ pub enum Error {
     /// Doesn't follow file name schema
     #[error(transparent)]
     InvalidWheelFileName(#[from] distribution_filename::WheelFilenameError),
-    #[error("Failed to read the wheel file {0}")]
+    /// The caller must add the name of the zip file (See note on type).
+    #[error("Failed to read {0} from zip file")]
     Zip(String, #[source] ZipError),
     #[error("Failed to run python subcommand")]
     PythonSubcommand(#[source] io::Error),
@@ -69,15 +80,6 @@ pub enum Error {
     MissingDistInfo,
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
-}
-
-impl Error {
-    pub(crate) fn from_zip_error(file: String, value: ZipError) -> Self {
-        match value {
-            ZipError::Io(io_error) => Self::IO(io_error),
-            _ => Self::Zip(file, value),
-        }
-    }
 }
 
 /// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or

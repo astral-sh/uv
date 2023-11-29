@@ -95,7 +95,7 @@ fn parse_scripts<R: Read + Seek>(
                 .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?
         }
         Err(ZipError::FileNotFound) => return Ok((Vec::new(), Vec::new())),
-        Err(err) => return Err(Error::from_zip_error(entry_points_path, err)),
+        Err(err) => return Err(Error::Zip(entry_points_path, err)),
     };
 
     // TODO: handle extras
@@ -163,9 +163,10 @@ fn unpack_wheel_files<R: Read + Seek>(
     let mut created_dirs = FxHashSet::default();
     // https://github.com/zip-rs/zip/blob/7edf2489d5cff8b80f02ee6fc5febf3efd0a9442/examples/extract.rs
     for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|err| Error::from_zip_error(format!("(index {i})"), err))?;
+        let mut file = archive.by_index(i).map_err(|err| {
+            let file1 = format!("(index {i})");
+            Error::Zip(file1, err)
+        })?;
         // enclosed_name takes care of evil zip paths
         let relative = match file.enclosed_name() {
             Some(path) => path.to_owned(),
@@ -583,7 +584,7 @@ pub fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
                 .map(|stripped| (stripped, ancestor))
         })
         .ok_or_else(|| {
-            Error::IO(io::Error::new(
+            Error::Io(io::Error::new(
                 io::ErrorKind::Other,
                 format!(
                     "trivial strip case should have worked: {} vs {}",
@@ -926,8 +927,10 @@ pub fn install_wheel(
 
     debug!(name = name.as_ref(), "Opening zip");
     // No BufReader: https://github.com/zip-rs/zip/issues/381
-    let mut archive =
-        ZipArchive::new(reader).map_err(|err| Error::from_zip_error("(index)".to_string(), err))?;
+    let mut archive = ZipArchive::new(reader).map_err(|err| {
+        let file = "(index)".to_string();
+        Error::Zip(file, err)
+    })?;
 
     debug!(name = name.as_ref(), "Getting wheel metadata");
     let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))?
@@ -937,11 +940,10 @@ pub fn install_wheel(
     // TODO: Check that name and version match
 
     let record_path = format!("{dist_info_prefix}.dist-info/RECORD");
-    let mut record = read_record_file(
-        &mut archive
-            .by_name(&record_path)
-            .map_err(|err| Error::from_zip_error(record_path.clone(), err))?,
-    )?;
+    let mut record = read_record_file(&mut archive.by_name(&record_path).map_err(|err| {
+        let file = record_path.clone();
+        Error::Zip(file, err)
+    })?)?;
 
     // We're going step by step though
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
@@ -951,7 +953,7 @@ pub fn install_wheel(
     let mut wheel_text = String::new();
     archive
         .by_name(&wheel_file_path)
-        .map_err(|err| Error::from_zip_error(wheel_file_path, err))?
+        .map_err(|err| Error::Zip(wheel_file_path, err))?
         .read_to_string(&mut wheel_text)?;
     parse_wheel_version(&wheel_text)?;
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
@@ -1044,7 +1046,10 @@ fn read_metadata(
     let metadata_file = format!("{dist_info_prefix}.dist-info/METADATA");
     archive
         .by_name(&metadata_file)
-        .map_err(|err| Error::from_zip_error(metadata_file.to_string(), err))?
+        .map_err(|err| {
+            let file = metadata_file.to_string();
+            Error::Zip(file, err)
+        })?
         .read_to_end(&mut content)?;
     // HACK: trick mailparse to parse as UTF-8 instead of ASCII
     let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();

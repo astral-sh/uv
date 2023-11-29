@@ -1,7 +1,6 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::io::Read;
 use std::path::Path;
 
 use configparser::ini::Ini;
@@ -61,7 +60,7 @@ pub fn install_wheel(
     let wheel_file_path = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
-    let wheel_text = std::fs::read_to_string(wheel_file_path)?;
+    let wheel_text = fs::read_to_string(wheel_file_path)?;
     parse_wheel_version(&wheel_text)?;
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
@@ -136,7 +135,7 @@ pub fn install_wheel(
 /// <https://github.com/PyO3/python-pkginfo-rs>
 fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info) = std::fs::read_dir(path)?.find_map(|entry| {
+    let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
         let entry = entry.ok()?;
         let path = entry.path();
         if path.is_dir() {
@@ -172,9 +171,7 @@ fn read_metadata(
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/METADATA"));
 
-    // Read into a buffer.
-    let mut content = Vec::new();
-    File::open(&metadata_file)?.read_to_end(&mut content)?;
+    let content = fs::read(&metadata_file)?;
 
     // HACK: trick mailparse to parse as UTF-8 instead of ASCII
     let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();
@@ -228,7 +225,7 @@ fn parse_scripts(
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
     // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let Ok(ini) = std::fs::read_to_string(entry_points_path) else {
+    let Ok(ini) = fs::read_to_string(entry_points_path) else {
         return Ok((Vec::new(), Vec::new()));
     };
 
@@ -301,7 +298,7 @@ fn clone_wheel_files(
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory.
-    for entry in std::fs::read_dir(&wheel)? {
+    for entry in fs::read_dir(wheel.as_ref())? {
         let entry = entry?;
         let from = entry.path();
         let to = site_packages
@@ -314,7 +311,7 @@ fn clone_wheel_files(
             .ok();
 
         // Copy the file.
-        reflink_copy::reflink(&from, &to)?;
+        reflink_copy::reflink(&from, &to).map_err(|err| Error::Reflink { from, to, err })?;
 
         count += 1;
     }
