@@ -14,7 +14,7 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, info_span};
 use url::Url;
 use zip::ZipArchive;
 
@@ -242,7 +242,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .reporter
                 .as_ref()
                 .map(|reporter| reporter.on_build_start(source_dist));
+            let span =
+                info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
             let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
+            drop(span);
 
             let download = SourceDistDownload {
                 dist: source_dist.clone(),
@@ -315,7 +318,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .send()
             .await
             .map_err(puffin_client::Error::RequestMiddlewareError)?;
+        let span =
+            info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
         let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
+        drop(span);
         let (_wheel_dir, disk_filename, wheel_filename, metadata) = self
             .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
             .await
