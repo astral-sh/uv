@@ -50,7 +50,7 @@ once_cell = { version = "1.18.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
-pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "725b9a8e323c9ae0727fed2d045bad64eb212167" }
+pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "2f20e6c95e31907849ff1f0c81031d17b3d71ec8" }
 pyo3 = { version = "0.20.0" }
 pyo3-log = { version = "0.9.0"}
 pyproject-toml = { version = "0.8.0" }
