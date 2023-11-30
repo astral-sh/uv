@@ -56,7 +56,8 @@ pyo3-log = { version = "0.9.0"}
 pyproject-toml = { version = "0.8.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
-reflink-copy = { version = "0.1.11" }
+# For correct IO error handling: https://github.com/cargo-bins/reflink-copy/pull/51
+reflink-copy = { git = "https://github.com/konstin/reflink-copy", rev = "1fc25b9ca5087bd20f78546009fe98709e9c4343" }
 regex = { version = "1.10.2" }
 reqwest = { version = "0.11.22", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls"] }
 reqwest-middleware = { version = "0.2.4" }
