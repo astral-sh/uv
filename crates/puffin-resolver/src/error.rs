@@ -78,7 +78,7 @@ impl std::error::Error for RichPubGrubError {}
 impl std::fmt::Display for RichPubGrubError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
-            let formatter = PubGrubReportFormatter::default();
+            let formatter = PubGrubReportFormatter;
             let report = DefaultStringReporter::report_with_formatter(derivation_tree, &formatter);
             write!(f, "{report}")
         } else {
