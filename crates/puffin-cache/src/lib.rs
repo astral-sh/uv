@@ -91,12 +91,14 @@ impl Cache {
 pub enum CacheBucket {
     /// Downloaded remote wheel archives.
     Archives,
-    /// Metadata of a built source distribution.
+    /// Wheels built from source distributions, their extracted metadata and caching information
+    /// about the source distribution.
     ///
     /// Cache structure:
-    ///  * `<build wheel metadata cache>/pypi/foo-1.0.0.zip/metadata.json`
-    ///  * `<build wheel metadata cache>/<sha256(index-url)>/foo-1.0.0.zip/metadata.json`
-    ///  * `<build wheel metadata cache>/url/<sha256(url)>/foo-1.0.0.zip/metadata.json`
+    ///  * `<build wheel cache>/pypi/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `<build wheel cache>/<digest(index-url)>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `<build wheel cache>/url/<digest(url)>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `<build wheel cache>/git/<digest(url)>/<git sha>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///
     /// But the url filename does not need to be a valid source dist filename
     /// (<https://github.com/search?q=path%3A**%2Frequirements.txt+master.zip&type=code>),
@@ -117,18 +119,21 @@ pub enum CacheBucket {
     ///
     /// ...may be cached as:
     /// ```text
-    /// built-wheel-metadata-v0
+    /// built-wheels-v0/
     /// ├── git
-    /// │   └── 5c56bc1c58c34c11
+    /// │   └── a67db8ed076e3814
     /// │       └── 843b753e9e8cb74e83cac55598719b39a4d5ef1f
-    /// │           └── metadata.json
+    /// │           ├── metadata.json
+    /// │           └── pydantic_extra_types-2.1.0-py3-none-any.whl
     /// ├── pypi
     /// │   └── django-allauth-0.51.0.tar.gz
+    /// │       ├── django_allauth-0.51.0-py3-none-any.whl
     /// │       └── metadata.json
     /// └── url
     ///     └── 6781bd6440ae72c2
     ///         └── werkzeug-3.0.1.tar.gz
-    ///             └── metadata.json
+    ///             ├── metadata.json
+    ///             └── werkzeug-3.0.1-py3-none-any.whl
     /// ```
     ///
     /// The inside of a `metadata.json`:
@@ -144,8 +149,6 @@ pub enum CacheBucket {
     ///   }
     /// }
     /// ```
-    BuiltWheelMetadata,
-    /// Wheel archives built from source distributions.
     BuiltWheels,
     /// Git repositories.
     Git,
@@ -230,7 +233,6 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             CacheBucket::Archives => "archives-v0",
-            CacheBucket::BuiltWheelMetadata => "built-wheel-metadata-v0",
             CacheBucket::BuiltWheels => "built-wheels-v0",
             CacheBucket::Git => "git-v0",
             CacheBucket::Interpreter => "interpreter-v0",
