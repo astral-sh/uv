@@ -2848,7 +2848,7 @@ dependencies = [
 [[package]]
 name = "reflink-copy"
 version = "0.1.12"
-source = "git+https://github.com/konstin/reflink-copy?rev=39c8452b766c7de8dbc2df6080a9397268ba75a8#39c8452b766c7de8dbc2df6080a9397268ba75a8"
+source = "git+https://github.com/konstin/reflink-copy?rev=1fc25b9ca5087bd20f78546009fe98709e9c4343#1fc25b9ca5087bd20f78546009fe98709e9c4343"
 dependencies = [
  "cfg-if 1.0.0",
  "rustix",
