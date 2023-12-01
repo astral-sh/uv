@@ -23,8 +23,7 @@ use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{Dist, GitSourceDist, Identifier, RemoteSource, SourceDist};
 use install_wheel_rs::find_dist_info;
 use platform_tags::Tags;
-use puffin_cache::CacheBucket::BuiltWheels;
-use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelMetadataCache};
+use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelMetadataCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
@@ -55,8 +54,8 @@ pub enum SourceDistError {
     Serde(#[from] serde_json::Error),
 
     // Build error
-    #[error("Failed to build")]
-    Build(#[source] anyhow::Error),
+    #[error("Failed to build {0}")]
+    Build(Box<SourceDist>, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
@@ -94,16 +93,10 @@ impl BuiltWheelMetadata {
     fn from_cached(
         filename: &WheelFilename,
         cached_data: &DiskFilenameAndMetadata,
-        cache: &Cache,
-        source_dist: &SourceDist,
+        cache_entry: &CacheEntry,
     ) -> Self {
-        // TODO(konstin): Change this when the built wheel naming scheme is fixed
-        let wheel_dir = cache
-            .bucket(CacheBucket::BuiltWheels)
-            .join(source_dist.distribution_id());
-
         Self {
-            path: wheel_dir.join(&cached_data.disk_filename),
+            path: cache_entry.dir.join(&cached_data.disk_filename),
             filename: filename.clone(),
             metadata: cached_data.metadata.clone(),
         }
@@ -195,7 +188,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         &path_source_dist.to_string(),
                     )
                     .await
-                    .map_err(SourceDistError::Build)?;
+                    .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
 
                 // Read the metadata from the wheel.
                 let filename = WheelFilename::from_str(&disk_filename)?;
@@ -230,12 +223,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheelMetadata,
+            CacheBucket::BuiltWheels,
             cache_shard.built_wheel_dir(filename),
             METADATA_JSON.to_string(),
         );
 
         let response_callback = |response| async {
+            // New or changed source distribution, delete all built wheels
+            if cache_entry.dir.exists() {
+                debug!("Clearing built wheels and metadata for {source_dist}");
+                fs::remove_dir_all(&cache_entry.dir).await?;
+            }
             debug!("Downloading and building source distribution: {source_dist}");
 
             let task = self
@@ -257,15 +255,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 reporter.on_download_progress(&Download::SourceDist(download.clone()));
             }
 
-            let (_wheel_filename, disk_filename, wheel_filename, metadata) = self
+            let (disk_filename, wheel_filename, metadata) = self
                 .build_source_dist(
                     &download.dist,
                     temp_dir,
                     &download.sdist_file,
                     download.subdirectory.as_deref(),
+                    &cache_entry,
                 )
                 .await
-                .map_err(SourceDistError::Build)?;
+                .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
 
             if let Some(task) = task {
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -300,8 +299,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Ok(BuiltWheelMetadata::from_cached(
                 filename,
                 cached_data,
-                self.build_context.cache(),
-                source_dist,
+                &cache_entry,
             ));
         }
 
@@ -322,10 +320,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
         let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
         drop(span);
-        let (_wheel_dir, disk_filename, wheel_filename, metadata) = self
-            .build_source_dist(source_dist, temp_dir, &sdist_file, subdirectory)
+        let (disk_filename, wheel_filename, metadata) = self
+            .build_source_dist(
+                source_dist,
+                temp_dir,
+                &sdist_file,
+                subdirectory,
+                &cache_entry,
+            )
             .await
-            .map_err(SourceDistError::Build)?;
+            .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_build_complete(source_dist, task);
@@ -355,8 +359,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         Ok(BuiltWheelMetadata::from_cached(
             &wheel_filename,
             &cached_data,
-            self.build_context.cache(),
-            source_dist,
+            &cache_entry,
         ))
     }
 
@@ -367,6 +370,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
+        // TODO(konstin): Do we want to delete old built wheels when the git sha changed?
         let git_sha = fetch
             .git()
             .precise()
@@ -374,7 +378,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .to_string();
         let cache_shard = WheelMetadataCache::Git(&git_source_dist.url);
         let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheelMetadata,
+            CacheBucket::BuiltWheels,
             cache_shard.built_wheel_dir(&git_sha),
             METADATA_JSON.to_string(),
         );
@@ -390,8 +394,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 return Ok(BuiltWheelMetadata::from_cached(
                     filename,
                     cached_data,
-                    self.build_context.cache(),
-                    source_dist,
+                    &cache_entry,
                 ));
             }
             metadatas
@@ -404,10 +407,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source_dist));
 
-        let (wheel_dir, disk_filename, filename, metadata) = self
-            .build_source_dist(source_dist, None, fetch.path(), subdirectory.as_deref())
+        let (disk_filename, filename, metadata) = self
+            .build_source_dist(
+                source_dist,
+                None,
+                fetch.path(),
+                subdirectory.as_deref(),
+                &cache_entry,
+            )
             .await
-            .map_err(SourceDistError::Build)?;
+            .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
 
         if metadata.name != git_source_dist.name {
             return Err(SourceDistError::NameMismatch {
@@ -435,7 +444,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         Ok(BuiltWheelMetadata {
-            path: wheel_dir.join(&disk_filename),
+            path: cache_entry.dir.join(&disk_filename),
             filename,
             metadata,
         })
@@ -453,7 +462,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let mut reader = tokio::io::BufReader::new(reader.compat());
 
         // Download the source distribution.
-        let cache_dir = self.build_context.cache().bucket(BuiltWheels);
+        let cache_dir = self.build_context.cache().bucket(CacheBucket::BuiltWheels);
         fs::create_dir_all(&cache_dir).await?;
         let temp_dir = tempfile::tempdir_in(cache_dir)?;
         let sdist_file = temp_dir.path().join(source_dist_filename);
@@ -497,25 +506,24 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         temp_dir: Option<TempDir>,
         source_dist: &Path,
         subdirectory: Option<&Path>,
-    ) -> anyhow::Result<(PathBuf, String, WheelFilename, Metadata21)> {
+        cache_entry: &CacheEntry,
+    ) -> anyhow::Result<(String, WheelFilename, Metadata21)> {
         debug!("Building: {dist}");
 
         if self.build_context.no_build() {
             bail!("Building source distributions is disabled");
         }
 
-        // Create a directory for the wheel.
-        let wheel_dir = self
-            .build_context
-            .cache()
-            .bucket(CacheBucket::BuiltWheels)
-            .join(dist.distribution_id());
-        fs::create_dir_all(&wheel_dir).await?;
-
         // Build the wheel.
+        fs::create_dir_all(&cache_entry.dir).await?;
         let disk_filename = self
             .build_context
-            .build_source(source_dist, subdirectory, &wheel_dir, &dist.to_string())
+            .build_source(
+                source_dist,
+                subdirectory,
+                &cache_entry.dir,
+                &dist.to_string(),
+            )
             .await?;
 
         if let Some(temp_dir) = temp_dir {
@@ -525,7 +533,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
 
-        let mut archive = ZipArchive::new(fs_err::File::open(wheel_dir.join(&disk_filename))?)?;
+        let mut archive =
+            ZipArchive::new(fs_err::File::open(cache_entry.dir.join(&disk_filename))?)?;
         let dist_info_dir =
             find_dist_info(&filename, archive.file_names().map(|name| (name, name)))?.1;
         let dist_info =
@@ -533,7 +542,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let metadata = Metadata21::parse(dist_info.as_bytes())?;
 
         debug!("Finished building: {dist}");
-        Ok((wheel_dir, disk_filename, filename, metadata))
+        Ok((disk_filename, filename, metadata))
     }
 }
 

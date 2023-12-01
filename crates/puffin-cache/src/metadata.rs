@@ -10,9 +10,8 @@ use crate::{digest, CanonicalUrl};
 
 /// Cache wheel metadata, both from remote wheels and built from source distributions.
 ///
-/// See [`WheelMetadataCache::wheel_dir`]/[`CacheBucket::WheelMetadata`] for remote wheel metadata
-/// caching and [`WheelMetadataCache::built_wheel_dir`]/[`CacheBucket::BuiltWheelMetadata`] for
-/// built source distributions metadata caching.
+/// Use [`WheelMetadataCache::wheel_dir`] for remote wheel metadata caching and
+/// [`WheelMetadataCache::built_wheel_dir`] for built source distributions metadata caching.
 pub enum WheelMetadataCache<'a> {
     /// Either pypi or an alternative index, which we key by index url
     Index(&'a IndexUrl),
@@ -46,7 +45,7 @@ impl<'a> WheelMetadataCache<'a> {
         self.bucket()
     }
 
-    /// Metadata of a built source distribution. See [`CacheBucket::BuiltWheelMetadata`]
+    /// Metadata of a built source distribution. See [`CacheBucket::BuiltWheels`]
     pub fn built_wheel_dir(&self, filename: &str) -> PathBuf {
         self.bucket().join(filename)
     }

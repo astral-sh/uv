@@ -557,6 +557,36 @@ fn install_sdist() -> Result<()> {
     Ok(())
 }
 
+/// Install a source distribution into a virtual environment.
+#[test]
+fn install_sdist_url() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("Werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz")?;
+
+    insta::with_settings!({
+        filters => vec![
+            (r"(\d|\.)+(ms|s)", "[TIME]"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    check_command(&venv, "import werkzeug", &temp_dir);
+
+    Ok(())
+}
+
 /// Attempt to re-install a package into a virtual environment from a URL. The second install
 /// should be a no-op.
 #[test]

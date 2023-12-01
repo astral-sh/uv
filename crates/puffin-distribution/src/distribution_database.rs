@@ -45,8 +45,6 @@ pub enum DistributionDatabaseError {
     Distribution(#[from] distribution_types::Error),
     #[error(transparent)]
     SourceBuild(#[from] SourceDistError),
-    #[error("Failed to build")]
-    Build(#[source] anyhow::Error),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
     /// Should not occur, i've only seen it when another task panicked
