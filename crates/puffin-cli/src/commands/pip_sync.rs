@@ -17,11 +17,10 @@ use puffin_dispatch::BuildDispatch;
 use puffin_distribution::DistributionDatabase;
 use puffin_installer::InstallPlan;
 use puffin_interpreter::Virtualenv;
-use pypi_types::Yanked;
+use pypi_types::{IndexUrls, Yanked};
 
 use crate::commands::reporters::{FetcherReporter, FinderReporter, InstallReporter, UnzipReporter};
 use crate::commands::{elapsed, ExitStatus};
-use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -29,7 +28,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     link_mode: LinkMode,
-    index_urls: Option<IndexUrls>,
+    index_urls: IndexUrls,
     no_build: bool,
     cache: Cache,
     mut printer: Printer,
@@ -62,7 +61,7 @@ pub(crate) async fn pip_sync(
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     link_mode: LinkMode,
-    index_urls: Option<IndexUrls>,
+    index_urls: IndexUrls,
     no_build: bool,
     cache: &Cache,
     mut printer: Printer,
@@ -85,7 +84,7 @@ pub(crate) async fn sync_requirements(
         local,
         remote,
         extraneous,
-    } = InstallPlan::try_from_requirements(requirements, cache, &venv, &tags)
+    } = InstallPlan::try_from_requirements(requirements, &index_urls, cache, &venv, &tags)
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.
@@ -106,18 +105,9 @@ pub(crate) async fn sync_requirements(
     }
 
     // Instantiate a client.
-    let client = {
-        let mut builder = RegistryClientBuilder::new(cache.clone());
-        if let Some(IndexUrls { index, extra_index }) = index_urls {
-            if let Some(index) = index {
-                builder = builder.index(index);
-            }
-            builder = builder.extra_index(extra_index);
-        } else {
-            builder = builder.no_index();
-        }
-        builder.build()
-    };
+    let client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_urls.clone())
+        .build();
 
     // Resolve any registry-based requirements.
     let remote = if remote.is_empty() {
@@ -183,15 +173,17 @@ pub(crate) async fn sync_requirements(
             venv.interpreter().clone(),
             fs::canonicalize(venv.python_executable())?,
             no_build,
+            index_urls.clone(),
         );
 
-        let fetcher = DistributionDatabase::new(cache, &tags, &client, &build_dispatch)
-            .with_reporter(FetcherReporter::from(printer).with_length(remote.len() as u64));
+        let distribution_database =
+            DistributionDatabase::new(cache, &tags, &client, &build_dispatch)
+                .with_reporter(FetcherReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = fetcher
+        let wheels = distribution_database
             .get_wheels(remote)
             .await
-            .context("Failed to download and build distributions")?;
+            .context("Failed to download distributions")?;
 
         let download_s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
@@ -218,7 +210,7 @@ pub(crate) async fn sync_requirements(
             .with_reporter(UnzipReporter::from(printer).with_length(wheels.len() as u64));
 
         let unzips = unzipper
-            .unzip(wheels, cache)
+            .unzip(wheels)
             .await
             .context("Failed to unpack wheels")?;
 

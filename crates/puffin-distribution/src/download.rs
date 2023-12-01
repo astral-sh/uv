@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use zip::ZipArchive;
@@ -19,6 +19,8 @@ pub struct InMemoryWheel {
     pub(crate) filename: WheelFilename,
     /// The contents of the wheel.
     pub(crate) buffer: Vec<u8>,
+    /// The path where the downloaded wheel would have been stored, if it wasn't an in-memory wheel.
+    pub(crate) path: PathBuf,
 }
 
 /// A downloaded wheel that's stored on-disk.
@@ -49,6 +51,16 @@ pub enum LocalWheel {
     InMemory(InMemoryWheel),
     Disk(DiskWheel),
     Built(BuiltWheel),
+}
+
+impl LocalWheel {
+    pub fn path(&self) -> &Path {
+        match self {
+            LocalWheel::InMemory(wheel) => &wheel.path,
+            LocalWheel::Disk(wheel) => &wheel.path,
+            LocalWheel::Built(wheel) => &wheel.path,
+        }
+    }
 }
 
 /// A downloaded source distribution.

@@ -1,13 +1,11 @@
 use std::cmp::Reverse;
+use std::path::PathBuf;
 
-use anyhow::Result;
-use tracing::debug;
+use anyhow::{Context, Result};
+use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, Dist, Identifier, RemoteSource};
-use puffin_cache::Cache;
+use distribution_types::{CachedDist, Dist, RemoteSource};
 use puffin_distribution::{LocalWheel, Unzip};
-
-use crate::cache::WheelCache;
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -24,21 +22,12 @@ impl Unzipper {
     }
 
     /// Unzip a set of downloaded wheels.
-    pub async fn unzip(
-        &self,
-        downloads: Vec<LocalWheel>,
-        cache: &Cache,
-    ) -> Result<Vec<CachedDist>> {
-        // Create the wheel cache subdirectory, if necessary.
-        let wheel_cache = WheelCache::new(cache);
-        wheel_cache.init()?;
-
+    #[instrument(skip_all)]
+    pub async fn unzip(&self, downloads: Vec<LocalWheel>) -> Result<Vec<CachedDist>> {
         // Sort the wheels by size.
         let mut downloads = downloads;
         downloads
             .sort_unstable_by_key(|wheel| Reverse(wheel.remote().size().unwrap_or(usize::MIN)));
-
-        let staging = tempfile::tempdir_in(wheel_cache.root())?;
 
         // Unpack the wheels into the cache.
         let mut wheels = Vec::with_capacity(downloads.len());
@@ -49,34 +38,31 @@ impl Unzipper {
             debug!("Unpacking wheel: {remote}");
 
             // Unzip the wheel.
-            tokio::task::spawn_blocking({
-                let target = staging.path().join(remote.distribution_id());
-                move || download.unzip(&target)
-            })
-            .await??;
+            let normalized_path = tokio::task::spawn_blocking({
+                move || -> Result<PathBuf> {
+                    let parent = download.path().parent().expect("Cache paths can't be root");
+                    fs_err::create_dir_all(parent)?;
+                    let staging = tempfile::tempdir_in(parent)?;
 
-            // Write the unzipped wheel to the target directory.
-            let target = wheel_cache.entry(&remote, &filename);
-            if let Some(parent) = target.parent() {
-                fs_err::create_dir_all(parent)?;
-            }
-            let result =
-                fs_err::tokio::rename(staging.path().join(remote.distribution_id()), target).await;
+                    download.unzip(staging.path())?;
 
-            if let Err(err) = result {
-                // If the renaming failed because another instance was faster, that's fine
-                // (`DirectoryNotEmpty` is not stable so we can't match on it)
-                if !wheel_cache.entry(&remote, &filename).is_dir() {
-                    return Err(err.into());
+                    // Remove the file we just unzipped and replace it with the unzipped directory.
+                    // If we abort before renaming the directory that's not a problem, we just lose
+                    // the cache.
+                    if !matches!(download, LocalWheel::InMemory(_)) {
+                        fs_err::remove_file(download.path())?;
+                    }
+
+                    let normalized_path = parent.join(download.filename().to_string());
+                    fs_err::rename(staging.path(), &normalized_path)?;
+
+                    Ok(normalized_path)
                 }
-            }
+            })
+            .await?
+            .with_context(|| format!("Failed to unpack: {remote}"))?;
 
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_unzip_progress(&remote);
-            }
-
-            let path = wheel_cache.entry(&remote, &filename);
-            wheels.push(CachedDist::from_remote(remote, filename, path));
+            wheels.push(CachedDist::from_remote(remote, filename, normalized_path));
         }
 
         if let Some(reporter) = self.reporter.as_ref() {

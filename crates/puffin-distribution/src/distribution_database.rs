@@ -15,9 +15,9 @@ use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
-use distribution_types::{BuiltDist, Dist, Metadata, RemoteSource, SourceDist};
+use distribution_types::{BuiltDist, Dist, RemoteSource, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket};
+use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
@@ -149,6 +149,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     DistributionDatabaseError::Url(wheel.file.url.to_string(), err)
                 })?;
                 let filename = WheelFilename::from_str(&wheel.file.filename)?;
+                let wheel_filename = &wheel.file.filename;
+
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Index(&wheel.index).wheel_dir(),
+                    wheel_filename.to_string(),
+                );
                 let reader = self.client.stream_external(&url).await?;
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
@@ -177,30 +184,22 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         dist: dist.clone(),
                         filename,
                         buffer,
+                        path: cache_entry.path(),
                     })
                 } else {
                     let size =
                         small_size.map_or("unknown size".to_string(), |size| size.to_string());
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
-                    // Create a directory for the wheel.
-                    // TODO(konstin): Change this when the built wheel naming scheme is fixed.
-                    let wheel_dir = self
-                        .cache
-                        .bucket(CacheBucket::Archives)
-                        .join(wheel.package_id());
-                    fs::create_dir_all(&wheel_dir).await?;
-
                     // Download the wheel to a temporary file.
-                    let wheel_filename = &wheel.file.filename;
-                    let wheel_file = wheel_dir.join(wheel_filename);
-                    let mut writer = tokio::fs::File::create(&wheel_file).await?;
+                    fs::create_dir_all(&cache_entry.dir).await?;
+                    let mut writer = fs::File::create(cache_entry.path()).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                     LocalWheel::Disk(DiskWheel {
                         dist: dist.clone(),
                         filename,
-                        path: wheel_file,
+                        path: cache_entry.path(),
                     })
                 };
 
@@ -215,26 +214,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
 
                 // Create a directory for the wheel.
-                // TODO(konstin): Change this when the built wheel naming scheme is fixed.
-                let wheel_dir = self
-                    .cache
-                    .bucket(CacheBucket::Archives)
-                    .join(wheel.package_id());
-                fs::create_dir_all(&wheel_dir).await?;
+                let wheel_filename = wheel.filename()?;
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Url(&wheel.url).wheel_dir(),
+                    wheel_filename.to_string(),
+                );
 
                 // Fetch the wheel.
                 let reader = self.client.stream_external(&wheel.url).await?;
 
                 // Download the wheel to the directory.
-                let wheel_filename = wheel.filename()?;
-                let wheel_file = wheel_dir.join(wheel_filename);
-                let mut writer = tokio::fs::File::create(&wheel_file).await?;
+                fs::create_dir_all(&cache_entry.dir).await?;
+                let mut writer = fs::File::create(&cache_entry.path()).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                 let local_wheel = LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
                     filename: wheel.filename.clone(),
-                    path: wheel_file,
+                    path: cache_entry.path(),
                 });
 
                 if let Some(reporter) = self.reporter.as_ref() {

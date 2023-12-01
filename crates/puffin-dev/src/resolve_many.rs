@@ -21,6 +21,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
+use pypi_types::IndexUrls;
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
@@ -57,6 +58,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
         venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,
+        IndexUrls::default(),
     );
 
     let build_dispatch_arc = Arc::new(build_dispatch);

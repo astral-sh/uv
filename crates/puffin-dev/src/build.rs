@@ -11,6 +11,7 @@ use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_traits::BuildContext;
+use pypi_types::IndexUrls;
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -49,6 +50,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         false,
+        IndexUrls::default(),
     );
     let wheel = build_dispatch
         .build_source(

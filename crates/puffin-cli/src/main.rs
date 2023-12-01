@@ -6,15 +6,14 @@ use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
-use url::Url;
 
 use puffin_cache::{Cache, CacheArgs};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
+use pypi_types::{IndexUrl, IndexUrls};
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus};
-use crate::index_urls::IndexUrls;
 use crate::python_version::PythonVersion;
 use crate::requirements::RequirementsSource;
 
@@ -35,7 +34,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod commands;
-mod index_urls;
 mod logging;
 mod printer;
 mod python_version;
@@ -127,13 +125,13 @@ struct PipCompileArgs {
     #[clap(short, long)]
     output_file: Option<PathBuf>,
 
-    /// The URL of the Python Package Index (default: <https://pypi.org/simple>).
-    #[clap(long, short)]
-    index_url: Option<Url>,
+    /// The URL of the Python Package Index.
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
+    index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long)]
-    extra_index_url: Vec<Url>,
+    extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
@@ -177,13 +175,13 @@ struct PipSyncArgs {
     #[clap(long, value_enum)]
     link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
-    /// The URL of the Python Package Index (default: <https://pypi.org/simple>).
-    #[clap(long, short)]
-    index_url: Option<Url>,
+    /// The URL of the Python Package Index.
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
+    index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long)]
-    extra_index_url: Vec<Url>,
+    extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
