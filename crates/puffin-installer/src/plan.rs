@@ -5,13 +5,13 @@ use tracing::debug;
 
 use distribution_filename::WheelFilename;
 use distribution_types::direct_url::DirectUrl;
-use distribution_types::{CachedDist, InstalledDist, RemoteSource};
+use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist, RemoteSource};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::Cache;
+use puffin_cache::{Cache, CacheBucket, WheelAndMetadataCache};
 use puffin_interpreter::Virtualenv;
+use pypi_types::IndexUrls;
 
-use crate::url_index::UrlIndex;
 use crate::{RegistryIndex, SitePackages};
 
 #[derive(Debug, Default)]
@@ -34,6 +34,7 @@ impl InstallPlan {
     /// need to be downloaded, and those that should be removed.
     pub fn try_from_requirements(
         requirements: &[Requirement],
+        index_urls: &IndexUrls,
         cache: &Cache,
         venv: &Virtualenv,
         tags: &Tags,
@@ -43,8 +44,7 @@ impl InstallPlan {
             SitePackages::try_from_executable(venv).context("Failed to list installed packages")?;
 
         // Index all the already-downloaded wheels in the cache.
-        let registry_index = RegistryIndex::try_from_directory(cache, tags);
-        let url_index = UrlIndex::try_from_directory(cache);
+        let registry_index = RegistryIndex::try_from_directory(cache, tags, index_urls);
 
         let mut local = vec![];
         let mut remote = vec![];
@@ -98,11 +98,13 @@ impl InstallPlan {
                     }
                 }
                 Some(VersionOrUrl::Url(url)) => {
-                    // Only consider wheel urls
-                    if let Some(filename) = url
-                        .filename()
-                        .ok()
-                        .and_then(|filename| WheelFilename::from_str(filename).ok())
+                    // TODO(konstin): Add source dist url support. It's more tricky since we don't
+                    // know yet whether source dist is fresh in the cache.
+                    if let Some((disk_filename, filename)) =
+                        url.filename().ok().and_then(|disk_filename| {
+                            let filename = WheelFilename::from_str(disk_filename).ok()?;
+                            Some((disk_filename, filename))
+                        })
                     {
                         if requirement.name != filename.name {
                             bail!(
@@ -111,9 +113,24 @@ impl InstallPlan {
                                 url
                             );
                         }
-                        if let Some(distribution) = url_index.get(filename, url) {
-                            debug!("Requirement already cached: {distribution}");
-                            local.push(CachedDist::Url(distribution.clone()));
+
+                        let cache_entry = cache.entry(
+                            CacheBucket::Wheels,
+                            WheelAndMetadataCache::Url(url).wheel_dir(),
+                            disk_filename.to_string(),
+                        );
+                        if cache_entry.path().exists() {
+                            // TODO(charlie): This takes advantage of the fact that for URL dependencies, the package ID
+                            // and distribution ID are identical. We should either change the cache layout to use
+                            // distribution IDs, or implement package ID for URL.
+                            let cached_dist = CachedDirectUrlDist::from_url(
+                                filename,
+                                url.clone(),
+                                cache_entry.path(),
+                            );
+
+                            debug!("Url wheel requirement already cached: {cached_dist}");
+                            local.push(CachedDist::Url(cached_dist.clone()));
                             continue;
                         }
                     }

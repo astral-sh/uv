@@ -17,6 +17,7 @@ use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
+use pypi_types::IndexUrls;
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -53,6 +54,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         venv.interpreter().clone(),
         fs::canonicalize(venv.python_executable())?,
         args.no_build,
+        IndexUrls::default(),
     );
 
     // Copied from `BuildDispatch`

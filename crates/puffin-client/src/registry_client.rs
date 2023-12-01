@@ -17,9 +17,9 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
-use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelMetadataCache};
+use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelAndMetadataCache};
 use puffin_normalize::PackageName;
-use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
+use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
 
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::{CachedClient, CachedClientError, Error};
@@ -27,9 +27,7 @@ use crate::{CachedClient, CachedClientError, Error};
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
-    index: IndexUrl,
-    extra_index: Vec<IndexUrl>,
-    no_index: bool,
+    index_urls: IndexUrls,
     proxy: Url,
     retries: u32,
     cache: Cache,
@@ -38,9 +36,7 @@ pub struct RegistryClientBuilder {
 impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
-            index: IndexUrl::Pypi,
-            extra_index: vec![],
-            no_index: false,
+            index_urls: IndexUrls::default(),
             proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
             cache,
             retries: 0,
@@ -50,20 +46,8 @@ impl RegistryClientBuilder {
 
 impl RegistryClientBuilder {
     #[must_use]
-    pub fn index(mut self, index: Url) -> Self {
-        self.index = IndexUrl::from(index);
-        self
-    }
-
-    #[must_use]
-    pub fn extra_index(mut self, extra_index: Vec<Url>) -> Self {
-        self.extra_index = extra_index.into_iter().map(IndexUrl::from).collect();
-        self
-    }
-
-    #[must_use]
-    pub fn no_index(mut self) -> Self {
-        self.no_index = true;
+    pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
+        self.index_urls = index_urls;
         self
     }
 
@@ -104,9 +88,7 @@ impl RegistryClientBuilder {
 
         let client = CachedClient::new(uncached_client.clone());
         RegistryClient {
-            index: self.index,
-            extra_index: self.extra_index,
-            no_index: self.no_index,
+            index_urls: self.index_urls,
             client_raw: client_raw.clone(),
             cache: self.cache,
             client,
@@ -118,10 +100,7 @@ impl RegistryClientBuilder {
 // TODO(konstin): Clean up the clients once we moved everything to common caching
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
-    pub(crate) index: IndexUrl,
-    pub(crate) extra_index: Vec<IndexUrl>,
-    /// Ignore the package index, instead relying on local archives and caches.
-    pub(crate) no_index: bool,
+    pub(crate) index_urls: IndexUrls,
     pub(crate) client: CachedClient,
     /// Don't use this client, it only exists because `async_http_range_reader` needs
     /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
@@ -141,11 +120,11 @@ impl RegistryClient {
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the pypi json api approximately implements.
     pub async fn simple(&self, package_name: PackageName) -> Result<(IndexUrl, SimpleJson), Error> {
-        if self.no_index {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
-        for index in std::iter::once(&self.index).chain(self.extra_index.iter()) {
+        for index in &self.index_urls {
             // Format the URL for PyPI.
             let mut url: Url = index.clone().into();
             url.path_segments_mut().unwrap().push(package_name.as_ref());
@@ -220,7 +199,7 @@ impl RegistryClient {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,
                     &wheel.url,
-                    WheelMetadataCache::Url(&wheel.url),
+                    WheelAndMetadataCache::Url(&wheel.url),
                 )
                 .await?
             }
@@ -247,7 +226,7 @@ impl RegistryClient {
         index: IndexUrl,
         file: File,
     ) -> Result<Metadata21, Error> {
-        if self.no_index {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(file.filename));
         }
 
@@ -262,8 +241,8 @@ impl RegistryClient {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
             let cache_entry = self.cache.entry(
-                CacheBucket::WheelMetadata,
-                WheelMetadataCache::Index(&index).wheel_dir(),
+                CacheBucket::Wheels,
+                WheelAndMetadataCache::Index(&index).wheel_dir(),
                 format!("{}.json", filename.stem()),
             );
 
@@ -280,7 +259,7 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, &url, WheelMetadataCache::Index(&index))
+            self.wheel_metadata_no_pep658(&filename, &url, WheelAndMetadataCache::Index(&index))
                 .await
         }
     }
@@ -290,14 +269,14 @@ impl RegistryClient {
         &self,
         filename: &'data WheelFilename,
         url: &'data Url,
-        cache_shard: WheelMetadataCache<'data>,
+        cache_shard: WheelAndMetadataCache<'data>,
     ) -> Result<Metadata21, Error> {
-        if self.no_index {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(url.to_string()));
         }
 
         let cache_entry = self.cache.entry(
-            CacheBucket::WheelMetadata,
+            CacheBucket::Wheels,
             cache_shard.wheel_dir(),
             format!("{}.json", filename.stem()),
         );
@@ -387,7 +366,7 @@ impl RegistryClient {
         &self,
         url: &Url,
     ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
-        if self.no_index {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(url.to_string()));
         }
 

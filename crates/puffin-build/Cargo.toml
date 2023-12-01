@@ -19,6 +19,7 @@ pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-traits = { path = "../puffin-traits" }
+pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
 flate2 = { workspace = true }

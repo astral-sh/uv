@@ -21,10 +21,10 @@ use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions};
+use pypi_types::IndexUrls;
 
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{elapsed, ExitStatus};
-use crate::index_urls::IndexUrls;
 use crate::printer::Printer;
 use crate::python_version::PythonVersion;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
@@ -41,7 +41,7 @@ pub(crate) async fn pip_compile(
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
-    index_urls: Option<IndexUrls>,
+    index_urls: IndexUrls,
     no_build: bool,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
@@ -136,18 +136,9 @@ pub(crate) async fn pip_compile(
         .patch_markers(markers.clone().into_owned());
 
     // Instantiate a client.
-    let client = {
-        let mut builder = RegistryClientBuilder::new(cache.clone());
-        if let Some(IndexUrls { index, extra_index }) = index_urls {
-            if let Some(index) = index {
-                builder = builder.index(index);
-            }
-            builder = builder.extra_index(extra_index);
-        } else {
-            builder = builder.no_index();
-        }
-        builder.build()
-    };
+    let client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_urls.clone())
+        .build();
 
     let build_dispatch = BuildDispatch::new(
         client.clone(),
@@ -155,6 +146,7 @@ pub(crate) async fn pip_compile(
         interpreter_info,
         fs::canonicalize(venv.python_executable())?,
         no_build,
+        index_urls,
     )
     .with_options(options);
 

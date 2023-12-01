@@ -22,6 +22,7 @@ use puffin_installer::{InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::BuildContext;
+use pypi_types::IndexUrls;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -33,6 +34,7 @@ pub struct BuildDispatch {
     no_build: bool,
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
+    index_urls: IndexUrls,
 }
 
 impl BuildDispatch {
@@ -42,6 +44,7 @@ impl BuildDispatch {
         interpreter: Interpreter,
         base_python: PathBuf,
         no_build: bool,
+        index_urls: IndexUrls,
     ) -> Self {
         Self {
             client,
@@ -51,6 +54,7 @@ impl BuildDispatch {
             no_build,
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
+            index_urls,
         }
     }
 
@@ -128,7 +132,13 @@ impl BuildContext for BuildDispatch {
                 local,
                 remote,
                 extraneous,
-            } = InstallPlan::try_from_requirements(requirements, self.cache(), venv, &tags)?;
+            } = InstallPlan::try_from_requirements(
+                requirements,
+                &self.index_urls,
+                self.cache(),
+                venv,
+                &tags,
+            )?;
 
             // Resolve the dependencies.
             let remote = if remote.is_empty() {
@@ -174,7 +184,7 @@ impl BuildContext for BuildDispatch {
                     wheels.iter().map(ToString::to_string).join(", ")
                 );
                 Unzipper::default()
-                    .unzip(wheels, self.cache())
+                    .unzip(wheels)
                     .await
                     .context("Failed to unpack build dependencies")?
             };

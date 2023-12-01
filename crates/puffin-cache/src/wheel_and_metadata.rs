@@ -8,11 +8,11 @@ use pypi_types::IndexUrl;
 use crate::CacheBucket;
 use crate::{digest, CanonicalUrl};
 
-/// Cache wheel metadata, both from remote wheels and built from source distributions.
+/// Cache wheels and their metadata, both from remote wheels and built from source distributions.
 ///
-/// Use [`WheelMetadataCache::wheel_dir`] for remote wheel metadata caching and
-/// [`WheelMetadataCache::built_wheel_dir`] for built source distributions metadata caching.
-pub enum WheelMetadataCache<'a> {
+/// Use [`WheelAndMetadataCache::wheel_dir`] for remote wheel metadata caching and
+/// [`WheelAndMetadataCache::built_wheel_dir`] for built source distributions metadata caching.
+pub enum WheelAndMetadataCache<'a> {
     /// Either pypi or an alternative index, which we key by index url
     Index(&'a IndexUrl),
     /// A direct url dependency, which we key by url
@@ -24,23 +24,23 @@ pub enum WheelMetadataCache<'a> {
     Git(&'a Url),
 }
 
-impl<'a> WheelMetadataCache<'a> {
+impl<'a> WheelAndMetadataCache<'a> {
     fn bucket(&self) -> PathBuf {
         match self {
-            WheelMetadataCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),
-            WheelMetadataCache::Index(url) => {
+            WheelAndMetadataCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),
+            WheelAndMetadataCache::Index(url) => {
                 PathBuf::from("index").join(digest(&CanonicalUrl::new(url)))
             }
-            WheelMetadataCache::Url(url) => {
+            WheelAndMetadataCache::Url(url) => {
                 PathBuf::from("url").join(digest(&CanonicalUrl::new(url)))
             }
-            WheelMetadataCache::Git(url) => {
+            WheelAndMetadataCache::Git(url) => {
                 PathBuf::from("git").join(digest(&CanonicalUrl::new(url)))
             }
         }
     }
 
-    /// Metadata of a remote wheel. See [`CacheBucket::WheelMetadata`]
+    /// Metadata of a remote wheel. See [`CacheBucket::Wheels`]
     pub fn wheel_dir(&self) -> PathBuf {
         self.bucket()
     }
