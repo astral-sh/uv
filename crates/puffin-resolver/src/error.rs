@@ -1,7 +1,7 @@
 use std::fmt::Formatter;
 
 use pubgrub::range::Range;
-use pubgrub::report::Reporter;
+use pubgrub::report::{DefaultStringReporter, Reporter};
 use thiserror::Error;
 use url::Url;
 
@@ -11,7 +11,7 @@ use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
-use crate::ResolutionFailureReporter;
+use crate::PubGrubReportFormatter;
 
 #[derive(Error, Debug)]
 pub enum ResolveError {
@@ -78,7 +78,8 @@ impl std::error::Error for RichPubGrubError {}
 impl std::fmt::Display for RichPubGrubError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
-            let report = ResolutionFailureReporter::report(derivation_tree);
+            let formatter = PubGrubReportFormatter;
+            let report = DefaultStringReporter::report_with_formatter(derivation_tree, &formatter);
             write!(f, "{report}")
         } else {
             write!(f, "{}", self.source)

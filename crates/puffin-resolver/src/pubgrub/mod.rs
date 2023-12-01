@@ -1,6 +1,6 @@
 pub(crate) use crate::pubgrub::package::PubGrubPackage;
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority};
-pub use crate::pubgrub::report::ResolutionFailureReporter;
+pub use crate::pubgrub::report::PubGrubReportFormatter;
 
 pub(crate) use crate::pubgrub::version::{PubGrubVersion, MIN_VERSION};
 

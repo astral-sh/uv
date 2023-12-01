@@ -2229,7 +2229,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/zanieb/pubgrub?rev=725b9a8e323c9ae0727fed2d045bad64eb212167#725b9a8e323c9ae0727fed2d045bad64eb212167"
+source = "git+https://github.com/zanieb/pubgrub?rev=c4ffd26715df9f21067983b0eb176dfd14876133#c4ffd26715df9f21067983b0eb176dfd14876133"
 dependencies = [
  "indexmap 2.1.0",
  "log",
