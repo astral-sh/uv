@@ -19,7 +19,7 @@ pub struct InMemoryWheel {
     pub(crate) filename: WheelFilename,
     /// The contents of the wheel.
     pub(crate) buffer: Vec<u8>,
-    /// The path where the downloaded wheel would have been stored, if it wasn't an i-memory wheel
+    /// The path where the downloaded wheel would have been stored, if it wasn't an in-memory wheel.
     pub(crate) path: PathBuf,
 }
 

@@ -10,14 +10,14 @@ pub use canonical_url::{CanonicalUrl, RepositoryUrl};
 pub use cli::CacheArgs;
 pub use digest::digest;
 pub use stable_hash::{StableHash, StableHasher};
-pub use wheel_and_metadata::WheelAndMetadataCache;
+pub use wheel::WheelCache;
 
 mod cache_key;
 mod canonical_url;
 mod cli;
 mod digest;
 mod stable_hash;
-mod wheel_and_metadata;
+mod wheel;
 
 /// A cache entry which may or may not exist yet.
 #[derive(Debug, Clone)]

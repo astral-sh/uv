@@ -17,7 +17,7 @@ use url::Url;
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
-use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelAndMetadataCache};
+use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelCache};
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
 
@@ -199,7 +199,7 @@ impl RegistryClient {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,
                     &wheel.url,
-                    WheelAndMetadataCache::Url(&wheel.url),
+                    WheelCache::Url(&wheel.url),
                 )
                 .await?
             }
@@ -242,7 +242,7 @@ impl RegistryClient {
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelAndMetadataCache::Index(&index).wheel_dir(),
+                WheelCache::Index(&index).wheel_dir(),
                 format!("{}.json", filename.stem()),
             );
 
@@ -259,7 +259,7 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, &url, WheelAndMetadataCache::Index(&index))
+            self.wheel_metadata_no_pep658(&filename, &url, WheelCache::Index(&index))
                 .await
         }
     }
@@ -269,7 +269,7 @@ impl RegistryClient {
         &self,
         filename: &'data WheelFilename,
         url: &'data Url,
-        cache_shard: WheelAndMetadataCache<'data>,
+        cache_shard: WheelCache<'data>,
     ) -> Result<Metadata21, Error> {
         if self.index_urls.no_index() {
             return Err(Error::NoIndex(url.to_string()));

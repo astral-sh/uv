@@ -183,7 +183,7 @@ pub(crate) async fn sync_requirements(
         let wheels = distribution_database
             .get_wheels(remote)
             .await
-            .context("Failed to download wheels and download and build distributions")?;
+            .context("Failed to download distributions")?;
 
         let download_s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(

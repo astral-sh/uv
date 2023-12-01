@@ -43,6 +43,7 @@ impl Unzipper {
                     let parent = download.path().parent().expect("Cache paths can't be root");
                     fs_err::create_dir_all(parent)?;
                     let staging = tempfile::tempdir_in(parent)?;
+
                     download.unzip(staging.path())?;
 
                     // Remove the file we just unzipped and replace it with the unzipped directory.
@@ -50,22 +51,16 @@ impl Unzipper {
                     // the cache.
                     if !matches!(download, LocalWheel::InMemory(_)) {
                         fs_err::remove_file(download.path())?;
-                        //match result {
-                        //    Ok(()) => {}
-                        //    // Don't error on missing cache entries
-                        //    Err(err) if err.kind() == ErrorKind::NotFound => {}
-                        //    Err(err) => return Err(err.into()),
-                        //}
                     }
+
                     let normalized_path = parent.join(download.filename().to_string());
                     fs_err::rename(staging.path(), &normalized_path)?;
-                    // Forget the tempdir so tempfile doesn't get surprised where its dir went
-                    let _ = staging.into_path();
+
                     Ok(normalized_path)
                 }
             })
             .await?
-            .with_context(|| format!("Failed to unpack {remote}"))?;
+            .with_context(|| format!("Failed to unpack: {remote}"))?;
 
             wheels.push(CachedDist::from_remote(remote, filename, normalized_path));
         }

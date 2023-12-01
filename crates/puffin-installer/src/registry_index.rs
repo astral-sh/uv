@@ -5,7 +5,7 @@ use tracing::warn;
 
 use distribution_types::{CachedRegistryDist, Metadata};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelAndMetadataCache};
+use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
 use pypi_types::IndexUrls;
 
@@ -21,7 +21,7 @@ impl RegistryIndex {
         for index_url in index_urls {
             let wheel_dir = cache
                 .bucket(CacheBucket::Wheels)
-                .join(WheelAndMetadataCache::Index(index_url).wheel_dir());
+                .join(WheelCache::Index(index_url).wheel_dir());
 
             let Ok(dir) = wheel_dir.read_dir() else {
                 continue;

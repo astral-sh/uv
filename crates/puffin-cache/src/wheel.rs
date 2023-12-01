@@ -10,9 +10,9 @@ use crate::{digest, CanonicalUrl};
 
 /// Cache wheels and their metadata, both from remote wheels and built from source distributions.
 ///
-/// Use [`WheelAndMetadataCache::wheel_dir`] for remote wheel metadata caching and
-/// [`WheelAndMetadataCache::built_wheel_dir`] for built source distributions metadata caching.
-pub enum WheelAndMetadataCache<'a> {
+/// Use [`WheelCache::wheel_dir`] for remote wheel metadata caching and
+/// [`WheelCache::built_wheel_dir`] for built source distributions metadata caching.
+pub enum WheelCache<'a> {
     /// Either pypi or an alternative index, which we key by index url
     Index(&'a IndexUrl),
     /// A direct url dependency, which we key by url
@@ -24,19 +24,13 @@ pub enum WheelAndMetadataCache<'a> {
     Git(&'a Url),
 }
 
-impl<'a> WheelAndMetadataCache<'a> {
+impl<'a> WheelCache<'a> {
     fn bucket(&self) -> PathBuf {
         match self {
-            WheelAndMetadataCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),
-            WheelAndMetadataCache::Index(url) => {
-                PathBuf::from("index").join(digest(&CanonicalUrl::new(url)))
-            }
-            WheelAndMetadataCache::Url(url) => {
-                PathBuf::from("url").join(digest(&CanonicalUrl::new(url)))
-            }
-            WheelAndMetadataCache::Git(url) => {
-                PathBuf::from("git").join(digest(&CanonicalUrl::new(url)))
-            }
+            WheelCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),
+            WheelCache::Index(url) => PathBuf::from("index").join(digest(&CanonicalUrl::new(url))),
+            WheelCache::Url(url) => PathBuf::from("url").join(digest(&CanonicalUrl::new(url))),
+            WheelCache::Git(url) => PathBuf::from("git").join(digest(&CanonicalUrl::new(url))),
         }
     }
 

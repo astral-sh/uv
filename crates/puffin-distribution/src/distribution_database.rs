@@ -17,7 +17,7 @@ use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
 use distribution_types::{BuiltDist, Dist, RemoteSource, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelAndMetadataCache};
+use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
@@ -153,7 +153,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelAndMetadataCache::Index(&wheel.index).wheel_dir(),
+                    WheelCache::Index(&wheel.index).wheel_dir(),
                     wheel_filename.to_string(),
                 );
                 let reader = self.client.stream_external(&url).await?;
@@ -217,7 +217,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let wheel_filename = wheel.filename()?;
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelAndMetadataCache::Url(&wheel.url).wheel_dir(),
+                    WheelCache::Url(&wheel.url).wheel_dir(),
                     wheel_filename.to_string(),
                 );
 

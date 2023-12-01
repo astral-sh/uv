@@ -23,7 +23,7 @@ use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{Dist, GitSourceDist, Identifier, RemoteSource, SourceDist};
 use install_wheel_rs::find_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelAndMetadataCache};
+use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
@@ -149,7 +149,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     source_dist,
                     filename,
                     &url,
-                    WheelAndMetadataCache::Url(&url),
+                    WheelCache::Url(&url),
                     subdirectory.as_deref(),
                 )
                 .await?
@@ -162,7 +162,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     source_dist,
                     &registry_source_dist.file.filename,
                     &url,
-                    WheelAndMetadataCache::Index(&registry_source_dist.index),
+                    WheelCache::Index(&registry_source_dist.index),
                     None,
                 )
                 .await?
@@ -219,7 +219,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &'data SourceDist,
         filename: &'data str,
         url: &'data Url,
-        cache_shard: WheelAndMetadataCache<'data>,
+        cache_shard: WheelCache<'data>,
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_entry = self.build_context.cache().entry(
@@ -376,7 +376,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .precise()
             .expect("Exact commit after checkout")
             .to_string();
-        let cache_shard = WheelAndMetadataCache::Git(&git_source_dist.url);
+        let cache_shard = WheelCache::Git(&git_source_dist.url);
         let cache_entry = self.build_context.cache().entry(
             CacheBucket::BuiltWheels,
             cache_shard.built_wheel_dir(&git_sha),
