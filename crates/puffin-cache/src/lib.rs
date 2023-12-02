@@ -1,8 +1,10 @@
 use std::fmt::{Display, Formatter};
 use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
 pub use canonical_url::{CanonicalUrl, RepositoryUrl};
@@ -47,22 +49,23 @@ pub struct Cache {
 
 impl Cache {
     /// A persistent cache directory at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Self {
-        Self {
-            root: root.into(),
+    pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
+        Ok(Self {
+            root: Self::init(root)?,
             _temp_dir_drop: None,
-        }
+        })
     }
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
         let temp_dir = tempdir()?;
         Ok(Self {
-            root: temp_dir.path().to_path_buf(),
+            root: Self::init(temp_dir.path())?,
             _temp_dir_drop: Some(Arc::new(temp_dir)),
         })
     }
 
+    /// Return the root of the cache.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -72,6 +75,7 @@ impl Cache {
         self.root.join(cache_bucket.to_str())
     }
 
+    /// Compute an entry in the cache.
     pub fn entry(
         &self,
         cache_bucket: CacheBucket,
@@ -83,10 +87,30 @@ impl Cache {
             file,
         }
     }
+
+    /// Initialize a directory for use as a cache.
+    fn init(root: impl Into<PathBuf>) -> Result<PathBuf, io::Error> {
+        let root = root.into();
+
+        // Create the cache directory, if it doesn't exist.
+        fs::create_dir_all(&root)?;
+
+        // Add the CACHEDIR.TAG.
+        cachedir::ensure_tag(&root)?;
+
+        // Add the .gitignore.
+        let gitignore_path = root.join(".gitignore");
+        if !gitignore_path.exists() {
+            let mut file = fs::File::create(gitignore_path)?;
+            file.write_all(b"*")?;
+        }
+
+        fs::canonicalize(root)
+    }
 }
 
 /// The different kinds of data in the cache are stored in different bucket, which in our case
-/// are subfolders.
+/// are subdirectories of the cache root.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum CacheBucket {
     /// Wheels (excluding built wheels), their metadata and cache policy.

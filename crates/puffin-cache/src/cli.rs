@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use directories::ProjectDirs;
-use fs_err as fs;
 
 use crate::Cache;
 
@@ -31,18 +30,14 @@ impl TryFrom<CacheArgs> for Cache {
     ///
     /// Returns an absolute cache dir.
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        let project_dirs = ProjectDirs::from("", "", "puffin");
         if value.no_cache {
-            Ok(Cache::temp()?)
+            Cache::temp()
         } else if let Some(cache_dir) = value.cache_dir {
-            fs::create_dir_all(&cache_dir)?;
-            Ok(Cache::from_path(fs::canonicalize(cache_dir)?))
-        } else if let Some(project_dirs) = project_dirs {
-            Ok(Cache::from_path(project_dirs.cache_dir().to_path_buf()))
+            Cache::from_path(cache_dir)
+        } else if let Some(project_dirs) = ProjectDirs::from("", "", "puffin") {
+            Cache::from_path(project_dirs.cache_dir())
         } else {
-            let cache_dir = ".puffin_cache";
-            fs::create_dir_all(cache_dir)?;
-            Ok(Cache::from_path(fs::canonicalize(cache_dir)?))
+            Cache::from_path(".puffin_cache")
         }
     }
 }

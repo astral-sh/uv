@@ -185,13 +185,13 @@ pub(crate) async fn sync_requirements(
             .await
             .context("Failed to download distributions")?;
 
-        let download_s = if wheels.len() == 1 { "" } else { "s" };
+        let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Downloaded {} in {}",
-                format!("{} package{}", wheels.len(), download_s).bold(),
+                format!("{} package{}", wheels.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()

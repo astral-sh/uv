@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 pypi-types = { path = "../pypi-types" }
 
+cachedir = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true }
