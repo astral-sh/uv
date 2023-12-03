@@ -75,7 +75,7 @@ impl Interpreter {
 
     /// Returns the Python version.
     pub fn version(&self) -> &Version {
-        &self.markers.python_version.version
+        &self.markers.python_full_version.version
     }
 
     /// Returns the Python version as a simple tuple.
