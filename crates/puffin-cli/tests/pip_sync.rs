@@ -855,3 +855,75 @@ fn install_local_source_distribution() -> Result<()> {
 
     Ok(())
 }
+
+/// The `ujson` package includes a `[build-system]`, but no `build-backend`. It lists some explicit
+/// build requirements, but _also_ depends on `wheel` and `setuptools`:
+/// ```toml
+/// [build-system]
+/// requires = ["setuptools>=42", "setuptools_scm[toml]>=3.4"]
+/// ```
+///
+/// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
+/// default build backend.
+#[test]
+fn install_ujson() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    check_command(&venv, "import ujson", &temp_dir);
+
+    Ok(())
+}
+
+/// The `DTLSSocket` package includes a `[build-system]`, but no `build-backend`. It lists some
+/// explicit build requirements that are necessary to build the distribution:
+/// ```toml
+/// [build-system]
+/// requires = ["Cython<3", "setuptools", "wheel"]
+/// ```
+///
+/// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
+/// default build backend.
+#[test]
+fn install_dtls_socket() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("DTLSSocket @ https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    check_command(&venv, "import DTLSSocket", &temp_dir);
+
+    Ok(())
+}
