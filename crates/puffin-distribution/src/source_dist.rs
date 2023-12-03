@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::bail;
+use anyhow::Result;
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use fxhash::FxHashMap;
@@ -16,12 +16,13 @@ use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span};
 use url::Url;
+use zip::result::ZipError;
 use zip::ZipArchive;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use distribution_types::{Dist, GitSourceDist, Identifier, RemoteSource, SourceDist};
-use install_wheel_rs::find_dist_info;
+use distribution_types::{GitSourceDist, Identifier, RemoteSource, SourceDist};
+use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
 use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
@@ -30,13 +31,15 @@ use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
-use crate::download::BuiltWheel;
 use crate::locks::LockedFile;
 use crate::{Download, Reporter, SourceDistDownload};
 
 /// The caller is responsible for adding the source dist information to the error chain
 #[derive(Debug, Error)]
 pub enum SourceDistError {
+    #[error("Building source distributions is disabled")]
+    NoBuild,
+
     // Network error
     #[error("Failed to parse URL: `{0}`")]
     UrlParse(String, #[source] url::ParseError),
@@ -54,7 +57,7 @@ pub enum SourceDistError {
     Serde(#[from] serde_json::Error),
 
     // Build error
-    #[error("Failed to build {0}")]
+    #[error("Failed to build: {0}")]
     Build(Box<SourceDist>, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
@@ -64,9 +67,13 @@ pub enum SourceDistError {
         metadata: PackageName,
     },
     #[error("Failed to parse metadata from built wheel")]
-    Metadata(#[from] crate::error::Error),
+    Metadata(#[from] pypi_types::Error),
+    #[error("Failed to read `dist-info` metadata from built wheel")]
+    DistInfo(#[from] install_wheel_rs::Error),
+    #[error("Failed to read zip archive from built wheel")]
+    Zip(#[from] ZipError),
 
-    /// Should not occur, i've only seen it when another task panicked
+    /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
 }
@@ -192,18 +199,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 // Read the metadata from the wheel.
                 let filename = WheelFilename::from_str(&disk_filename)?;
-
-                // TODO(konstin): Remove duplicated `.dist-info` read.
-                // See: https://github.com/astral-sh/puffin/issues/484
-                let metadata = BuiltWheel {
-                    dist: Dist::Source(source_dist.clone()),
-                    filename: filename.clone(),
-                    path: wheel_dir.join(&disk_filename),
-                }
-                .read_dist_info()?;
+                let path = wheel_dir.join(disk_filename);
+                let metadata = read_metadata(&filename, &path)?;
 
                 BuiltWheelMetadata {
-                    path: wheel_dir.join(disk_filename),
+                    path,
                     filename,
                     metadata,
                 }
@@ -263,8 +263,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     download.subdirectory.as_deref(),
                     &cache_entry,
                 )
-                .await
-                .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
+                .await?;
 
             if let Some(task) = task {
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -328,8 +327,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 subdirectory,
                 &cache_entry,
             )
-            .await
-            .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
+            .await?;
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_build_complete(source_dist, task);
@@ -415,8 +413,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 subdirectory.as_deref(),
                 &cache_entry,
             )
-            .await
-            .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
+            .await?;
 
         if metadata.name != git_source_dist.name {
             return Err(SourceDistError::NameMismatch {
@@ -507,11 +504,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &Path,
         subdirectory: Option<&Path>,
         cache_entry: &CacheEntry,
-    ) -> anyhow::Result<(String, WheelFilename, Metadata21)> {
+    ) -> Result<(String, WheelFilename, Metadata21), SourceDistError> {
         debug!("Building: {dist}");
 
         if self.build_context.no_build() {
-            bail!("Building source distributions is disabled");
+            return Err(SourceDistError::NoBuild);
         }
 
         // Build the wheel.
@@ -524,7 +521,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 &cache_entry.dir,
                 &dist.to_string(),
             )
-            .await?;
+            .await
+            .map_err(|err| SourceDistError::Build(Box::new(dist.clone()), err))?;
 
         if let Some(temp_dir) = temp_dir {
             temp_dir.close()?;
@@ -532,18 +530,21 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
-
-        let mut archive =
-            ZipArchive::new(fs_err::File::open(cache_entry.dir.join(&disk_filename))?)?;
-        let dist_info_dir =
-            find_dist_info(&filename, archive.file_names().map(|name| (name, name)))?.1;
-        let dist_info =
-            std::io::read_to_string(archive.by_name(&format!("{dist_info_dir}/METADATA"))?)?;
-        let metadata = Metadata21::parse(dist_info.as_bytes())?;
+        let metadata = read_metadata(&filename, cache_entry.dir.join(&disk_filename))?;
 
         debug!("Finished building: {dist}");
         Ok((disk_filename, filename, metadata))
     }
+}
+
+/// Read the [`Metadata21`] from a built wheel.
+fn read_metadata(
+    filename: &WheelFilename,
+    wheel: impl Into<PathBuf>,
+) -> Result<Metadata21, SourceDistError> {
+    let mut archive = ZipArchive::new(fs_err::File::open(wheel)?)?;
+    let dist_info = read_dist_info(filename, &mut archive)?;
+    Ok(Metadata21::parse(&dist_info)?)
 }
 
 trait SourceDistReporter: Send + Sync {
