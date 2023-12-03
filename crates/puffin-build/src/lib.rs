@@ -35,7 +35,7 @@ static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r".*\.(c|c..|h|h..):\d+:\d+: fatal error: (?<header>.*\.(h|h..)): No such file or directory"
     )
-    .unwrap()
+        .unwrap()
 });
 
 #[derive(Error, Debug)]
@@ -133,6 +133,7 @@ pub struct PyProjectToml {
 }
 
 /// `[build-backend]` from pyproject.toml
+#[derive(Debug)]
 struct Pep517Backend {
     /// The build backend string such as `setuptools.build_meta:__legacy__` or `maturin` from
     /// `build-backend.backend` in pyproject.toml
@@ -252,14 +253,15 @@ impl SourceBuild {
 
         let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter)?;
 
-        // There are packages such as DTLSSocket 0.1.16 that say
+        // There are packages such as DTLSSocket 0.1.16 that say:
         // ```toml
         // [build-system]
         // requires = ["Cython<3", "setuptools", "wheel"]
         // ```
-        // In this case we need to install requires PEP 517 style but then call setup.py in the
-        // legacy way
-        let requirements = if let Some(build_system) = &build_system {
+        // In this case, we need to install requires PEP 517 style but then call setup.py in the
+        // legacy way.
+        let requirements = if let Some(build_system) = build_system.as_ref() {
+            // .filter(|build_system| build_system.build_backend.is_some()) {
             let resolved_requirements = build_context
                 .resolve(&build_system.requires)
                 .await
@@ -324,13 +326,11 @@ impl SourceBuild {
                 source_dist,
             )
             .await?;
-        } else {
-            if !source_tree.join("setup.py").is_file() {
-                return Err(Error::InvalidSourceDist(
-                    "The archive contains neither a pyproject.toml or a setup.py at the top level"
-                        .to_string(),
-                ));
-            }
+        } else if !source_tree.join("setup.py").is_file() {
+            return Err(Error::InvalidSourceDist(
+                "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
+                    .to_string(),
+            ));
         }
 
         Ok(Self {
@@ -381,7 +381,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
                 &output,
-            &self.package_id));
+                &self.package_id));
         }
         let message = output
             .stdout
@@ -445,7 +445,7 @@ impl SourceBuild {
                         "Expected exactly wheel in `dist/` after invoking setup.py, found {dist_dir:?}"
                     ),
                     &output,
-                &self.package_id));
+                    &self.package_id));
             };
             // TODO(konstin): Faster copy such as reflink? Or maybe don't really let the user pick the target dir
             let wheel = wheel_dir.join(dist_wheel.file_name());
@@ -598,8 +598,9 @@ async fn create_pep517_build_environment(
     }
     Ok(())
 }
+
 /// Returns the directory with the `pyproject.toml`/`setup.py`
-#[instrument(skip_all, fields(sdist = ?sdist.file_name().unwrap_or(sdist.as_os_str())))]
+#[instrument(skip_all, fields(sdist = ? sdist.file_name().unwrap_or(sdist.as_os_str())))]
 fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {
     if sdist
         .extension()
