@@ -103,7 +103,7 @@ impl Interpreter {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct InterpreterQueryResult {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
@@ -166,23 +166,30 @@ impl InterpreterQueryResult {
         let cache_dir = cache.bucket(CacheBucket::Interpreter);
         let cache_path = cache_dir.join(format!("{}.json", digest(&executable_bytes)));
 
+        let modified = fs_err::metadata(executable)?
+            // Note: This is infallible on windows and unix (i.e., all platforms we support).
+            .modified()?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| Error::SystemTime(executable.to_path_buf(), err))?;
+
         // Read from the cache.
         if let Ok(data) = fs::read(&cache_path) {
             if let Ok(cached) = serde_json::from_slice::<CachedByTimestamp<Self>>(&data) {
-                debug!("Using cached markers for {}", executable.display());
-                return Ok(cached.data);
+                if cached.timestamp == modified.as_millis() {
+                    debug!("Using cached markers for: {}", executable.display());
+                    return Ok(cached.data);
+                }
+
+                debug!(
+                    "Ignoring stale cached markers for: {}",
+                    executable.display()
+                );
             }
         }
 
         // Otherwise, run the Python script.
-        debug!("Detecting markers for {}", executable.display());
+        debug!("Detecting markers for: {}", executable.display());
         let info = Self::query(executable)?;
-
-        let modified = fs_err::metadata(executable)?
-            // Note: This is infallible on windows and unix (i.e. all platforms we support)
-            .modified()?
-            .duration_since(UNIX_EPOCH)
-            .map_err(|err| Error::SystemTime(executable.to_path_buf(), err))?;
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info
