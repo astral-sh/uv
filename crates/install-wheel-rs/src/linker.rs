@@ -6,14 +6,13 @@ use std::path::Path;
 use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::File;
-use mailparse::MailHeaderMap;
 use tracing::{debug, span, Level};
 
 use pypi_types::DirectUrl;
 
 use crate::install_location::InstallLocation;
 use crate::wheel::{
-    extra_dist_info, install_data, parse_wheel_version, read_scripts_from_section,
+    extra_dist_info, install_data, parse_metadata, parse_wheel_version, read_scripts_from_section,
     write_script_entrypoints,
 };
 use crate::{read_record_file, Error, Script};
@@ -49,7 +48,8 @@ pub fn install_wheel(
     };
 
     let dist_info_prefix = find_dist_info(&wheel)?;
-    let (name, _version) = read_metadata(&dist_info_prefix, &wheel)?;
+    let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
+    let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
 
     let _my_span = span!(Level::DEBUG, "install_wheel", name);
 
@@ -128,11 +128,9 @@ pub fn install_wheel(
     Ok(())
 }
 
-/// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
-/// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
-/// Either way, we just search the wheel for the name
+/// Find the `dist-info` directory in an unzipped wheel.
 ///
-/// <https://github.com/PyO3/python-pkginfo-rs>
+/// See: <https://github.com/PyO3/python-pkginfo-rs>
 fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
@@ -162,52 +160,12 @@ fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     Ok(dist_info_prefix.to_string_lossy().to_string())
 }
 
-/// <https://github.com/PyO3/python-pkginfo-rs>
-fn read_metadata(
-    dist_info_prefix: &str,
-    wheel: impl AsRef<Path>,
-) -> Result<(String, String), Error> {
+/// Read the `dist-info` metadata from a directory.
+fn dist_info_metadata(dist_info_prefix: &str, wheel: impl AsRef<Path>) -> Result<Vec<u8>, Error> {
     let metadata_file = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/METADATA"));
-
-    let content = fs::read(&metadata_file)?;
-
-    // HACK: trick mailparse to parse as UTF-8 instead of ASCII
-    let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();
-    mail.extend_from_slice(&content);
-    let msg = mailparse::parse_mail(&mail).map_err(|err| {
-        Error::InvalidWheel(format!("Invalid {}: {}", metadata_file.display(), err))
-    })?;
-    let headers = msg.get_headers();
-    let metadata_version =
-        headers
-            .get_first_value("Metadata-Version")
-            .ok_or(Error::InvalidWheel(format!(
-                "No Metadata-Version field in {}",
-                metadata_file.display()
-            )))?;
-    // Crude but it should do https://packaging.python.org/en/latest/specifications/core-metadata/#metadata-version
-    // At time of writing:
-    // > Version of the file format; legal values are “1.0”, “1.1”, “1.2”, “2.1”, “2.2”, and “2.3”.
-    if !(metadata_version.starts_with("1.") || metadata_version.starts_with("2.")) {
-        return Err(Error::InvalidWheel(format!(
-            "Metadata-Version field has unsupported value {metadata_version}"
-        )));
-    }
-    let name = headers
-        .get_first_value("Name")
-        .ok_or(Error::InvalidWheel(format!(
-            "No Name field in {}",
-            metadata_file.display()
-        )))?;
-    let version = headers
-        .get_first_value("Version")
-        .ok_or(Error::InvalidWheel(format!(
-            "No Version field in {}",
-            metadata_file.display()
-        )))?;
-    Ok((name, version))
+    Ok(fs::read(metadata_file)?)
 }
 
 /// Parses the `entry_points.txt` entry in the wheel for console scripts

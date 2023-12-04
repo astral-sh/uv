@@ -901,7 +901,7 @@ pub fn install_wheel(
     compile: bool,
     check_hashes: bool,
     // initially used to the console scripts, currently unused. Keeping it because we likely need
-    // it for validation later
+    // it for validation later.
     _extras: &[String],
     sys_executable: impl AsRef<Path>,
 ) -> Result<String, Error> {
@@ -936,8 +936,8 @@ pub fn install_wheel(
     let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))?
         .1
         .to_string();
-    let (name, _version) = read_metadata(&dist_info_prefix, &mut archive)?;
-    // TODO: Check that name and version match
+    let metadata = dist_info_metadata(&dist_info_prefix, &mut archive)?;
+    let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
 
     let record_path = format!("{dist_info_prefix}.dist-info/RECORD");
     let mut record = read_record_file(&mut archive.by_name(&record_path).map_err(|err| {
@@ -1037,49 +1037,59 @@ pub fn install_wheel(
     Ok(filename.get_tag())
 }
 
-/// <https://github.com/PyO3/python-pkginfo-rs>
-fn read_metadata(
+/// Read the `dist-info` metadata from a wheel archive.
+fn dist_info_metadata(
     dist_info_prefix: &str,
     archive: &mut ZipArchive<impl Read + Seek + Sized>,
-) -> Result<(String, String), Error> {
+) -> Result<Vec<u8>, Error> {
     let mut content = Vec::new();
-    let metadata_file = format!("{dist_info_prefix}.dist-info/METADATA");
+    let dist_info_file = format!("{dist_info_prefix}.dist-info/DIST-INFO");
     archive
-        .by_name(&metadata_file)
-        .map_err(|err| {
-            let file = metadata_file.to_string();
-            Error::Zip(file, err)
-        })?
+        .by_name(&dist_info_file)
+        .map_err(|err| Error::Zip(dist_info_file.clone(), err))?
         .read_to_end(&mut content)?;
+    Ok(content)
+}
+
+/// Parse the distribution name and version from a wheel's `dist-info` metadata.
+///
+/// See: <https://github.com/PyO3/python-pkginfo-rs>
+pub(crate) fn parse_metadata(
+    dist_info_prefix: &str,
+    content: &[u8],
+) -> Result<(String, String), Error> {
     // HACK: trick mailparse to parse as UTF-8 instead of ASCII
     let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();
-    mail.extend_from_slice(&content);
-    let msg = mailparse::parse_mail(&mail)
-        .map_err(|err| Error::InvalidWheel(format!("Invalid {metadata_file}: {err}")))?;
+    mail.extend_from_slice(content);
+    let msg = mailparse::parse_mail(&mail).map_err(|err| {
+        Error::InvalidWheel(format!(
+            "Invalid metadata in {dist_info_prefix}.dist-info/METADATA: {err}"
+        ))
+    })?;
     let headers = msg.get_headers();
     let metadata_version =
         headers
             .get_first_value("Metadata-Version")
             .ok_or(Error::InvalidWheel(format!(
-                "No Metadata-Version field in {metadata_file}"
+                "No `Metadata-Version` field in: {dist_info_prefix}.dist-info/METADATA"
             )))?;
     // Crude but it should do https://packaging.python.org/en/latest/specifications/core-metadata/#metadata-version
     // At time of writing:
     // > Version of the file format; legal values are “1.0”, “1.1”, “1.2”, “2.1”, “2.2”, and “2.3”.
     if !(metadata_version.starts_with("1.") || metadata_version.starts_with("2.")) {
         return Err(Error::InvalidWheel(format!(
-            "Metadata-Version field has unsupported value {metadata_version}"
+            "`Metadata-Version` field has unsupported value {metadata_version} in: {dist_info_prefix}.dist-info/METADATA"
         )));
     }
     let name = headers
         .get_first_value("Name")
         .ok_or(Error::InvalidWheel(format!(
-            "No Name field in {metadata_file}"
+            "No `Name` field in: {dist_info_prefix}.dist-info/METADATA"
         )))?;
     let version = headers
         .get_first_value("Version")
         .ok_or(Error::InvalidWheel(format!(
-            "No Version field in {metadata_file}"
+            "No `Version` field in: {dist_info_prefix}.dist-info/METADATA"
         )))?;
     Ok((name, version))
 }

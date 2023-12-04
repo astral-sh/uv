@@ -1,14 +1,16 @@
 //! Takes a wheel and installs it into a venv..
 
 use std::io;
+use std::io::{Read, Seek};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use distribution_filename::WheelFilename;
 use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
+use zip::ZipArchive;
 
+use distribution_filename::WheelFilename;
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
@@ -80,8 +82,12 @@ pub enum Error {
     MissingDistInfo,
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
+    #[error("Invalid wheel size")]
+    InvalidSize,
 }
 
+/// Find the `dist-info` directory from a list of files.
+///
 /// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
 /// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
 /// Either way, we just search the wheel for the name.
@@ -124,11 +130,31 @@ pub fn find_dist_info<'a, T: Copy>(
     Ok((payload, dist_info_dir))
 }
 
+/// Given an archive, read the `dist-info` metadata into a buffer.
+pub fn read_dist_info(
+    filename: &WheelFilename,
+    archive: &mut ZipArchive<impl Read + Seek + Sized>,
+) -> Result<Vec<u8>, Error> {
+    let dist_info_dir = find_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
+
+    let mut file = archive
+        .by_name(&format!("{dist_info_dir}/METADATA"))
+        .map_err(|err| Error::Zip(filename.to_string(), err))?;
+
+    #[allow(clippy::cast_possible_truncation)]
+    let mut buffer = Vec::with_capacity(file.size() as usize);
+    file.read_to_end(&mut buffer)?;
+
+    Ok(buffer)
+}
+
 #[cfg(test)]
 mod test {
-    use crate::find_dist_info;
-    use distribution_filename::WheelFilename;
     use std::str::FromStr;
+
+    use distribution_filename::WheelFilename;
+
+    use crate::find_dist_info;
 
     #[test]
     fn test_dot_in_name() {
