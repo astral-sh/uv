@@ -73,7 +73,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         }
     }
     fs::create_dir_all(location)?;
-    // TODO: I bet on windows we'll have to strip the prefix again
+    // TODO(konstin): I bet on windows we'll have to strip the prefix again
     let location = location.canonicalize_utf8()?;
     let bin_dir = {
         #[cfg(unix)]

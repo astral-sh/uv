@@ -6,10 +6,9 @@ use reqwest::{Request, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace, warn};
 
-use puffin_cache::CacheEntry;
+use puffin_cache::{write_atomic, CacheEntry};
 
 /// Either a cached client error or a (user specified) error from the callback
 pub enum CachedClientError<CallbackError> {
@@ -121,17 +120,12 @@ impl CachedClient {
         match cached_response {
             CachedResponse::FreshCache(data) => Ok(data),
             CachedResponse::NotModified(data_with_cache_policy) => {
-                let temp_file =
-                    NamedTempFile::new_in(&cache_entry.dir).map_err(crate::Error::from)?;
-                fs_err::tokio::write(
-                    &temp_file,
-                    &serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
+                write_atomic(
+                    cache_entry.path(),
+                    serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
                 )
                 .await
                 .map_err(crate::Error::from)?;
-                temp_file
-                    .persist(cache_entry.path())
-                    .map_err(crate::Error::from)?;
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
@@ -143,15 +137,10 @@ impl CachedClient {
                     fs_err::tokio::create_dir_all(&cache_entry.dir)
                         .await
                         .map_err(crate::Error::from)?;
-                    let temp_file =
-                        NamedTempFile::new_in(&cache_entry.dir).map_err(crate::Error::from)?;
                     let data =
                         serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
-                    fs_err::tokio::write(&temp_file, &data)
+                    write_atomic(cache_entry.path(), data)
                         .await
-                        .map_err(crate::Error::from)?;
-                    temp_file
-                        .persist(cache_entry.path())
                         .map_err(crate::Error::from)?;
                     Ok(data_with_cache_policy.data)
                 } else {

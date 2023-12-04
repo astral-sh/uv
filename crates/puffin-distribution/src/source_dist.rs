@@ -24,7 +24,7 @@ use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{GitSourceDist, Identifier, RemoteSource, SourceDist};
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
+use puffin_cache::{digest, write_atomic, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
@@ -351,7 +351,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             cached
                 .data
                 .insert(wheel_filename.clone(), cached_data.clone());
-            fs::write(cache_entry.path(), serde_json::to_vec(&cached)?).await?;
+            write_atomic(cache_entry.path(), serde_json::to_vec(&cached)?).await?;
         };
 
         Ok(BuiltWheelMetadata::from_cached(
@@ -430,9 +430,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 metadata: metadata.clone(),
             },
         );
-        let cached = serde_json::to_vec(&metadatas)?;
         fs::create_dir_all(&cache_entry.dir).await?;
-        fs::write(cache_entry.path(), cached).await?;
+        let data = serde_json::to_vec(&metadatas)?;
+        write_atomic(cache_entry.path(), data).await?;
 
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
