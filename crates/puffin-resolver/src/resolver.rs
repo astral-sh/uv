@@ -551,7 +551,8 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                         metadata,
                         &package_name,
                         self.tags,
-                        self.build_context.interpreter().version(),
+                        self.markers,
+                        self.build_context.interpreter(),
                         self.exclude_newer.as_ref(),
                     );
                     self.index

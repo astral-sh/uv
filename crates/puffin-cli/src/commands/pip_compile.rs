@@ -124,16 +124,14 @@ pub(crate) async fn pip_compile(
     // Determine the compatible platform tags.
     let tags = Tags::from_interpreter(venv.interpreter())?;
 
+    // Determine the interpreter to use for resolution.
+    let interpreter = venv.interpreter().clone();
+
     // Determine the markers to use for resolution.
     let markers = python_version.map_or_else(
         || Cow::Borrowed(venv.interpreter().markers()),
         |python_version| Cow::Owned(python_version.markers(venv.interpreter().markers())),
     );
-    // Inject the fake python version if necessary
-    let interpreter_info = venv
-        .interpreter()
-        .clone()
-        .patch_markers(markers.clone().into_owned());
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -143,7 +141,7 @@ pub(crate) async fn pip_compile(
     let build_dispatch = BuildDispatch::new(
         client.clone(),
         cache.clone(),
-        interpreter_info,
+        interpreter,
         fs::canonicalize(venv.python_executable())?,
         no_build,
         index_urls,
