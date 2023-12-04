@@ -63,7 +63,7 @@ impl Unzipper {
                             normalized_path.display()
                         );
                     }
-                    fs_err::rename(staging.path(), &normalized_path)?;
+                    fs_err::rename(staging.into_path(), &normalized_path)?;
 
                     Ok(normalized_path)
                 }

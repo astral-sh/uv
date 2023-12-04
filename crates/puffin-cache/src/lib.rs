@@ -213,9 +213,11 @@ pub enum CacheBucket {
     /// TODO(konstin): The cache policy should be on the source dist level, the metadata we can put
     /// next to the wheels as in the `Wheels` bucket.
     ///
-    /// When resolving, we only build the wheel and store the archive file in the cache, when
-    /// installing, we unpack it and store it as directory under the same name, so it's a mix of
-    /// wheel archive zip files and unzipped wheel directories in the cache.
+    /// Source distributions are built into zipped wheel files (as PEP 517 specifies) and unzipped
+    /// lazily before installing. So when resolving, we only build the wheel and store the archive
+    /// file in the cache, when installing, we unpack it and replace the zip file with an unzipped
+    /// directory under the same. You may find a mix of wheel archive zip files and unzipped
+    /// wheel directories in the cache.
     ///
     /// Cache structure:
     ///  * `built-wheels-v0/pypi/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
