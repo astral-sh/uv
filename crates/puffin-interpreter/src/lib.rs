@@ -7,6 +7,7 @@ use thiserror::Error;
 pub use crate::interpreter::Interpreter;
 pub use crate::virtual_env::Virtualenv;
 
+mod cfg;
 mod interpreter;
 mod python_platform;
 mod virtual_env;
@@ -39,4 +40,6 @@ pub enum Error {
     },
     #[error("Failed to write to cache")]
     Serde(#[from] serde_json::Error),
+    #[error("Failed to parse pyvenv.cfg")]
+    Cfg(#[from] cfg::Error),
 }

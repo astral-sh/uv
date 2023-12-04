@@ -45,6 +45,16 @@ impl SitePackages {
     pub fn remove(&mut self, name: &PackageName) -> Option<InstalledDist> {
         self.0.remove(name)
     }
+
+    /// Returns `true` if there are no installed packages.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the number of installed packages.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl IntoIterator for SitePackages {
