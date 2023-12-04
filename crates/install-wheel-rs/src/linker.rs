@@ -256,7 +256,7 @@ fn clone_wheel_files(
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory unless the subdirectory exists already in which case we'll need to recursively
-    // merge its contents with the existing direcotry.
+    // merge its contents with the existing directory.
     for entry in fs::read_dir(wheel.as_ref())? {
         let entry = entry?;
         let from = entry.path();
@@ -276,17 +276,22 @@ fn clone_recursive(from: &Path, to: &Path) -> Result<(), Error> {
     debug!("Cloning {} to {}", from.display(), to.display());
     let reflink = reflink_copy::reflink(from, to);
 
-    // If copying fails and the directory exists already, it must be merged recursively
-    if from.is_dir()
-        && reflink
-            .as_ref()
-            .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
+    if reflink
+        .as_ref()
+        .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
     {
-        for entry in fs::read_dir(from)? {
-            let entry = entry?;
-            let child_from = entry.path();
-            let child_to = to.join(child_from.strip_prefix(from).unwrap());
-            clone_recursive(child_from.as_path(), child_to.as_path())?;
+        // If copying fails and the directory exists already, it must be merged recursively.
+        if from.is_dir() {
+            for entry in fs::read_dir(from)? {
+                let entry = entry?;
+                let child_from = entry.path();
+                let child_to = to.join(child_from.strip_prefix(from).unwrap());
+                clone_recursive(child_from.as_path(), child_to.as_path())?;
+            }
+        } else {
+            // If file already exists, remove it and overwrite.
+            fs::remove_file(to)?;
+            reflink_copy::reflink(from, to)?;
         }
     } else {
         // Other errors should be tracked
