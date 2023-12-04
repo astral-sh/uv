@@ -249,7 +249,12 @@ impl SourceBuild {
             if let Some(build_system) = pyproject_toml.build_system {
                 Some(Pep517Backend {
                     // If `build-backend` is missing, inject the legacy setuptools backend, but
-                    // retain the `requires`, to match `pip` and `build`.
+                    // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
+                    // says that in this case we "should revert to the legacy behaviour of running
+                    // `setup.py` (either directly, or by implicitly invoking the
+                    // `setuptools.build_meta:__legacy__` backend)", we found that in practice, only
+                    // the legacy setuptools backend is allowed. See also:
+                    // https://github.com/pypa/build/blob/de5b44b0c28c598524832dff685a98d5a5148c44/src/build/__init__.py#L114-L118
                     backend: build_system
                         .build_backend
                         .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
