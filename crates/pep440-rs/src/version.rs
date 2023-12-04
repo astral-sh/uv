@@ -213,7 +213,7 @@ pub enum LocalSegment {
     /// Not-parseable as integer segment of local version
     String(String),
     /// Inferred integer segment of local version
-    Number(u32),
+    Number(u64),
 }
 
 impl Display for LocalSegment {
@@ -236,7 +236,7 @@ impl FromStr for LocalSegment {
     type Err = ();
 
     fn from_str(segment: &str) -> Result<Self, Self::Err> {
-        Ok(if let Ok(number) = segment.parse::<u32>() {
+        Ok(if let Ok(number) = segment.parse::<u64>() {
             Self::Number(number)
         } else {
             // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
@@ -263,25 +263,25 @@ impl FromStr for LocalSegment {
 pub struct Version {
     /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
     /// but you can increment it if you switched the versioning scheme.
-    pub epoch: u32,
+    pub epoch: u64,
     /// The normal number part of the version
     /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
     /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
     ///
     /// Note that we drop the * placeholder by moving it to `Operator`
-    pub release: Vec<u32>,
+    pub release: Vec<u64>,
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
     ///
     /// Note that whether this is Some influences the version
     /// range matching since normally we exclude all prerelease versions
-    pub pre: Option<(PreRelease, u32)>,
+    pub pre: Option<(PreRelease, u64)>,
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
     /// higher post version are preferred over lower post or none-post versions
-    pub post: Option<u32>,
+    pub post: Option<u64>,
     /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
     /// if any
-    pub dev: Option<u32>,
+    pub dev: Option<u64>,
     /// A [local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers)
     /// such as `+deadbeef` in `1.2.3+deadbeef`
     ///
@@ -318,7 +318,7 @@ impl PyVersion {
     /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
     /// but you can increment it if you switched the versioning scheme.
     #[getter]
-    pub fn epoch(&self) -> u32 {
+    pub fn epoch(&self) -> u64 {
         self.0.epoch
     }
     /// The normal number part of the version
@@ -327,7 +327,7 @@ impl PyVersion {
     ///
     /// Note that we drop the * placeholder by moving it to `Operator`
     #[getter]
-    pub fn release(&self) -> Vec<u32> {
+    pub fn release(&self) -> Vec<u64> {
         self.0.release.clone()
     }
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
@@ -336,35 +336,35 @@ impl PyVersion {
     /// Note that whether this is Some influences the version
     /// range matching since normally we exclude all prerelease versions
     #[getter]
-    pub fn pre(&self) -> Option<(PreRelease, u32)> {
+    pub fn pre(&self) -> Option<(PreRelease, u64)> {
         self.0.pre.clone()
     }
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
     /// higher post version are preferred over lower post or none-post versions
     #[getter]
-    pub fn post(&self) -> Option<u32> {
+    pub fn post(&self) -> Option<u64> {
         self.0.post
     }
     /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
     /// if any
     #[getter]
-    pub fn dev(&self) -> Option<u32> {
+    pub fn dev(&self) -> Option<u64> {
         self.0.dev
     }
     /// The first item of release or 0 if unavailable.
     #[getter]
     #[allow(clippy::get_first)]
-    pub fn major(&self) -> u32 {
+    pub fn major(&self) -> u64 {
         self.0.release.get(0).copied().unwrap_or_default()
     }
     /// The second item of release or 0 if unavailable.
     #[getter]
-    pub fn minor(&self) -> u32 {
+    pub fn minor(&self) -> u64 {
         self.0.release.get(1).copied().unwrap_or_default()
     }
     /// The third item of release or 0 if unavailable.
     #[getter]
-    pub fn micro(&self) -> u32 {
+    pub fn micro(&self) -> u64 {
         self.0.release.get(2).copied().unwrap_or_default()
     }
 
@@ -442,7 +442,7 @@ impl Serialize for Version {
 
 impl Version {
     /// Constructor for a version that is just a release such as `3.8`
-    pub fn from_release(release: Vec<u32>) -> Self {
+    pub fn from_release(release: Vec<u64>) -> Self {
         Self {
             epoch: 0,
             release,
@@ -535,7 +535,7 @@ impl Display for Version {
 
 /// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` == `1.1` and
 /// `1.16` < `1.19`
-pub(crate) fn compare_release(this: &[u32], other: &[u32]) -> Ordering {
+pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
     // "When comparing release segments with different numbers of components, the shorter segment
     // is padded out with additional zeros as necessary"
     for (this, other) in this.iter().chain(iter::repeat(&0)).zip(
@@ -568,7 +568,7 @@ pub(crate) fn compare_release(this: &[u32], other: &[u32]) -> Ordering {
 /// For post, any number is better than none (so None defaults to None<0), but for dev, no number
 /// is better (so None default to the maximum). For local the Option<Vec<T>> luckily already has the
 /// correct default Ord implementation
-fn sortable_tuple(version: &Version) -> (u32, u32, Option<u32>, u32, Option<&[LocalSegment]>) {
+fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, Option<&[LocalSegment]>) {
     match (&version.pre, &version.post, &version.dev) {
         // dev release
         (None, None, Some(n)) => (0, 0, None, *n, version.local.as_deref()),
@@ -577,7 +577,7 @@ fn sortable_tuple(version: &Version) -> (u32, u32, Option<u32>, u32, Option<&[Lo
             1,
             *n,
             *post,
-            dev.unwrap_or(u32::MAX),
+            dev.unwrap_or(u64::MAX),
             version.local.as_deref(),
         ),
         // beta release
@@ -585,7 +585,7 @@ fn sortable_tuple(version: &Version) -> (u32, u32, Option<u32>, u32, Option<&[Lo
             2,
             *n,
             *post,
-            dev.unwrap_or(u32::MAX),
+            dev.unwrap_or(u64::MAX),
             version.local.as_deref(),
         ),
         // alpha release
@@ -593,7 +593,7 @@ fn sortable_tuple(version: &Version) -> (u32, u32, Option<u32>, u32, Option<&[Lo
             3,
             *n,
             *post,
-            dev.unwrap_or(u32::MAX),
+            dev.unwrap_or(u64::MAX),
             version.local.as_deref(),
         ),
         // final release
@@ -603,7 +603,7 @@ fn sortable_tuple(version: &Version) -> (u32, u32, Option<u32>, u32, Option<&[Lo
             5,
             0,
             Some(*post),
-            dev.unwrap_or(u32::MAX),
+            dev.unwrap_or(u64::MAX),
             version.local.as_deref(),
         ),
     }
@@ -718,7 +718,7 @@ impl Version {
     pub(crate) fn parse_impl(captures: &Captures) -> Result<(Version, bool), String> {
         let number_field = |field_name| {
             if let Some(field_str) = captures.name(field_name) {
-                match field_str.as_str().parse::<u32>() {
+                match field_str.as_str().parse::<u64>() {
                     Ok(number) => Ok(Some(number)),
                     // Should be already forbidden by the regex
                     Err(err) => Err(format!(
@@ -769,7 +769,7 @@ impl Version {
                 .as_str()
                 .split(&['-', '_', '.'][..])
                 .map(|segment| {
-                    if let Ok(number) = segment.parse::<u32>() {
+                    if let Ok(number) = segment.parse::<u64>() {
                         LocalSegment::Number(number)
                     } else {
                         // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
@@ -784,8 +784,8 @@ impl Version {
             .ok_or_else(|| "No release in version".to_string())?
             .as_str()
             .split('.')
-            .map(|segment| segment.parse::<u32>().map_err(|err| err.to_string()))
-            .collect::<Result<Vec<u32>, String>>()?;
+            .map(|segment| segment.parse::<u64>().map_err(|err| err.to_string()))
+            .collect::<Result<Vec<u64>, String>>()?;
 
         let star = captures.name("trailing_dot_star").is_some();
         if star {
