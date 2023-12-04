@@ -27,4 +27,4 @@ serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 indoc = { version = "2.0.4" }
-tempfile = { worspace = true }
+tempfile = { version = "3.8.1" }
