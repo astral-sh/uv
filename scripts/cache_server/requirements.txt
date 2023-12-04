@@ -1,0 +1,4 @@
+pkg_source_dist @ http://0.0.0.0:8000/pkg_source_dist-0.1.0.tar.gz
+pkg_whl @ http://0.0.0.0:8000/pkg_whl-0.1.0-py3-none-any.whl
+pkg_path_source_dist @ file:///home/konsti/projects/puffin/scripts/cache_server/cache_b/pkg_path_source_dist-0.1.0.tar.gz
+pkg_path_whl @ file:///home/konsti/projects/puffin/scripts/cache_server/cache_b/pkg_path_whl-0.1.0-py3-none-any.whl
