@@ -2532,12 +2532,14 @@ name = "puffin-interpreter"
 version = "0.0.1"
 dependencies = [
  "fs-err",
+ "indoc",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",
  "puffin-cache",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
