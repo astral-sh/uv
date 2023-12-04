@@ -1477,3 +1477,34 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
 
     Ok(())
 }
+
+/// Resolve a local path dependency to a non-existent file.
+#[test]
+fn compile_wheel_path_dependency_missing() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("flask @ file:///path/to/flask-3.0.0-py3-none-any.whl")?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}

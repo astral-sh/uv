@@ -25,7 +25,7 @@ use distribution_types::{GitSourceDist, Identifier, RemoteSource, SourceDist};
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
 use puffin_cache::{digest, write_atomic, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
-use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
+use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy, Error};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
@@ -460,11 +460,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Download the source distribution.
         let cache_dir = self.build_context.cache().bucket(CacheBucket::BuiltWheels);
-        fs::create_dir_all(&cache_dir).await?;
-        let temp_dir = tempfile::tempdir_in(cache_dir)?;
+        fs::create_dir_all(&cache_dir)
+            .await
+            .map_err(Error::CacheWrite)?;
+        let temp_dir = tempfile::tempdir_in(cache_dir).map_err(Error::CacheWrite)?;
         let sdist_file = temp_dir.path().join(source_dist_filename);
-        let mut writer = tokio::fs::File::create(&sdist_file).await?;
-        tokio::io::copy(&mut reader, &mut writer).await?;
+        let mut writer = tokio::fs::File::create(&sdist_file)
+            .await
+            .map_err(Error::CacheWrite)?;
+        tokio::io::copy(&mut reader, &mut writer)
+            .await
+            .map_err(Error::CacheWrite)?;
         Ok((Some(temp_dir), sdist_file))
     }
 

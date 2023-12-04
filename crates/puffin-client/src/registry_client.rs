@@ -8,7 +8,7 @@ use futures::TryStreamExt;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use tempfile::tempfile;
+use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, trace};
@@ -318,10 +318,12 @@ impl RegistryClient {
         // you host your wheels for some reasons doesn't support range requests
         // (tbh we should probably warn here and tell users to get a better registry because
         // their current one makes resolution unnecessary slow)
-        let temp_download = tempfile()?;
+        let temp_download = tempfile_in(cache_shard.wheel_dir()).map_err(Error::CacheWrite)?;
         let mut writer = BufWriter::new(tokio::fs::File::from_std(temp_download));
         let mut reader = self.stream_external(url).await?.compat();
-        tokio::io::copy(&mut reader, &mut writer).await?;
+        tokio::io::copy(&mut reader, &mut writer)
+            .await
+            .map_err(Error::CacheWrite)?;
         let reader = writer.into_inner();
 
         Self::metadata_from_async_read(filename, url.to_string(), reader).await

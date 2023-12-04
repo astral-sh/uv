@@ -68,7 +68,10 @@ pub enum Error {
     Zip(WheelFilename, #[source] ZipError),
 
     #[error("Failed to write to the client cache")]
-    IO(#[from] io::Error),
+    CacheWrite(#[source] io::Error),
+
+    #[error(transparent)]
+    Io(#[from] io::Error),
 
     /// An [`io::Error`] with a filename attached
     #[error(transparent)]

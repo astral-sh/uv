@@ -10,4 +10,7 @@ pub enum Error {
 
     #[error("Unable to extract filename from URL: {0}")]
     UrlFilename(Url),
+
+    #[error("Unable to locate distribution at: {0}")]
+    NotFound(Url, #[source] std::io::Error),
 }

@@ -5,7 +5,7 @@ use pubgrub::report::{DefaultStringReporter, Reporter};
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{BuiltDist, SourceDist};
+use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
@@ -54,11 +54,17 @@ pub enum ResolveError {
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),
 
-    #[error("Failed to download {0}")]
+    #[error("Failed to download: {0}")]
     Fetch(Box<BuiltDist>, #[source] DistributionDatabaseError),
 
-    #[error("Failed to download and build {0}")]
+    #[error("Failed to download and build: {0}")]
     FetchAndBuild(Box<SourceDist>, #[source] DistributionDatabaseError),
+
+    #[error("Failed to read: {0}")]
+    Read(Box<PathBuiltDist>, #[source] DistributionDatabaseError),
+
+    #[error("Failed to build: {0}")]
+    Build(Box<PathSourceDist>, #[source] DistributionDatabaseError),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
