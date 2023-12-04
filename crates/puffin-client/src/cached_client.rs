@@ -125,7 +125,7 @@ impl CachedClient {
                     serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
                 )
                 .await
-                .map_err(crate::Error::from)?;
+                .map_err(crate::Error::CacheWrite)?;
                 Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
@@ -136,12 +136,12 @@ impl CachedClient {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
                     fs_err::tokio::create_dir_all(&cache_entry.dir)
                         .await
-                        .map_err(crate::Error::from)?;
+                        .map_err(crate::Error::CacheWrite)?;
                     let data =
                         serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
                     write_atomic(cache_entry.path(), data)
                         .await
-                        .map_err(crate::Error::from)?;
+                        .map_err(crate::Error::CacheWrite)?;
                     Ok(data_with_cache_policy.data)
                 } else {
                     Ok(data)

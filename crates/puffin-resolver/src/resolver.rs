@@ -17,7 +17,7 @@ use url::Url;
 use waitmap::WaitMap;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
+use distribution_types::{BuiltDist, Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
@@ -610,6 +610,12 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                     .get_or_build_wheel_metadata(&dist)
                     .await
                     .map_err(|err| match dist.clone() {
+                        Dist::Built(BuiltDist::Path(built_dist)) => {
+                            ResolveError::Read(Box::new(built_dist), err)
+                        }
+                        Dist::Source(SourceDist::Path(source_dist)) => {
+                            ResolveError::Build(Box::new(source_dist), err)
+                        }
                         Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
                         Dist::Source(source_dist) => {
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)

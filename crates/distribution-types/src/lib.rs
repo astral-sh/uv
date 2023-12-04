@@ -198,7 +198,8 @@ impl Dist {
             let path = url
                 .to_file_path()
                 .map_err(|()| Error::UrlFilename(url.clone()))?
-                .canonicalize()?;
+                .canonicalize()
+                .map_err(|err| Error::NotFound(url.clone(), err))?;
             return if path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
