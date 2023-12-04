@@ -241,40 +241,58 @@ impl SourceBuild {
             source_root
         };
 
-        // Check if we have a PEP 517 build, a legacy setup.py, or an edge case
-        let build_system = if source_tree.join("pyproject.toml").is_file() {
+        // Check if we have a PEP 517 build backend.
+        let pep517_backend = if source_tree.join("pyproject.toml").is_file() {
             let pyproject_toml: PyProjectToml =
                 toml::from_str(&fs::read_to_string(source_tree.join("pyproject.toml"))?)
                     .map_err(Error::InvalidPyprojectToml)?;
-            pyproject_toml.build_system
+            if let Some(build_system) = pyproject_toml.build_system {
+                Some(Pep517Backend {
+                    // If `build-backend` is missing, inject the legacy setuptools backend, but
+                    // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
+                    // says that in this case we "should revert to the legacy behaviour of running
+                    // `setup.py` (either directly, or by implicitly invoking the
+                    // `setuptools.build_meta:__legacy__` backend)", we found that in practice, only
+                    // the legacy setuptools backend is allowed. See also:
+                    // https://github.com/pypa/build/blob/de5b44b0c28c598524832dff685a98d5a5148c44/src/build/__init__.py#L114-L118
+                    backend: build_system
+                        .build_backend
+                        .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
+                    backend_path: build_system.backend_path,
+                    requirements: build_system.requires,
+                })
+            } else {
+                // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
+                // a PEP 517 build using the default backend, to match `pip` and `build`.
+                Some(Pep517Backend {
+                    backend: "setuptools.build_meta:__legacy__".to_string(),
+                    backend_path: None,
+                    requirements: vec![
+                        Requirement::from_str("wheel").unwrap(),
+                        Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+                    ],
+                })
+            }
         } else {
             None
         };
 
         let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter)?;
 
-        // There are packages such as DTLSSocket 0.1.16 that say:
-        // ```toml
-        // [build-system]
-        // requires = ["Cython<3", "setuptools", "wheel"]
-        // ```
-        // In this case, we need to install requires PEP 517 style but then call setup.py in the
-        // legacy way.
-        let requirements = if let Some(build_system) = build_system.as_ref() {
-            // .filter(|build_system| build_system.build_backend.is_some()) {
+        // Setup the build environment using PEP 517 or the legacy setuptools backend.
+        if let Some(pep517_backend) = pep517_backend.as_ref() {
             let resolved_requirements = build_context
-                .resolve(&build_system.requires)
+                .resolve(&pep517_backend.requirements)
                 .await
                 .map_err(|err| {
-                    Error::RequirementsInstall("build-system.requires (resolve)", err)
-                })?;
+                Error::RequirementsInstall("build-system.requires (resolve)", err)
+            })?;
             build_context
                 .install(&resolved_requirements, &venv)
                 .await
                 .map_err(|err| {
                     Error::RequirementsInstall("build-system.requires (install)", err)
                 })?;
-            build_system.requires.clone()
         } else {
             let requirements = vec![
                 Requirement::from_str("wheel").unwrap(),
@@ -296,25 +314,6 @@ impl SourceBuild {
                 .install(&resolved_requirements, &venv)
                 .await
                 .map_err(|err| Error::RequirementsInstall("setup.py build (install)", err))?;
-            requirements
-        };
-
-        // > If the pyproject.toml file is absent, or the build-backend key is missing, the
-        // > source tree is not using this specification, and tools should revert to the legacy
-        // > behaviour of running setup.py (either directly, or by implicitly invoking the
-        // > setuptools.build_meta:__legacy__ backend).
-        let pep517_backend = if let Some(build_system) = build_system {
-            if let Some(backend) = build_system.build_backend {
-                Some(Pep517Backend {
-                    backend,
-                    backend_path: build_system.backend_path,
-                    requirements,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
         };
 
         if let Some(pep517_backend) = &pep517_backend {
