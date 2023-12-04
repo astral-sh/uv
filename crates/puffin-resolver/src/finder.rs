@@ -149,11 +149,11 @@ impl<'a> DistFinder<'a> {
             // compatibility and wheels which may be tagged `py3-none-any` but
             // have `requires-python: ">=3.9"`
             // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-            if !file
+            if file
                 .requires_python
                 .as_ref()
-                .map_or(true, |requires_python| {
-                    requires_python.contains(self.interpreter.version())
+                .is_some_and(|requires_python| {
+                    !requires_python.contains(self.interpreter.version())
                 })
             {
                 continue;

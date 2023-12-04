@@ -18,7 +18,7 @@ fn create_venv() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"Using Python 3.12 at .+", "Using Python 3.11 at [PATH]"),
+            (r"Using Python 3\.\d+\.\d+ at .+", "Using Python [VERSION] at [PATH]"),
             (temp_dir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {
@@ -42,7 +42,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"Using Python 3.12 at .+", "Using Python 3.11 at [PATH]"),
+            (r"Using Python 3\.\d+\.\d+ at .+", "Using Python [VERSION] at [PATH]"),
             (temp_dir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {

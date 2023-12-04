@@ -4,7 +4,7 @@ info:
   program: puffin
   args:
     - venv
-    - /var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmprOsp0M/.venv
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpINXhJh/.venv
     - "--python"
     - python3.12
 ---
@@ -13,6 +13,6 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
-Using Python 3.11 at [PATH]
+Using Python [VERSION] at [PATH]
 Creating virtual environment at: /home/ferris/project/.venv
 

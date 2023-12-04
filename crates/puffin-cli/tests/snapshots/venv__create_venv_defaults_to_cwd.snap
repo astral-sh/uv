@@ -12,6 +12,6 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
-Using Python 3.11 at [PATH]
+Using Python [VERSION] at [PATH]
 Creating virtual environment at: .venv
 
