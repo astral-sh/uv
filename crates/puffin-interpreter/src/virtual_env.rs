@@ -32,17 +32,6 @@ impl Virtualenv {
         })
     }
 
-    pub fn from_virtualenv(platform: Platform, root: &Path, cache: &Cache) -> Result<Self, Error> {
-        let platform = PythonPlatform::from(platform);
-        let executable = platform.venv_python(root);
-        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
-
-        Ok(Self {
-            root: root.to_path_buf(),
-            interpreter,
-        })
-    }
-
     /// Creating a new venv from a python interpreter changes this
     pub fn new_prefix(venv: &Path, interpreter: &Interpreter) -> Self {
         Self {
@@ -91,17 +80,20 @@ impl Virtualenv {
 
 /// Locate the current virtual environment.
 pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathBuf>, Error> {
-    match (env::var_os("VIRTUAL_ENV"), env::var_os("CONDA_PREFIX")) {
+    match (
+        env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()),
+        env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()),
+    ) {
         (Some(dir), None) => {
             debug!(
-                "Found a virtualenv through VIRTUAL_ENV at {}",
+                "Found a virtualenv through VIRTUAL_ENV at: {}",
                 Path::new(&dir).display()
             );
             return Ok(Some(PathBuf::from(dir)));
         }
         (None, Some(dir)) => {
             debug!(
-                "Found a virtualenv through CONDA_PREFIX at {}",
+                "Found a virtualenv through CONDA_PREFIX at: {}",
                 Path::new(&dir).display()
             );
             return Ok(Some(PathBuf::from(dir)));
@@ -126,7 +118,7 @@ pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathB
             if !python.is_file() {
                 return Err(Error::BrokenVenv(dot_venv, python));
             }
-            debug!("Found a virtualenv named .venv at {}", dot_venv.display());
+            debug!("Found a virtualenv named .venv at: {}", dot_venv.display());
             return Ok(Some(dot_venv));
         }
     }

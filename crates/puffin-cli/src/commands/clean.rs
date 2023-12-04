@@ -31,10 +31,10 @@ pub(crate) fn clean(cache: &Cache, mut printer: Printer) -> Result<ExitStatus> {
     {
         if entry.file_type()?.is_dir() {
             fs::remove_dir_all(entry.path())
-                .with_context(|| format!("Failed to clear cache at {}", cache.root().display()))?;
+                .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
         } else {
             fs::remove_file(entry.path())
-                .with_context(|| format!("Failed to clear cache at {}", cache.root().display()))?;
+                .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
         }
     }
 
