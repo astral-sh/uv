@@ -87,10 +87,22 @@ impl InstallPlan {
 
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
-                None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                    if let Some(distribution) = registry_index
-                        .get(&requirement.name)
-                        .filter(|dist| requirement.is_satisfied_by(&dist.filename.version))
+                None => {
+                    if let Some((_version, distribution)) =
+                        registry_index.by_name(&requirement.name).next()
+                    {
+                        debug!("Requirement already cached: {distribution}");
+                        local.push(CachedDist::Registry(distribution.clone()));
+                        continue;
+                    }
+                }
+                Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+                    if let Some((_version, distribution)) = registry_index
+                        .by_name(&requirement.name)
+                        .find(|(version, dist)| {
+                            specifier.contains(version)
+                                && requirement.is_satisfied_by(&dist.filename.version)
+                        })
                     {
                         debug!("Requirement already cached: {distribution}");
                         local.push(CachedDist::Registry(distribution.clone()));
