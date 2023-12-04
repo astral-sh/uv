@@ -208,3 +208,78 @@ impl InterpreterQueryResult {
         Ok(info)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::Interpreter;
+    use fs_err as fs;
+    use indoc::{formatdoc, indoc};
+    use pep440_rs::Version;
+    use platform_host::Platform;
+    use puffin_cache::Cache;
+    use std::str::FromStr;
+    use tempfile::tempdir;
+
+    #[test]
+    #[cfg(unix)]
+    fn test_cache_invalidation() {
+        let mock_dir = tempdir().unwrap();
+        let mocked_interpreter = mock_dir.path().join("python");
+        let json = indoc! {r##"
+            {
+                "markers": {
+                    "implementation_name": "cpython",
+                    "implementation_version": "3.12.0",
+                    "os_name": "posix",
+                    "platform_machine": "x86_64",
+                    "platform_python_implementation": "CPython",
+                    "platform_release": "6.5.0-13-generic",
+                    "platform_system": "Linux",
+                    "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
+                    "python_full_version": "3.12.0",
+                    "python_version": "3.12",
+                    "sys_platform": "linux"
+                },
+                "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+                "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+                "sys_executable": "/home/ferris/projects/puffin/.venv/bin/python"
+            }
+        "##};
+
+        let cache = Cache::temp().unwrap();
+        let platform = Platform::current().unwrap();
+
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r##"
+            #!/bin/bash
+            echo '{json}'
+            "##},
+        )
+        .unwrap();
+        fs::set_permissions(
+            &mocked_interpreter,
+            std::os::unix::fs::PermissionsExt::from_mode(0o770),
+        )
+        .unwrap();
+        let interpreter =
+            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
+        assert_eq!(
+            interpreter.markers.python_version.version,
+            Version::from_str("3.12").unwrap()
+        );
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r##"
+            #!/bin/bash
+            echo '{}'
+            "##, json.replace("3.12", "3.13")},
+        )
+        .unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, platform, &cache).unwrap();
+        assert_eq!(
+            interpreter.markers.python_version.version,
+            Version::from_str("3.13").unwrap()
+        );
+    }
+}

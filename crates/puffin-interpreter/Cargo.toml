@@ -24,3 +24,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+indoc = { version = "2.0.4" }
+tempfile = { worspace = true }
