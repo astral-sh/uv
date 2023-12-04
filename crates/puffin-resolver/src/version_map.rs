@@ -6,8 +6,9 @@ use chrono::{DateTime, Utc};
 use tracing::warn;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
-use pep440_rs::Version;
+use pep508_rs::MarkerEnvironment;
 use platform_tags::{TagPriority, Tags};
+use puffin_interpreter::Interpreter;
 use puffin_macros::warn_once;
 use puffin_normalize::PackageName;
 use pypi_types::{SimpleJson, Yanked};
@@ -25,7 +26,8 @@ impl VersionMap {
         metadata: SimpleJson,
         package_name: &PackageName,
         tags: &Tags,
-        python_version: &Version,
+        markers: &MarkerEnvironment,
+        interpreter: &Interpreter,
         exclude_newer: Option<&DateTime<Utc>>,
     ) -> Self {
         let mut version_map: BTreeMap<PubGrubVersion, PrioritizedDistribution> =
@@ -38,14 +40,17 @@ impl VersionMap {
             // distributions which give no other indication of their compatibility and wheels which
             // may be tagged `py3-none-any` but have `requires-python: ">=3.9"`.
             // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-            if !file
-                .requires_python
-                .as_ref()
-                .map_or(true, |requires_python| {
-                    requires_python.contains(python_version)
-                })
-            {
-                continue;
+            if let Some(requires_python) = file.requires_python.as_ref() {
+                // The interpreter and marker version are often the same, but can differ. For
+                // example, if the user is resolving against a target Python version passed in
+                // via the command-line, that version will differ from the interpreter version.
+                let interpreter_version = interpreter.version();
+                let marker_version = &markers.python_version.version;
+                if !requires_python.contains(interpreter_version)
+                    || !requires_python.contains(marker_version)
+                {
+                    continue;
+                }
             }
 
             // Support resolving as if it were an earlier timestamp, at least as long files have

@@ -95,12 +95,6 @@ impl Interpreter {
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
     }
-
-    /// Inject markers of a fake python version
-    #[must_use]
-    pub fn patch_markers(self, markers: MarkerEnvironment) -> Self {
-        Self { markers, ..self }
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
