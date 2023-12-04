@@ -32,6 +32,7 @@ puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
+puffin-traits = { path = "../puffin-traits" }
 puffin-workspace = { path = "../puffin-workspace" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
@@ -58,6 +59,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
+waitmap = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -6,12 +6,11 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
-use anyhow::Result;
-use anyhow::{bail, Context};
+use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::Metadata;
+use distribution_types::{CachedDist, Metadata};
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
@@ -21,7 +20,7 @@ use puffin_distribution::DistributionDatabase;
 use puffin_installer::{InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, InFlight};
 use pypi_types::IndexUrls;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -35,6 +34,7 @@ pub struct BuildDispatch {
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
     index_urls: IndexUrls,
+    in_flight_unzips: InFlight<PathBuf, Result<CachedDist, String>>,
 }
 
 impl BuildDispatch {
@@ -55,6 +55,7 @@ impl BuildDispatch {
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
             index_urls,
+            in_flight_unzips: InFlight::default(),
         }
     }
 
@@ -186,7 +187,7 @@ impl BuildContext for BuildDispatch {
                     wheels.iter().map(ToString::to_string).join(", ")
                 );
                 Unzipper::default()
-                    .unzip(wheels)
+                    .unzip(wheels, &self.in_flight_unzips)
                     .await
                     .context("Failed to unpack build dependencies")?
             };

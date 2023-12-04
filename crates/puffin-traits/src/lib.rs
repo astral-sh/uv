@@ -6,9 +6,12 @@ use std::pin::Pin;
 
 use anyhow::Result;
 
+pub use in_flight::InFlight;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
 use puffin_interpreter::{Interpreter, Virtualenv};
+
+mod in_flight;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
