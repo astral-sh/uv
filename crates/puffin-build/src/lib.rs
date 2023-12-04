@@ -20,7 +20,7 @@ use pyproject_toml::{BuildSystem, Project};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tar::Archive;
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument};
@@ -420,7 +420,11 @@ impl SourceBuild {
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
         if let Some(pep517_backend) = &self.pep517_backend {
-            self.pep517_build_wheel(&wheel_dir, pep517_backend)
+            // Prevent clashes from two puffin processes building wheels in parallel
+            let tmp_dir = tempdir_in(&wheel_dir)?;
+            let filename = self.pep517_build_wheel(tmp_dir.path(), pep517_backend)?;
+            fs::rename(tmp_dir.path().join(&filename), wheel_dir.join(&filename))?;
+            Ok(filename)
         } else {
             // We checked earlier that setup.py exists
             let python_interpreter = self.venv.python_executable();
@@ -446,10 +450,9 @@ impl SourceBuild {
                     &output,
                     &self.package_id));
             };
-            // TODO(konstin): Faster copy such as reflink? Or maybe don't really let the user pick the target dir
             let wheel = wheel_dir.join(dist_wheel.file_name());
+            // Legacy path, not atomic
             fs::copy(dist_wheel.path(), wheel)?;
-            // TODO(konstin): Check wheel filename
             Ok(dist_wheel.file_name().to_string_lossy().to_string())
         }
     }

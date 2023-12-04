@@ -88,10 +88,6 @@ fn venv_impl(
     )
     .into_diagnostic()?;
 
-    // If the path already exists, remove it.
-    fs::remove_file(path).ok();
-    fs::remove_dir_all(path).ok();
-
     writeln!(
         printer,
         "Creating virtual environment at: {}",

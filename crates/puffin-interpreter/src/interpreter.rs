@@ -9,7 +9,7 @@ use tracing::debug;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
-use puffin_cache::{digest, Cache, CacheBucket};
+use puffin_cache::{digest, write_atomic_sync, Cache, CacheBucket};
 
 use crate::python_platform::PythonPlatform;
 use crate::Error;
@@ -190,7 +190,7 @@ impl InterpreterQueryResult {
         if executable == info.sys_executable {
             fs::create_dir_all(cache_dir)?;
             // Write to the cache.
-            fs::write(
+            write_atomic_sync(
                 cache_path,
                 serde_json::to_vec(&CachedByTimestamp {
                     timestamp: modified.as_millis(),
@@ -205,14 +205,17 @@ impl InterpreterQueryResult {
 
 #[cfg(test)]
 mod tests {
-    use crate::Interpreter;
+    use std::str::FromStr;
+
     use fs_err as fs;
     use indoc::{formatdoc, indoc};
+    use tempfile::tempdir;
+
     use pep440_rs::Version;
     use platform_host::Platform;
     use puffin_cache::Cache;
-    use std::str::FromStr;
-    use tempfile::tempdir;
+
+    use crate::Interpreter;
 
     #[test]
     #[cfg(unix)]
