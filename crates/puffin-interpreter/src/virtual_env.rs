@@ -6,6 +6,7 @@ use tracing::debug;
 use platform_host::Platform;
 use puffin_cache::Cache;
 
+use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;
 use crate::{Error, Interpreter};
 
@@ -77,8 +78,15 @@ impl Virtualenv {
         &self.root
     }
 
+    /// Return the [`Interpreter`] for this virtual environment.
     pub fn interpreter(&self) -> &Interpreter {
         &self.interpreter
+    }
+
+    /// Return the [`Configuration`] for this virtual environment, as extracted from the
+    /// `pyvenv.cfg` file.
+    pub fn cfg(&self) -> Result<Configuration, Error> {
+        Ok(Configuration::parse(self.root.join("pyvenv.cfg"))?)
     }
 
     /// Returns the path to the `site-packages` directory inside a virtual environment.

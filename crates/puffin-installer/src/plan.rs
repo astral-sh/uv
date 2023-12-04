@@ -142,9 +142,19 @@ impl InstallPlan {
         }
 
         // Remove any unnecessary packages.
-        for (_package, dist_info) in site_packages {
-            debug!("Unnecessary package: {dist_info}");
-            extraneous.push(dist_info);
+        if !site_packages.is_empty() {
+            // If Puffin created the virtual environment, then remove all packages, regardless of
+            // whether they're considered "seed" packages.
+            let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_gourgeist());
+            for (package, dist_info) in site_packages {
+                if seed_packages && matches!(package.as_ref(), "pip" | "setuptools" | "wheel") {
+                    debug!("Preserving seed package: {dist_info}");
+                    continue;
+                }
+
+                debug!("Unnecessary package: {dist_info}");
+                extraneous.push(dist_info);
+            }
         }
 
         Ok(InstallPlan {
