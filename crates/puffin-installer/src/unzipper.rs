@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use distribution_types::{CachedDist, Dist, RemoteSource};
 use puffin_distribution::{LocalWheel, Unzip};
@@ -54,6 +54,15 @@ impl Unzipper {
                     }
 
                     let normalized_path = parent.join(download.filename().to_string());
+                    if fs_err::remove_dir_all(&normalized_path).is_ok() {
+                        // If we're replacing an existing directory, warn. If a wheel already exists
+                        // in the cache, we should avoid re-downloading it, so reaching this
+                        // condition represents a bug in the install plan.
+                        warn!(
+                            "Removed existing directory at: {}",
+                            normalized_path.display()
+                        );
+                    }
                     fs_err::rename(staging.path(), &normalized_path)?;
 
                     Ok(normalized_path)
