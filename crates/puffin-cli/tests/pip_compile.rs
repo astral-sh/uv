@@ -473,7 +473,7 @@ fn compile_python_312() -> Result<()> {
             .arg("pip-compile")
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("py312")
+            .arg("3.12")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .arg("--exclude-newer")
@@ -502,12 +502,56 @@ fn compile_python_37() -> Result<()> {
             .arg("pip-compile")
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("py37")
+            .arg("3.7")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .arg("--exclude-newer")
             .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Resolve a specific version of Black against an invalid Python version.
+#[test]
+fn compile_python_invalid_version() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("black==23.10.1")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--python-version")
+            .arg("3.7.x")
+            .current_dir(&temp_dir));
+    });
+
+    Ok(())
+}
+
+/// Resolve a specific version of Black against an invalid Python version.
+#[test]
+fn compile_python_dev_version() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("black==23.10.1")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--python-version")
+            .arg("3.7-dev")
             .current_dir(&temp_dir));
     });
 

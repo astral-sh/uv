@@ -1,54 +1,65 @@
 use std::str::FromStr;
+use tracing::debug;
 
+use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
-pub(crate) enum PythonVersion {
-    Py37,
-    Py38,
-    Py39,
-    Py310,
-    Py311,
-    Py312,
+#[derive(Debug, Clone)]
+pub(crate) struct PythonVersion(StringVersion);
+
+impl FromStr for PythonVersion {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let version = StringVersion::from_str(s)?;
+        if version.is_dev() {
+            return Err(format!("Python version {s} is a development release"));
+        }
+        if version.is_local() {
+            return Err(format!("Python version {s} is a local version"));
+        }
+        if version.epoch != 0 {
+            return Err(format!("Python version {s} has a non-zero epoch"));
+        }
+        if version.version < Version::from_release(vec![3, 7]) {
+            return Err(format!("Python version {s} must be >= 3.7"));
+        }
+        if version.version >= Version::from_release(vec![4, 0]) {
+            return Err(format!("Python version {s} must be < 4.0"));
+        }
+
+        // If the version lacks a patch, assume the most recent known patch for that minor version.
+        match version.release.as_slice() {
+            [3, 7] => {
+                debug!("Assuming Python 3.7.17");
+                Ok(Self(StringVersion::from_str("3.7.17")?))
+            }
+            [3, 8] => {
+                debug!("Assuming Python 3.8.18");
+                Ok(Self(StringVersion::from_str("3.8.18")?))
+            }
+            [3, 9] => {
+                debug!("Assuming Python 3.9.18");
+                Ok(Self(StringVersion::from_str("3.9.18")?))
+            }
+            [3, 10] => {
+                debug!("Assuming Python 3.10.13");
+                Ok(Self(StringVersion::from_str("3.10.13")?))
+            }
+            [3, 11] => {
+                debug!("Assuming Python 3.11.6");
+                Ok(Self(StringVersion::from_str("3.11.6")?))
+            }
+            [3, 12] => {
+                debug!("Assuming Python 3.12.0");
+                Ok(Self(StringVersion::from_str("3.12.0")?))
+            }
+            _ => Ok(Self(version)),
+        }
+    }
 }
 
 impl PythonVersion {
-    /// Return the `python_version` marker for a [`PythonVersion`].
-    fn python_version(self) -> &'static str {
-        match self {
-            Self::Py37 => "3.7",
-            Self::Py38 => "3.8",
-            Self::Py39 => "3.9",
-            Self::Py310 => "3.10",
-            Self::Py311 => "3.11",
-            Self::Py312 => "3.12",
-        }
-    }
-
-    /// Return the `python_full_version` marker for a [`PythonVersion`].
-    fn python_full_version(self) -> &'static str {
-        match self {
-            Self::Py37 => "3.7.0",
-            Self::Py38 => "3.8.0",
-            Self::Py39 => "3.9.0",
-            Self::Py310 => "3.10.0",
-            Self::Py311 => "3.11.0",
-            Self::Py312 => "3.12.0",
-        }
-    }
-
-    /// Return the `implementation_version` marker for a [`PythonVersion`].
-    fn implementation_version(self) -> &'static str {
-        match self {
-            Self::Py37 => "3.7.0",
-            Self::Py38 => "3.8.0",
-            Self::Py39 => "3.9.0",
-            Self::Py310 => "3.10.0",
-            Self::Py311 => "3.11.0",
-            Self::Py312 => "3.12.0",
-        }
-    }
-
     /// Return a [`MarkerEnvironment`] compatible with the given [`PythonVersion`], based on
     /// a base [`MarkerEnvironment`].
     ///
@@ -56,15 +67,18 @@ impl PythonVersion {
     /// but override its Python version markers.
     pub(crate) fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
         let mut markers = base.clone();
-        // Ex) `python_version == "3.12"`
-        markers.python_version = StringVersion::from_str(self.python_version()).unwrap();
-        // Ex) `python_full_version == "3.12.0"`
-        markers.python_full_version = StringVersion::from_str(self.python_full_version()).unwrap();
+
         // Ex) `implementation_version == "3.12.0"`
         if markers.implementation_name == "cpython" {
-            markers.implementation_version =
-                StringVersion::from_str(self.implementation_version()).unwrap();
+            markers.implementation_version = self.0.clone();
         }
+
+        // Ex) `python_full_version == "3.12.0"`
+        markers.python_full_version = self.0.clone();
+
+        // Ex) `python_version == "3.12"`
+        markers.python_version = self.0;
+
         markers
     }
 }

@@ -59,6 +59,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Compile a `requirements.in` file to a `requirements.txt` file.
     PipCompile(PipCompileArgs),
@@ -148,7 +149,11 @@ struct PipCompileArgs {
     #[clap(long)]
     no_build: bool,
 
-    /// The minimum Python version that should be supported.
+    /// The minimum Python version that should be supported by the compiled requirements (e.g.,
+    /// `3.7` or `3.7.9`).
+    ///
+    /// If a patch version is omitted, the most recent known patch version for that minor version
+    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
     #[arg(long, short, value_enum)]
     python_version: Option<PythonVersion>,
 
