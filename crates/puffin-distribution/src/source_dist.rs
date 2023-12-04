@@ -185,6 +185,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     .join(source_dist.distribution_id());
                 fs::create_dir_all(&wheel_dir).await?;
 
+                let task = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_build_start(source_dist));
+
                 // Build the wheel.
                 let disk_filename = self
                     .build_context
@@ -201,6 +206,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let filename = WheelFilename::from_str(&disk_filename)?;
                 let path = wheel_dir.join(disk_filename);
                 let metadata = read_metadata(&filename, &path)?;
+
+                if let Some(task) = task {
+                    if let Some(reporter) = self.reporter.as_ref() {
+                        reporter.on_build_complete(source_dist, task);
+                    }
+                }
 
                 BuiltWheelMetadata {
                     path,
