@@ -56,7 +56,7 @@ impl From<&[Requirement]> for Preferences {
                     else {
                         return None;
                     };
-                    let [version_specifier] = &**version_specifiers else {
+                    let [version_specifier] = version_specifiers.as_ref() else {
                         return None;
                     };
                     let version = PubGrubVersion::from(version_specifier.version().clone());

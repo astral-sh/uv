@@ -20,3 +20,4 @@ mod resolution_mode;
 mod resolution_options;
 mod resolver;
 mod version_map;
+mod yanks;

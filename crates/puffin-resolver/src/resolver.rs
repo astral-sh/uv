@@ -36,6 +36,7 @@ use crate::pubgrub::{
 };
 use crate::resolution::Graph;
 use crate::version_map::VersionMap;
+use crate::yanks::AllowedYanks;
 use crate::ResolutionOptions;
 
 pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
@@ -43,6 +44,7 @@ pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     allowed_urls: AllowedUrls,
+    allowed_yanks: AllowedYanks,
     markers: &'a MarkerEnvironment,
     tags: &'a Tags,
     client: &'a RegistryClient,
@@ -78,6 +80,11 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                         None
                     }
                 })
+                .collect(),
+            allowed_yanks: manifest
+                .requirements
+                .iter()
+                .chain(manifest.constraints.iter())
                 .collect(),
             project: manifest.project,
             requirements: manifest.requirements,
@@ -553,6 +560,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                         self.tags,
                         self.markers,
                         self.build_context.interpreter(),
+                        &self.allowed_yanks,
                         self.exclude_newer.as_ref(),
                     );
                     self.index
