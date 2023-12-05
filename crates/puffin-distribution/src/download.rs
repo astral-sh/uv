@@ -15,7 +15,7 @@ use crate::error::Error;
 pub struct InMemoryWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
-    /// The parsed filename
+    /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The contents of the wheel.
     pub(crate) buffer: Vec<u8>,
@@ -28,7 +28,7 @@ pub struct InMemoryWheel {
 pub struct DiskWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
-    /// The parsed filename
+    /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The path to the downloaded wheel.
     pub(crate) path: PathBuf,
@@ -41,7 +41,7 @@ pub struct DiskWheel {
 pub struct BuiltWheel {
     /// The remote source distribution from which this wheel was built.
     pub(crate) dist: Dist,
-    /// The parsed filename
+    /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The path to the built wheel.
     pub(crate) path: PathBuf,

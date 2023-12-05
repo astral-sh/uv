@@ -149,13 +149,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     DistributionDatabaseError::Url(wheel.file.url.to_string(), err)
                 })?;
                 let filename = WheelFilename::from_str(&wheel.file.filename)?;
-                let wheel_filename = &wheel.file.filename;
 
-                let cache_entry = self.cache.entry(
-                    CacheBucket::Wheels,
-                    WheelCache::Index(&wheel.index).wheel_dir(),
-                    wheel_filename.to_string(),
-                );
                 let reader = self.client.stream_external(&url).await?;
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
@@ -175,6 +169,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         ByteSize::b(small_size as u64)
                     );
 
+                    let cache_entry = self.cache.entry(
+                        CacheBucket::Wheels,
+                        WheelCache::Index(&wheel.index).wheel_dir(),
+                        filename.stem(),
+                    );
+
                     // Read into a buffer.
                     let mut buffer = Vec::with_capacity(small_size);
                     let mut reader = tokio::io::BufReader::new(reader.compat());
@@ -182,14 +182,20 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     LocalWheel::InMemory(InMemoryWheel {
                         dist: dist.clone(),
-                        filename,
-                        buffer,
                         target: cache_entry.path(),
+                        buffer,
+                        filename,
                     })
                 } else {
                     let size =
                         small_size.map_or("unknown size".to_string(), |size| size.to_string());
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
+
+                    let cache_entry = self.cache.entry(
+                        CacheBucket::Wheels,
+                        WheelCache::Index(&wheel.index).wheel_dir(),
+                        filename.to_string(),
+                    );
 
                     // Download the wheel into the cache.
                     // TODO(charlie): Use an atomic write, and remove any existing files or directories.
@@ -199,9 +205,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     LocalWheel::Disk(DiskWheel {
                         dist: dist.clone(),
-                        filename,
                         path: cache_entry.path(),
-                        target: cache_entry.path(),
+                        target: cache_entry.with_file(filename.stem()).path(),
+                        filename,
                     })
                 };
 
@@ -215,28 +221,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                 debug!("Fetching disk-based wheel from URL: {}", wheel.url);
 
-                // Create a directory for the wheel.
-                let wheel_filename = wheel.filename()?;
-                let cache_entry = self.cache.entry(
-                    CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).wheel_dir(),
-                    wheel_filename.to_string(),
-                );
-
                 // Fetch the wheel.
                 let reader = self.client.stream_external(&wheel.url).await?;
 
                 // Download the wheel into the cache.
                 // TODO(charlie): Use an atomic write, and remove any existing files or directories.
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Url(&wheel.url).wheel_dir(),
+                    wheel.filename.to_string(),
+                );
                 fs::create_dir_all(&cache_entry.dir).await?;
                 let mut writer = fs::File::create(&cache_entry.path()).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                 let local_wheel = LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
-                    filename: wheel.filename.clone(),
                     path: cache_entry.path(),
-                    target: cache_entry.path(),
+                    target: cache_entry.with_file(wheel.filename.stem()).path(),
+                    filename: wheel.filename.clone(),
                 });
 
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -250,14 +253,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(),
-                    wheel.filename.to_string(),
+                    wheel.filename.stem(),
                 );
 
                 Ok(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
-                    filename: wheel.filename.clone(),
                     path: wheel.path.clone(),
                     target: cache_entry.path(),
+                    filename: wheel.filename.clone(),
                 }))
             }
 
@@ -268,9 +271,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let built_wheel = self.builder.download_and_build(source_dist).await?;
                 Ok(LocalWheel::Built(BuiltWheel {
                     dist: dist.clone(),
+                    path: built_wheel.path,
+                    target: built_wheel.target,
                     filename: built_wheel.filename,
-                    path: built_wheel.path.clone(),
-                    target: built_wheel.path,
                 }))
             }
         }
