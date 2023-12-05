@@ -10,7 +10,6 @@
 //!  * `-e`
 //!
 //! Unsupported:
-//!  * `-e <path>`. TBD
 //!  * `<path>`. TBD
 //!  * `<archive_url>`. TBD
 //!  * Options without a requirement, such as `--find-links` or `--index-url`
@@ -44,6 +43,7 @@ use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use unscanny::{Pattern, Scanner};
+use url::Url;
 
 use pep508_rs::{Pep508Error, Requirement};
 
@@ -63,6 +63,14 @@ enum RequirementsTxtStatement {
     },
     /// PEP 508 requirement plus metadata
     RequirementEntry(RequirementEntry),
+    /// `-e`
+    EditableRequirement(EditableRequirement),
+}
+
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
+pub enum EditableRequirement {
+    Path(PathBuf),
+    Url(Url),
 }
 
 /// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
@@ -97,6 +105,8 @@ pub struct RequirementsTxt {
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`
     pub constraints: Vec<Requirement>,
+    /// Editables with `-e`
+    pub editable: Vec<EditableRequirement>,
 }
 
 impl RequirementsTxt {
@@ -182,6 +192,9 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
                 }
+                RequirementsTxtStatement::EditableRequirement(editable) => {
+                    data.editable.push(editable);
+                }
             }
         }
         Ok(data)
@@ -230,12 +243,13 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-e") {
-        let (requirement, hashes) = parse_requirement_and_hashes(s, content)?;
-        RequirementsTxtStatement::RequirementEntry(RequirementEntry {
-            requirement,
-            hashes,
-            editable: true,
-        })
+        let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let editable_requirement = if let Ok(url) = Url::from_str(path_or_url) {
+            EditableRequirement::Url(url)
+        } else {
+            EditableRequirement::Path(PathBuf::from(path_or_url))
+        };
+        RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
@@ -505,6 +519,7 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
+    #[test_case(Path::new("editable.txt"))]
     fn line_endings(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
@@ -580,5 +595,29 @@ mod test {
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
+    }
+
+    #[test]
+    fn invalid_editable() {
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let basic = working_dir.join("invalid-requirement");
+        let err = RequirementsTxt::parse(&basic, &working_dir).unwrap_err();
+        let errors = anyhow::Error::new(err)
+            .chain()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        let expected = &[
+            format!(
+                "Couldn't parse requirement in {} position 0 to 15",
+                basic.display()
+            ),
+            indoc! {"
+                Expected an alphanumeric character starting the extra name, found 'ö'
+                numpy[ö]==1.29
+                      ^"
+            }
+            .to_string(),
+        ];
+        assert_eq!(errors, expected);
     }
 }

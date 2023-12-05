@@ -24,6 +24,7 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.75" }
