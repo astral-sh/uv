@@ -6,6 +6,7 @@ use tracing::{debug, instrument, warn};
 
 use distribution_types::{CachedDist, Dist, RemoteSource};
 use puffin_distribution::{LocalWheel, Unzip};
+use puffin_fs::{rename_atomic_sync, Target};
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -40,32 +41,28 @@ impl Unzipper {
             // Unzip the wheel.
             let normalized_path = tokio::task::spawn_blocking({
                 move || -> Result<PathBuf> {
-                    let parent = download.path().parent().expect("Cache paths can't be root");
+                    // Unzip the wheel into a temporary directory.
+                    let parent = download
+                        .target()
+                        .parent()
+                        .expect("Cache paths can't be root");
                     fs_err::create_dir_all(parent)?;
                     let staging = tempfile::tempdir_in(parent)?;
-
                     download.unzip(staging.path())?;
 
-                    // Remove the file we just unzipped and replace it with the unzipped directory.
-                    // If we abort before renaming the directory that's not a problem, we just lose
-                    // the cache.
-                    if !matches!(download, LocalWheel::InMemory(_)) {
-                        fs_err::remove_file(download.path())?;
-                    }
-
-                    let normalized_path = parent.join(download.filename().to_string());
-                    if fs_err::remove_dir_all(&normalized_path).is_ok() {
-                        // If we're replacing an existing directory, warn. If a wheel already exists
-                        // in the cache, we should avoid re-downloading it, so reaching this
-                        // condition represents a bug in the install plan.
+                    // Move the unzipped wheel into the cache, removing any existing files or
+                    // directories. This will often include the zipped wheel itself, which we
+                    // replace in the cache with the unzipped directory.
+                    if rename_atomic_sync(staging.into_path(), download.target())?
+                        .is_some_and(Target::is_directory)
+                    {
                         warn!(
-                            "Removed existing directory at: {}",
-                            normalized_path.display()
+                            "Removing existing directory at: {}",
+                            download.target().display()
                         );
                     }
-                    fs_err::rename(staging.into_path(), &normalized_path)?;
 
-                    Ok(normalized_path)
+                    Ok(download.target().to_path_buf())
                 }
             })
             .await?

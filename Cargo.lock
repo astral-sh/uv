@@ -2525,6 +2525,7 @@ dependencies = [
  "puffin-cache",
  "puffin-client",
  "puffin-distribution",
+ "puffin-fs",
  "puffin-git",
  "puffin-interpreter",
  "puffin-normalize",

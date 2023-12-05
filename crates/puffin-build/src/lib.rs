@@ -427,7 +427,7 @@ impl SourceBuild {
 
             let from = tmp_dir.path().join(&filename);
             let to = wheel_dir.join(&filename);
-            if !rename_atomic_sync(from, &to)? {
+            if rename_atomic_sync(from, &to)?.is_some() {
                 warn!("Overwriting existing wheel at: {}", to.display());
             }
 
@@ -461,7 +461,7 @@ impl SourceBuild {
 
             let from = dist_wheel.path();
             let to = wheel_dir.join(dist_wheel.file_name());
-            if !copy_atomic_sync(from, &to)? {
+            if copy_atomic_sync(from, &to)?.is_some() {
                 warn!("Overwriting existing wheel at: {}", to.display());
             }
 
