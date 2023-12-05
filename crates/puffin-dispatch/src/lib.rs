@@ -13,7 +13,7 @@ use tracing::{debug, instrument};
 use distribution_types::{CachedDist, Metadata};
 use pep508_rs::Requirement;
 use platform_tags::Tags;
-use puffin_build::{SourceBuild, SourceBuildContext};
+use puffin_build::{BuildKind, SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall};
@@ -230,6 +230,7 @@ impl BuildContext for BuildDispatch {
                 self,
                 self.source_build_context.clone(),
                 source_dist,
+                BuildKind::Wheel,
             )
             .await?;
             Ok(builder.build(wheel_dir).await?)
