@@ -84,6 +84,21 @@ impl Virtualenv {
             .platform
             .venv_site_packages(&self.root, self.interpreter().simple_version())
     }
+
+    pub fn bin_dir(&self) -> PathBuf {
+        #[cfg(unix)]
+        {
+            self.root().join("bin")
+        }
+        #[cfg(windows)]
+        {
+            self.root().join("Scripts")
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            compile_error!("only unix (like mac and linux) and windows are supported")
+        }
+    }
 }
 
 /// Locate the current virtual environment.
