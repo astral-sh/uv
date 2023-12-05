@@ -1,0 +1,35 @@
+---
+source: crates/requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [],
+    constraints: [],
+    editable: [
+        Path(
+            "../editable-installs/maturin_editable",
+        ),
+        Path(
+            "../editable-installs/poetry_editable",
+        ),
+        Url(
+            Url {
+                scheme: "git+https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "github.com",
+                    ),
+                ),
+                port: None,
+                path: "/PyO3/maturin.git@c6932cd40c0869d85028841ef8e717cb19a6de38",
+                query: None,
+                fragment: Some(
+                    "subdirectory=test-crates/cffi-mixed",
+                ),
+            },
+        ),
+    ],
+}
