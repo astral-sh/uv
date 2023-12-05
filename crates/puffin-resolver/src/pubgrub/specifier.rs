@@ -71,7 +71,7 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 } else if let Some(post) = low.post {
                     low.post = Some(post + 1);
                 } else {
-                    low.post = Some(u32::MAX);
+                    low.post = Some(u64::MAX);
                 }
                 let version = PubGrubVersion::from(specifier.version().clone());
                 Range::strictly_higher_than(version)

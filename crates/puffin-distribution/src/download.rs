@@ -76,6 +76,7 @@ pub struct SourceDistDownload {
 
 /// A downloaded distribution, either a wheel or a source distribution.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Download {
     Wheel(LocalWheel),
     SourceDist(SourceDistDownload),
