@@ -184,7 +184,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         dist: dist.clone(),
                         filename,
                         buffer,
-                        path: cache_entry.path(),
+                        target: cache_entry.path(),
                     })
                 } else {
                     let size =
@@ -201,6 +201,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         dist: dist.clone(),
                         filename,
                         path: cache_entry.path(),
+                        target: cache_entry.path(),
                     })
                 };
 
@@ -212,7 +213,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             }
 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                debug!("Fetching disk-based wheel from URL: {}", &wheel.url);
+                debug!("Fetching disk-based wheel from URL: {}", wheel.url);
 
                 // Create a directory for the wheel.
                 let wheel_filename = wheel.filename()?;
@@ -235,6 +236,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     dist: dist.clone(),
                     filename: wheel.filename.clone(),
                     path: cache_entry.path(),
+                    target: cache_entry.path(),
                 });
 
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -244,11 +246,20 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 Ok(local_wheel)
             }
 
-            Dist::Built(BuiltDist::Path(wheel)) => Ok(LocalWheel::Disk(DiskWheel {
-                dist: dist.clone(),
-                path: wheel.path.clone(),
-                filename: wheel.filename.clone(),
-            })),
+            Dist::Built(BuiltDist::Path(wheel)) => {
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Url(&wheel.url).wheel_dir(),
+                    wheel.filename.to_string(),
+                );
+
+                Ok(LocalWheel::Disk(DiskWheel {
+                    dist: dist.clone(),
+                    filename: wheel.filename.clone(),
+                    path: wheel.path.clone(),
+                    target: cache_entry.path(),
+                }))
+            }
 
             Dist::Source(source_dist) => {
                 let lock = self.locks.acquire(&dist).await;
@@ -258,7 +269,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 Ok(LocalWheel::Built(BuiltWheel {
                     dist: dist.clone(),
                     filename: built_wheel.filename,
-                    path: built_wheel.path,
+                    path: built_wheel.path.clone(),
+                    target: built_wheel.path,
                 }))
             }
         }

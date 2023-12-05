@@ -22,6 +22,7 @@ puffin-client = { path = "../puffin-client" }
 distribution-types = { path = "../distribution-types" }
 platform-tags = { path = "../platform-tags" }
 puffin-distribution = { path = "../puffin-distribution" }
+puffin-fs = { path = "../puffin-fs" }
 puffin-git = { path = "../puffin-git" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }

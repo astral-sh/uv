@@ -19,8 +19,8 @@ pub struct InMemoryWheel {
     pub(crate) filename: WheelFilename,
     /// The contents of the wheel.
     pub(crate) buffer: Vec<u8>,
-    /// The path where the downloaded wheel would have been stored, if it wasn't an in-memory wheel.
-    pub(crate) path: PathBuf,
+    /// The expected path to the downloaded wheel's entry in the cache.
+    pub(crate) target: PathBuf,
 }
 
 /// A downloaded wheel that's stored on-disk.
@@ -32,6 +32,8 @@ pub struct DiskWheel {
     pub(crate) filename: WheelFilename,
     /// The path to the downloaded wheel.
     pub(crate) path: PathBuf,
+    /// The expected path to the downloaded wheel's entry in the cache.
+    pub(crate) target: PathBuf,
 }
 
 /// A wheel built from a source distribution that's stored on-disk.
@@ -43,6 +45,8 @@ pub struct BuiltWheel {
     pub(crate) filename: WheelFilename,
     /// The path to the built wheel.
     pub(crate) path: PathBuf,
+    /// The expected path to the downloaded wheel's entry in the cache.
+    pub(crate) target: PathBuf,
 }
 
 /// A downloaded or built wheel.
@@ -54,11 +58,12 @@ pub enum LocalWheel {
 }
 
 impl LocalWheel {
-    pub fn path(&self) -> &Path {
+    /// Return the path to the downloaded wheel's entry in the cache.
+    pub fn target(&self) -> &Path {
         match self {
-            LocalWheel::InMemory(wheel) => &wheel.path,
-            LocalWheel::Disk(wheel) => &wheel.path,
-            LocalWheel::Built(wheel) => &wheel.path,
+            LocalWheel::InMemory(wheel) => &wheel.target,
+            LocalWheel::Disk(wheel) => &wheel.target,
+            LocalWheel::Built(wheel) => &wheel.target,
         }
     }
 }
