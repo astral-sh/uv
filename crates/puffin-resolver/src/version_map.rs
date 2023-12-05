@@ -15,6 +15,7 @@ use pypi_types::{SimpleJson, Yanked};
 
 use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::pubgrub::PubGrubVersion;
+use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default)]
@@ -28,6 +29,7 @@ impl VersionMap {
         tags: &Tags,
         markers: &MarkerEnvironment,
         interpreter: &Interpreter,
+        allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
     ) -> Self {
         let mut version_map: BTreeMap<PubGrubVersion, PrioritizedDistribution> =
@@ -72,14 +74,16 @@ impl VersionMap {
                 }
             }
 
-            // When resolving, exclude yanked files.
-            // TODO(konstin): When we fail resolving due to a dependency locked to yanked version,
-            // we should tell the user.
-            if file.yanked.as_ref().is_some_and(Yanked::is_yanked) {
-                continue;
-            }
-
             if let Ok(filename) = WheelFilename::from_str(file.filename.as_str()) {
+                // When resolving, exclude yanked files.
+                if file.yanked.as_ref().is_some_and(Yanked::is_yanked) {
+                    if allowed_yanks.allowed(package_name, &filename.version) {
+                        warn!("Allowing yanked version: {}", file.filename);
+                    } else {
+                        continue;
+                    }
+                }
+
                 let priority = filename.compatibility(tags);
 
                 match version_map.entry(filename.version.into()) {
@@ -96,6 +100,15 @@ impl VersionMap {
             } else if let Ok(filename) =
                 SourceDistFilename::parse(file.filename.as_str(), package_name)
             {
+                // When resolving, exclude yanked files.
+                if file.yanked.as_ref().is_some_and(Yanked::is_yanked) {
+                    if allowed_yanks.allowed(package_name, &filename.version) {
+                        warn!("Allowing yanked version: {}", file.filename);
+                    } else {
+                        continue;
+                    }
+                }
+
                 match version_map.entry(filename.version.into()) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_source(SdistFile(file));
