@@ -1,0 +1,12 @@
+[project]
+name = "maturin_editable"
+version = "0.1.0"
+requires-python = ">=3.8"
+
+[tool.maturin]
+python-source = "python"
+features = ["pyo3/extension-module"]
+
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
