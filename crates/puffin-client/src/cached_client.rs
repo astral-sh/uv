@@ -8,7 +8,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace, warn};
 
-use puffin_cache::{write_atomic, CacheEntry};
+use puffin_cache::CacheEntry;
+use puffin_fs::write_atomic;
 
 /// Either a cached client error or a (user specified) error from the callback
 pub enum CachedClientError<CallbackError> {

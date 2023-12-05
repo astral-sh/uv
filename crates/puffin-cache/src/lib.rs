@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use fs_err as fs;
-use tempfile::{tempdir, NamedTempFile, TempDir};
+use tempfile::{tempdir, TempDir};
 
 pub use canonical_url::{CanonicalUrl, RepositoryUrl};
 #[cfg(feature = "clap")]
@@ -342,46 +342,4 @@ impl Display for CacheBucket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.to_str())
     }
-}
-
-/// Write `data` to `path` atomically using a temporary file and atomic rename.   
-pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
-    let temp_file = NamedTempFile::new_in(
-        path.as_ref()
-            .parent()
-            .expect("Cache path must have a parent"),
-    )?;
-    fs_err::tokio::write(&temp_file, &data).await?;
-    temp_file.persist(&path).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
-                err.error
-            ),
-        )
-    })?;
-    Ok(())
-}
-
-/// Write `data` to `path` atomically using a temporary file and atomic rename.   
-pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
-    let temp_file = NamedTempFile::new_in(
-        path.as_ref()
-            .parent()
-            .expect("Cache path must have a parent"),
-    )?;
-    fs_err::write(&temp_file, &data)?;
-    temp_file.persist(&path).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
-                err.error
-            ),
-        )
-    })?;
-    Ok(())
 }
