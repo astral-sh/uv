@@ -41,6 +41,11 @@ impl RegistryIndex {
                     }
                 };
 
+                // Ignore zipped wheels, which represent intermediary cached artifacts.
+                if !path.is_dir() {
+                    continue;
+                }
+
                 match CachedRegistryDist::try_from_path(&path) {
                     Ok(None) => {}
                     Ok(Some(dist_info)) => {
