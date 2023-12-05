@@ -8,6 +8,7 @@ distribution-filename = { path = "../distribution-filename" }
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 puffin-cache = { path = "../puffin-cache" }
+puffin-fs = { path = "../puffin-fs" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 

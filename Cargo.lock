@@ -2261,6 +2261,7 @@ dependencies = [
  "once_cell",
  "pep508_rs",
  "platform-host",
+ "puffin-fs",
  "puffin-interpreter",
  "puffin-traits",
  "pypi-types",
@@ -2363,6 +2364,7 @@ dependencies = [
  "http-cache-semantics",
  "install-wheel-rs",
  "puffin-cache",
+ "puffin-fs",
  "puffin-normalize",
  "pypi-types",
  "reqwest",
@@ -2460,6 +2462,7 @@ dependencies = [
  "platform-tags",
  "puffin-cache",
  "puffin-client",
+ "puffin-fs",
  "puffin-git",
  "puffin-normalize",
  "puffin-traits",
@@ -2476,6 +2479,14 @@ dependencies = [
  "tracing",
  "url",
  "zip",
+]
+
+[[package]]
+name = "puffin-fs"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "tempfile",
 ]
 
 [[package]]
@@ -2537,6 +2548,7 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "puffin-cache",
+ "puffin-fs",
  "serde",
  "serde_json",
  "tempfile",

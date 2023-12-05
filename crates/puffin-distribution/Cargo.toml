@@ -19,6 +19,7 @@ install-wheel-rs = { path = "../install-wheel-rs" }
 platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
+puffin-fs = { path = "../puffin-fs" }
 puffin-git = { path = "../puffin-git" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-traits = { path = "../puffin-traits" }

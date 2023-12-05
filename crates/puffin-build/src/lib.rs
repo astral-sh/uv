@@ -23,10 +23,11 @@ use tar::Archive;
 use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tracing::{debug, info_span, instrument};
+use tracing::{debug, info_span, instrument, warn};
 use zip::ZipArchive;
 
 use pep508_rs::Requirement;
+use puffin_fs::{copy_atomic_sync, rename_atomic_sync};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_traits::BuildContext;
 
@@ -416,17 +417,23 @@ impl SourceBuild {
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip(self, wheel_dir), fields(package_id = self.package_id))]
     pub fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
-        // The build scripts run with the extracted root as cwd, so they need the absolute path
+        // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
         if let Some(pep517_backend) = &self.pep517_backend {
-            // Prevent clashes from two puffin processes building wheels in parallel
+            // Prevent clashes from two puffin processes building wheels in parallel.
             let tmp_dir = tempdir_in(&wheel_dir)?;
             let filename = self.pep517_build_wheel(tmp_dir.path(), pep517_backend)?;
-            fs::rename(tmp_dir.path().join(&filename), wheel_dir.join(&filename))?;
+
+            let from = tmp_dir.path().join(&filename);
+            let to = wheel_dir.join(&filename);
+            if !rename_atomic_sync(from, &to)? {
+                warn!("Overwriting existing wheel at: {}", to.display());
+            }
+
             Ok(filename)
         } else {
-            // We checked earlier that setup.py exists
+            // We checked earlier that setup.py exists.
             let python_interpreter = self.venv.python_executable();
             let output = Command::new(&python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
@@ -448,11 +455,16 @@ impl SourceBuild {
                         "Expected exactly wheel in `dist/` after invoking setup.py, found {dist_dir:?}"
                     ),
                     &output,
-                    &self.package_id));
+                    &self.package_id)
+                );
             };
-            let wheel = wheel_dir.join(dist_wheel.file_name());
-            // Legacy path, not atomic
-            fs::copy(dist_wheel.path(), wheel)?;
+
+            let from = dist_wheel.path();
+            let to = wheel_dir.join(dist_wheel.file_name());
+            if !copy_atomic_sync(from, &to)? {
+                warn!("Overwriting existing wheel at: {}", to.display());
+            }
+
             Ok(dist_wheel.file_name().to_string_lossy().to_string())
         }
     }

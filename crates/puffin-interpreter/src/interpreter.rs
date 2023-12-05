@@ -9,7 +9,8 @@ use tracing::debug;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
-use puffin_cache::{digest, write_atomic_sync, Cache, CacheBucket};
+use puffin_cache::{digest, Cache, CacheBucket};
+use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
 use crate::Error;

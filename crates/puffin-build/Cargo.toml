@@ -17,6 +17,7 @@ workspace = true
 gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
+puffin-fs = { path = "../puffin-fs" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }

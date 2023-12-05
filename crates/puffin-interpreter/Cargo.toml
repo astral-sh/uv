@@ -17,6 +17,7 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
 puffin-cache = { path = "../puffin-cache" }
+puffin-fs = { path = "../puffin-fs" }
 
 fs-err = { workspace = true, features = ["tokio"] }
 serde_json = { workspace = true }

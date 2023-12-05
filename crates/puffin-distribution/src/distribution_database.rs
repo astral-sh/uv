@@ -192,6 +192,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
                     // Download the wheel into the cache.
+                    // TODO(charlie): Use an atomic write, and remove any existing files or directories.
                     fs::create_dir_all(&cache_entry.dir).await?;
                     let mut writer = fs::File::create(cache_entry.path()).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
@@ -224,7 +225,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // Fetch the wheel.
                 let reader = self.client.stream_external(&wheel.url).await?;
 
-                // Download the wheel to the directory.
+                // Download the wheel into the cache.
+                // TODO(charlie): Use an atomic write, and remove any existing files or directories.
                 fs::create_dir_all(&cache_entry.dir).await?;
                 let mut writer = fs::File::create(&cache_entry.path()).await?;
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
