@@ -112,11 +112,9 @@ impl InstallPlan {
                 Some(VersionOrUrl::Url(url)) => {
                     // TODO(konstin): Add source dist url support. It's more tricky since we don't
                     // know yet whether source dist is fresh in the cache.
-                    if let Ok((disk_filename, filename)) =
-                        url.filename().and_then(|disk_filename| {
-                            let filename = WheelFilename::from_str(disk_filename)?;
-                            Ok((disk_filename, filename))
-                        })
+                    if let Ok(filename) = url
+                        .filename()
+                        .and_then(|disk_filename| Ok(WheelFilename::from_str(disk_filename)?))
                     {
                         if requirement.name != filename.name {
                             bail!(
@@ -129,7 +127,7 @@ impl InstallPlan {
                         let cache_entry = cache.entry(
                             CacheBucket::Wheels,
                             WheelCache::Url(url).wheel_dir(),
-                            disk_filename.to_string(),
+                            filename.stem(),
                         );
 
                         // Ignore zipped wheels, which represent intermediary cached artifacts.

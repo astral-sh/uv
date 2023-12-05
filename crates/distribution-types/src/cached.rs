@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use anyhow::Result;
 use url::Url;
@@ -125,6 +124,7 @@ impl CachedDist {
 }
 
 impl CachedDirectUrlDist {
+    /// Initialize a [`CachedDirectUrlDist`] from a [`WheelFilename`], [`Url`], and [`Path`].
     pub fn from_url(filename: WheelFilename, url: Url, path: PathBuf) -> Self {
         Self {
             filename,
@@ -135,7 +135,7 @@ impl CachedDirectUrlDist {
 }
 
 impl CachedRegistryDist {
-    /// Try to parse a distribution from a cached directory name (like `django-5.0a1`).
+    /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
     pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
         let Some(file_name) = path.file_name() else {
             return Ok(None);
@@ -143,9 +143,12 @@ impl CachedRegistryDist {
         let Some(file_name) = file_name.to_str() else {
             return Ok(None);
         };
-        let Ok(filename) = WheelFilename::from_str(file_name) else {
+        let Ok(filename) = WheelFilename::from_stem(file_name) else {
             return Ok(None);
         };
+        if path.is_file() {
+            return Ok(None);
+        }
 
         let path = path.to_path_buf();
 

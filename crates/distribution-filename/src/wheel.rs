@@ -1,8 +1,8 @@
-#[cfg(feature = "serde")]
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+#[cfg(feature = "serde")]
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
@@ -23,13 +23,69 @@ impl FromStr for WheelFilename {
     type Err = WheelFilenameError;
 
     fn from_str(filename: &str) -> Result<Self, Self::Err> {
-        let basename = filename.strip_suffix(".whl").ok_or_else(|| {
+        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
             WheelFilenameError::InvalidWheelFileName(
                 filename.to_string(),
                 "Must end with .whl".to_string(),
             )
         })?;
+        Self::parse(stem, filename)
+    }
+}
 
+impl Display for WheelFilename {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}-{}-{}.whl",
+            self.name.as_dist_info_name(),
+            self.version,
+            self.get_tag()
+        )
+    }
+}
+
+impl WheelFilename {
+    /// Returns `true` if the wheel is compatible with the given tags.
+    pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
+        compatible_tags.is_compatible(&self.python_tag, &self.abi_tag, &self.platform_tag)
+    }
+
+    /// Return the [`TagPriority`] score of the wheel with the given tags, or `None` if the wheel is
+    /// incompatible.
+    pub fn compatibility(&self, compatible_tags: &Tags) -> Option<TagPriority> {
+        compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
+    }
+
+    /// Get the tag for this wheel.
+    pub fn get_tag(&self) -> String {
+        format!(
+            "{}-{}-{}",
+            self.python_tag.join("."),
+            self.abi_tag.join("."),
+            self.platform_tag.join(".")
+        )
+    }
+
+    /// The wheel filename without the extension.
+    pub fn stem(&self) -> String {
+        format!(
+            "{}-{}-{}",
+            self.name.as_dist_info_name(),
+            self.version,
+            self.get_tag()
+        )
+    }
+
+    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
+    pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
+        Self::parse(stem, stem)
+    }
+
+    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
+    ///
+    /// The originating `filename` is used for high-fidelity error messages.
+    fn parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
@@ -39,7 +95,7 @@ impl FromStr for WheelFilename {
         // is used to break ties. This might mean that we generate identical
         // `WheelName` values for multiple distinct wheels, but it's not clear
         // if this is a problem in practice.
-        let mut parts = basename.split('-');
+        let mut parts = stem.split('-');
 
         let name = parts
             .next()
@@ -109,46 +165,6 @@ impl FromStr for WheelFilename {
             abi_tag: abi_tag.split('.').map(String::from).collect(),
             platform_tag: platform_tag.split('.').map(String::from).collect(),
         })
-    }
-}
-
-impl Display for WheelFilename {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}-{}-{}.whl",
-            self.name.as_dist_info_name(),
-            self.version,
-            self.get_tag()
-        )
-    }
-}
-
-impl WheelFilename {
-    /// Returns `true` if the wheel is compatible with the given tags.
-    pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
-        compatible_tags.is_compatible(&self.python_tag, &self.abi_tag, &self.platform_tag)
-    }
-
-    /// Return the [`TagPriority`] score of the wheel with the given tags, or `None` if the wheel is
-    /// incompatible.
-    pub fn compatibility(&self, compatible_tags: &Tags) -> Option<TagPriority> {
-        compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
-    }
-
-    /// Get the tag for this wheel.
-    pub fn get_tag(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.python_tag.join("."),
-            self.abi_tag.join("."),
-            self.platform_tag.join(".")
-        )
-    }
-
-    /// The wheel filename without the extension
-    pub fn stem(&self) -> String {
-        format!("{}-{}-{}", self.name, self.version, self.get_tag())
     }
 }
 

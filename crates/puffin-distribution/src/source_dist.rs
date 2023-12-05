@@ -92,8 +92,13 @@ type Metadata21s = FxHashMap<WheelFilename, DiskFilenameAndMetadata>;
 /// The information about the wheel we either just built or got from the cache
 #[derive(Debug, Clone)]
 pub struct BuiltWheelMetadata {
+    /// The path to the built wheel.
     pub path: PathBuf,
+    /// The expected path to the downloaded wheel's entry in the cache.
+    pub target: PathBuf,
+    /// The parsed filename.
     pub filename: WheelFilename,
+    /// The metadata of the built wheel.
     pub metadata: Metadata21,
 }
 
@@ -105,6 +110,7 @@ impl BuiltWheelMetadata {
     ) -> Self {
         Self {
             path: cache_entry.dir.join(&cached_data.disk_filename),
+            target: cache_entry.dir.join(filename.stem()),
             filename: filename.clone(),
             metadata: cached_data.metadata.clone(),
         }
@@ -206,6 +212,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 // Read the metadata from the wheel.
                 let filename = WheelFilename::from_str(&disk_filename)?;
                 let path = wheel_dir.join(disk_filename);
+                let target = wheel_dir.join(filename.stem());
                 let metadata = read_metadata(&filename, &path)?;
 
                 if let Some(task) = task {
@@ -216,6 +223,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 BuiltWheelMetadata {
                     path,
+                    target,
                     filename,
                     metadata,
                 }
@@ -452,8 +460,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
         }
 
+        let path = cache_entry.dir.join(&disk_filename);
+        let target = cache_entry.dir.join(filename.stem());
+
         Ok(BuiltWheelMetadata {
-            path: cache_entry.dir.join(&disk_filename),
+            path,
+            target,
             filename,
             metadata,
         })

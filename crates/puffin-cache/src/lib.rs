@@ -33,6 +33,11 @@ impl CacheEntry {
         // TODO(konstin): Cache this to avoid allocations?
         self.dir.join(&self.file)
     }
+
+    #[must_use]
+    pub fn with_file(self, file: String) -> Self {
+        Self { file, ..self }
+    }
 }
 
 /// The main cache abstraction.
@@ -115,10 +120,10 @@ impl Cache {
 pub enum CacheBucket {
     /// Wheels (excluding built wheels), their metadata and cache policy.
     ///
-    /// There are two kinds from cache entries: Wheel metadata and policy as json files, and the
-    /// wheels themselves. If a wheel file is over an in-memory size threshold, we first download
-    /// the zip file into the cache, then unzip it into a directory with the same name. Unlike the
-    /// built wheels cache, you should only see unpacked wheel directories after running puffin.
+    /// There are three kinds from cache entries: Wheel metadata and policy as JSON files, the
+    /// wheels themselves, and the unzipped wheel archives. If a wheel file is over an in-memory
+    /// size threshold, we first download the zip file into the cache, then unzip it into a
+    /// directory with the same name, omitting the `.whl` extension.
     ///
     /// Cache structure:
     ///  * `wheel-metadata-v0/pypi/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
@@ -170,6 +175,7 @@ pub enum CacheBucket {
     /// ├── pypi
     /// │   ...
     /// │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+    /// │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64
     /// │   ...
     /// └── url
     ///     └── 4b8be67c801a7ecb
@@ -188,6 +194,7 @@ pub enum CacheBucket {
     /// │   ├── ...
     /// │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.json
     /// │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+    /// │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64
     /// │   │   ├── pandas
     /// │   │   │   ├── ...
     /// │   │   ├── pandas-2.1.3.dist-info
@@ -197,7 +204,8 @@ pub enum CacheBucket {
     /// └── url
     ///     └── 4b8be67c801a7ecb
     ///         ├── flask-3.0.0-py3-none-any.json
-    ///         └── flask-3.0.0-py3-none-any.whl
+    ///         ├── flask-3.0.0-py3-none-any.json
+    ///         └── flask-3.0.0-py3-none-any
     ///             ├── flask
     ///             │   └── ...
     ///             └── flask-3.0.0.dist-info
@@ -207,17 +215,17 @@ pub enum CacheBucket {
     /// the source distribution.
     ///
     /// The structure is similar of that of the `Wheel` bucket, except we have an additional layer
-    /// for the source dist filename and the metadata is on the source dist level, not on the wheel
-    /// level.
+    /// for the source distribution filename and the metadata is at the source distribution-level,
+    /// not at the wheel level.
     ///
-    /// TODO(konstin): The cache policy should be on the source dist level, the metadata we can put
-    /// next to the wheels as in the `Wheels` bucket.
+    /// TODO(konstin): The cache policy should be on the source distribution level, the metadata we
+    /// can put next to the wheels as in the `Wheels` bucket.
     ///
     /// Source distributions are built into zipped wheel files (as PEP 517 specifies) and unzipped
     /// lazily before installing. So when resolving, we only build the wheel and store the archive
-    /// file in the cache, when installing, we unpack it and replace the zip file with an unzipped
-    /// directory under the same. You may find a mix of wheel archive zip files and unzipped
-    /// wheel directories in the cache.
+    /// file in the cache, when installing, we unpack it under the same name, omitting the `.whl`
+    /// extension. You may find a mix of wheel archive zip files and unzipped wheel directories in
+    /// the cache.
     ///
     /// Cache structure:
     ///  * `built-wheels-v0/pypi/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
