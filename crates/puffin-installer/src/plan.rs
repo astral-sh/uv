@@ -131,17 +131,16 @@ impl InstallPlan {
                             WheelCache::Url(url).wheel_dir(),
                             disk_filename.to_string(),
                         );
-                        if cache_entry.path().exists() {
-                            // TODO(charlie): This takes advantage of the fact that for URL dependencies, the package ID
-                            // and distribution ID are identical. We should either change the cache layout to use
-                            // distribution IDs, or implement package ID for URL.
+
+                        // Ignore zipped wheels, which represent intermediary cached artifacts.
+                        if cache_entry.path().is_dir() {
                             let cached_dist = CachedDirectUrlDist::from_url(
                                 filename,
                                 url.clone(),
                                 cache_entry.path(),
                             );
 
-                            debug!("Url wheel requirement already cached: {cached_dist}");
+                            debug!("URL wheel requirement already cached: {cached_dist}");
                             local.push(CachedDist::Url(cached_dist.clone()));
                             continue;
                         }

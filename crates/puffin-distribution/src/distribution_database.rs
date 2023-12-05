@@ -103,7 +103,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         }
     }
 
-    /// In parallel, either fetch the wheel or fetch and built source distributions.
+    /// In parallel, either fetch each wheel or build each source distribution.
     pub async fn get_wheels(
         &self,
         dists: Vec<Dist>,
@@ -191,7 +191,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         small_size.map_or("unknown size".to_string(), |size| size.to_string());
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
-                    // Download the wheel to a temporary file.
+                    // Download the wheel into the cache.
                     fs::create_dir_all(&cache_entry.dir).await?;
                     let mut writer = fs::File::create(cache_entry.path()).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
