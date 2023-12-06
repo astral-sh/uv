@@ -7,6 +7,7 @@ use std::sync::Arc;
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
+pub use by_timestamp::CachedByTimestamp;
 pub use canonical_url::{CanonicalUrl, RepositoryUrl};
 #[cfg(feature = "clap")]
 pub use cli::CacheArgs;
@@ -14,6 +15,7 @@ pub use digest::digest;
 pub use stable_hash::{StableHash, StableHasher};
 pub use wheel::WheelCache;
 
+mod by_timestamp;
 mod cache_key;
 mod canonical_url;
 mod cli;

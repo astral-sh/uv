@@ -2290,6 +2290,8 @@ dependencies = [
  "hex",
  "pypi-types",
  "seahash",
+ "serde",
+ "serde_json",
  "tempfile",
  "url",
 ]
