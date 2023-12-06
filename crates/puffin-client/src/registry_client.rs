@@ -420,7 +420,7 @@ impl VersionFiles {
 pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
 
 impl SimpleMetadata {
-    pub fn iter(&self) -> std::collections::btree_map::Iter<Version, VersionFiles> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, &VersionFiles)> {
         self.0.iter()
     }
 
