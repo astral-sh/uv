@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use url::Url;
 
@@ -13,14 +13,16 @@ use crate::{digest, CanonicalUrl};
 /// Use [`WheelCache::wheel_dir`] for remote wheel metadata caching and
 /// [`WheelCache::built_wheel_dir`] for built source distributions metadata caching.
 pub enum WheelCache<'a> {
-    /// Either pypi or an alternative index, which we key by index url
+    /// Either pypi or an alternative index, which we key by index URL.
     Index(&'a IndexUrl),
-    /// A direct url dependency, which we key by url
+    /// A direct URL dependency, which we key by URL.
     Url(&'a Url),
-    /// A git dependency, which we key by repository url. We use the revision as filename.
+    /// A path dependency, which we key by URL.
+    Path(&'a Url),
+    /// A Git dependency, which we key by repository url. We use the revision as filename.
     ///
     /// Note that this variant only exists for source distributions, wheels can't be delivered
-    /// through git.
+    /// through Git.
     Git(&'a Url),
 }
 
@@ -30,6 +32,7 @@ impl<'a> WheelCache<'a> {
             WheelCache::Index(IndexUrl::Pypi) => PathBuf::from("pypi"),
             WheelCache::Index(url) => PathBuf::from("index").join(digest(&CanonicalUrl::new(url))),
             WheelCache::Url(url) => PathBuf::from("url").join(digest(&CanonicalUrl::new(url))),
+            WheelCache::Path(url) => PathBuf::from("path").join(digest(&CanonicalUrl::new(url))),
             WheelCache::Git(url) => PathBuf::from("git").join(digest(&CanonicalUrl::new(url))),
         }
     }
@@ -40,7 +43,7 @@ impl<'a> WheelCache<'a> {
     }
 
     /// Metadata of a built source distribution. See [`CacheBucket::BuiltWheels`]
-    pub fn built_wheel_dir(&self, filename: &str) -> PathBuf {
+    pub fn built_wheel_dir(&self, filename: impl AsRef<Path>) -> PathBuf {
         self.bucket().join(filename)
     }
 }
