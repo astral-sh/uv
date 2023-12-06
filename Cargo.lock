@@ -2291,6 +2291,7 @@ dependencies = [
  "pypi-types",
  "seahash",
  "serde",
+ "serde_json",
  "tempfile",
  "url",
 ]

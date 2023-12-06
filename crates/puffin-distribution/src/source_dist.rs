@@ -14,7 +14,7 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span};
+use tracing::{debug, info_span, warn};
 use url::Url;
 use zip::result::ZipError;
 use zip::ZipArchive;
@@ -24,7 +24,7 @@ use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{GitSourceDist, Metadata, PathSourceDist, RemoteSource, SourceDist};
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
+use puffin_cache::{digest, CacheBucket, CacheEntry, CachedByTimestamp, CanonicalUrl, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::write_atomic;
 use puffin_git::{Fetch, GitSource};
@@ -73,6 +73,8 @@ pub enum SourceDistError {
     DistInfo(#[from] install_wheel_rs::Error),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
+    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
+    DirWithoutEntrypoint,
 
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
@@ -350,21 +352,60 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             METADATA_JSON.to_string(),
         );
 
-        let mut metadatas = if cache_entry.path().is_file() {
-            let cached = fs::read(&cache_entry.path()).await?;
-            let metadatas = serde_json::from_slice::<Metadata21s>(&cached)?;
-            // Do we have previous compatible build of this source dist?
-            if let Some((filename, cached_data)) = metadatas
-                .iter()
-                .find(|(filename, _metadata)| filename.is_compatible(self.tags))
-            {
-                return Ok(BuiltWheelMetadata::from_cached(
-                    filename,
-                    cached_data,
-                    &cache_entry,
-                ));
+        let file_metadata = fs_err::metadata(&path_source_dist.path)?;
+        // `modified()` is infallible on windows and unix (i.e., all platforms we support).
+        let modified = if file_metadata.is_file() {
+            file_metadata.modified()?
+        } else {
+            if path_source_dist.path.join("pyproject.toml").is_file() {
+                path_source_dist
+                    .path
+                    .join("pyproject.toml")
+                    .metadata()?
+                    .modified()?
+            } else if path_source_dist.path.join("setup.py").is_file() {
+                path_source_dist
+                    .path
+                    .join("setup.py")
+                    .metadata()?
+                    .modified()?
+            } else {
+                return Err(SourceDistError::DirWithoutEntrypoint);
             }
-            metadatas
+        };
+
+        let mut metadatas = if cache_entry.path().is_file() {
+            let cached = fs::read(&cache_entry.path()).await.ok().and_then(|cached| {
+                serde_json::from_slice::<CachedByTimestamp<Metadata21s>>(&cached).ok()
+            });
+            if let Some(cached) = cached {
+                if cached.timestamp == modified {
+                    // Do we have previous compatible build of this source dist?
+                    if let Some((filename, cached_data)) = cached
+                        .data
+                        .iter()
+                        .find(|(filename, _metadata)| filename.is_compatible(self.tags))
+                    {
+                        return Ok(BuiltWheelMetadata::from_cached(
+                            filename,
+                            cached_data,
+                            &cache_entry,
+                        ));
+                    }
+                    cached.data
+                } else {
+                    debug!(
+                        "Removing stale built wheels for: {}",
+                        cache_entry.path().display()
+                    );
+                    if let Err(err) = fs::remove_dir_all(&cache_entry.dir).await {
+                        warn!("Failed to remove stale built wheel cache directory: {err}");
+                    }
+                    Metadata21s::default()
+                }
+            } else {
+                Metadata21s::default()
+            }
         } else {
             Metadata21s::default()
         };
@@ -399,8 +440,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 metadata: metadata.clone(),
             },
         );
+        let cached = CachedByTimestamp {
+            timestamp: modified,
+            data: metadatas,
+        };
         fs::create_dir_all(&cache_entry.dir).await?;
-        let data = serde_json::to_vec(&metadatas)?;
+        let data = serde_json::to_vec(&cached)?;
         write_atomic(cache_entry.path(), data).await?;
 
         if let Some(task) = task {

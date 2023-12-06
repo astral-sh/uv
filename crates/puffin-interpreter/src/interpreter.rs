@@ -158,12 +158,11 @@ impl InterpreterQueryResult {
             format!("{}.json", digest(&executable_bytes)),
         );
 
-        let modified = fs_err::metadata(executable)?
-            // Note: This is infallible on windows and unix (i.e., all platforms we support).
-            .modified()?;
+        // `modified()` is infallible on windows and unix (i.e., all platforms we support).
+        let modified = fs_err::metadata(executable)?.modified()?;
 
         // Read from the cache.
-        if let Ok(data) = fs::read(&cache_entry.path()) {
+        if let Ok(data) = fs::read(cache_entry.path()) {
             if let Ok(cached) = serde_json::from_slice::<CachedByTimestamp<Self>>(&data) {
                 if cached.timestamp == modified {
                     debug!("Using cached markers for: {}", executable.display());
