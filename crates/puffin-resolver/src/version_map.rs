@@ -35,7 +35,7 @@ impl VersionMap {
         let mut version_map: BTreeMap<PubGrubVersion, PrioritizedDistribution> =
             BTreeMap::default();
 
-        // Discarding any incompatible distributions.
+        // Collect compatible distributions.
         for (version, files) in metadata {
             for (filename, file) in files.all() {
                 // Only add dists compatible with the python version. This is relevant for source
