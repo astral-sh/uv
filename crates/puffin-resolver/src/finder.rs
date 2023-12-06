@@ -6,7 +6,7 @@ use std::hash::BuildHasherDefault;
 use std::str::FromStr;
 
 use anyhow::Result;
-use futures::{StreamExt, TryFutureExt};
+use futures::StreamExt;
 use fxhash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
@@ -61,12 +61,16 @@ impl<'a> DistFinder<'a> {
         // Initialize the package stream.
         let mut package_stream = package_stream
             .map(|request: Request| match request {
-                Request::Package(requirement) => self
-                    .client
-                    .simple(requirement.name.clone())
-                    .map_ok(move |(index, metadata)| {
-                        Response::Package(requirement, index, metadata)
-                    }),
+                Request::Package(requirement) => {
+                    async move {
+                        let (index, metadata) = self.client.simple(&requirement.name).await?;
+                        Ok::<_, puffin_client::Error>(Response::Package(
+                            requirement,
+                            index,
+                            metadata,
+                        ))
+                    }
+                }
             })
             .buffer_unordered(32)
             .ready_chunks(32);

@@ -4,9 +4,10 @@ use chrono::{DateTime, Utc};
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ResolutionOptions {
-    pub(crate) resolution_mode: ResolutionMode,
-    pub(crate) prerelease_mode: PreReleaseMode,
-    pub(crate) exclude_newer: Option<DateTime<Utc>>,
+    // TODO(konstin): These should be pub(crate) again
+    pub resolution_mode: ResolutionMode,
+    pub prerelease_mode: PreReleaseMode,
+    pub exclude_newer: Option<DateTime<Utc>>,
 }
 
 impl ResolutionOptions {

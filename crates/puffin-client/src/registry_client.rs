@@ -119,7 +119,10 @@ impl RegistryClient {
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the pypi json api approximately implements.
-    pub async fn simple(&self, package_name: PackageName) -> Result<(IndexUrl, SimpleJson), Error> {
+    pub async fn simple(
+        &self,
+        package_name: &PackageName,
+    ) -> Result<(IndexUrl, SimpleJson), Error> {
         if self.index_urls.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
@@ -131,11 +134,7 @@ impl RegistryClient {
             url.path_segments_mut().unwrap().push("");
             url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 
-            trace!(
-                "Fetching metadata for {} from {}",
-                package_name.as_ref(),
-                url
-            );
+            trace!("Fetching metadata for {} from {}", package_name, url);
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Simple,
@@ -180,7 +179,7 @@ impl RegistryClient {
             }
         }
 
-        Err(Error::PackageNotFound(package_name.as_ref().to_string()))
+        Err(Error::PackageNotFound(package_name.to_string()))
     }
 
     /// Fetch the metadata for a remote wheel file.

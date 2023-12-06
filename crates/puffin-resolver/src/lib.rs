@@ -6,7 +6,9 @@ pub use pubgrub::PubGrubReportFormatter;
 pub use resolution::Graph;
 pub use resolution_mode::ResolutionMode;
 pub use resolution_options::ResolutionOptions;
-pub use resolver::{BuildId, Reporter as ResolverReporter, Resolver};
+pub use resolver::{
+    BuildId, DefaultResolverProvider, Reporter as ResolverReporter, Resolver, ResolverProvider,
+};
 
 mod candidate_selector;
 mod error;
