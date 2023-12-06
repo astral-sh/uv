@@ -37,7 +37,7 @@ impl VersionMap {
 
         // Discarding any incompatible distributions.
         for (version, files) in metadata {
-            for (filename, file) in files.into_iter_all() {
+            for (filename, file) in files.all() {
                 // Only add dists compatible with the python version. This is relevant for source
                 // distributions which give no other indication of their compatibility and wheels which
                 // may be tagged `py3-none-any` but have `requires-python: ">=3.9"`.

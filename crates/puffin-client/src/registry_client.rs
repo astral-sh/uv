@@ -404,7 +404,7 @@ impl VersionFiles {
         }
     }
 
-    pub fn into_iter_all(self) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
         self.wheels
             .into_iter()
             .map(|(filename, file)| (DistFilename::WheelFilename(filename), file))
