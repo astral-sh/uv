@@ -17,7 +17,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_distribution::DistributionDatabase;
 use puffin_installer::InstallPlan;
 use puffin_interpreter::Virtualenv;
-use puffin_traits::InFlight;
+use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
 
 use crate::commands::reporters::{FetcherReporter, FinderReporter, InstallReporter, UnzipReporter};
@@ -213,7 +213,7 @@ pub(crate) async fn sync_requirements(
             .with_reporter(UnzipReporter::from(printer).with_length(wheels.len() as u64));
 
         let unzips = unzipper
-            .unzip(wheels, &InFlight::default())
+            .unzip(wheels, &OnceMap::default())
             .await
             .context("Failed to unpack wheels")?;
 

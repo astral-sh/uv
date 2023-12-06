@@ -6,7 +6,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 
-pub use in_flight::InFlight;
+pub use in_flight::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
 use puffin_interpreter::{Interpreter, Virtualenv};

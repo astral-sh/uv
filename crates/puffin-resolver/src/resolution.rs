@@ -2,19 +2,20 @@ use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
 use colored::Colorize;
-use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
 use fxhash::FxHashMap;
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{Requirement, VersionOrUrl};
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
-use puffin_normalize::PackageName;
-use pypi_types::{File, IndexUrl};
 use url::Url;
-use waitmap::WaitMap;
+
+use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{Requirement, VersionOrUrl};
+use puffin_normalize::PackageName;
+use puffin_traits::OnceMap;
+use pypi_types::{File, IndexUrl};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 use crate::ResolveError;
@@ -60,7 +61,7 @@ impl Graph {
     pub fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FxHashMap<PackageName, FxHashMap<Version, (IndexUrl, File)>>,
-        redirects: &WaitMap<Url, Url>,
+        redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should

@@ -20,7 +20,7 @@ use puffin_distribution::DistributionDatabase;
 use puffin_installer::{InstallPlan, Installer, Unzipper};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
-use puffin_traits::{BuildContext, InFlight};
+use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::IndexUrls;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -34,7 +34,7 @@ pub struct BuildDispatch {
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
     index_urls: IndexUrls,
-    in_flight_unzips: InFlight<PathBuf, Result<CachedDist, String>>,
+    in_flight_unzips: OnceMap<PathBuf, Result<CachedDist, String>>,
 }
 
 impl BuildDispatch {
@@ -55,7 +55,7 @@ impl BuildDispatch {
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
             index_urls,
-            in_flight_unzips: InFlight::default(),
+            in_flight_unzips: OnceMap::default(),
         }
     }
 

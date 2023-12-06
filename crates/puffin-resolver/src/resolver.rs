@@ -17,7 +17,6 @@ use pubgrub::type_aliases::DependencyConstraints;
 use tokio::select;
 use tracing::{debug, trace};
 use url::Url;
-use waitmap::WaitMap;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Dist, Identifier, Metadata, SourceDist, VersionOrUrl};
@@ -27,12 +26,11 @@ use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, Download};
 use puffin_normalize::{ExtraName, PackageName};
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{File, IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
-use crate::file::DistFile;
 use crate::manifest::Manifest;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
@@ -271,7 +269,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let root = PubGrubPackage::Root(self.project.clone());
 
         // Keep track of the packages for which we've requested metadata.
-        let mut in_flight = InFlight::default();
+        let index = Index::default();
         let mut pins = FxHashMap::default();
         let mut priorities = PubGrubPriorities::default();
 
@@ -286,11 +284,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             state.unit_propagation(next)?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-            self.pre_visit(
-                state.partial_solution.prioritized_packages(),
-                &mut in_flight,
-                request_sink,
-            )?;
+            self.pre_visit(state.partial_solution.prioritized_packages(), request_sink)
+                .await?;
 
             // Choose a package version.
             let Some(highest_priority_pkg) =
@@ -316,7 +311,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &next,
                     term_intersection.unwrap_positive(),
                     &mut pins,
-                    &mut in_flight,
                     request_sink,
                 )
                 .await?;
@@ -353,7 +347,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         &version,
                         &mut pins,
                         &mut priorities,
-                        &mut in_flight,
+                        &index,
                         request_sink,
                     )
                     .await?
@@ -406,24 +400,24 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
-    fn visit_package(
+    async fn visit_package(
         package: &PubGrubPackage,
         priorities: &mut PubGrubPriorities,
-        in_flight: &mut InFlight,
+        index: &Index,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
-                if in_flight.insert_package(package_name) {
+                if index.packages.register(package_name.clone()).await {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
-                if in_flight.insert_url(url) {
+                if index.redirects.register(url.clone()).await {
                     let distribution = Dist::from_url(package_name.clone(), url.clone())?;
                     priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
@@ -435,10 +429,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
     /// metadata for all of the packages in parallel.
-    fn pre_visit(
+    async fn pre_visit(
         &self,
         packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
-        in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
@@ -462,7 +455,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             };
 
             // Emit a request to fetch the metadata for this version.
-            if in_flight.insert_file(&candidate.file) {
+            if self
+                .index
+                .distributions
+                .register(candidate.file.sha256().to_string())
+                .await
+            {
                 let distribution = Dist::from_registry(
                     candidate.package_name,
                     candidate.version.into(),
@@ -482,7 +480,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         package: &PubGrubPackage,
         range: &Range<PubGrubVersion>,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, (IndexUrl, File)>>,
-        in_flight: &mut InFlight,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Option<PubGrubVersion>, ResolveError> {
         return match package {
@@ -509,12 +506,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     }
                 } else {
                     // Otherwise, assume this is a source distribution.
-                    let entry = self
-                        .index
-                        .distributions
-                        .wait(&url.distribution_id())
-                        .await
-                        .unwrap();
+                    let entry = self.index.distributions.wait(&url.distribution_id()).await;
                     let metadata = entry.value();
                     let version = PubGrubVersion::from(metadata.version.clone());
                     if range.contains(&version) {
@@ -527,7 +519,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Wait for the metadata to be available.
-                let entry = self.index.packages.wait(package_name).await.unwrap();
+                let entry = self.index.packages.wait(package_name).await;
                 let (index, version_map) = entry.value();
 
                 debug!("Searching for a compatible version of {package_name} ({range})");
@@ -557,7 +549,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let version = candidate.version.clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if in_flight.insert_file(&candidate.file) {
+                if self
+                    .index
+                    .distributions
+                    .register(candidate.file.sha256().to_string())
+                    .await
+                {
                     let distribution = Dist::from_registry(
                         candidate.package_name,
                         candidate.version.into(),
@@ -579,7 +576,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         version: &PubGrubVersion,
         pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, (IndexUrl, File)>>,
         priorities: &mut PubGrubPriorities,
-        in_flight: &mut InFlight,
+        index: &Index,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
@@ -605,7 +602,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(package, priorities, in_flight, request_sink)?;
+                    Self::visit_package(package, priorities, index, request_sink).await?;
                 }
 
                 Ok(Dependencies::Known(constraints.into()))
@@ -614,20 +611,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
                 let entry = match url {
-                    Some(url) => self
-                        .index
-                        .distributions
-                        .wait(&url.distribution_id())
-                        .await
-                        .unwrap(),
+                    Some(url) => self.index.distributions.wait(&url.distribution_id()).await,
                     None => {
                         let versions = pins.get(package_name).unwrap();
                         let (_index, file) = versions.get(version.into()).unwrap();
-                        self.index
-                            .distributions
-                            .wait(&file.distribution_id())
-                            .await
-                            .unwrap()
+                        self.index.distributions.wait(&file.distribution_id()).await
                     }
                 };
                 let metadata = entry.value();
@@ -644,7 +632,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(package, priorities, in_flight, request_sink)?;
+                    Self::visit_package(package, priorities, index, request_sink).await?;
                 }
 
                 if let Some(extra) = extra {
@@ -677,31 +665,29 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 Response::Package(package_name, index, version_map) => {
                     trace!("Received package metadata for: {package_name}");
 
-                    self.index
-                        .packages
-                        .insert(package_name, (index, version_map));
+                    self.index.packages.done(package_name, (index, version_map));
                 }
                 Response::Dist(Dist::Built(distribution), metadata, ..) => {
                     trace!("Received built distribution metadata for: {distribution}");
                     self.index
                         .distributions
-                        .insert(distribution.distribution_id(), metadata);
+                        .done(distribution.distribution_id(), metadata);
                 }
                 Response::Dist(Dist::Source(distribution), metadata, precise) => {
                     trace!("Received source distribution metadata for: {distribution}");
                     self.index
                         .distributions
-                        .insert(distribution.distribution_id(), metadata);
+                        .done(distribution.distribution_id(), metadata);
                     if let Some(precise) = precise {
                         match distribution {
                             SourceDist::DirectUrl(sdist) => {
-                                self.index.redirects.insert(sdist.url.clone(), precise);
+                                self.index.redirects.done(sdist.url.clone(), precise);
                             }
                             SourceDist::Git(sdist) => {
-                                self.index.redirects.insert(sdist.url.clone(), precise);
+                                self.index.redirects.done(sdist.url.clone(), precise);
                             }
                             SourceDist::Path(sdist) => {
-                                self.index.redirects.insert(sdist.url.clone(), precise);
+                                self.index.redirects.done(sdist.url.clone(), precise);
                             }
                             SourceDist::Registry(_) => {}
                         }
@@ -850,56 +836,18 @@ enum Response {
     Dist(Dist, Metadata21, Option<Url>),
 }
 
-/// In-memory index of in-flight network requests. Any request in an [`InFlight`] state will be
-/// eventually be inserted into an [`Index`].
-#[derive(Debug, Default)]
-struct InFlight {
-    /// The set of requested [`PackageName`]s.
-    packages: FxHashSet<PackageName>,
-    /// The set of requested registry-based files, represented by their SHAs.
-    files: FxHashSet<String>,
-    /// The set of requested URLs.
-    urls: FxHashSet<Url>,
-}
-
-impl InFlight {
-    fn insert_package(&mut self, package_name: &PackageName) -> bool {
-        self.packages.insert(package_name.clone())
-    }
-
-    fn insert_file(&mut self, file: &DistFile) -> bool {
-        match file {
-            DistFile::Wheel(file) => self.files.insert(file.hashes.sha256.clone()),
-            DistFile::Sdist(file) => self.files.insert(file.hashes.sha256.clone()),
-        }
-    }
-
-    fn insert_url(&mut self, url: &Url) -> bool {
-        self.urls.insert(url.clone())
-    }
-}
-
 /// In-memory index of package metadata.
-struct Index {
+#[derive(Default)]
+pub(crate) struct Index {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
-    packages: WaitMap<PackageName, (IndexUrl, VersionMap)>,
+    pub(crate) packages: OnceMap<PackageName, (IndexUrl, VersionMap)>,
 
     /// A map from distribution SHA to metadata for that distribution.
-    distributions: WaitMap<String, Metadata21>,
+    pub(crate) distributions: OnceMap<String, Metadata21>,
 
     /// A map from source URL to precise URL.
-    redirects: WaitMap<Url, Url>,
-}
-
-impl Default for Index {
-    fn default() -> Self {
-        Self {
-            packages: WaitMap::new(),
-            distributions: WaitMap::new(),
-            redirects: WaitMap::new(),
-        }
-    }
+    pub(crate) redirects: OnceMap<Url, Url>,
 }
 
 #[derive(Debug, Default)]

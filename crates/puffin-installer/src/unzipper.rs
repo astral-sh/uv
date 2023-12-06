@@ -6,7 +6,7 @@ use tracing::{debug, instrument, warn};
 
 use distribution_types::{CachedDist, Dist, RemoteSource};
 use puffin_distribution::{LocalWheel, Unzip};
-use puffin_traits::InFlight;
+use puffin_traits::OnceMap;
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -27,7 +27,7 @@ impl Unzipper {
     pub async fn unzip(
         &self,
         downloads: Vec<LocalWheel>,
-        in_flight: &InFlight<PathBuf, Result<CachedDist, String>>,
+        in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
     ) -> Result<Vec<CachedDist>> {
         // Sort the wheels by size.
         let mut downloads = downloads;
@@ -38,32 +38,32 @@ impl Unzipper {
         let mut unzipped = Vec::with_capacity(downloads.len());
         for wheel in downloads {
             let wheel_path = wheel.target().to_path_buf();
-            let cached_dist = if let Some(cached_dist) =
-                in_flight.wait_or_register(wheel_path.clone()).await
-            {
-                cached_dist
-                    .map_err(|err| format_err!("Unzipping failed in different thread: {}", err))?
-            } else {
-                let result = tokio::task::spawn_blocking(move || {
-                    let remote = wheel.remote().clone();
-                    unzip_wheel(&wheel).with_context(|| format!("Failed to unpack: {remote}"))
-                })
-                .await;
-                match result {
-                    Ok(Ok(cached)) => {
-                        in_flight.submit_done(wheel_path, Ok(cached.clone()));
-                        cached
+            let cached_dist =
+                if let Some(cached_dist) = in_flight.wait_or_register(&wheel_path).await {
+                    cached_dist.value().clone().map_err(|err| {
+                        format_err!("Unzipping failed in different thread: {}", err)
+                    })?
+                } else {
+                    let result = tokio::task::spawn_blocking(move || {
+                        let remote = wheel.remote().clone();
+                        unzip_wheel(&wheel).with_context(|| format!("Failed to unpack: {remote}"))
+                    })
+                    .await;
+                    match result {
+                        Ok(Ok(cached)) => {
+                            in_flight.done(wheel_path, Ok(cached.clone()));
+                            cached
+                        }
+                        Ok(Err(err)) => {
+                            in_flight.done(wheel_path, Err(err.to_string()));
+                            return Err(err);
+                        }
+                        Err(err) => {
+                            in_flight.done(wheel_path, Err(err.to_string()));
+                            return Err(err.into());
+                        }
                     }
-                    Ok(Err(err)) => {
-                        in_flight.submit_done(wheel_path, Err(err.to_string()));
-                        return Err(err);
-                    }
-                    Err(err) => {
-                        in_flight.submit_done(wheel_path, Err(err.to_string()));
-                        return Err(err.into());
-                    }
-                }
-            };
+                };
 
             unzipped.push(cached_dist);
         }
