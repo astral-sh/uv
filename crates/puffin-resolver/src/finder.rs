@@ -160,7 +160,7 @@ impl<'a> DistFinder<'a> {
             }
 
             // Otherwise, find the most compatible wheel
-            for (filename, file) in files {
+            for (filename, file) in files.into_iter_all() {
                 // Only add dists compatible with the python version.
                 // This is relevant for source dists which give no other indication of their
                 // compatibility and wheels which may be tagged `py3-none-any` but

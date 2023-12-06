@@ -15,7 +15,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, trace};
 use url::Url;
 
-use distribution_filename::{DistFilename, WheelFilename};
+use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
@@ -390,11 +390,37 @@ impl RegistryClient {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct SimpleMetadata(BTreeMap<Version, Vec<(DistFilename, File)>>);
+#[derive(Default, Debug)]
+pub struct VersionFiles {
+    pub wheels: Vec<(WheelFilename, File)>,
+    pub source_dists: Vec<(SourceDistFilename, File)>,
+}
+
+impl VersionFiles {
+    fn push(&mut self, filename: DistFilename, file: File) {
+        match filename {
+            DistFilename::WheelFilename(inner) => self.wheels.push((inner, file)),
+            DistFilename::SourceDistFilename(inner) => self.source_dists.push((inner, file)),
+        }
+    }
+
+    pub fn into_iter_all(self) -> impl Iterator<Item = (DistFilename, File)> {
+        self.wheels
+            .into_iter()
+            .map(|(filename, file)| (DistFilename::WheelFilename(filename), file))
+            .chain(
+                self.source_dists
+                    .into_iter()
+                    .map(|(filename, file)| (DistFilename::SourceDistFilename(filename), file)),
+            )
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
 
 impl SimpleMetadata {
-    pub fn iter(&self) -> std::collections::btree_map::Iter<Version, Vec<(DistFilename, File)>> {
+    pub fn iter(&self) -> std::collections::btree_map::Iter<Version, VersionFiles> {
         self.0.iter()
     }
 
@@ -407,16 +433,18 @@ impl SimpleMetadata {
                 DistFilename::try_from_filename_for_package(file.filename.as_str(), package_name)
             {
                 let version = match filename {
-                    DistFilename::SourceDistFilename(ref inner) => inner.clone().version,
-                    DistFilename::WheelFilename(ref inner) => inner.clone().version,
+                    DistFilename::SourceDistFilename(ref inner) => &inner.version,
+                    DistFilename::WheelFilename(ref inner) => &inner.version,
                 };
 
-                match metadata.0.entry(version) {
+                match metadata.0.entry(version.clone()) {
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        entry.get_mut().push((filename, file))
+                        entry.get_mut().push(filename, file);
                     }
                     std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(vec![(filename, file)]);
+                        let mut files = VersionFiles::default();
+                        files.push(filename, file);
+                        entry.insert(files);
                     }
                 }
             }
@@ -427,8 +455,8 @@ impl SimpleMetadata {
 }
 
 impl IntoIterator for SimpleMetadata {
-    type Item = (Version, Vec<(DistFilename, File)>);
-    type IntoIter = std::collections::btree_map::IntoIter<Version, Vec<(DistFilename, File)>>;
+    type Item = (Version, VersionFiles);
+    type IntoIter = std::collections::btree_map::IntoIter<Version, VersionFiles>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
