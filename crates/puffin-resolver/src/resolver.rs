@@ -73,6 +73,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     fetcher: DistributionDatabase<'a, Context>,
     build_context: &'a Context,
     tags: &'a Tags,
+    markers: &'a MarkerEnvironment,
     exclude_newer: Option<DateTime<Utc>>,
     allowed_yanks: AllowedYanks,
 }
@@ -83,6 +84,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         fetcher: DistributionDatabase<'a, Context>,
         build_context: &'a Context,
         tags: &'a Tags,
+        markers: &'a MarkerEnvironment,
         exclude_newer: Option<DateTime<Utc>>,
         allowed_yanks: AllowedYanks,
     ) -> Self {
@@ -91,6 +93,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             fetcher,
             build_context,
             tags,
+            markers,
             exclude_newer,
             allowed_yanks,
         }
@@ -119,7 +122,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                             metadata,
                             package_name,
                             self.tags,
-                            self.build_context.interpreter().markers(),
+                            self.markers,
                             self.build_context.interpreter(),
                             &self.allowed_yanks,
                             self.exclude_newer.as_ref(),
@@ -173,6 +176,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
             build_context,
             tags,
+            markers,
             options.exclude_newer,
             manifest
                 .requirements
