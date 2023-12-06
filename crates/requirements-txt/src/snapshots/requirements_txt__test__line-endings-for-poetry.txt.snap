@@ -136,4 +136,5 @@ RequirementsTxt {
         },
     ],
     constraints: [],
+    editable: [],
 }

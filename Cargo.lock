@@ -2947,6 +2947,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "unscanny",
+ "url",
 ]
 
 [[package]]
