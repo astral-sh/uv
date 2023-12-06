@@ -15,7 +15,7 @@ use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
-use distribution_types::{BuiltDist, Dist, RemoteSource, SourceDist};
+use distribution_types::{BuiltDist, Dist, Metadata, RemoteSource, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
@@ -171,7 +171,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     let cache_entry = self.cache.entry(
                         CacheBucket::Wheels,
-                        WheelCache::Index(&wheel.index).wheel_dir(),
+                        WheelCache::Index(&wheel.index).remote_wheel_dir(filename.name.as_ref()),
                         filename.stem(),
                     );
 
@@ -193,12 +193,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     let cache_entry = self.cache.entry(
                         CacheBucket::Wheels,
-                        WheelCache::Index(&wheel.index).wheel_dir(),
+                        WheelCache::Index(&wheel.index).remote_wheel_dir(filename.name.as_ref()),
                         filename.to_string(),
                     );
 
                     // Download the wheel into the cache.
-                    // TODO(charlie): Use an atomic write, and remove any existing files or directories.
                     fs::create_dir_all(&cache_entry.dir).await?;
                     let mut writer = fs::File::create(cache_entry.path()).await?;
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
@@ -225,10 +224,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let reader = self.client.stream_external(&wheel.url).await?;
 
                 // Download the wheel into the cache.
-                // TODO(charlie): Use an atomic write, and remove any existing files or directories.
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).wheel_dir(),
+                    WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                     wheel.filename.to_string(),
                 );
                 fs::create_dir_all(&cache_entry.dir).await?;
@@ -252,7 +250,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Dist::Built(BuiltDist::Path(wheel)) => {
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).wheel_dir(),
+                    WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
 

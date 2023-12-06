@@ -3,8 +3,7 @@ use tracing::debug;
 
 use distribution_types::direct_url::{git_reference, DirectUrl};
 use distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Metadata, RemoteSource,
-    SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Metadata, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
@@ -45,7 +44,7 @@ impl InstallPlan {
             SitePackages::try_from_executable(venv).context("Failed to list installed packages")?;
 
         // Index all the already-downloaded wheels in the cache.
-        let registry_index = RegistryWheelIndex::from_directory(cache, tags, index_urls);
+        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_urls);
 
         let mut local = vec![];
         let mut remote = vec![];
@@ -89,9 +88,8 @@ impl InstallPlan {
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None => {
-                    // TODO(charlie): This doesn't respect built wheels.
                     if let Some((_version, distribution)) =
-                        registry_index.by_name(&requirement.name).next()
+                        registry_index.get(&requirement.name).next()
                     {
                         debug!("Requirement already cached: {distribution}");
                         local.push(CachedDist::Registry(distribution.clone()));
@@ -99,12 +97,16 @@ impl InstallPlan {
                     }
                 }
                 Some(VersionOrUrl::VersionSpecifier(specifier)) => {
-                    if let Some((_version, distribution)) = registry_index
-                        .by_name(&requirement.name)
-                        .find(|(version, dist)| {
-                            specifier.contains(version)
-                                && requirement.is_satisfied_by(&dist.filename.version)
-                        })
+                    if let Some(distribution) =
+                        registry_index
+                            .get(&requirement.name)
+                            .find_map(|(version, distribution)| {
+                                if specifier.contains(version) {
+                                    Some(distribution)
+                                } else {
+                                    None
+                                }
+                            })
                     {
                         debug!("Requirement already cached: {distribution}");
                         local.push(CachedDist::Registry(distribution.clone()));
@@ -124,7 +126,7 @@ impl InstallPlan {
                             // advance.
                             let cache_entry = cache.entry(
                                 CacheBucket::Wheels,
-                                WheelCache::Url(&wheel.url).wheel_dir(),
+                                WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                                 wheel.filename.stem(),
                             );
 
@@ -145,7 +147,7 @@ impl InstallPlan {
                             // advance.
                             let cache_entry = cache.entry(
                                 CacheBucket::Wheels,
-                                WheelCache::Url(&wheel.url).wheel_dir(),
+                                WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                                 wheel.filename.stem(),
                             );
 
@@ -164,14 +166,12 @@ impl InstallPlan {
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            let cache_entry = cache.entry(
+                            let cache_shard = cache.shard(
                                 CacheBucket::BuiltWheels,
-                                WheelCache::Url(&sdist.url).wheel_dir(),
-                                sdist.filename()?.to_string(),
+                                WheelCache::Url(&sdist.url).remote_wheel_dir(sdist.name().as_ref()),
                             );
-                            let index = BuiltWheelIndex::new(cache_entry.path(), tags);
 
-                            if let Some(wheel) = index.find() {
+                            if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 local.push(CachedDist::Url(cached_dist.clone()));
@@ -181,14 +181,13 @@ impl InstallPlan {
                         Dist::Source(SourceDist::Path(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            let cache_entry = cache.entry(
+                            let cache_shard = cache.shard(
                                 CacheBucket::BuiltWheels,
-                                WheelCache::Path(&sdist.url).wheel_dir(),
-                                sdist.name().to_string(),
+                                WheelCache::Path(&sdist.url)
+                                    .remote_wheel_dir(sdist.name().as_ref()),
                             );
-                            let index = BuiltWheelIndex::new(cache_entry.path(), tags);
 
-                            if let Some(wheel) = index.find() {
+                            if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 local.push(CachedDist::Url(cached_dist.clone()));
@@ -199,14 +198,12 @@ impl InstallPlan {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
                             if let Ok(Some(reference)) = git_reference(&sdist.url) {
-                                let cache_entry = cache.entry(
+                                let cache_shard = cache.shard(
                                     CacheBucket::BuiltWheels,
-                                    WheelCache::Git(&sdist.url).wheel_dir(),
-                                    reference.to_string(),
+                                    WheelCache::Git(&sdist.url).built_wheel_dir(reference),
                                 );
-                                let index = BuiltWheelIndex::new(cache_entry.path(), tags);
 
-                                if let Some(wheel) = index.find() {
+                                if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
                                     let cached_dist = wheel.into_url_dist(url.clone());
                                     debug!("Git source requirement already cached: {cached_dist}");
                                     local.push(CachedDist::Url(cached_dist.clone()));

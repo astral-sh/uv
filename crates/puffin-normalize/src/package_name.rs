@@ -1,5 +1,3 @@
-use std::fmt;
-use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -54,8 +52,8 @@ impl<'de> Deserialize<'de> for PackageName {
     }
 }
 
-impl Display for PackageName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for PackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }

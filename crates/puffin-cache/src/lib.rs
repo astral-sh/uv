@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -37,8 +38,32 @@ impl CacheEntry {
     }
 
     #[must_use]
-    pub fn with_file(self, file: String) -> Self {
-        Self { file, ..self }
+    pub fn with_file(self, file: impl Into<String>) -> Self {
+        Self {
+            file: file.into(),
+            ..self
+        }
+    }
+}
+
+/// A subdirectory within the cache.
+#[derive(Debug, Clone)]
+pub struct CacheShard(PathBuf);
+
+impl CacheShard {
+    pub fn entry(&self, file: impl Into<String>) -> CacheEntry {
+        CacheEntry {
+            dir: self.0.clone(),
+            file: file.into(),
+        }
+    }
+}
+
+impl Deref for CacheShard {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -83,6 +108,11 @@ impl Cache {
     }
 
     /// Compute an entry in the cache.
+    pub fn shard(&self, cache_bucket: CacheBucket, dir: impl AsRef<Path>) -> CacheShard {
+        CacheShard(self.bucket(cache_bucket).join(dir.as_ref()))
+    }
+
+    /// Compute an entry in the cache.
     pub fn entry(
         &self,
         cache_bucket: CacheBucket,
@@ -120,17 +150,17 @@ impl Cache {
 /// are subdirectories of the cache root.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum CacheBucket {
-    /// Wheels (excluding built wheels), their metadata and cache policy.
+    /// Wheels (excluding built wheels), alongside their metadata and cache policy.
     ///
     /// There are three kinds from cache entries: Wheel metadata and policy as JSON files, the
     /// wheels themselves, and the unzipped wheel archives. If a wheel file is over an in-memory
     /// size threshold, we first download the zip file into the cache, then unzip it into a
-    /// directory with the same name, omitting the `.whl` extension.
+    /// directory with the same name (exclusive of the `.whl` extension).
     ///
     /// Cache structure:
-    ///  * `wheel-metadata-v0/pypi/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
-    ///  * `wheel-metadata-v0/<digest(index-url)>/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
-    ///  * `wheel-metadata-v0/url/<digest(url)>/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
+    ///  * `wheel-metadata-v0/pypi/foo/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
+    ///  * `wheel-metadata-v0/<digest(index-url)>/foo/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
+    ///  * `wheel-metadata-v0/url/<digest(url)>/foo/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
     ///
     /// See `puffin_client::RegistryClient::wheel_metadata` for information on how wheel metadata
     /// is fetched.
@@ -151,11 +181,13 @@ pub enum CacheBucket {
     /// wheel-v0
     /// ├── pypi
     /// │   ...
-    /// │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.json
+    /// │   ├── pandas
+    /// │   │   └── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.json
     /// │   ...
     /// └── url
     ///     └── 4b8be67c801a7ecb
-    ///         └── flask-3.0.0-py3-none-any.json
+    ///         └── flask
+    ///             └── flask-3.0.0-py3-none-any.json
     /// ```
     ///
     /// We get the following `requirement.txt` from `pip-compile`:
@@ -176,16 +208,18 @@ pub enum CacheBucket {
     /// wheel-v0
     /// ├── pypi
     /// │   ...
-    /// │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    /// │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64
+    /// │   ├── pandas
+    /// │   │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+    /// │   │   ├── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64
     /// │   ...
     /// └── url
     ///     └── 4b8be67c801a7ecb
-    ///         └── flask-3.0.0-py3-none-any.whl
-    ///             ├── flask
-    ///             │   └── ...
-    ///             └── flask-3.0.0.dist-info
-    ///                 └── ...
+    ///         └── flask
+    ///             └── flask-3.0.0-py3-none-any.whl
+    ///                 ├── flask
+    ///                 │   └── ...
+    ///                 └── flask-3.0.0.dist-info
+    ///                     └── ...
     /// ```
     ///
     /// If we run first `pip-compile` and then `pip-sync` on the same machine, we get both:
@@ -194,24 +228,26 @@ pub enum CacheBucket {
     /// wheels-v0
     /// ├── pypi
     /// │   ├── ...
-    /// │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.json
-    /// │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    /// │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64
-    /// │   │   ├── pandas
-    /// │   │   │   ├── ...
-    /// │   │   ├── pandas-2.1.3.dist-info
-    /// │   │   │   ├── ...
-    /// │   │   └── pandas.libs
+    /// │   ├── pandas
+    /// │   │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.json
+    /// │   │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+    /// │   │   └── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64
+    /// │   │       ├── pandas
+    /// │   │       │   ├── ...
+    /// │   │       ├── pandas-2.1.3.dist-info
+    /// │   │       │   ├── ...
+    /// │   │       └── pandas.libs
     /// │   ├── ...
     /// └── url
     ///     └── 4b8be67c801a7ecb
-    ///         ├── flask-3.0.0-py3-none-any.json
-    ///         ├── flask-3.0.0-py3-none-any.json
-    ///         └── flask-3.0.0-py3-none-any
-    ///             ├── flask
-    ///             │   └── ...
-    ///             └── flask-3.0.0.dist-info
-    ///                 └── ...
+    ///         └── flask
+    ///             ├── flask-3.0.0-py3-none-any.json
+    ///             ├── flask-3.0.0-py3-none-any.json
+    ///             └── flask-3.0.0-py3-none-any
+    ///                 ├── flask
+    ///                 │   └── ...
+    ///                 └── flask-3.0.0.dist-info
+    ///                     └── ...
     Wheels,
     /// Wheels built from source distributions, their extracted metadata and the cache policy of
     /// the source distribution.
@@ -225,14 +261,14 @@ pub enum CacheBucket {
     ///
     /// Source distributions are built into zipped wheel files (as PEP 517 specifies) and unzipped
     /// lazily before installing. So when resolving, we only build the wheel and store the archive
-    /// file in the cache, when installing, we unpack it under the same name, omitting the `.whl`
-    /// extension. You may find a mix of wheel archive zip files and unzipped wheel directories in
-    /// the cache.
+    /// file in the cache, when installing, we unpack it under the same name (exclusive of the
+    /// `.whl` extension). You may find a mix of wheel archive zip files and unzipped wheel
+    /// directories in the cache.
     ///
     /// Cache structure:
-    ///  * `built-wheels-v0/pypi/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/<digest(index-url)>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/url/<digest(url)>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/pypi/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///
     /// But the url filename does not need to be a valid source dist filename
@@ -261,14 +297,16 @@ pub enum CacheBucket {
     /// │           ├── metadata.json
     /// │           └── pydantic_extra_types-2.1.0-py3-none-any.whl
     /// ├── pypi
-    /// │   └── django-allauth-0.51.0.tar.gz
-    /// │       ├── django_allauth-0.51.0-py3-none-any.whl
-    /// │       └── metadata.json
+    /// │   └── django
+    /// │       └── django-allauth-0.51.0.tar.gz
+    /// │           ├── django_allauth-0.51.0-py3-none-any.whl
+    /// │           └── metadata.json
     /// └── url
     ///     └── 6781bd6440ae72c2
-    ///         └── werkzeug-3.0.1.tar.gz
-    ///             ├── metadata.json
-    ///             └── werkzeug-3.0.1-py3-none-any.whl
+    ///         └── werkzeug
+    ///             └── werkzeug-3.0.1.tar.gz
+    ///                 ├── metadata.json
+    ///                 └── werkzeug-3.0.1-py3-none-any.whl
     /// ```
     ///
     /// The inside of a `metadata.json`:
