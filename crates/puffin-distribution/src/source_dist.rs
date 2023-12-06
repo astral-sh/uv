@@ -21,7 +21,7 @@ use zip::ZipArchive;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use distribution_types::{GitSourceDist, Identifier, RemoteSource, SourceDist};
+use distribution_types::{GitSourceDist, Metadata, PathSourceDist, RemoteSource, SourceDist};
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
 use puffin_cache::{digest, CacheBucket, CacheEntry, CanonicalUrl, WheelCache};
@@ -182,57 +182,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             SourceDist::Git(git_source_dist) => self.git(source_dist, git_source_dist).await?,
-            SourceDist::Path(path_source_dist) => {
-                // TODO(konstin): Change this when the built wheel naming scheme is fixed
-                // See: https://github.com/astral-sh/puffin/issues/478
-                let wheel_dir = self
-                    .build_context
-                    .cache()
-                    .bucket(CacheBucket::BuiltWheels)
-                    .join(source_dist.distribution_id());
-                fs::create_dir_all(&wheel_dir).await?;
-
-                let task = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| reporter.on_build_start(source_dist));
-
-                // Build the wheel.
-                let disk_filename = self
-                    .build_context
-                    .build_source(
-                        &path_source_dist.path,
-                        None,
-                        &wheel_dir,
-                        &path_source_dist.to_string(),
-                    )
-                    .await
-                    .map_err(|err| SourceDistError::Build(Box::new(source_dist.clone()), err))?;
-
-                // Read the metadata from the wheel.
-                let filename = WheelFilename::from_str(&disk_filename)?;
-                let path = wheel_dir.join(disk_filename);
-                let target = wheel_dir.join(filename.stem());
-                let metadata = read_metadata(&filename, &path)?;
-
-                if let Some(task) = task {
-                    if let Some(reporter) = self.reporter.as_ref() {
-                        reporter.on_build_complete(source_dist, task);
-                    }
-                }
-
-                BuiltWheelMetadata {
-                    path,
-                    target,
-                    filename,
-                    metadata,
-                }
-            }
+            SourceDist::Path(path_source_dist) => self.path(source_dist, path_source_dist).await?,
         };
 
         Ok(built_wheel_metadata)
     }
 
+    /// Build a source distribution from a remote URL.
     #[allow(clippy::too_many_arguments)]
     async fn url<'data>(
         &self,
@@ -381,6 +337,90 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         ))
     }
 
+    /// Build a source distribution from a local path.
+    async fn path(
+        &self,
+        source_dist: &SourceDist,
+        path_source_dist: &PathSourceDist,
+    ) -> Result<BuiltWheelMetadata, SourceDistError> {
+        let cache_shard = WheelCache::Path(&path_source_dist.url);
+        let cache_entry = self.build_context.cache().entry(
+            CacheBucket::BuiltWheels,
+            cache_shard.built_wheel_dir(source_dist.name().to_string()),
+            METADATA_JSON.to_string(),
+        );
+
+        let mut metadatas = if cache_entry.path().is_file() {
+            let cached = fs::read(&cache_entry.path()).await?;
+            let metadatas = serde_json::from_slice::<Metadata21s>(&cached)?;
+            // Do we have previous compatible build of this source dist?
+            if let Some((filename, cached_data)) = metadatas
+                .iter()
+                .find(|(filename, _metadata)| filename.is_compatible(self.tags))
+            {
+                return Ok(BuiltWheelMetadata::from_cached(
+                    filename,
+                    cached_data,
+                    &cache_entry,
+                ));
+            }
+            metadatas
+        } else {
+            Metadata21s::default()
+        };
+
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source_dist));
+
+        let (disk_filename, filename, metadata) = self
+            .build_source_dist(
+                source_dist,
+                None,
+                &path_source_dist.path,
+                None,
+                &cache_entry,
+            )
+            .await?;
+
+        if metadata.name != path_source_dist.name {
+            return Err(SourceDistError::NameMismatch {
+                metadata: metadata.name,
+                given: path_source_dist.name.clone(),
+            });
+        }
+
+        // Store the metadata for this build along with all the other builds.
+        metadatas.insert(
+            filename.clone(),
+            DiskFilenameAndMetadata {
+                disk_filename: disk_filename.clone(),
+                metadata: metadata.clone(),
+            },
+        );
+        fs::create_dir_all(&cache_entry.dir).await?;
+        let data = serde_json::to_vec(&metadatas)?;
+        write_atomic(cache_entry.path(), data).await?;
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source_dist, task);
+            }
+        }
+
+        let path = cache_entry.dir.join(&disk_filename);
+        let target = cache_entry.dir.join(filename.stem());
+
+        Ok(BuiltWheelMetadata {
+            path,
+            target,
+            filename,
+            metadata,
+        })
+    }
+
+    /// Build a source distribution from a Git repository.
     async fn git(
         &self,
         source_dist: &SourceDist,
@@ -442,7 +482,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             });
         }
 
-        // Store the metadata for this build along with all the other builds
+        // Store the metadata for this build along with all the other builds.
         metadatas.insert(
             filename.clone(),
             DiskFilenameAndMetadata {
