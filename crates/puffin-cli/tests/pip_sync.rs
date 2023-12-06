@@ -794,13 +794,13 @@ fn install_local_wheel() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
-    let flask_wheel = temp_dir.child("flask-3.0.0-py3-none-any.whl");
-    let mut flask_wheel_file = std::fs::File::create(&flask_wheel)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
+    let archive = temp_dir.child("tomli-3.0.1-py3-none-any.whl");
+    let mut archive_file = std::fs::File::create(&archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
+    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let mut filters = INSTA_FILTERS.to_vec();
@@ -817,6 +817,8 @@ fn install_local_wheel() -> Result<()> {
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
+
+    check_command(&venv, "import tomli", &temp_dir);
 
     Ok(())
 }
@@ -829,13 +831,13 @@ fn install_local_source_distribution() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Download a source distribution.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
-    let flask_wheel = temp_dir.child("flask-3.0.0.tar.gz");
-    let mut flask_wheel_file = std::fs::File::create(&flask_wheel)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
+    let archive = temp_dir.child("wheel-0.42.0.tar.gz");
+    let mut archive_file = std::fs::File::create(&archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
+    requirements_txt.write_str(&format!("wheel @ file://{}", archive.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let mut filters = INSTA_FILTERS.to_vec();
@@ -852,6 +854,8 @@ fn install_local_source_distribution() -> Result<()> {
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir));
     });
+
+    check_command(&venv, "import wheel", &temp_dir);
 
     Ok(())
 }
@@ -928,24 +932,12 @@ fn install_dtls_socket() -> Result<()> {
     Ok(())
 }
 
-/// Check that we show the right messages on cached source dist installs
+/// Check that we show the right messages on cached, direct URL source distribution installs.
 #[test]
-fn install_source_dist_cached() -> Result<()> {
+fn install_url_source_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
-    let venv2 = temp_dir.child(".venv2");
-    assert_cmd::Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv2.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.12")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv2.assert(predicates::path::is_dir());
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -972,12 +964,23 @@ fn install_source_dist_cached() -> Result<()> {
         Installed 1 package in [TIME]
          + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
         "###);
+    });
+
+    check_command(&venv, "import tqdm", &temp_dir);
+
+    // Re-run the installation in a new virtual environment.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
             .arg("requirements.txt")
             .arg("--cache-dir")
             .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv2.as_os_str())
+            .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
@@ -993,7 +996,294 @@ fn install_source_dist_cached() -> Result<()> {
     });
 
     check_command(&venv, "import tqdm", &temp_dir);
-    check_command(&venv2, "import tqdm", &temp_dir);
+
+    Ok(())
+}
+
+/// Check that we show the right messages on cached, Git source distribution installs.
+#[test]
+#[cfg(feature = "git")]
+fn install_git_source_dist_cached() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+        "###);
+    });
+
+    check_command(&venv, "import werkzeug", &temp_dir);
+
+    // Re-run the installation in a new virtual environment.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+        "###);
+    });
+
+    check_command(&venv, "import werkzeug", &temp_dir);
+
+    Ok(())
+}
+
+/// Check that we show the right messages on cached, registry source distribution installs.
+#[test]
+fn install_registry_source_dist_cached() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("future==0.18.3")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + future==0.18.3
+        "###);
+    });
+
+    check_command(&venv, "import future", &temp_dir);
+
+    // Re-run the installation in a new virtual environment.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + future==0.18.3
+        "###);
+    });
+
+    check_command(&venv, "import future", &temp_dir);
+
+    Ok(())
+}
+
+/// Check that we show the right messages on cached, local source distribution installs.
+#[test]
+fn install_path_source_dist_cached() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Download a source distribution.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
+    let archive = temp_dir.child("wheel-0.42.0.tar.gz");
+    let mut archive_file = std::fs::File::create(&archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("wheel @ file://{}", archive.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+        "###);
+    });
+
+    check_command(&venv, "import wheel", &temp_dir);
+
+    // Re-run the installation in a new virtual environment.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+        "###);
+    });
+
+    check_command(&venv, "import wheel", &temp_dir);
+
+    Ok(())
+}
+
+/// Check that we show the right messages on cached, local source distribution installs.
+#[test]
+fn install_path_built_dist_cached() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Download a wheel.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
+    let archive = temp_dir.child("tomli-3.0.1-py3-none-any.whl");
+    let mut archive_file = std::fs::File::create(&archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Re-run the installation in a new virtual environment.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Installed 1 package in [TIME]
+         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &parent);
 
     Ok(())
 }
