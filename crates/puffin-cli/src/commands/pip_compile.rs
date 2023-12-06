@@ -20,7 +20,7 @@ use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions};
+use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver};
 use pypi_types::IndexUrls;
 
 use crate::commands::reporters::ResolverReporter;
@@ -149,15 +149,8 @@ pub(crate) async fn pip_compile(
     .with_options(options);
 
     // Resolve the dependencies.
-    let resolver = puffin_resolver::Resolver::new(
-        manifest,
-        options,
-        &markers,
-        &tags,
-        &client,
-        &build_dispatch,
-    )
-    .with_reporter(ResolverReporter::from(printer));
+    let resolver = Resolver::new(manifest, options, &markers, &tags, &client, &build_dispatch)
+        .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::PubGrub(err)) => {
             #[allow(clippy::print_stderr)]

@@ -1,5 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -22,10 +24,10 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DistributionDatabase, Download};
+use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, Download};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::BuildContext;
-use pypi_types::{File, IndexUrl, Metadata21, SimpleJson};
+use pypi_types::{File, IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
@@ -39,25 +41,123 @@ use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 use crate::ResolutionOptions;
 
-pub struct Resolver<'a, Context: BuildContext + Send + Sync> {
+type VersionMapResponse = Result<(IndexUrl, VersionMap), puffin_client::Error>;
+type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
+
+pub trait ResolverIo: Send + Sync {
+    /// Get the version map for a package.
+    fn get_version_map<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+    ) -> Pin<Box<dyn Future<Output = VersionMapResponse> + Send + 'io>>;
+
+    /// Get the metadata for a distribution.
+    ///
+    /// For a wheel, this is done by querying it's (remote) metadata, for a source dist we
+    /// (fetch and) build the source distribution and return the metadata from the built
+    /// distribution.
+    fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+    ) -> Pin<Box<dyn Future<Output = WheelMetadataResponse> + Send + 'io>>;
+
+    /// Set the [`Reporter`] to use for this installer.
+    #[must_use]
+    fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self;
+}
+
+/// The main IO backend for the resolver, which does cached requests network requests using the
+/// [`RegistryClient`] and [`DistributionDatabase`].
+pub struct DefaultResolverIo<'a, Context: BuildContext + Send + Sync> {
+    client: &'a RegistryClient,
+    fetcher: DistributionDatabase<'a, Context>,
+    build_context: &'a Context,
+    tags: &'a Tags,
+    exclude_newer: Option<DateTime<Utc>>,
+    allowed_yanks: AllowedYanks,
+}
+
+impl<'a, Context: BuildContext + Send + Sync> DefaultResolverIo<'a, Context> {
+    pub(crate) fn new(
+        client: &'a RegistryClient,
+        fetcher: DistributionDatabase<'a, Context>,
+        build_context: &'a Context,
+        tags: &'a Tags,
+        exclude_newer: Option<DateTime<Utc>>,
+        allowed_yanks: AllowedYanks,
+    ) -> Self {
+        Self {
+            client,
+            fetcher,
+            build_context,
+            tags,
+            exclude_newer,
+            allowed_yanks,
+        }
+    }
+}
+
+impl<'a, Context: BuildContext + Send + Sync> ResolverIo for DefaultResolverIo<'a, Context> {
+    fn get_version_map<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+    ) -> Pin<Box<dyn Future<Output = VersionMapResponse> + Send + 'io>> {
+        Box::pin(
+            self.client
+                .simple(package_name)
+                .map_ok(move |(index, metadata)| {
+                    // TODO(konstin): I think the client should return something in between
+                    // `SimpleJson` and `VersionMap`, with source dists and wheels grouped by
+                    // version, but python version and exclude newer not yet applied. This should
+                    // work well with caching, testing and PEP 503 html APIs.
+                    // (https://github.com/astral-sh/puffin/issues/412)
+                    (
+                        index,
+                        VersionMap::from_metadata(
+                            metadata,
+                            package_name,
+                            self.tags,
+                            self.build_context.interpreter().markers(),
+                            self.build_context.interpreter(),
+                            &self.allowed_yanks,
+                            self.exclude_newer.as_ref(),
+                        ),
+                    )
+                }),
+        )
+    }
+
+    fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+    ) -> Pin<Box<dyn Future<Output = WheelMetadataResponse> + Send + 'io>> {
+        Box::pin(self.fetcher.get_or_build_wheel_metadata(dist))
+    }
+
+    /// Set the [`puffin_distribution::Reporter`] to use for this installer.
+    #[must_use]
+    fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self {
+        Self {
+            fetcher: self.fetcher.with_reporter(reporter),
+            ..self
+        }
+    }
+}
+
+pub struct Resolver<'a, Io: ResolverIo> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     allowed_urls: AllowedUrls,
-    allowed_yanks: AllowedYanks,
     markers: &'a MarkerEnvironment,
-    tags: &'a Tags,
-    client: &'a RegistryClient,
     selector: CandidateSelector,
     index: Arc<Index>,
-    exclude_newer: Option<DateTime<Utc>>,
-    fetcher: DistributionDatabase<'a, Context>,
-    build_context: &'a Context,
     reporter: Option<Arc<dyn Reporter>>,
+    io: Io,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
-    /// Initialize a new resolver.
+impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverIo<'a, Context>> {
+    /// Initialize a new resolver using the default backend doing real requests.
     pub fn new(
         manifest: Manifest,
         options: ResolutionOptions,
@@ -65,6 +165,30 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
+    ) -> Self {
+        let io = DefaultResolverIo::new(
+            client,
+            DistributionDatabase::new(build_context.cache(), tags, client, build_context),
+            build_context,
+            tags,
+            options.exclude_newer,
+            manifest
+                .requirements
+                .iter()
+                .chain(manifest.constraints.iter())
+                .collect(),
+        );
+        Self::new_custom_io(manifest, options, markers, io)
+    }
+}
+
+impl<'a, Io: ResolverIo> Resolver<'a, Io> {
+    /// Initialize a new resolver using a user provided backend.
+    pub fn new_custom_io(
+        manifest: Manifest,
+        options: ResolutionOptions,
+        markers: &'a MarkerEnvironment,
+        io: Io,
     ) -> Self {
         Self {
             index: Arc::new(Index::default()),
@@ -81,21 +205,12 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
                     }
                 })
                 .collect(),
-            allowed_yanks: manifest
-                .requirements
-                .iter()
-                .chain(manifest.constraints.iter())
-                .collect(),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
-            exclude_newer: options.exclude_newer,
             markers,
-            tags,
-            client,
-            fetcher: DistributionDatabase::new(build_context.cache(), tags, client, build_context),
-            build_context,
             reporter: None,
+            io,
         }
     }
 
@@ -105,7 +220,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
         let reporter = Arc::new(reporter);
         Self {
             reporter: Some(reporter.clone()),
-            fetcher: self.fetcher.with_reporter(Facade { reporter }),
+            io: self.io.with_reporter(Facade { reporter }),
             ..self
         }
     }
@@ -552,17 +667,9 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
 
         while let Some(response) = response_stream.next().await {
             match response? {
-                Response::Package(package_name, index, metadata) => {
+                Response::Package(package_name, index, version_map) => {
                     trace!("Received package metadata for: {package_name}");
-                    let version_map = VersionMap::from_metadata(
-                        metadata,
-                        &package_name,
-                        self.tags,
-                        self.markers,
-                        self.build_context.interpreter(),
-                        &self.allowed_yanks,
-                        self.exclude_newer.as_ref(),
-                    );
+
                     self.index
                         .packages
                         .insert(package_name, (index, version_map));
@@ -603,18 +710,17 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, Context> {
         match request {
             // Fetch package metadata from the registry.
             Request::Package(package_name) => {
-                self.client
-                    .simple(package_name.clone())
-                    .map_ok(move |(index, metadata)| {
-                        Response::Package(package_name, index, metadata)
-                    })
-                    .map_err(ResolveError::Client)
+                let (index, metadata) = self
+                    .io
+                    .get_version_map(&package_name)
                     .await
+                    .map_err(ResolveError::Client)?;
+                Ok(Response::Package(package_name, index, metadata))
             }
 
             Request::Dist(dist) => {
                 let (metadata, precise) = self
-                    .fetcher
+                    .io
                     .get_or_build_wheel_metadata(&dist)
                     .await
                     .map_err(|err| match dist.clone() {
@@ -732,7 +838,7 @@ enum Request {
 #[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, IndexUrl, SimpleJson),
+    Package(PackageName, IndexUrl, VersionMap),
     /// The returned metadata for a distribution.
     Dist(Dist, Metadata21, Option<Url>),
 }
