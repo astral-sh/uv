@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::UNIX_EPOCH;
 
 use fs_err as fs;
 use serde::{Deserialize, Serialize};
@@ -9,6 +8,7 @@ use tracing::debug;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
+use puffin_cache::CachedByTimestamp;
 use puffin_cache::{digest, Cache, CacheBucket};
 use puffin_fs::write_atomic_sync;
 
@@ -106,12 +106,6 @@ pub(crate) struct InterpreterQueryResult {
     pub(crate) sys_executable: PathBuf,
 }
 
-#[derive(Deserialize, Serialize)]
-pub(crate) struct CachedByTimestamp<T> {
-    pub(crate) timestamp: u128,
-    pub(crate) data: T,
-}
-
 impl InterpreterQueryResult {
     /// Return the resolved [`InterpreterQueryResult`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
@@ -158,19 +152,20 @@ impl InterpreterQueryResult {
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let executable_bytes = executable.as_os_str().as_encoded_bytes();
-        let cache_dir = cache.bucket(CacheBucket::Interpreter);
-        let cache_path = cache_dir.join(format!("{}.json", digest(&executable_bytes)));
+        let cache_entry = cache.entry(
+            CacheBucket::Interpreter,
+            "",
+            format!("{}.json", digest(&executable_bytes)),
+        );
 
         let modified = fs_err::metadata(executable)?
             // Note: This is infallible on windows and unix (i.e., all platforms we support).
-            .modified()?
-            .duration_since(UNIX_EPOCH)
-            .map_err(|err| Error::SystemTime(executable.to_path_buf(), err))?;
+            .modified()?;
 
         // Read from the cache.
-        if let Ok(data) = fs::read(&cache_path) {
+        if let Ok(data) = fs::read(&cache_entry.path()) {
             if let Ok(cached) = serde_json::from_slice::<CachedByTimestamp<Self>>(&data) {
-                if cached.timestamp == modified.as_millis() {
+                if cached.timestamp == modified {
                     debug!("Using cached markers for: {}", executable.display());
                     return Ok(cached.data);
                 }
@@ -189,12 +184,12 @@ impl InterpreterQueryResult {
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info
         if executable == info.sys_executable {
-            fs::create_dir_all(cache_dir)?;
+            fs::create_dir_all(&cache_entry.dir)?;
             // Write to the cache.
             write_atomic_sync(
-                cache_path,
+                cache_entry.path(),
                 serde_json::to_vec(&CachedByTimestamp {
-                    timestamp: modified.as_millis(),
+                    timestamp: modified,
                     data: info.clone(),
                 })?,
             )?;
