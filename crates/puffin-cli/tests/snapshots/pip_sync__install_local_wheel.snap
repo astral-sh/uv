@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpKx7cY5
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpOaWXtJ
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpEz5kWW/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpl1QcDF/.venv
 ---
 success: true
 exit_code: 0
@@ -19,5 +19,5 @@ Resolved 1 package in [TIME]
 Downloaded 1 package in [TIME]
 Unzipped 1 package in [TIME]
 Installed 1 package in [TIME]
- + flask @ file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
+ + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
 
