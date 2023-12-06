@@ -2,11 +2,10 @@ use std::cmp::Reverse;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use tracing::{debug, instrument, warn};
+use tracing::{instrument, warn};
 
 use distribution_types::{CachedDist, Dist, RemoteSource};
 use puffin_distribution::{LocalWheel, Unzip};
-use puffin_fs::{rename_atomic_sync, Target};
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -36,7 +35,16 @@ impl Unzipper {
             let remote = download.remote().clone();
             let filename = download.filename().clone();
 
-            debug!("Unpacking wheel: {remote}");
+            // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
+            if download.target().is_dir() {
+                warn!("Wheel is already unpacked: {remote}");
+                wheels.push(CachedDist::from_remote(
+                    remote,
+                    filename,
+                    download.target().to_path_buf(),
+                ));
+                continue;
+            }
 
             // Unzip the wheel.
             let normalized_path = tokio::task::spawn_blocking({
@@ -50,17 +58,8 @@ impl Unzipper {
                     let staging = tempfile::tempdir_in(parent)?;
                     download.unzip(staging.path())?;
 
-                    // Move the unzipped wheel into the cache, removing any existing files or
-                    // directories. This will often include the zipped wheel itself, which we
-                    // replace in the cache with the unzipped directory.
-                    if rename_atomic_sync(staging.into_path(), download.target())?
-                        .is_some_and(Target::is_directory)
-                    {
-                        warn!(
-                            "Removing existing directory at: {}",
-                            download.target().display()
-                        );
-                    }
+                    // Move the unzipped wheel into the cache,.
+                    fs_err::rename(staging.into_path(), download.target())?;
 
                     Ok(download.target().to_path_buf())
                 }

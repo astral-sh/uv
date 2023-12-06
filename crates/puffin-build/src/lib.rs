@@ -23,11 +23,10 @@ use tar::Archive;
 use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tracing::{debug, info_span, instrument, warn};
+use tracing::{debug, info_span, instrument};
 use zip::ZipArchive;
 
 use pep508_rs::Requirement;
-use puffin_fs::{copy_atomic_sync, rename_atomic_sync};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_traits::BuildContext;
 
@@ -427,9 +426,7 @@ impl SourceBuild {
 
             let from = tmp_dir.path().join(&filename);
             let to = wheel_dir.join(&filename);
-            if rename_atomic_sync(from, &to)?.is_some() {
-                warn!("Overwriting existing wheel at: {}", to.display());
-            }
+            fs_err::rename(from, to)?;
 
             Ok(filename)
         } else {
@@ -461,9 +458,7 @@ impl SourceBuild {
 
             let from = dist_wheel.path();
             let to = wheel_dir.join(dist_wheel.file_name());
-            if copy_atomic_sync(from, &to)?.is_some() {
-                warn!("Overwriting existing wheel at: {}", to.display());
-            }
+            fs_err::copy(from, to)?;
 
             Ok(dist_wheel.file_name().to_string_lossy().to_string())
         }
