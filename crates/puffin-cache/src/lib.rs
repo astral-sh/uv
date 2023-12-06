@@ -332,7 +332,7 @@ pub enum CacheBucket {
     ///  * `simple-v0/pypi/<package_name>.json`
     ///  * `simple-v0/<digest(index_url)>/<package_name>.json`
     ///
-    /// TODO(konstin): Link to the json type after <https://github.com/astral-sh/puffin/pull/522/>
+    /// The response is parsed into [`puffin_client::SimpleMetadata`] before storage.
     Simple,
 }
 
