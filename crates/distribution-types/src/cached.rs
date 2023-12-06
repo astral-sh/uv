@@ -134,9 +134,17 @@ impl CachedDirectUrlDist {
     }
 }
 
-impl CachedRegistryDist {
+#[derive(Debug, Clone)]
+pub struct CachedWheel {
+    /// The filename of the wheel.
+    pub filename: WheelFilename,
+    /// The path to the wheel.
+    pub path: PathBuf,
+}
+
+impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
+    pub fn from_path(path: &Path) -> Result<Option<Self>> {
         let Some(file_name) = path.file_name() else {
             return Ok(None);
         };
@@ -153,5 +161,22 @@ impl CachedRegistryDist {
         let path = path.to_path_buf();
 
         Ok(Some(Self { filename, path }))
+    }
+
+    /// Convert a [`CachedWheel`] into a [`CachedRegistryDist`].
+    pub fn into_registry_dist(self) -> CachedRegistryDist {
+        CachedRegistryDist {
+            filename: self.filename,
+            path: self.path,
+        }
+    }
+
+    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`].
+    pub fn into_url_dist(self, url: Url) -> CachedDirectUrlDist {
+        CachedDirectUrlDist {
+            filename: self.filename,
+            url,
+            path: self.path,
+        }
     }
 }

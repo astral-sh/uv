@@ -1,18 +1,19 @@
-use std::str::FromStr;
-
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use tracing::debug;
 
-use distribution_filename::WheelFilename;
-use distribution_types::direct_url::DirectUrl;
-use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist, RemoteSource};
+use distribution_types::direct_url::{git_reference, DirectUrl};
+use distribution_types::{
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Metadata, RemoteSource,
+    SourceDist,
+};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
+use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use pypi_types::IndexUrls;
 
-use crate::{RegistryIndex, SitePackages};
+use crate::SitePackages;
 
 #[derive(Debug, Default)]
 pub struct InstallPlan {
@@ -44,7 +45,7 @@ impl InstallPlan {
             SitePackages::try_from_executable(venv).context("Failed to list installed packages")?;
 
         // Index all the already-downloaded wheels in the cache.
-        let registry_index = RegistryIndex::try_from_directory(cache, tags, index_urls);
+        let registry_index = RegistryWheelIndex::from_directory(cache, tags, index_urls);
 
         let mut local = vec![];
         let mut remote = vec![];
@@ -88,6 +89,7 @@ impl InstallPlan {
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None => {
+                    // TODO(charlie): This doesn't respect built wheels.
                     if let Some((_version, distribution)) =
                         registry_index.by_name(&requirement.name).next()
                     {
@@ -110,37 +112,107 @@ impl InstallPlan {
                     }
                 }
                 Some(VersionOrUrl::Url(url)) => {
-                    // TODO(konstin): Add source dist url support. It's more tricky since we don't
-                    // know yet whether source dist is fresh in the cache.
-                    if let Ok(filename) = url
-                        .filename()
-                        .and_then(|disk_filename| Ok(WheelFilename::from_str(disk_filename)?))
-                    {
-                        if requirement.name != filename.name {
-                            bail!(
-                                "Given name `{}` does not match url name `{}`",
-                                requirement.name,
-                                url
-                            );
+                    match Dist::from_url(requirement.name.clone(), url.clone())? {
+                        Dist::Built(BuiltDist::Registry(_wheel)) => {
+                            // Nothing to do.
                         }
-
-                        let cache_entry = cache.entry(
-                            CacheBucket::Wheels,
-                            WheelCache::Url(url).wheel_dir(),
-                            filename.stem(),
-                        );
-
-                        // Ignore zipped wheels, which represent intermediary cached artifacts.
-                        if cache_entry.path().is_dir() {
-                            let cached_dist = CachedDirectUrlDist::from_url(
-                                filename,
-                                url.clone(),
-                                cache_entry.path(),
+                        Dist::Source(SourceDist::Registry(_)) => {
+                            // Nothing to do.
+                        }
+                        Dist::Built(BuiltDist::DirectUrl(wheel)) => {
+                            // Find the exact wheel from the cache, since we know the filename in
+                            // advance.
+                            let cache_entry = cache.entry(
+                                CacheBucket::Wheels,
+                                WheelCache::Url(&wheel.url).wheel_dir(),
+                                wheel.filename.stem(),
                             );
 
-                            debug!("URL wheel requirement already cached: {cached_dist}");
-                            local.push(CachedDist::Url(cached_dist.clone()));
-                            continue;
+                            if cache_entry.path().exists() {
+                                let cached_dist = CachedDirectUrlDist::from_url(
+                                    wheel.filename,
+                                    wheel.url,
+                                    cache_entry.path(),
+                                );
+
+                                debug!("URL wheel requirement already cached: {cached_dist}");
+                                local.push(CachedDist::Url(cached_dist.clone()));
+                                continue;
+                            }
+                        }
+                        Dist::Built(BuiltDist::Path(wheel)) => {
+                            // Find the exact wheel from the cache, since we know the filename in
+                            // advance.
+                            let cache_entry = cache.entry(
+                                CacheBucket::Wheels,
+                                WheelCache::Url(&wheel.url).wheel_dir(),
+                                wheel.filename.stem(),
+                            );
+
+                            if cache_entry.path().exists() {
+                                let cached_dist = CachedDirectUrlDist::from_url(
+                                    wheel.filename,
+                                    wheel.url,
+                                    cache_entry.path(),
+                                );
+
+                                debug!("Path wheel requirement already cached: {cached_dist}");
+                                local.push(CachedDist::Url(cached_dist.clone()));
+                                continue;
+                            }
+                        }
+                        Dist::Source(SourceDist::DirectUrl(sdist)) => {
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            let cache_entry = cache.entry(
+                                CacheBucket::BuiltWheels,
+                                WheelCache::Url(&sdist.url).wheel_dir(),
+                                sdist.filename()?.to_string(),
+                            );
+                            let index = BuiltWheelIndex::new(cache_entry.path(), tags);
+
+                            if let Some(wheel) = index.find() {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("URL source requirement already cached: {cached_dist}");
+                                local.push(CachedDist::Url(cached_dist.clone()));
+                                continue;
+                            }
+                        }
+                        Dist::Source(SourceDist::Path(sdist)) => {
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            let cache_entry = cache.entry(
+                                CacheBucket::BuiltWheels,
+                                WheelCache::Path(&sdist.url).wheel_dir(),
+                                sdist.name().to_string(),
+                            );
+                            let index = BuiltWheelIndex::new(cache_entry.path(), tags);
+
+                            if let Some(wheel) = index.find() {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("Path source requirement already cached: {cached_dist}");
+                                local.push(CachedDist::Url(cached_dist.clone()));
+                                continue;
+                            }
+                        }
+                        Dist::Source(SourceDist::Git(sdist)) => {
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            if let Ok(Some(reference)) = git_reference(&sdist.url) {
+                                let cache_entry = cache.entry(
+                                    CacheBucket::BuiltWheels,
+                                    WheelCache::Git(&sdist.url).wheel_dir(),
+                                    reference.to_string(),
+                                );
+                                let index = BuiltWheelIndex::new(cache_entry.path(), tags);
+
+                                if let Some(wheel) = index.find() {
+                                    let cached_dist = wheel.into_url_dist(url.clone());
+                                    debug!("Git source requirement already cached: {cached_dist}");
+                                    local.push(CachedDist::Url(cached_dist.clone()));
+                                    continue;
+                                }
+                            }
                         }
                     }
                 }

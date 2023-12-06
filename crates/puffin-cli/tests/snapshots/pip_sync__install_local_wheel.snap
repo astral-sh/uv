@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpOaWXtJ
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp9AMtBI
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpl1QcDF/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpA2E3PE/.venv
 ---
 success: true
 exit_code: 0

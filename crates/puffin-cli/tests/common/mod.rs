@@ -14,6 +14,7 @@ pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
 ];
 
+/// Create a virtual environment named `.venv` in a temporary directory.
 pub(crate) fn create_venv_py312(temp_dir: &TempDir, cache_dir: &TempDir) -> PathBuf {
     let venv = temp_dir.child(".venv");
     Command::new(get_cargo_bin(BIN_NAME))
