@@ -2365,6 +2365,7 @@ dependencies = [
  "http",
  "http-cache-semantics",
  "install-wheel-rs",
+ "pep440_rs 0.3.12",
  "puffin-cache",
  "puffin-fs",
  "puffin-normalize",
