@@ -7,7 +7,7 @@ pub use resolution::Graph;
 pub use resolution_mode::ResolutionMode;
 pub use resolution_options::ResolutionOptions;
 pub use resolver::{
-    BuildId, DefaultResolverIo, Reporter as ResolverReporter, Resolver, ResolverIo,
+    BuildId, DefaultResolverProvider, Reporter as ResolverReporter, Resolver, ResolverProvider,
 };
 
 mod candidate_selector;

@@ -44,7 +44,7 @@ use crate::ResolutionOptions;
 type VersionMapResponse = Result<(IndexUrl, VersionMap), puffin_client::Error>;
 type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
 
-pub trait ResolverIo: Send + Sync {
+pub trait ResolverProvider: Send + Sync {
     /// Get the version map for a package.
     fn get_version_map<'io>(
         &'io self,
@@ -68,7 +68,7 @@ pub trait ResolverIo: Send + Sync {
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
 /// [`RegistryClient`] and [`DistributionDatabase`].
-pub struct DefaultResolverIo<'a, Context: BuildContext + Send + Sync> {
+pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     client: &'a RegistryClient,
     fetcher: DistributionDatabase<'a, Context>,
     build_context: &'a Context,
@@ -77,8 +77,8 @@ pub struct DefaultResolverIo<'a, Context: BuildContext + Send + Sync> {
     allowed_yanks: AllowedYanks,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> DefaultResolverIo<'a, Context> {
-    pub(crate) fn new(
+impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
+    pub fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
         build_context: &'a Context,
@@ -97,7 +97,9 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverIo<'a, Context> {
     }
 }
 
-impl<'a, Context: BuildContext + Send + Sync> ResolverIo for DefaultResolverIo<'a, Context> {
+impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
+    for DefaultResolverProvider<'a, Context>
+{
     fn get_version_map<'io>(
         &'io self,
         package_name: &'io PackageName,
@@ -144,7 +146,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverIo for DefaultResolverIo<'
     }
 }
 
-pub struct Resolver<'a, Io: ResolverIo> {
+pub struct Resolver<'a, Provider: ResolverProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
@@ -153,10 +155,10 @@ pub struct Resolver<'a, Io: ResolverIo> {
     selector: CandidateSelector,
     index: Arc<Index>,
     reporter: Option<Arc<dyn Reporter>>,
-    io: Io,
+    provider: Provider,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverIo<'a, Context>> {
+impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvider<'a, Context>> {
     /// Initialize a new resolver using the default backend doing real requests.
     pub fn new(
         manifest: Manifest,
@@ -166,7 +168,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverIo<'a,
         client: &'a RegistryClient,
         build_context: &'a Context,
     ) -> Self {
-        let io = DefaultResolverIo::new(
+        let provider = DefaultResolverProvider::new(
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
             build_context,
@@ -178,17 +180,17 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverIo<'a,
                 .chain(manifest.constraints.iter())
                 .collect(),
         );
-        Self::new_custom_io(manifest, options, markers, io)
+        Self::new_custom_io(manifest, options, markers, provider)
     }
 }
 
-impl<'a, Io: ResolverIo> Resolver<'a, Io> {
+impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Initialize a new resolver using a user provided backend.
     pub fn new_custom_io(
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
-        io: Io,
+        provider: Provider,
     ) -> Self {
         Self {
             index: Arc::new(Index::default()),
@@ -210,7 +212,7 @@ impl<'a, Io: ResolverIo> Resolver<'a, Io> {
             constraints: manifest.constraints,
             markers,
             reporter: None,
-            io,
+            provider,
         }
     }
 
@@ -220,7 +222,7 @@ impl<'a, Io: ResolverIo> Resolver<'a, Io> {
         let reporter = Arc::new(reporter);
         Self {
             reporter: Some(reporter.clone()),
-            io: self.io.with_reporter(Facade { reporter }),
+            provider: self.provider.with_reporter(Facade { reporter }),
             ..self
         }
     }
@@ -711,7 +713,7 @@ impl<'a, Io: ResolverIo> Resolver<'a, Io> {
             // Fetch package metadata from the registry.
             Request::Package(package_name) => {
                 let (index, metadata) = self
-                    .io
+                    .provider
                     .get_version_map(&package_name)
                     .await
                     .map_err(ResolveError::Client)?;
@@ -720,7 +722,7 @@ impl<'a, Io: ResolverIo> Resolver<'a, Io> {
 
             Request::Dist(dist) => {
                 let (metadata, precise) = self
-                    .io
+                    .provider
                     .get_or_build_wheel_metadata(&dist)
                     .await
                     .map_err(|err| match dist.clone() {
