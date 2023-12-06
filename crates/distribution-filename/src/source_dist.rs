@@ -1,12 +1,13 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use pep440_rs::Version;
 use puffin_normalize::{InvalidNameError, PackageName};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceDistExtension {
     Zip,
     TarGz,
@@ -47,7 +48,7 @@ impl SourceDistExtension {
 
 /// Note that this is a normalized and not an exact representation, keep the original string if you
 /// need the latter.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceDistFilename {
     pub name: PackageName,
     pub version: Version,

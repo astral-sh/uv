@@ -9,6 +9,7 @@ use futures::TryStreamExt;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -157,7 +158,8 @@ impl RegistryClient {
                 let bytes = response.bytes().await?;
                 let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                     .map_err(|err| Error::from_json_err(err, url))?;
-                Ok(data)
+                let metadata = SimpleMetadata::from_package_simple_json(package_name, data);
+                Ok(metadata)
             };
             let result = self
                 .client
@@ -166,11 +168,8 @@ impl RegistryClient {
 
             // Fetch from the index.
             match result {
-                Ok(simple_json) => {
-                    return Ok((
-                        index.clone(),
-                        SimpleMetadata::from_package_simple_json(package_name, simple_json),
-                    ));
+                Ok(simple_metadata) => {
+                    return Ok((index.clone(), simple_metadata));
                 }
                 Err(CachedClientError::Client(Error::RequestError(err))) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {
@@ -390,7 +389,7 @@ impl RegistryClient {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct VersionFiles {
     pub wheels: Vec<(WheelFilename, File)>,
     pub source_dists: Vec<(SourceDistFilename, File)>,
@@ -416,7 +415,7 @@ impl VersionFiles {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
 
 impl SimpleMetadata {
