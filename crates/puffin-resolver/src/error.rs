@@ -77,8 +77,8 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
 /// A wrapper around [`pubgrub::error::PubGrubError`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct RichPubGrubError {
-    pub source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
-    pub available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+    available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
 impl std::error::Error for RichPubGrubError {}
@@ -99,9 +99,24 @@ impl std::fmt::Display for RichPubGrubError {
 
 impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
     fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+        if matches!(value, pubgrub::error::PubGrubError::NoSolution(_)) {
+            unreachable!("`NoSolution` should be constructed with available versions")
+        }
         ResolveError::PubGrub(RichPubGrubError {
             source: value,
             available_versions: FxHashMap::default(),
         })
+    }
+}
+
+impl RichPubGrubError {
+    pub fn new(
+        source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+        available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    ) -> Self {
+        Self {
+            source,
+            available_versions,
+        }
     }
 }

@@ -303,10 +303,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     }
                 }
 
-                RichPubGrubError {
-                    source: err,
-                    available_versions,
-                }
+                RichPubGrubError::new(err, available_versions)
             })?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
