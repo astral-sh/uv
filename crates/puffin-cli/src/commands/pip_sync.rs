@@ -75,7 +75,9 @@ pub(crate) async fn sync_requirements(
         "Using Python interpreter: {}",
         venv.python_executable().display()
     );
+
     // Determine the current environment markers.
+    let markers = venv.interpreter().markers();
     let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
@@ -84,7 +86,7 @@ pub(crate) async fn sync_requirements(
         local,
         remote,
         extraneous,
-    } = InstallPlan::try_from_requirements(requirements, &index_urls, cache, &venv, &tags)
+    } = InstallPlan::from_requirements(requirements, &index_urls, cache, &venv, markers, &tags)
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.

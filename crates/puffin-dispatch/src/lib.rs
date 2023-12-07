@@ -126,17 +126,19 @@ impl BuildContext for BuildDispatch {
                 venv.root().display(),
             );
 
+            let markers = self.interpreter.markers();
             let tags = Tags::from_interpreter(&self.interpreter)?;
 
             let InstallPlan {
                 local,
                 remote,
                 extraneous,
-            } = InstallPlan::try_from_requirements(
+            } = InstallPlan::from_requirements(
                 requirements,
                 &self.index_urls,
                 self.cache(),
                 venv,
+                markers,
                 &tags,
             )?;
 
