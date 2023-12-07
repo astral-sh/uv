@@ -4,8 +4,7 @@ use tracing::warn;
 use distribution_types::CachedWheel;
 use platform_tags::Tags;
 use puffin_cache::CacheShard;
-
-use crate::index::iter_directories;
+use puffin_fs::directories;
 
 /// A local index of built distributions for a specific source distribution.
 pub struct BuiltWheelIndex;
@@ -30,7 +29,7 @@ impl BuiltWheelIndex {
     pub fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
         let mut candidate: Option<CachedWheel> = None;
 
-        for subdir in iter_directories(shard.read_dir().ok()?) {
+        for subdir in directories(&**shard) {
             match CachedWheel::from_path(&subdir) {
                 Ok(None) => {}
                 Ok(Some(dist_info)) => {

@@ -1,6 +1,5 @@
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
-
 use std::path::Path;
 
 use fs_err as fs;
@@ -11,10 +10,9 @@ use distribution_types::{CachedRegistryDist, CachedWheel};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
+use puffin_fs::directories;
 use puffin_normalize::PackageName;
 use pypi_types::IndexUrls;
-
-use crate::index::iter_directories;
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]
@@ -79,10 +77,7 @@ impl<'a> RegistryWheelIndex<'a> {
 
             // Built wheels have one more level of indirection, as they are keyed by the source
             // distribution filename.
-            let Ok(read_dir) = built_wheel_dir.read_dir() else {
-                continue;
-            };
-            for subdir in iter_directories(read_dir) {
+            for subdir in directories(&*built_wheel_dir) {
                 Self::add_directory(subdir, tags, &mut versions);
             }
         }
@@ -98,11 +93,7 @@ impl<'a> RegistryWheelIndex<'a> {
         tags: &Tags,
         versions: &mut BTreeMap<Version, CachedRegistryDist>,
     ) {
-        let Ok(read_dir) = path.as_ref().read_dir() else {
-            return;
-        };
-
-        for wheel_dir in iter_directories(read_dir) {
+        for wheel_dir in directories(path.as_ref()) {
             match CachedWheel::from_path(&wheel_dir) {
                 Ok(None) => {}
                 Ok(Some(dist_info)) => {
