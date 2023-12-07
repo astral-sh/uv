@@ -13,7 +13,7 @@ use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
-fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
+fn check_command(venv: &Path, temp_dir: &Path, command: &str) {
     Command::new(venv.join("bin").join("python"))
         .arg("-c")
         .arg(command)
@@ -83,7 +83,7 @@ fn install() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, &temp_dir, "import markupsafe");
 
     Ok(())
 }
@@ -113,7 +113,7 @@ fn install_copy() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, &temp_dir, "import markupsafe");
 
     Ok(())
 }
@@ -143,7 +143,7 @@ fn install_hardlink() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, &temp_dir, "import markupsafe");
 
     Ok(())
 }
@@ -171,7 +171,7 @@ fn install_many() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import markupsafe; import tomli", &cache_dir);
+    check_command(&venv, &cache_dir, "import markupsafe; import tomli");
 
     Ok(())
 }
@@ -209,7 +209,7 @@ fn noop() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, &temp_dir, "import markupsafe");
 
     Ok(())
 }
@@ -261,7 +261,7 @@ fn link() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv2, "import markupsafe", &temp_dir);
+    check_command(&venv2, &temp_dir, "import markupsafe");
 
     Ok(())
 }
@@ -304,7 +304,7 @@ fn add_remove() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import tomli", &temp_dir);
+    check_command(&venv, &temp_dir, "import tomli");
 
     Command::new(venv.join("bin").join("python"))
         .arg("-c")
@@ -354,7 +354,7 @@ fn install_sequential() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import markupsafe; import tomli", &cache_dir);
+    check_command(&venv, &cache_dir, "import markupsafe; import tomli");
 
     Ok(())
 }
@@ -397,7 +397,7 @@ fn upgrade() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import tomli", &temp_dir);
+    check_command(&venv, &temp_dir, "import tomli");
 
     Ok(())
 }
@@ -427,7 +427,7 @@ fn install_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -458,7 +458,7 @@ fn install_git_commit() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -489,7 +489,7 @@ fn install_git_tag() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -520,9 +520,9 @@ fn install_git_subdirectories() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import example_pkg", &temp_dir);
-    check_command(&venv, "import example_pkg.a", &temp_dir);
-    check_command(&venv, "import example_pkg.b", &temp_dir);
+    check_command(&venv, &temp_dir, "import example_pkg");
+    check_command(&venv, &temp_dir, "import example_pkg.a");
+    check_command(&venv, &temp_dir, "import example_pkg.b");
 
     Ok(())
 }
@@ -552,7 +552,7 @@ fn install_sdist() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -582,7 +582,7 @@ fn install_sdist_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -623,7 +623,7 @@ fn install_url_then_install_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -668,7 +668,7 @@ fn install_url_then_install_version() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -713,7 +713,7 @@ fn install_version_then_install_url() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -755,7 +755,7 @@ fn install_numpy_py38() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import numpy", &temp_dir);
+    check_command(&venv, &temp_dir, "import numpy");
 
     Ok(())
 }
@@ -818,7 +818,7 @@ fn install_local_wheel() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import tomli", &temp_dir);
+    check_command(&venv, &temp_dir, "import tomli");
 
     Ok(())
 }
@@ -855,7 +855,7 @@ fn install_local_source_distribution() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import wheel", &temp_dir);
+    check_command(&venv, &temp_dir, "import wheel");
 
     Ok(())
 }
@@ -891,7 +891,7 @@ fn install_ujson() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import ujson", &temp_dir);
+    check_command(&venv, &temp_dir, "import ujson");
 
     Ok(())
 }
@@ -927,7 +927,7 @@ fn install_dtls_socket() -> Result<()> {
             .current_dir(&temp_dir));
     });
 
-    check_command(&venv, "import DTLSSocket", &temp_dir);
+    check_command(&venv, &temp_dir, "import DTLSSocket");
 
     Ok(())
 }
@@ -966,7 +966,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    check_command(&venv, &temp_dir, "import tqdm");
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
@@ -992,7 +992,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    check_command(&venv, &temp_dir, "import tqdm");
 
     Ok(())
 }
@@ -1032,7 +1032,7 @@ fn install_git_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
@@ -1058,7 +1058,7 @@ fn install_git_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, &temp_dir, "import werkzeug");
 
     Ok(())
 }
@@ -1097,7 +1097,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import future", &temp_dir);
+    check_command(&venv, &temp_dir, "import future");
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
@@ -1123,7 +1123,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import future", &temp_dir);
+    check_command(&venv, &temp_dir, "import future");
 
     Ok(())
 }
@@ -1171,7 +1171,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import wheel", &temp_dir);
+    check_command(&venv, &temp_dir, "import wheel");
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
@@ -1197,7 +1197,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import wheel", &temp_dir);
+    check_command(&venv, &temp_dir, "import wheel");
 
     Ok(())
 }
@@ -1245,7 +1245,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import tomli", &temp_dir);
+    check_command(&venv, &temp_dir, "import tomli");
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
@@ -1271,7 +1271,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import tomli", &parent);
+    check_command(&venv, &parent, "import tomli");
 
     Ok(())
 }
@@ -1310,7 +1310,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    check_command(&venv, &temp_dir, "import tqdm");
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
@@ -1336,7 +1336,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         "###);
     });
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    check_command(&venv, &temp_dir, "import tqdm");
 
     Ok(())
 }
