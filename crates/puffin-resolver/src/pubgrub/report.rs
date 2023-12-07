@@ -7,13 +7,13 @@ use puffin_normalize::PackageName;
 
 use super::{PubGrubPackage, PubGrubVersion};
 
-#[derive(Debug, Default)]
-pub struct PubGrubReportFormatter {
+#[derive(Debug)]
+pub struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    pub available_versions: &'a FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
-impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFormatter {
+impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFormatter<'_> {
     type Output = String;
 
     fn format_external(

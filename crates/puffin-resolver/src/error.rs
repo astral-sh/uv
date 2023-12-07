@@ -78,7 +78,7 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
 #[derive(Debug)]
 pub struct RichPubGrubError {
     pub source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
-    pub versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    pub available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
 impl std::error::Error for RichPubGrubError {}
@@ -87,7 +87,7 @@ impl std::fmt::Display for RichPubGrubError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
             let formatter = PubGrubReportFormatter {
-                available_versions: self.versions.clone(),
+                available_versions: &self.available_versions,
             };
             let report = DefaultStringReporter::report_with_formatter(derivation_tree, &formatter);
             write!(f, "{report}")
@@ -101,7 +101,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> f
     fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
         ResolveError::PubGrub(RichPubGrubError {
             source: value,
-            versions: FxHashMap::default(),
+            available_versions: FxHashMap::default(),
         })
     }
 }

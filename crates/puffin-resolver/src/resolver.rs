@@ -285,13 +285,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         loop {
             // Run unit propagation.
             state.unit_propagation(next).map_err(|err| {
-                let mut versions = FxHashMap::default();
+                let mut available_versions = FxHashMap::default();
                 if matches!(err, pubgrub::error::PubGrubError::NoSolution(_)) {
                     for package in added_dependencies.keys() {
                         if let PubGrubPackage::Package(package_name, ..) = package {
                             if let Some(entry) = self.index.packages.get(package_name) {
                                 let (_index, version_map) = entry.value();
-                                versions.insert(
+                                available_versions.insert(
                                     package.clone(),
                                     version_map
                                         .iter()
@@ -305,7 +305,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 RichPubGrubError {
                     source: err,
-                    versions,
+                    available_versions,
                 }
             })?;
 
