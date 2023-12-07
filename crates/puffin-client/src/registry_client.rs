@@ -241,7 +241,7 @@ impl RegistryClient {
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Index(&index).wheel_dir(),
+                WheelCache::Index(&index).remote_wheel_dir(filename.name.as_ref()),
                 format!("{}.json", filename.stem()),
             );
 
@@ -276,7 +276,7 @@ impl RegistryClient {
 
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
-            cache_shard.wheel_dir(),
+            cache_shard.remote_wheel_dir(filename.name.as_ref()),
             format!("{}.json", filename.stem()),
         );
 
@@ -311,13 +311,13 @@ impl RegistryClient {
         // The range request version failed (this is bad, the webserver should support this), fall
         // back to downloading the entire file and the reading the file from the zip the regular way
 
-        debug!("Range requests not supported for {filename}, downloading whole wheel");
+        debug!("Range requests not supported for {filename}; downloading wheel");
         // TODO(konstin): Download the wheel into a cache shared with the installer instead
         // Note that this branch is only hit when you're not using and the server where
         // you host your wheels for some reasons doesn't support range requests
         // (tbh we should probably warn here and tell users to get a better registry because
-        // their current one makes resolution unnecessary slow)
-        let temp_download = tempfile_in(cache_shard.wheel_dir()).map_err(Error::CacheWrite)?;
+        // their current one makes resolution unnecessary slow).
+        let temp_download = tempfile_in(self.cache.root()).map_err(Error::CacheWrite)?;
         let mut writer = BufWriter::new(tokio::fs::File::from_std(temp_download));
         let mut reader = self.stream_external(url).await?.compat();
         tokio::io::copy(&mut reader, &mut writer)

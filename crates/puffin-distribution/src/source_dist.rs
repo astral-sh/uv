@@ -24,7 +24,9 @@ use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{GitSourceDist, Metadata, PathSourceDist, RemoteSource, SourceDist};
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{digest, CacheBucket, CacheEntry, CachedByTimestamp, CanonicalUrl, WheelCache};
+use puffin_cache::{
+    digest, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, CanonicalUrl, WheelCache,
+};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::write_atomic;
 use puffin_git::{Fetch, GitSource};
@@ -161,11 +163,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let DirectArchiveUrl { url, subdirectory } =
                     DirectArchiveUrl::from(&direct_url_source_dist.url);
 
+                // For direct URLs, cache directly under the hash of the URL itself.
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::BuiltWheels,
+                    WheelCache::Url(&url).remote_wheel_dir(direct_url_source_dist.name().as_ref()),
+                );
+
                 self.url(
                     source_dist,
                     filename,
                     &url,
-                    WheelCache::Url(&url),
+                    cache_shard,
                     subdirectory.as_deref(),
                 )
                 .await?
@@ -174,11 +182,21 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let url = Url::parse(&registry_source_dist.file.url).map_err(|err| {
                     SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
                 })?;
+
+                // For registry source distributions, shard by distribution, then by filename.
+                // Ex) `pypi/requests/requests-2.25.1.tar.gz`
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::BuiltWheels,
+                    WheelCache::Index(&registry_source_dist.index)
+                        .remote_wheel_dir(registry_source_dist.name.as_ref())
+                        .join(&registry_source_dist.file.filename),
+                );
+
                 self.url(
                     source_dist,
                     &registry_source_dist.file.filename,
                     &url,
-                    WheelCache::Index(&registry_source_dist.index),
+                    cache_shard,
                     None,
                 )
                 .await?
@@ -197,14 +215,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &'data SourceDist,
         filename: &'data str,
         url: &'data Url,
-        cache_shard: WheelCache<'data>,
+        cache_shard: CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheels,
-            cache_shard.built_wheel_dir(filename),
-            METADATA_JSON.to_string(),
-        );
+        let cache_entry = cache_shard.entry(METADATA_JSON.to_string());
 
         let response_callback = |response| async {
             // New or changed source distribution, delete all built wheels
@@ -345,10 +359,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let cache_shard = WheelCache::Path(&path_source_dist.url);
         let cache_entry = self.build_context.cache().entry(
             CacheBucket::BuiltWheels,
-            cache_shard.built_wheel_dir(source_dist.name().to_string()),
+            WheelCache::Path(&path_source_dist.url)
+                .remote_wheel_dir(path_source_dist.name().as_ref()),
             METADATA_JSON.to_string(),
         );
 
