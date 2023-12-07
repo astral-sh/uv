@@ -1,4 +1,7 @@
-use anyhow::{Context, Result};
+use std::hash::BuildHasherDefault;
+
+use anyhow::{bail, Context, Result};
+use fxhash::FxHashMap;
 use tracing::debug;
 
 use distribution_types::direct_url::{git_reference, DirectUrl};
@@ -6,7 +9,7 @@ use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Metadata, RemoteSource,
     SourceDist,
 };
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
@@ -33,11 +36,12 @@ pub struct InstallPlan {
 impl InstallPlan {
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
-    pub fn try_from_requirements(
+    pub fn from_requirements(
         requirements: &[Requirement],
         index_urls: &IndexUrls,
         cache: &Cache,
         venv: &Virtualenv,
+        env: &MarkerEnvironment,
         tags: &Tags,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
@@ -50,8 +54,20 @@ impl InstallPlan {
         let mut local = vec![];
         let mut remote = vec![];
         let mut extraneous = vec![];
+        let mut seen =
+            FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         for requirement in requirements {
+            // Filter out incompatible requirements.
+            if !requirement.evaluate_markers(env, &[]) {
+                continue;
+            }
+
+            // If we see the same requirement twice, then we have a conflict.
+            if let Some(existing) = seen.insert(requirement.name.clone(), requirement) {
+                bail!("Detected duplicate package in requirements:\n    {requirement}\n    {existing}");
+            }
+
             // Filter out already-installed packages.
             if let Some(distribution) = site_packages.remove(&requirement.name) {
                 // We need to map here from the requirement to its DirectUrl, then see if that DirectUrl
