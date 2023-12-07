@@ -182,12 +182,7 @@ impl<'a> DistFinder<'a> {
                         .map_or(true, |(.., existing)| priority > *existing)
                     {
                         best_wheel = Some((
-                            Dist::from_registry(
-                                wheel.name,
-                                wheel.version,
-                                file.clone(),
-                                index.clone(),
-                            ),
+                            Dist::from_registry(wheel.name, wheel.version, file, index.clone()),
                             priority,
                         ));
                     }
