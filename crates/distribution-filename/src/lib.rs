@@ -13,7 +13,7 @@ pub enum DistFilename {
 }
 
 impl DistFilename {
-    pub fn try_from_filename_for_package(
+    pub fn try_from_filename(
         filename: &str,
         package_name: &puffin_normalize::PackageName,
     ) -> Option<Self> {

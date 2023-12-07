@@ -429,7 +429,7 @@ impl SimpleMetadata {
         // Group the distributions by version and kind
         for file in simple_json.files {
             if let Some(filename) =
-                DistFilename::try_from_filename_for_package(file.filename.as_str(), package_name)
+                DistFilename::try_from_filename(file.filename.as_str(), package_name)
             {
                 let version = match filename {
                     DistFilename::SourceDistFilename(ref inner) => &inner.version,
