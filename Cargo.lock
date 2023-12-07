@@ -2461,6 +2461,7 @@ dependencies = [
  "futures",
  "fxhash",
  "install-wheel-rs",
+ "pep440_rs 0.3.12",
  "platform-tags",
  "puffin-cache",
  "puffin-client",

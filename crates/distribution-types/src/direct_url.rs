@@ -88,6 +88,12 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
     Some(PathBuf::from(subdirectory))
 }
 
+/// Return the Git reference of the given URL, if it exists.
+pub fn git_reference(url: &Url) -> Result<Option<String>, Error> {
+    let DirectGitUrl { url, .. } = DirectGitUrl::try_from(url)?;
+    Ok(url.reference().map(ToString::to_string))
+}
+
 impl TryFrom<&Url> for DirectUrl {
     type Error = Error;
 

@@ -987,9 +987,6 @@ fn install_url_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
         "###);
@@ -1056,9 +1053,6 @@ fn install_git_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
         "###);
@@ -1124,9 +1118,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + future==0.18.3
         "###);
@@ -1201,9 +1192,6 @@ fn install_path_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
         "###);
@@ -1284,6 +1272,71 @@ fn install_path_built_dist_cached() -> Result<()> {
     });
 
     check_command(&venv, "import tomli", &parent);
+
+    Ok(())
+}
+
+/// Check that we show the right messages on cached, direct URL built distribution installs.
+#[test]
+fn install_url_built_dist_cached() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Unzipped 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
+        "###);
+    });
+
+    check_command(&venv, "import tqdm", &temp_dir);
+
+    // Re-run the installation in a new virtual environment.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Installed 1 package in [TIME]
+         + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
+        "###);
+    });
+
+    check_command(&venv, "import tqdm", &temp_dir);
 
     Ok(())
 }
