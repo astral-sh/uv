@@ -3,21 +3,19 @@
 //! This is similar to running `pip install` with the `--no-deps` flag.
 
 use std::hash::BuildHasherDefault;
-use std::str::FromStr;
 
 use anyhow::Result;
 use futures::StreamExt;
 use fxhash::FxHashMap;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::Dist;
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagPriority, Tags};
-use puffin_client::RegistryClient;
+use puffin_client::{RegistryClient, SimpleMetadata};
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
-use pypi_types::{File, IndexUrl, SimpleJson};
+use pypi_types::IndexUrl;
 
 use crate::error::ResolveError;
 use crate::resolution::Resolution;
@@ -108,8 +106,7 @@ impl<'a> DistFinder<'a> {
                 match result {
                     Response::Package(requirement, index, metadata) => {
                         // Pick a version that satisfies the requirement.
-                        let Some(distribution) = self.select(&requirement, &index, metadata.files)
-                        else {
+                        let Some(distribution) = self.select(&requirement, &index, metadata) else {
                             return Err(ResolveError::NotFound(requirement));
                         };
 
@@ -141,77 +138,82 @@ impl<'a> DistFinder<'a> {
         &self,
         requirement: &Requirement,
         index: &IndexUrl,
-        files: Vec<File>,
+        metadata: SimpleMetadata,
     ) -> Option<Dist> {
         let mut best_version: Option<Version> = None;
         let mut best_wheel: Option<(Dist, TagPriority)> = None;
         let mut best_sdist: Option<Dist> = None;
 
-        for file in files.into_iter().rev() {
-            // Only add dists compatible with the python version.
-            // This is relevant for source dists which give no other indication of their
-            // compatibility and wheels which may be tagged `py3-none-any` but
-            // have `requires-python: ">=3.9"`
-            // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-            if file
-                .requires_python
+        for (version, files) in metadata.into_iter().rev() {
+            // If we iterated past the first-compatible version, break.
+            if best_version
                 .as_ref()
-                .is_some_and(|requires_python| {
-                    !requires_python.contains(self.interpreter.version())
-                })
+                .is_some_and(|best_version| *best_version != version)
             {
+                break;
+            }
+
+            // If the version does not satisfy the requirement, continue.
+            if !requirement.is_satisfied_by(&version) {
                 continue;
             }
 
-            // Find the most-compatible wheel.
-            if let Ok(wheel) = WheelFilename::from_str(file.filename.as_str()) {
-                // If we iterated past the first-compatible version, break.
-                if best_version
+            // Find the most-compatible wheel
+            for (wheel, file) in files.wheels {
+                // Only add dists compatible with the python version.
+                // This is relevant for source dists which give no other indication of their
+                // compatibility and wheels which may be tagged `py3-none-any` but
+                // have `requires-python: ">=3.9"`
+                // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
+                if !file
+                    .requires_python
                     .as_ref()
-                    .is_some_and(|version| *version != wheel.version)
+                    .map_or(true, |requires_python| {
+                        requires_python.contains(self.interpreter.version())
+                    })
                 {
-                    break;
+                    continue;
                 }
 
-                if requirement.is_satisfied_by(&wheel.version) {
-                    best_version = Some(wheel.version.clone());
-                    if let Some(priority) = wheel.compatibility(self.tags) {
-                        if best_wheel
-                            .as_ref()
-                            .map_or(true, |(.., existing)| priority > *existing)
-                        {
-                            best_wheel = Some((
-                                Dist::from_registry(wheel.name, wheel.version, file, index.clone()),
-                                priority,
-                            ));
-                        }
+                best_version = Some(version.clone());
+                if let Some(priority) = wheel.compatibility(self.tags) {
+                    if best_wheel
+                        .as_ref()
+                        .map_or(true, |(.., existing)| priority > *existing)
+                    {
+                        best_wheel = Some((
+                            Dist::from_registry(wheel.name, wheel.version, file, index.clone()),
+                            priority,
+                        ));
                     }
                 }
-                continue;
             }
 
             // Find the most-compatible sdist, if no wheel was found.
             if best_wheel.is_none() {
-                if let Ok(sdist) =
-                    SourceDistFilename::parse(file.filename.as_str(), &requirement.name)
-                {
-                    // If we iterated past the first-compatible version, break.
-                    if best_version
+                for (sdist, file) in files.source_dists {
+                    // Only add dists compatible with the python version.
+                    // This is relevant for source dists which give no other indication of their
+                    // compatibility and wheels which may be tagged `py3-none-any` but
+                    // have `requires-python: ">=3.9"`
+                    // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
+                    if !file
+                        .requires_python
                         .as_ref()
-                        .is_some_and(|version| *version != sdist.version)
+                        .map_or(true, |requires_python| {
+                            requires_python.contains(self.interpreter.version())
+                        })
                     {
-                        break;
+                        continue;
                     }
 
-                    if requirement.is_satisfied_by(&sdist.version) {
-                        best_version = Some(sdist.version.clone());
-                        best_sdist = Some(Dist::from_registry(
-                            sdist.name,
-                            sdist.version,
-                            file,
-                            index.clone(),
-                        ));
-                    }
+                    best_version = Some(sdist.version.clone());
+                    best_sdist = Some(Dist::from_registry(
+                        sdist.name,
+                        sdist.version,
+                        file,
+                        index.clone(),
+                    ));
                 }
             }
         }
@@ -229,7 +231,7 @@ enum Request {
 #[derive(Debug)]
 enum Response {
     /// The returned metadata for a package.
-    Package(Requirement, IndexUrl, SimpleJson),
+    Package(Requirement, IndexUrl, SimpleMetadata),
 }
 
 pub trait Reporter: Send + Sync {

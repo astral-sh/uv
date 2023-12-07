@@ -7,6 +7,7 @@ edition = "2021"
 distribution-filename = { path = "../distribution-filename" }
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }
+pep440_rs = { path = "../pep440-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-fs = { path = "../puffin-fs" }
 puffin-normalize = { path = "../puffin-normalize" }

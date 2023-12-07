@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
@@ -8,15 +9,17 @@ use futures::TryStreamExt;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, trace};
 use url::Url;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, Metadata};
 use install_wheel_rs::find_dist_info;
+use pep440_rs::Version;
 use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelCache};
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
@@ -122,7 +125,7 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, SimpleJson), Error> {
+    ) -> Result<(IndexUrl, SimpleMetadata), Error> {
         if self.index_urls.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
@@ -155,7 +158,8 @@ impl RegistryClient {
                 let bytes = response.bytes().await?;
                 let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                     .map_err(|err| Error::from_json_err(err, url))?;
-                Ok(data)
+                let metadata = SimpleMetadata::from_package_simple_json(package_name, data);
+                Ok(metadata)
             };
             let result = self
                 .client
@@ -164,8 +168,8 @@ impl RegistryClient {
 
             // Fetch from the index.
             match result {
-                Ok(simple_json) => {
-                    return Ok((index.clone(), simple_json));
+                Ok(simple_metadata) => {
+                    return Ok((index.clone(), simple_metadata));
                 }
                 Err(CachedClientError::Client(Error::RequestError(err))) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {
@@ -382,5 +386,78 @@ impl RegistryClient {
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
                 .into_async_read(),
         ))
+    }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct VersionFiles {
+    pub wheels: Vec<(WheelFilename, File)>,
+    pub source_dists: Vec<(SourceDistFilename, File)>,
+}
+
+impl VersionFiles {
+    fn push(&mut self, filename: DistFilename, file: File) {
+        match filename {
+            DistFilename::WheelFilename(inner) => self.wheels.push((inner, file)),
+            DistFilename::SourceDistFilename(inner) => self.source_dists.push((inner, file)),
+        }
+    }
+
+    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
+        self.wheels
+            .into_iter()
+            .map(|(filename, file)| (DistFilename::WheelFilename(filename), file))
+            .chain(
+                self.source_dists
+                    .into_iter()
+                    .map(|(filename, file)| (DistFilename::SourceDistFilename(filename), file)),
+            )
+    }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
+
+impl SimpleMetadata {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, &VersionFiles)> {
+        self.0.iter()
+    }
+
+    fn from_package_simple_json(package_name: &PackageName, simple_json: SimpleJson) -> Self {
+        let mut metadata = Self::default();
+
+        // Group the distributions by version and kind
+        for file in simple_json.files {
+            if let Some(filename) =
+                DistFilename::try_from_filename(file.filename.as_str(), package_name)
+            {
+                let version = match filename {
+                    DistFilename::SourceDistFilename(ref inner) => &inner.version,
+                    DistFilename::WheelFilename(ref inner) => &inner.version,
+                };
+
+                match metadata.0.entry(version.clone()) {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        entry.get_mut().push(filename, file);
+                    }
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        let mut files = VersionFiles::default();
+                        files.push(filename, file);
+                        entry.insert(files);
+                    }
+                }
+            }
+        }
+
+        metadata
+    }
+}
+
+impl IntoIterator for SimpleMetadata {
+    type Item = (Version, VersionFiles);
+    type IntoIter = std::collections::btree_map::IntoIter<Version, VersionFiles>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
