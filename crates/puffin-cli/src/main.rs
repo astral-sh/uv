@@ -68,7 +68,7 @@ enum Commands {
     /// Uninstall packages from the current environment.
     PipUninstall(PipUninstallArgs),
     /// Clear the cache.
-    Clean,
+    Clean(CleanArgs),
     /// Enumerate the installed packages in the current environment.
     Freeze,
     /// Create a virtual environment.
@@ -211,6 +211,12 @@ struct PipUninstallArgs {
 }
 
 #[derive(Args)]
+struct CleanArgs {
+    /// The packages to remove from the cache.
+    package: Vec<PackageName>,
+}
+
+#[derive(Args)]
 struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     // Short `-p` to match `virtualenv`
@@ -321,7 +327,7 @@ async fn inner() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await
         }
-        Commands::Clean => commands::clean(&cache, printer),
+        Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::Freeze => commands::freeze(&cache, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
         Commands::Add(args) => commands::add(&args.name, printer),

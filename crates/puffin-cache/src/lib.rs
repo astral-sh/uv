@@ -7,12 +7,16 @@ use std::sync::Arc;
 
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
+use tracing::debug;
 
+use crate::wheel::WheelCacheKind;
 pub use by_timestamp::CachedByTimestamp;
 pub use canonical_url::{CanonicalUrl, RepositoryUrl};
 #[cfg(feature = "clap")]
 pub use cli::CacheArgs;
 pub use digest::digest;
+use puffin_fs::{directories, force_remove_all};
+use puffin_normalize::PackageName;
 pub use stable_hash::{StableHash, StableHasher};
 pub use wheel::WheelCache;
 
@@ -144,6 +148,23 @@ impl Cache {
 
         fs::canonicalize(root)
     }
+
+    /// Remove a package from the cache.
+    ///
+    /// Returns the number of entries removed from the cache.
+    pub fn purge(&self, name: &PackageName) -> Result<usize, io::Error> {
+        let mut count = 0;
+        for bucket in [
+            CacheBucket::Wheels,
+            CacheBucket::BuiltWheels,
+            CacheBucket::Git,
+            CacheBucket::Interpreter,
+            CacheBucket::Simple,
+        ] {
+            count += bucket.purge(self, name)?;
+        }
+        Ok(count)
+    }
 }
 
 /// The different kinds of data in the cache are stored in different bucket, which in our case
@@ -269,7 +290,7 @@ pub enum CacheBucket {
     ///  * `built-wheels-v0/pypi/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///
     /// But the url filename does not need to be a valid source dist filename
     /// (<https://github.com/search?q=path%3A**%2Frequirements.txt+master.zip&type=code>),
@@ -383,6 +404,117 @@ impl CacheBucket {
             CacheBucket::Simple => "simple-v0",
             CacheBucket::Wheels => "wheels-v0",
         }
+    }
+
+    /// Purge a package from the cache bucket.
+    ///
+    /// Returns the number of entries removed from the cache.
+    fn purge(self, cache: &Cache, name: &PackageName) -> Result<usize, io::Error> {
+        fn remove(path: impl AsRef<Path>) -> Result<bool, io::Error> {
+            Ok(if force_remove_all(path.as_ref())? {
+                debug!("Removed cache entry: {}", path.as_ref().display());
+                true
+            } else {
+                false
+            })
+        }
+
+        let mut count = 0;
+        match self {
+            CacheBucket::Wheels => {
+                // For `pypi` wheels, we expect a directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Pypi);
+                if remove(root.join(name.to_string()))? {
+                    count += 1;
+                }
+
+                // For alternate indices, we expect a directory for every index, followed by a
+                // directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Index);
+                for directory in directories(root) {
+                    if remove(directory.join(name.to_string()))? {
+                        count += 1;
+                    }
+                }
+
+                // For direct URLs, we expect a directory for every URL, followed by a
+                // directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Url);
+                for directory in directories(root) {
+                    if remove(directory.join(name.to_string()))? {
+                        count += 1;
+                    }
+                }
+            }
+            CacheBucket::BuiltWheels => {
+                // For `pypi` wheels, we expect a directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Pypi);
+                if remove(root.join(name.to_string()))? {
+                    count += 1;
+                }
+
+                // For alternate indices, we expect a directory for every index, followed by a
+                // directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Index);
+                for directory in directories(root) {
+                    if remove(directory.join(name.to_string()))? {
+                        count += 1;
+                    }
+                }
+
+                // For direct URLs, we expect a directory for every index, followed by a
+                // directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Url);
+                for directory in directories(root) {
+                    if remove(directory.join(name.to_string()))? {
+                        count += 1;
+                    }
+                }
+
+                // For local dependencies, we expect a directory for every path, followed by a
+                // directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Path);
+                for directory in directories(root) {
+                    if remove(directory.join(name.to_string()))? {
+                        count += 1;
+                    }
+                }
+
+                // For Git dependencies, we expect a directory for every repository, followed by a
+                // directory for every SHA, followed by a directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Git);
+                for directory in directories(root) {
+                    for directory in directories(directory) {
+                        if remove(directory.join(name.to_string()))? {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+            CacheBucket::Simple => {
+                // For `pypi` wheels, we expect a JSON file per package, indexed by name.
+                let root = cache.bucket(self).join(WheelCacheKind::Pypi);
+                if remove(root.join(format!("{name}.json")))? {
+                    count += 1;
+                }
+
+                // For alternate indices, we expect a directory for every index, followed by a
+                // JSON file per package, indexed by name.
+                let root = cache.bucket(self).join(WheelCacheKind::Url);
+                for directory in directories(root) {
+                    if remove(directory.join(format!("{name}.json")))? {
+                        count += 1;
+                    }
+                }
+            }
+            CacheBucket::Git => {
+                // Nothing to do.
+            }
+            CacheBucket::Interpreter => {
+                // Nothing to do.
+            }
+        }
+        Ok(count)
     }
 }
 

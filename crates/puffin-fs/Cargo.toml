@@ -15,3 +15,4 @@ workspace = true
 [dependencies]
 fs-err = { workspace = true, features = ["tokio"] }
 tempfile = { workspace = true }
+tracing = { workspace = true }

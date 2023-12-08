@@ -1,40 +1,58 @@
 use std::fmt::Write;
 
 use anyhow::{Context, Result};
+use colored::Colorize;
 use fs_err as fs;
-use tracing::debug;
 
 use puffin_cache::Cache;
+use puffin_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Clear the cache.
-pub(crate) fn clean(cache: &Cache, mut printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn clean(
+    cache: &Cache,
+    packages: &[PackageName],
+    mut printer: Printer,
+) -> Result<ExitStatus> {
     if !cache.root().exists() {
-        writeln!(printer, "No cache found at: {}", cache.root().display())?;
+        writeln!(
+            printer,
+            "No cache found at: {}",
+            format!("{}", cache.root().display()).cyan()
+        )?;
         return Ok(ExitStatus::Success);
     }
 
-    debug!("Clearing cache at: {}", cache.root().display());
-
-    for entry in cache
-        .root()
-        .read_dir()
-        .with_context(|| {
-            format!(
-                "Failed to read directory contents while clearing {}",
-                cache.root().display()
-            )
-        })?
-        .flatten()
-    {
-        if entry.file_type()?.is_dir() {
-            fs::remove_dir_all(entry.path())
-                .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
-        } else {
-            fs::remove_file(entry.path())
-                .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
+    if packages.is_empty() {
+        writeln!(
+            printer,
+            "Clearing cache at: {}",
+            format!("{}", cache.root().display()).cyan()
+        )?;
+        fs::remove_dir_all(cache.root())
+            .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
+    } else {
+        for package in packages {
+            let count = cache.purge(package)?;
+            match count {
+                0 => writeln!(
+                    printer,
+                    "No entries found for package: {}",
+                    format!("{package}").cyan()
+                )?,
+                1 => writeln!(
+                    printer,
+                    "Cleared 1 entry for package: {}",
+                    format!("{package}").cyan()
+                )?,
+                count => writeln!(
+                    printer,
+                    "Cleared {count} entries for package: {}",
+                    format!("{package}").cyan()
+                )?,
+            }
         }
     }
 
