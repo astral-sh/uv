@@ -1071,15 +1071,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1479,7 +1470,6 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "fs2",
- "fxhash",
  "goblin",
  "indoc",
  "mailparse",
@@ -1494,6 +1484,7 @@ dependencies = [
  "rayon",
  "reflink-copy",
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",
@@ -2115,9 +2106,9 @@ name = "platform-tags"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "fxhash",
  "platform-host",
  "puffin-interpreter",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -2466,7 +2457,6 @@ dependencies = [
  "fs-err",
  "fs2",
  "futures",
- "fxhash",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
  "platform-tags",
@@ -2479,6 +2469,7 @@ dependencies = [
  "pypi-types",
  "rayon",
  "reqwest",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",
@@ -2528,7 +2519,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "fxhash",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
  "pep508_rs",
@@ -2543,6 +2533,7 @@ dependencies = [
  "puffin-traits",
  "pypi-types",
  "rayon",
+ "rustc-hash",
  "tempfile",
  "thiserror",
  "tokio",
@@ -2575,8 +2566,8 @@ name = "puffin-macros"
 version = "0.0.1"
 dependencies = [
  "colored",
- "fxhash",
  "once_cell",
+ "rustc-hash",
  "tracing",
 ]
 
@@ -2603,7 +2594,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "fxhash",
  "gourgeist",
  "http-cache-semantics",
  "insta",
@@ -2626,6 +2616,7 @@ dependencies = [
  "puffin-traits",
  "pypi-types",
  "reqwest",
+ "rustc-hash",
  "serde_json",
  "sha2",
  "tempfile",
@@ -2643,10 +2634,10 @@ name = "puffin-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "fxhash",
  "pep508_rs",
  "puffin-cache",
  "puffin-interpreter",
+ "rustc-hash",
  "tokio",
  "waitmap",
 ]

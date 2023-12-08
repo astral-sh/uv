@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 
 use puffin_normalize::PackageName;
 

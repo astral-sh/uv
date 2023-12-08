@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 use std::hash::Hash;
 
-use fxhash::FxHashSet;
+use rustc_hash::FxHashSet;
 use tokio::sync::Mutex;
 use waitmap::{Ref, WaitMap};
 

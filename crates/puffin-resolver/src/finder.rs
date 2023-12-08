@@ -6,7 +6,7 @@ use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
 use futures::StreamExt;
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 
 use distribution_types::Dist;
 use pep440_rs::Version;

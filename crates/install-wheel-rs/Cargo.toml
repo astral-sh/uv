@@ -32,7 +32,6 @@ csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
-fxhash = { workspace = true }
 goblin = { workspace = true }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
@@ -42,6 +41,7 @@ pyo3 = { workspace = true, features = ["extension-module", "abi3-py37"], optiona
 rayon = { workspace = true, optional = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
+rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

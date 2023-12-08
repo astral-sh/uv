@@ -38,13 +38,13 @@ colored = { workspace = true }
 derivative = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-fxhash = { workspace = true }
 http-cache-semantics = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 reqwest = { workspace = true }
+rustc-hash = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }

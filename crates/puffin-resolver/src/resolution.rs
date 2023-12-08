@@ -2,12 +2,12 @@ use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
 use colored::Colorize;
-use fxhash::FxHashMap;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};

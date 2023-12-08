@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use fs2::FileExt;
 use fs_err::File;
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 use tokio::sync::Mutex;
 use tracing::error;
 

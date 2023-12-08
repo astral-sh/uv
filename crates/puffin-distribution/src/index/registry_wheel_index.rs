@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use fs_err as fs;
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 use tracing::warn;
 
 use distribution_types::{CachedRegistryDist, CachedWheel};

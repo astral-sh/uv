@@ -1,7 +1,7 @@
 use std::num::NonZeroU32;
 
 use anyhow::{Error, Result};
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 
 use platform_host::{Arch, Os, Platform, PlatformError};
 use puffin_interpreter::Interpreter;

@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
-use fxhash::FxHashSet;
 use once_cell::sync::Lazy;
+use rustc_hash::FxHashSet;
 
 // macro hygiene: The user might not have direct dependencies on those crates
 #[doc(hidden)]
