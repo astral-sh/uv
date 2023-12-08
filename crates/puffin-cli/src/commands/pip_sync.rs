@@ -15,7 +15,7 @@ use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_distribution::DistributionDatabase;
-use puffin_installer::InstallPlan;
+use puffin_installer::{InstallPlan, Reinstall};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
@@ -28,6 +28,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
+    reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
     no_build: bool,
@@ -49,6 +50,7 @@ pub(crate) async fn pip_sync(
 
     sync_requirements(
         &requirements,
+        reinstall,
         link_mode,
         index_urls,
         no_build,
@@ -61,6 +63,7 @@ pub(crate) async fn pip_sync(
 /// Install a set of locked requirements into the current Python environment.
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
+    reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
     no_build: bool,
@@ -87,8 +90,16 @@ pub(crate) async fn sync_requirements(
         local,
         remote,
         extraneous,
-    } = InstallPlan::from_requirements(requirements, &index_urls, cache, &venv, markers, &tags)
-        .context("Failed to determine installation plan")?;
+    } = InstallPlan::from_requirements(
+        requirements,
+        reinstall,
+        &index_urls,
+        cache,
+        &venv,
+        markers,
+        &tags,
+    )
+    .context("Failed to determine installation plan")?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && extraneous.is_empty() {

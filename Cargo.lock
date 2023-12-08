@@ -2288,11 +2288,14 @@ dependencies = [
  "directories",
  "fs-err",
  "hex",
+ "puffin-fs",
+ "puffin-normalize",
  "pypi-types",
  "seahash",
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
  "url",
 ]
 
@@ -2494,6 +2497,7 @@ version = "0.0.1"
 dependencies = [
  "fs-err",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]

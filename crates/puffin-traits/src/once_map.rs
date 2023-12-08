@@ -15,7 +15,7 @@ use waitmap::{Ref, WaitMap};
 pub struct OnceMap<K: Eq + Hash, V> {
     /// Computations that were started, including those that were finished.
     started: Mutex<FxHashSet<K>>,
-    waitmap: WaitMap<K, V>,
+    wait_map: WaitMap<K, V>,
 }
 
 impl<K: Eq + Hash, V> OnceMap<K, V> {
@@ -29,7 +29,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
         let mut in_flight_lock = self.started.lock().await;
         if in_flight_lock.contains(key) {
             let reference = self
-                .waitmap
+                .wait_map
                 .wait(key)
                 .await
                 .expect("This operation is never cancelled");
@@ -59,7 +59,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        self.waitmap.insert(key, value);
+        self.wait_map.insert(key, value);
     }
 
     /// Wait for the result of a job that is running.
@@ -69,7 +69,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     where
         K: Borrow<Q> + for<'a> From<&'a Q>,
     {
-        self.waitmap
+        self.wait_map
             .wait(key)
             .await
             .expect("This operation is never cancelled")
@@ -80,7 +80,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     where
         K: Borrow<Q>,
     {
-        self.waitmap.get(key)
+        self.wait_map.get(key)
     }
 }
 
@@ -88,7 +88,7 @@ impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
     fn default() -> Self {
         Self {
             started: Mutex::new(FxHashSet::default()),
-            waitmap: WaitMap::new(),
+            wait_map: WaitMap::new(),
         }
     }
 }

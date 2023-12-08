@@ -37,14 +37,16 @@ impl Unzipper {
         // Unpack the wheels into the cache.
         let mut unzipped = Vec::with_capacity(downloads.len());
         for wheel in downloads {
+            let remote = wheel.remote().clone();
             let wheel_path = wheel.target().to_path_buf();
+
             let cached_dist =
                 if let Some(cached_dist) = in_flight.wait_or_register(&wheel_path).await {
-                    cached_dist.value().clone().map_err(|err| {
-                        format_err!("Unzipping failed in different thread: {}", err)
-                    })?
+                    cached_dist
+                        .value()
+                        .clone()
+                        .map_err(|err| format_err!("Failed to unpack: {err}"))?
                 } else {
-                    let remote = wheel.remote().clone();
                     let result = unzip_wheel(wheel)
                         .await
                         .with_context(|| format!("Failed to unpack: {remote}"));
@@ -60,6 +62,10 @@ impl Unzipper {
                     }
                 };
 
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_unzip_progress(&remote);
+            }
+
             unzipped.push(cached_dist);
         }
 
@@ -71,17 +77,13 @@ impl Unzipper {
     }
 }
 
+/// Unzip a locally-available wheel into the cache.
 async fn unzip_wheel(wheel: LocalWheel) -> Result<CachedDist> {
     debug!("Unpacking wheel: {}", wheel.remote());
+
     let remote = wheel.remote().clone();
     let filename = wheel.filename().clone();
     let target = wheel.target().to_path_buf();
-
-    // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
-    if target.is_dir() {
-        warn!("Wheel is already unpacked: {remote}");
-        return Ok(CachedDist::from_remote(remote, filename, target));
-    }
 
     tokio::task::spawn_blocking(move || -> Result<()> {
         // Unzip the wheel into a temporary directory.
@@ -90,8 +92,16 @@ async fn unzip_wheel(wheel: LocalWheel) -> Result<CachedDist> {
         let staging = tempfile::tempdir_in(parent)?;
         wheel.unzip(staging.path())?;
 
-        // Move the unzipped wheel into the cache.
-        fs_err::rename(staging.into_path(), wheel.target())?;
+        // Move the unzipped wheel into the cache,.
+        if let Err(err) = fs_err::rename(staging.into_path(), wheel.target()) {
+            // If another thread already unpacked the wheel, we can ignore the error.
+            if wheel.target().is_dir() {
+                warn!("Wheel is already unpacked: {}", wheel.remote());
+            } else {
+                return Err(err.into());
+            }
+        }
+
         Ok(())
     })
     .await??;

@@ -8,6 +8,7 @@ use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 
 use puffin_cache::{Cache, CacheArgs};
+use puffin_installer::Reinstall;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use pypi_types::{IndexUrl, IndexUrls};
@@ -68,7 +69,7 @@ enum Commands {
     /// Uninstall packages from the current environment.
     PipUninstall(PipUninstallArgs),
     /// Clear the cache.
-    Clean,
+    Clean(CleanArgs),
     /// Enumerate the installed packages in the current environment.
     Freeze,
     /// Create a virtual environment.
@@ -176,6 +177,16 @@ struct PipSyncArgs {
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
+    /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
+    /// packages in the environment.
+    #[clap(long)]
+    reinstall: bool,
+
+    /// Reinstall a specific package, overwriting any entries in the cache and replacing any
+    /// existing versions in the environment.
+    #[clap(long)]
+    reinstall_package: Vec<PackageName>,
+
     /// The method to use when installing packages from the global cache.
     #[clap(long, value_enum)]
     link_mode: Option<install_wheel_rs::linker::LinkMode>,
@@ -208,6 +219,12 @@ struct PipUninstallArgs {
     /// Uninstall all packages listed in the given requirements files.
     #[clap(short, long, group = "sources")]
     requirement: Vec<PathBuf>,
+}
+
+#[derive(Args)]
+struct CleanArgs {
+    /// The packages to remove from the cache.
+    package: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -302,8 +319,10 @@ async fn inner() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
+            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             commands::pip_sync(
                 &sources,
+                &reinstall,
                 args.link_mode.unwrap_or_default(),
                 index_urls,
                 args.no_build,
@@ -321,7 +340,7 @@ async fn inner() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await
         }
-        Commands::Clean => commands::clean(&cache, printer),
+        Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::Freeze => commands::freeze(&cache, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
         Commands::Add(args) => commands::add(&args.name, printer),

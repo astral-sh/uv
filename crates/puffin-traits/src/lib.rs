@@ -6,12 +6,12 @@ use std::pin::Pin;
 
 use anyhow::Result;
 
-pub use in_flight::OnceMap;
+pub use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
 use puffin_interpreter::{Interpreter, Virtualenv};
 
-mod in_flight;
+mod once_map;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
