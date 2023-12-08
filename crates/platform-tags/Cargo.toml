@@ -17,4 +17,4 @@ platform-host = { path = "../platform-host" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
 anyhow = { workspace = true }
-fxhash = { workspace = true }
+rustc-hash = { workspace = true }

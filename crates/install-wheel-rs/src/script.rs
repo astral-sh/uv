@@ -1,5 +1,5 @@
-use fxhash::FxHashSet;
 use regex::Regex;
+use rustc_hash::FxHashSet;
 use serde::Serialize;
 
 use crate::Error;

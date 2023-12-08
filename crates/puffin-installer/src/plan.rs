@@ -1,7 +1,7 @@
 use std::hash::BuildHasherDefault;
 
 use anyhow::{bail, Context, Result};
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use distribution_types::direct_url::{git_reference, DirectUrl};

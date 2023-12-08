@@ -1,4 +1,4 @@
-use fxhash::FxHashSet;
+use rustc_hash::FxHashSet;
 
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;

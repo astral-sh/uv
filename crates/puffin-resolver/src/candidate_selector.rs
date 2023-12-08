@@ -1,5 +1,5 @@
-use fxhash::FxHashMap;
 use pubgrub::range::Range;
+use rustc_hash::FxHashMap;
 
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
