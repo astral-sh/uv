@@ -66,6 +66,24 @@ impl LocalWheel {
             LocalWheel::Built(wheel) => &wheel.target,
         }
     }
+
+    /// Return the [`Dist`] from which this wheel was downloaded.
+    pub fn remote(&self) -> &Dist {
+        match self {
+            LocalWheel::InMemory(wheel) => wheel.remote(),
+            LocalWheel::Disk(wheel) => wheel.remote(),
+            LocalWheel::Built(wheel) => wheel.remote(),
+        }
+    }
+
+    /// Return the [`WheelFilename`] of this wheel.
+    pub fn filename(&self) -> &WheelFilename {
+        match self {
+            LocalWheel::InMemory(wheel) => &wheel.filename,
+            LocalWheel::Disk(wheel) => &wheel.filename,
+            LocalWheel::Built(wheel) => &wheel.filename,
+        }
+    }
 }
 
 /// A downloaded source distribution.
@@ -142,26 +160,6 @@ impl BuiltWheel {
     /// downloaded.
     pub fn remote(&self) -> &Dist {
         &self.dist
-    }
-}
-
-impl LocalWheel {
-    /// Return the [`Dist`] from which this wheel was downloaded.
-    pub fn remote(&self) -> &Dist {
-        match self {
-            LocalWheel::InMemory(wheel) => wheel.remote(),
-            LocalWheel::Disk(wheel) => wheel.remote(),
-            LocalWheel::Built(wheel) => wheel.remote(),
-        }
-    }
-
-    /// Return the [`WheelFilename`] of this wheel.
-    pub fn filename(&self) -> &WheelFilename {
-        match self {
-            LocalWheel::InMemory(wheel) => &wheel.filename,
-            LocalWheel::Disk(wheel) => &wheel.filename,
-            LocalWheel::Built(wheel) => &wheel.filename,
-        }
     }
 }
 

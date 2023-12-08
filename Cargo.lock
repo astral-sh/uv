@@ -2336,6 +2336,7 @@ dependencies = [
  "puffin-interpreter",
  "puffin-normalize",
  "puffin-resolver",
+ "puffin-traits",
  "puffin-workspace",
  "pypi-types",
  "pyproject-toml",
@@ -2351,6 +2352,7 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tree",
  "url",
+ "waitmap",
  "which",
 ]
 
@@ -2450,6 +2452,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "waitmap",
 ]
 
 [[package]]
@@ -2545,6 +2548,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "waitmap",
 ]
 
 [[package]]
@@ -2639,9 +2643,12 @@ name = "puffin-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "fxhash",
  "pep508_rs",
  "puffin-cache",
  "puffin-interpreter",
+ "tokio",
+ "waitmap",
 ]
 
 [[package]]

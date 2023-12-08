@@ -1,11 +1,12 @@
 use std::cmp::Reverse;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
-use tracing::{instrument, warn};
+use anyhow::{format_err, Context, Result};
+use tracing::{debug, instrument, warn};
 
 use distribution_types::{CachedDist, Dist, RemoteSource};
 use puffin_distribution::{LocalWheel, Unzip};
+use puffin_traits::OnceMap;
 
 #[derive(Default)]
 pub struct Unzipper {
@@ -23,67 +24,89 @@ impl Unzipper {
 
     /// Unzip a set of downloaded wheels.
     #[instrument(skip_all)]
-    pub async fn unzip(&self, downloads: Vec<LocalWheel>) -> Result<Vec<CachedDist>> {
+    pub async fn unzip(
+        &self,
+        downloads: Vec<LocalWheel>,
+        in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
+    ) -> Result<Vec<CachedDist>> {
         // Sort the wheels by size.
         let mut downloads = downloads;
         downloads
             .sort_unstable_by_key(|wheel| Reverse(wheel.remote().size().unwrap_or(usize::MIN)));
 
         // Unpack the wheels into the cache.
-        let mut wheels = Vec::with_capacity(downloads.len());
-        for download in downloads {
-            let remote = download.remote().clone();
-            let filename = download.filename().clone();
+        let mut unzipped = Vec::with_capacity(downloads.len());
+        for wheel in downloads {
+            let remote = wheel.remote().clone();
+            let wheel_path = wheel.target().to_path_buf();
 
-            // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
-            if download.target().is_dir() {
-                warn!("Wheel is already unpacked: {remote}");
-                wheels.push(CachedDist::from_remote(
-                    remote,
-                    filename,
-                    download.target().to_path_buf(),
-                ));
-                continue;
+            let cached_dist =
+                if let Some(cached_dist) = in_flight.wait_or_register(&wheel_path).await {
+                    cached_dist
+                        .value()
+                        .clone()
+                        .map_err(|err| format_err!("Failed to unpack: {err}"))?
+                } else {
+                    let result = unzip_wheel(wheel)
+                        .await
+                        .with_context(|| format!("Failed to unpack: {remote}"));
+                    match result {
+                        Ok(cached) => {
+                            in_flight.done(wheel_path, Ok(cached.clone()));
+                            cached
+                        }
+                        Err(err) => {
+                            in_flight.done(wheel_path, Err(err.to_string()));
+                            return Err(err);
+                        }
+                    }
+                };
+
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_unzip_progress(&remote);
             }
 
-            // Unzip the wheel.
-            let normalized_path = tokio::task::spawn_blocking({
-                move || -> Result<PathBuf> {
-                    // Unzip the wheel into a temporary directory.
-                    let parent = download
-                        .target()
-                        .parent()
-                        .expect("Cache paths can't be root");
-                    fs_err::create_dir_all(parent)?;
-                    let staging = tempfile::tempdir_in(parent)?;
-                    download.unzip(staging.path())?;
-
-                    // Move the unzipped wheel into the cache,.
-                    if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
-                        // If another thread already unpacked the wheel, we can ignore the error.
-                        return if download.target().is_dir() {
-                            warn!("Wheel is already unpacked: {}", download.remote());
-                            Ok(download.target().to_path_buf())
-                        } else {
-                            Err(err.into())
-                        };
-                    }
-
-                    Ok(download.target().to_path_buf())
-                }
-            })
-            .await?
-            .with_context(|| format!("Failed to unpack: {remote}"))?;
-
-            wheels.push(CachedDist::from_remote(remote, filename, normalized_path));
+            unzipped.push(cached_dist);
         }
 
         if let Some(reporter) = self.reporter.as_ref() {
             reporter.on_unzip_complete();
         }
 
-        Ok(wheels)
+        Ok(unzipped)
     }
+}
+
+/// Unzip a locally-available wheel into the cache.
+async fn unzip_wheel(wheel: LocalWheel) -> Result<CachedDist> {
+    debug!("Unpacking wheel: {}", wheel.remote());
+
+    let remote = wheel.remote().clone();
+    let filename = wheel.filename().clone();
+    let target = wheel.target().to_path_buf();
+
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        // Unzip the wheel into a temporary directory.
+        let parent = wheel.target().parent().expect("Cache paths can't be root");
+        fs_err::create_dir_all(parent)?;
+        let staging = tempfile::tempdir_in(parent)?;
+        wheel.unzip(staging.path())?;
+
+        // Move the unzipped wheel into the cache,.
+        if let Err(err) = fs_err::rename(staging.into_path(), wheel.target()) {
+            // If another thread already unpacked the wheel, we can ignore the error.
+            if wheel.target().is_dir() {
+                warn!("Wheel is already unpacked: {}", wheel.remote());
+            } else {
+                return Err(err.into());
+            }
+        }
+
+        Ok(())
+    })
+    .await??;
+
+    Ok(CachedDist::from_remote(remote, filename, target))
 }
 
 pub trait Reporter: Send + Sync {
