@@ -31,7 +31,7 @@ use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::{ResolveError, RichPubGrubError};
+use crate::error::{NoSolutionError, ResolveError};
 use crate::file::DistFile;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
@@ -285,25 +285,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         loop {
             // Run unit propagation.
             state.unit_propagation(next).map_err(|err| {
-                let mut available_versions = FxHashMap::default();
-                if matches!(err, pubgrub::error::PubGrubError::NoSolution(_)) {
-                    for package in added_dependencies.keys() {
-                        if let PubGrubPackage::Package(package_name, ..) = package {
-                            if let Some(entry) = self.index.packages.get(package_name) {
-                                let (_index, version_map) = entry.value();
-                                available_versions.insert(
-                                    package.clone(),
-                                    version_map
-                                        .iter()
-                                        .map(|(version, _)| version.clone())
-                                        .collect(),
-                                );
-                            }
-                        }
-                    }
+                if let Some(err) = NoSolutionError::try_from_pubgrub(&err, &self.index.packages) {
+                    ResolveError::from(err)
+                } else {
+                    err.into()
                 }
-
-                RichPubGrubError::new(err, available_versions)
             })?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.

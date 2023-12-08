@@ -2,7 +2,8 @@ use std::fmt::Formatter;
 
 use fxhash::FxHashMap;
 use pubgrub::range::Range;
-use pubgrub::report::{DefaultStringReporter, Reporter};
+use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
+use pypi_types::IndexUrl;
 use thiserror::Error;
 use url::Url;
 
@@ -10,8 +11,10 @@ use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
+use waitmap::WaitMap;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
+use crate::version_map::VersionMap;
 use crate::PubGrubReportFormatter;
 
 #[derive(Error, Debug)]
@@ -30,9 +33,6 @@ pub enum ResolveError {
 
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
-
-    #[error(transparent)]
-    PubGrub(#[from] RichPubGrubError),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
@@ -66,6 +66,38 @@ pub enum ResolveError {
 
     #[error("Failed to build: {0}")]
     Build(Box<PathSourceDist>, #[source] DistributionDatabaseError),
+
+    #[error(transparent)]
+    NoSolution(#[from] NoSolutionError),
+
+    #[error("Retrieving dependencies of {package} {version} failed")]
+    ErrorRetrievingDependencies {
+        /// Package whose dependencies we want.
+        package: PubGrubPackage,
+        /// Version of the package for which we want the dependencies.
+        version: PubGrubVersion,
+        /// Error raised by the implementer of
+        /// [DependencyProvider](crate::solver::DependencyProvider).
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("{package} {version} depends on itself")]
+    SelfDependency {
+        /// Package whose dependencies we want.
+        package: PubGrubPackage,
+        /// Version of the package for which we want the dependencies.
+        version: PubGrubVersion,
+    },
+
+    #[error("Decision making failed")]
+    ErrorChoosingPackageVersion(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("We should cancel")]
+    ErrorInShouldCancel(Box<dyn std::error::Error + Send + Sync>),
+
+    /// Something unexpected happened.
+    #[error("{0}")]
+    Failure(String),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
@@ -74,49 +106,83 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
     }
 }
 
-/// A wrapper around [`pubgrub::error::PubGrubError`] that displays a resolution failure report.
+impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
+    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+        match value {
+            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(inner) => {
+                ResolveError::ErrorChoosingPackageVersion(inner)
+            }
+            pubgrub::error::PubGrubError::ErrorInShouldCancel(inner) => {
+                ResolveError::ErrorInShouldCancel(inner)
+            }
+            pubgrub::error::PubGrubError::ErrorRetrievingDependencies {
+                package,
+                version,
+                source,
+            } => ResolveError::ErrorRetrievingDependencies {
+                package,
+                version,
+                source,
+            },
+            pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
+            pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
+                unreachable!("`NoSolution` error requires manual cast to `NoSolutionError`")
+            }
+            pubgrub::error::PubGrubError::SelfDependency { package, version } => {
+                ResolveError::SelfDependency { package, version }
+            }
+        }
+    }
+}
+
+/// A wrapper around [`pubgrub::error::PubGrubError::NoSolution`] that displays a resolution failure report.
 #[derive(Debug)]
-pub struct RichPubGrubError {
-    source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+pub struct NoSolutionError {
+    derivation_tree: DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
     available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
-impl std::error::Error for RichPubGrubError {}
+impl std::error::Error for NoSolutionError {}
 
-impl std::fmt::Display for RichPubGrubError {
+impl std::fmt::Display for NoSolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
-            let formatter = PubGrubReportFormatter {
-                available_versions: &self.available_versions,
-            };
-            let report = DefaultStringReporter::report_with_formatter(derivation_tree, &formatter);
-            write!(f, "{report}")
+        let formatter = PubGrubReportFormatter {
+            available_versions: &self.available_versions,
+        };
+        let report =
+            DefaultStringReporter::report_with_formatter(&self.derivation_tree, &formatter);
+        write!(f, "{report}")
+    }
+}
+
+impl NoSolutionError {
+    pub fn try_from_pubgrub<'a>(
+        source: &pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+        package_versions: &'a WaitMap<PackageName, (IndexUrl, VersionMap)>,
+    ) -> Option<Self> {
+        if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = source {
+            let mut available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>> =
+                FxHashMap::default();
+            for package in derivation_tree.packages() {
+                if let PubGrubPackage::Package(name, ..) = package {
+                    if let Some(entry) = package_versions.get(name) {
+                        let (_, version_map) = entry.value();
+                        available_versions.insert(
+                            package.clone(),
+                            version_map
+                                .iter()
+                                .map(|(version, _)| version.clone())
+                                .collect(),
+                        );
+                    }
+                }
+            }
+            Some(Self {
+                derivation_tree: derivation_tree.clone(),
+                available_versions,
+            })
         } else {
-            write!(f, "{}", self.source)
-        }
-    }
-}
-
-impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
-    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
-        if matches!(value, pubgrub::error::PubGrubError::NoSolution(_)) {
-            unreachable!("`NoSolution` should be constructed with available versions")
-        }
-        ResolveError::PubGrub(RichPubGrubError {
-            source: value,
-            available_versions: FxHashMap::default(),
-        })
-    }
-}
-
-impl RichPubGrubError {
-    pub fn new(
-        source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
-        available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
-    ) -> Self {
-        Self {
-            source,
-            available_versions,
+            None
         }
     }
 }
