@@ -59,7 +59,15 @@ impl Unzipper {
                     download.unzip(staging.path())?;
 
                     // Move the unzipped wheel into the cache,.
-                    fs_err::rename(staging.into_path(), download.target())?;
+                    if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
+                        // If another thread already unpacked the wheel, we can ignore the error.
+                        return if download.target().is_dir() {
+                            warn!("Wheel is already unpacked: {}", download.remote());
+                            Ok(download.target().to_path_buf())
+                        } else {
+                            Err(err.into())
+                        };
+                    }
 
                     Ok(download.target().to_path_buf())
                 }
