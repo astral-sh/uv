@@ -73,20 +73,19 @@ pub enum ResolveError {
     #[error("Retrieving dependencies of {package} {version} failed")]
     ErrorRetrievingDependencies {
         /// Package whose dependencies we want.
-        package: PubGrubPackage,
+        package: Box<PubGrubPackage>,
         /// Version of the package for which we want the dependencies.
-        version: PubGrubVersion,
-        /// Error raised by the implementer of
-        /// [DependencyProvider](crate::solver::DependencyProvider).
+        version: Box<PubGrubVersion>,
+        /// Error raised by the implementer of [DependencyProvider](crate::solver::DependencyProvider).
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     #[error("{package} {version} depends on itself")]
     SelfDependency {
         /// Package whose dependencies we want.
-        package: PubGrubPackage,
+        package: Box<PubGrubPackage>,
         /// Version of the package for which we want the dependencies.
-        version: PubGrubVersion,
+        version: Box<PubGrubVersion>,
     },
 
     #[error("Decision making failed")]
@@ -120,8 +119,8 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> f
                 version,
                 source,
             } => ResolveError::ErrorRetrievingDependencies {
-                package,
-                version,
+                package: Box::new(package),
+                version: Box::new(version),
                 source,
             },
             pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
@@ -132,7 +131,10 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> f
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
-                ResolveError::SelfDependency { package, version }
+                ResolveError::SelfDependency {
+                    package: Box::new(package),
+                    version: Box::new(version),
+                }
             }
         }
     }
