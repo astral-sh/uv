@@ -8,6 +8,7 @@ use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 
 use puffin_cache::{Cache, CacheArgs};
+use puffin_installer::Reinstall;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use pypi_types::{IndexUrl, IndexUrls};
@@ -176,6 +177,16 @@ struct PipSyncArgs {
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
+    /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
+    /// packages in the environment.
+    #[clap(long)]
+    reinstall: bool,
+
+    /// Reinstall a specific package, overwriting any entries in the cache and replacing any
+    /// existing versions in the environment.
+    #[clap(long)]
+    reinstall_package: Vec<PackageName>,
+
     /// The method to use when installing packages from the global cache.
     #[clap(long, value_enum)]
     link_mode: Option<install_wheel_rs::linker::LinkMode>,
@@ -308,8 +319,10 @@ async fn inner() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
+            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             commands::pip_sync(
                 &sources,
+                &reinstall,
                 args.link_mode.unwrap_or_default(),
                 index_urls,
                 args.no_build,

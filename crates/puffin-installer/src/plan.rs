@@ -13,6 +13,7 @@ use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
+use puffin_normalize::PackageName;
 use pypi_types::IndexUrls;
 
 use crate::SitePackages;
@@ -37,6 +38,7 @@ impl InstallPlan {
     /// need to be downloaded, and those that should be removed.
     pub fn from_requirements(
         requirements: &[Requirement],
+        reinstall: &Reinstall,
         index_urls: &IndexUrls,
         cache: &Cache,
         venv: &Virtualenv,
@@ -67,10 +69,20 @@ impl InstallPlan {
                 bail!("Detected duplicate package in requirements:\n    {requirement}\n    {existing}");
             }
 
-            // Filter out already-installed packages.
-            if let Some(distribution) = site_packages.remove(&requirement.name) {
-                // We need to map here from the requirement to its DirectUrl, then see if that DirectUrl
-                // is anywhere in `site_packages`.
+            // Check if the package should be reinstalled. A reinstall involves (1) purging any
+            // cached distributions, and (2) marking any installed distributions as extraneous.
+            let reinstall = match reinstall {
+                Reinstall::None => false,
+                Reinstall::All => true,
+                Reinstall::Packages(packages) => packages.contains(&requirement.name),
+            };
+
+            if reinstall {
+                // If necessary, purge the cached distributions.
+                debug!("Purging cached distributions for: {requirement}");
+                cache.purge(&requirement.name)?;
+            } else if let Some(distribution) = site_packages.remove(&requirement.name) {
+                // Filter out already-installed packages.
                 match requirement.version_or_url.as_ref() {
                     // If the requirement comes from a registry, check by name.
                     None | Some(VersionOrUrl::VersionSpecifier(_)) => {
@@ -257,5 +269,30 @@ impl InstallPlan {
             remote,
             extraneous,
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum Reinstall {
+    /// Don't reinstall any packages; respect the existing installation.
+    None,
+
+    /// Reinstall all packages in the plan.
+    All,
+
+    /// Reinstall only the specified packages.
+    Packages(Vec<PackageName>),
+}
+
+impl Reinstall {
+    /// Determine the reinstall strategy to use.
+    pub fn from_args(reinstall: bool, reinstall_package: Vec<PackageName>) -> Self {
+        if reinstall {
+            Self::All
+        } else if !reinstall_package.is_empty() {
+            Self::Packages(reinstall_package)
+        } else {
+            Self::None
+        }
     }
 }
