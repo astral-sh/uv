@@ -11,7 +11,7 @@ use url::Url;
 use puffin_cache::{digest, RepositoryUrl};
 
 use crate::git::GitRemote;
-use crate::{FetchStrategy, GitUrl};
+use crate::{FetchStrategy, GitSha, GitUrl};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -58,7 +58,7 @@ impl GitSource {
         let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev) => (db, rev, None),
+            (Some(rev), Some(db)) if db.contains(rev.into()) => (db, rev, None),
 
             // ... otherwise we use this state to update the git database. Note
             // that we still check for being offline here, for example in the
@@ -76,18 +76,18 @@ impl GitSource {
                     &db_path,
                     db,
                     &self.git.reference,
-                    locked_rev,
+                    locked_rev.map(git2::Oid::from),
                     self.strategy,
                     &self.client,
                 )?;
 
-                (db, actual_rev, task)
+                (db, GitSha::from(actual_rev), task)
             }
         };
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
-        let short_id = db.to_short_id(actual_rev)?;
+        let short_id = db.to_short_id(actual_rev.into())?;
 
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
@@ -97,7 +97,12 @@ impl GitSource {
             .join("checkouts")
             .join(&ident)
             .join(short_id.as_str());
-        db.copy_to(actual_rev, &checkout_path, self.strategy, &self.client)?;
+        db.copy_to(
+            actual_rev.into(),
+            &checkout_path,
+            self.strategy,
+            &self.client,
+        )?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = task {

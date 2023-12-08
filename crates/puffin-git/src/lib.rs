@@ -1,9 +1,12 @@
+use std::str::FromStr;
 use url::Url;
 
-use git::GitReference;
-pub use source::{Fetch, GitSource, Reporter};
+use crate::git::GitReference;
+pub use crate::sha::GitSha;
+pub use crate::source::{Fetch, GitSource, Reporter};
 
 mod git;
+mod sha;
 mod source;
 mod util;
 
@@ -15,12 +18,12 @@ pub struct GitUrl {
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
     /// The precise commit to use, if known.
-    precise: Option<git2::Oid>,
+    precise: Option<GitSha>,
 }
 
 impl GitUrl {
     #[must_use]
-    pub(crate) fn with_precise(mut self, precise: git2::Oid) -> Self {
+    pub(crate) fn with_precise(mut self, precise: GitSha) -> Self {
         self.precise = Some(precise);
         self
     }
@@ -44,7 +47,7 @@ impl GitUrl {
     }
 
     /// Return the precise commit, if known.
-    pub fn precise(&self) -> Option<git2::Oid> {
+    pub fn precise(&self) -> Option<GitSha> {
         self.precise
     }
 }
@@ -66,7 +69,7 @@ impl TryFrom<Url> for GitUrl {
             url = Url::parse(prefix)?;
         }
         let precise = if let GitReference::FullCommit(rev) = &reference {
-            Some(git2::Oid::from_str(rev)?)
+            Some(GitSha::from_str(rev)?)
         } else {
             None
         };
