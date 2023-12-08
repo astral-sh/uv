@@ -18,7 +18,7 @@ use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_distribution::DistributionDatabase;
-use puffin_installer::{InstallPlan, Installer, Unzipper};
+use puffin_installer::{InstallPlan, Installer, Reinstall, Unzipper};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::BuildContext;
@@ -135,6 +135,7 @@ impl BuildContext for BuildDispatch {
                 extraneous,
             } = InstallPlan::from_requirements(
                 requirements,
+                &Reinstall::None,
                 &self.index_urls,
                 self.cache(),
                 venv,

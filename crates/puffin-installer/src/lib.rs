@@ -1,5 +1,5 @@
 pub use installer::{Installer, Reporter as InstallReporter};
-pub use plan::InstallPlan;
+pub use plan::{InstallPlan, Reinstall};
 pub use site_packages::SitePackages;
 pub use uninstall::uninstall;
 pub use unzipper::{Reporter as UnzipReporter, Unzipper};
