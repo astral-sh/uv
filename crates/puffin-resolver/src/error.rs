@@ -161,6 +161,9 @@ impl std::fmt::Display for NoSolutionError {
 }
 
 impl NoSolutionError {
+    /// Update the available versions attached to the error using the given package version index.
+    ///
+    /// Only packages used in the error's deriviation tree will be retrieved.
     pub(crate) fn update_available_versions(
         mut self,
         package_versions: &WaitMap<PackageName, (IndexUrl, VersionMap)>,
