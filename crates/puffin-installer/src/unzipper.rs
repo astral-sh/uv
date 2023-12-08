@@ -44,23 +44,18 @@ impl Unzipper {
                         format_err!("Unzipping failed in different thread: {}", err)
                     })?
                 } else {
-                    let result = tokio::task::spawn_blocking(move || {
-                        let remote = wheel.remote().clone();
-                        unzip_wheel(&wheel).with_context(|| format!("Failed to unpack: {remote}"))
-                    })
-                    .await;
+                    let remote = wheel.remote().clone();
+                    let result = unzip_wheel(wheel)
+                        .await
+                        .with_context(|| format!("Failed to unpack: {remote}"));
                     match result {
-                        Ok(Ok(cached)) => {
+                        Ok(cached) => {
                             in_flight.done(wheel_path, Ok(cached.clone()));
                             cached
                         }
-                        Ok(Err(err)) => {
-                            in_flight.done(wheel_path, Err(err.to_string()));
-                            return Err(err);
-                        }
                         Err(err) => {
                             in_flight.done(wheel_path, Err(err.to_string()));
-                            return Err(err.into());
+                            return Err(err);
                         }
                     }
                 };
@@ -76,34 +71,32 @@ impl Unzipper {
     }
 }
 
-fn unzip_wheel(wheel: &LocalWheel) -> Result<CachedDist> {
+async fn unzip_wheel(wheel: LocalWheel) -> Result<CachedDist> {
     debug!("Unpacking wheel: {}", wheel.remote());
     let remote = wheel.remote().clone();
     let filename = wheel.filename().clone();
+    let target = wheel.target().to_path_buf();
 
     // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
-    if wheel.target().is_dir() {
+    if target.is_dir() {
         warn!("Wheel is already unpacked: {remote}");
-        return Ok(CachedDist::from_remote(
-            remote,
-            filename,
-            wheel.target().to_path_buf(),
-        ));
+        return Ok(CachedDist::from_remote(remote, filename, target));
     }
-    // Unzip the wheel into a temporary directory.
-    let parent = wheel.target().parent().expect("Cache paths can't be root");
-    fs_err::create_dir_all(parent)?;
-    let staging = tempfile::tempdir_in(parent)?;
-    wheel.unzip(staging.path())?;
 
-    // Move the unzipped wheel into the cache,.
-    fs_err::rename(staging.into_path(), wheel.target())?;
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        // Unzip the wheel into a temporary directory.
+        let parent = wheel.target().parent().expect("Cache paths can't be root");
+        fs_err::create_dir_all(parent)?;
+        let staging = tempfile::tempdir_in(parent)?;
+        wheel.unzip(staging.path())?;
 
-    Ok(CachedDist::from_remote(
-        remote,
-        filename,
-        wheel.target().to_path_buf(),
-    ))
+        // Move the unzipped wheel into the cache.
+        fs_err::rename(staging.into_path(), wheel.target())?;
+        Ok(())
+    })
+    .await??;
+
+    Ok(CachedDist::from_remote(remote, filename, target))
 }
 
 pub trait Reporter: Send + Sync {

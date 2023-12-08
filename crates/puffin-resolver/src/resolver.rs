@@ -410,14 +410,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
-                if index.packages.register(package_name.clone()).await {
+                if index.packages.register(package_name).await {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
-                if index.redirects.register(url.clone()).await {
+                if index.redirects.register(url).await {
                     let distribution = Dist::from_url(package_name.clone(), url.clone())?;
                     priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
@@ -458,7 +458,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             if self
                 .index
                 .distributions
-                .register(candidate.file.sha256().to_string())
+                .register(candidate.file.sha256())
                 .await
             {
                 let distribution = Dist::from_registry(
@@ -552,7 +552,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if self
                     .index
                     .distributions
-                    .register(candidate.file.sha256().to_string())
+                    .register(candidate.file.sha256())
                     .await
                 {
                     let distribution = Dist::from_registry(

@@ -1,9 +1,9 @@
 use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
-use std::collections::HashSet;
 use std::hash::Hash;
-use tokio::sync::Mutex;
 
+use fxhash::FxHashSet;
+use tokio::sync::Mutex;
 use waitmap::{Ref, WaitMap};
 
 /// Run tasks only once and store the results in a parallel hash map.
@@ -14,7 +14,7 @@ use waitmap::{Ref, WaitMap};
 /// result.
 pub struct OnceMap<K: Eq + Hash, V> {
     /// Computations that were started, including those that were finished.
-    started: Mutex<HashSet<K>>,
+    started: Mutex<FxHashSet<K>>,
     waitmap: WaitMap<K, V>,
 }
 
@@ -45,8 +45,16 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
     /// or other tasks will hang. If it returns `false`, this job is already in progress and you
     /// can [`OnceMap::wait`] for the result.
-    pub async fn register(&self, key: K) -> bool {
-        self.started.lock().await.insert(key)
+    pub async fn register<Q>(&self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq + ToOwned<Owned = K>,
+    {
+        let mut lock = self.started.lock().await;
+        if lock.contains(key) {
+            return false;
+        }
+        lock.insert(key.to_owned())
     }
 
     /// Submit the result of a job you registered.
@@ -79,7 +87,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
 impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
     fn default() -> Self {
         Self {
-            started: Mutex::new(HashSet::new()),
+            started: Mutex::new(FxHashSet::default()),
             waitmap: WaitMap::new(),
         }
     }

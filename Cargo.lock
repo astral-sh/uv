@@ -2639,6 +2639,7 @@ name = "puffin-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "fxhash",
  "pep508_rs",
  "puffin-cache",
  "puffin-interpreter",

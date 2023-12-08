@@ -18,5 +18,6 @@ puffin-cache = { path = "../puffin-cache" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
 anyhow = { workspace = true }
+fxhash = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 waitmap = { workspace = true }
