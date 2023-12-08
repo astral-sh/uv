@@ -285,8 +285,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         loop {
             // Run unit propagation.
             state.unit_propagation(next).map_err(|err| {
-                if let Some(err) = NoSolutionError::try_from_pubgrub(&err, &self.index.packages) {
-                    ResolveError::from(err)
+                if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = err {
+                    ResolveError::NoSolution(NoSolutionError::new(
+                        derivation_tree,
+                        &self.index.packages,
+                    ))
                 } else {
                     err.into()
                 }

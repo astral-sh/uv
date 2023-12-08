@@ -156,33 +156,29 @@ impl std::fmt::Display for NoSolutionError {
 }
 
 impl NoSolutionError {
-    pub fn try_from_pubgrub<'a>(
-        source: &pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+    pub fn new<'a>(
+        derivation_tree: DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
         package_versions: &'a WaitMap<PackageName, (IndexUrl, VersionMap)>,
-    ) -> Option<Self> {
-        if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = source {
-            let mut available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>> =
-                FxHashMap::default();
-            for package in derivation_tree.packages() {
-                if let PubGrubPackage::Package(name, ..) = package {
-                    if let Some(entry) = package_versions.get(name) {
-                        let (_, version_map) = entry.value();
-                        available_versions.insert(
-                            package.clone(),
-                            version_map
-                                .iter()
-                                .map(|(version, _)| version.clone())
-                                .collect(),
-                        );
-                    }
+    ) -> Self {
+        let mut available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>> =
+            FxHashMap::default();
+        for package in derivation_tree.packages() {
+            if let PubGrubPackage::Package(name, ..) = package {
+                if let Some(entry) = package_versions.get(name) {
+                    let (_, version_map) = entry.value();
+                    available_versions.insert(
+                        package.clone(),
+                        version_map
+                            .iter()
+                            .map(|(version, _)| version.clone())
+                            .collect(),
+                    );
                 }
             }
-            Some(Self {
-                derivation_tree: derivation_tree.clone(),
-                available_versions,
-            })
-        } else {
-            None
+        }
+        Self {
+            derivation_tree,
+            available_versions,
         }
     }
 }
