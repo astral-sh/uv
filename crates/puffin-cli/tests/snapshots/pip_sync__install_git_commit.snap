@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /tmp/.tmpoJsrzd
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpqOiPpJ
   env:
-    VIRTUAL_ENV: /tmp/.tmpkdU3Lp/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpUdJ8vf/.venv
 ---
 success: true
 exit_code: 0
@@ -17,7 +17,6 @@ exit_code: 0
 ----- stderr -----
 Resolved 1 package in [TIME]
 Downloaded 1 package in [TIME]
-Unzipped 1 package in [TIME]
 Installed 1 package in [TIME]
  + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
 
