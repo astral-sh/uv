@@ -126,7 +126,10 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> f
             },
             pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
             pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
-                unreachable!("`NoSolution` error requires manual cast to `NoSolutionError`")
+                ResolveError::NoSolution(NoSolutionError {
+                    derivation_tree,
+                    available_versions: FxHashMap::default(),
+                })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
                 ResolveError::SelfDependency { package, version }
@@ -156,17 +159,15 @@ impl std::fmt::Display for NoSolutionError {
 }
 
 impl NoSolutionError {
-    pub fn new<'a>(
-        derivation_tree: DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
+    pub fn update_available_versions<'a>(
+        mut self,
         package_versions: &'a WaitMap<PackageName, (IndexUrl, VersionMap)>,
     ) -> Self {
-        let mut available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>> =
-            FxHashMap::default();
-        for package in derivation_tree.packages() {
+        for package in self.derivation_tree.packages() {
             if let PubGrubPackage::Package(name, ..) = package {
                 if let Some(entry) = package_versions.get(name) {
                     let (_, version_map) = entry.value();
-                    available_versions.insert(
+                    self.available_versions.insert(
                         package.clone(),
                         version_map
                             .iter()
@@ -176,9 +177,6 @@ impl NoSolutionError {
                 }
             }
         }
-        Self {
-            derivation_tree,
-            available_versions,
-        }
+        self
     }
 }

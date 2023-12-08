@@ -255,7 +255,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 return Err(ResolveError::StreamTermination);
             }
             resolution = resolve_fut => {
-                resolution?
+                resolution.map_err(|err| {
+                    // Add version information to improve unsat error messages
+                    if let ResolveError::NoSolution(err) = err {
+                        ResolveError::NoSolution(err.update_available_versions(&self.index.packages))
+                    } else {
+                        err
+                    }
+                })?
             }
         };
 
@@ -284,16 +291,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         loop {
             // Run unit propagation.
-            state.unit_propagation(next).map_err(|err| {
-                if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = err {
-                    ResolveError::NoSolution(NoSolutionError::new(
-                        derivation_tree,
-                        &self.index.packages,
-                    ))
-                } else {
-                    err.into()
-                }
-            })?;
+            state.unit_propagation(next)?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
             self.pre_visit(state.partial_solution.prioritized_packages(), request_sink)
