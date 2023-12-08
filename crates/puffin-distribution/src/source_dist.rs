@@ -488,15 +488,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
         // TODO(konstin): Do we want to delete old built wheels when the git sha changed?
-        let git_sha = fetch
-            .git()
-            .precise()
-            .expect("Exact commit after checkout")
-            .to_string();
-        let cache_shard = WheelCache::Git(&git_source_dist.url);
+        let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_entry = self.build_context.cache().entry(
             CacheBucket::BuiltWheels,
-            cache_shard.built_wheel_dir(&git_sha),
+            WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
+                .remote_wheel_dir(git_source_dist.name().as_ref()),
             METADATA_JSON.to_string(),
         );
 

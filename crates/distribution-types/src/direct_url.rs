@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Error, Result};
 use url::Url;
 
-use puffin_git::GitUrl;
+use puffin_git::{GitSha, GitUrl};
 
 #[derive(Debug)]
 pub enum DirectUrl {
@@ -89,9 +89,9 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
 }
 
 /// Return the Git reference of the given URL, if it exists.
-pub fn git_reference(url: &Url) -> Result<Option<String>, Error> {
+pub fn git_reference(url: &Url) -> Result<Option<GitSha>, Error> {
     let DirectGitUrl { url, .. } = DirectGitUrl::try_from(url)?;
-    Ok(url.reference().map(ToString::to_string))
+    Ok(url.precise())
 }
 
 impl TryFrom<&Url> for DirectUrl {
@@ -159,7 +159,7 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
             url: value.url.repository().to_string(),
             vcs_info: pypi_types::VcsInfo {
                 vcs: pypi_types::VcsKind::Git,
-                commit_id: value.url.precise().map(|oid| oid.to_string()),
+                commit_id: value.url.precise().as_ref().map(ToString::to_string),
                 requested_revision: value.url.reference().map(ToString::to_string),
             },
             subdirectory: value.subdirectory.clone(),

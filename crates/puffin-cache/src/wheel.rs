@@ -19,11 +19,11 @@ pub enum WheelCache<'a> {
     Url(&'a Url),
     /// A path dependency, which we key by URL.
     Path(&'a Url),
-    /// A Git dependency, which we key by repository url. We use the revision as filename.
+    /// A Git dependency, which we key by URL and SHA.
     ///
-    /// Note that this variant only exists for source distributions, wheels can't be delivered
+    /// Note that this variant only exists for source distributions; wheels can't be delivered
     /// through Git.
-    Git(&'a Url),
+    Git(&'a Url, &'a str),
 }
 
 impl<'a> WheelCache<'a> {
@@ -33,7 +33,9 @@ impl<'a> WheelCache<'a> {
             WheelCache::Index(url) => PathBuf::from("index").join(digest(&CanonicalUrl::new(url))),
             WheelCache::Url(url) => PathBuf::from("url").join(digest(&CanonicalUrl::new(url))),
             WheelCache::Path(url) => PathBuf::from("path").join(digest(&CanonicalUrl::new(url))),
-            WheelCache::Git(url) => PathBuf::from("git").join(digest(&CanonicalUrl::new(url))),
+            WheelCache::Git(url, sha) => PathBuf::from("git")
+                .join(digest(&CanonicalUrl::new(url)))
+                .join(sha),
         }
     }
 

@@ -213,10 +213,11 @@ impl InstallPlan {
                         Dist::Source(SourceDist::Git(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Ok(Some(reference)) = git_reference(&sdist.url) {
+                            if let Ok(Some(git_sha)) = git_reference(&sdist.url) {
                                 let cache_shard = cache.shard(
                                     CacheBucket::BuiltWheels,
-                                    WheelCache::Git(&sdist.url).built_wheel_dir(reference),
+                                    WheelCache::Git(&sdist.url, &git_sha.to_short_string())
+                                        .remote_wheel_dir(sdist.name().as_ref()),
                                 );
 
                                 if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
