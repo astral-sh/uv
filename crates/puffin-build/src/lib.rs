@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use tar::Archive;
 use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
+use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument};
 use zip::ZipArchive;
@@ -346,7 +347,7 @@ impl SourceBuild {
     /// actual build
     ///
     /// TODO(konstin): Return the actual metadata instead of the dist-info dir
-    pub fn get_metadata_without_build(&mut self) -> Result<Option<&Path>, Error> {
+    pub async fn get_metadata_without_build(&mut self) -> Result<Option<&Path>, Error> {
         // setup.py builds don't support this.
         let Some(pep517_backend) = &self.pep517_backend else {
             return Ok(None);
@@ -375,7 +376,8 @@ impl SourceBuild {
             name="prepare_metadata_for_build_wheel",
             python_version = %self.venv.interpreter().version()
         );
-        let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
+        let output =
+            run_python_script(&self.venv.python_executable(), &script, &self.source_tree).await?;
         drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
@@ -414,14 +416,16 @@ impl SourceBuild {
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip(self, wheel_dir), fields(package_id = self.package_id))]
-    pub fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
+    pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
         if let Some(pep517_backend) = &self.pep517_backend {
             // Prevent clashes from two puffin processes building wheels in parallel.
             let tmp_dir = tempdir_in(&wheel_dir)?;
-            let filename = self.pep517_build_wheel(tmp_dir.path(), pep517_backend)?;
+            let filename = self
+                .pep517_build_wheel(tmp_dir.path(), pep517_backend)
+                .await?;
 
             let from = tmp_dir.path().join(&filename);
             let to = wheel_dir.join(&filename);
@@ -435,6 +439,7 @@ impl SourceBuild {
                 .args(["setup.py", "bdist_wheel"])
                 .current_dir(&self.source_tree)
                 .output()
+                .await
                 .map_err(|err| Error::CommandFailed(python_interpreter, err))?;
             if !output.status.success() {
                 return Err(Error::from_command_output(
@@ -463,7 +468,7 @@ impl SourceBuild {
         }
     }
 
-    fn pep517_build_wheel(
+    async fn pep517_build_wheel(
         &self,
         wheel_dir: &Path,
         pep517_backend: &Pep517Backend,
@@ -489,7 +494,8 @@ impl SourceBuild {
             name="build_wheel",
             python_version = %self.venv.interpreter().version()
         );
-        let output = run_python_script(&self.venv.python_executable(), &script, &self.source_tree)?;
+        let output =
+            run_python_script(&self.venv.python_executable(), &script, &self.source_tree).await?;
         drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
@@ -550,7 +556,7 @@ async fn create_pep517_build_environment(
         name="build_wheel",
         python_version = %venv.interpreter().version()
     );
-    let output = run_python_script(&venv.python_executable(), &script, source_tree)?;
+    let output = run_python_script(&venv.python_executable(), &script, source_tree).await?;
     drop(span);
     if !output.status.success() {
         return Err(Error::from_command_output(
@@ -651,7 +657,7 @@ fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> 
 }
 
 /// It is the caller's responsibility to create an informative span.
-fn run_python_script(
+async fn run_python_script(
     python_interpreter: &Path,
     script: &str,
     source_tree: &Path,
@@ -660,6 +666,7 @@ fn run_python_script(
         .args(["-c", script])
         .current_dir(source_tree)
         .output()
+        .await
         .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))
 }
 
