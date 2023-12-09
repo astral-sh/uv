@@ -116,17 +116,13 @@ impl std::fmt::Display for Download {
 
 impl std::fmt::Display for LocalWheel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LocalWheel::InMemory(wheel) => write!(f, "{} from {}", wheel.filename, wheel.dist),
-            LocalWheel::Disk(wheel) => write!(f, "{} from {}", wheel.filename, wheel.dist),
-            LocalWheel::Built(wheel) => write!(f, "{} from {}", wheel.filename, wheel.dist),
-        }
+        write!(f, "{}", self.remote())
     }
 }
 
 impl std::fmt::Display for SourceDistDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.dist)
+        write!(f, "{}", self.remote())
     }
 }
 
