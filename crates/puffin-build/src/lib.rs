@@ -362,8 +362,9 @@ impl SourceBuild {
         let script = formatdoc! {
             r#"{}
             import json
-            
-            if prepare_metadata_for_build_wheel := getattr(backend, "prepare_metadata_for_build_wheel", None):
+
+            prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
+            if prepare_metadata_for_build_wheel:
                 print(prepare_metadata_for_build_wheel("{}"))
             else:
                 print()
@@ -537,8 +538,9 @@ async fn create_pep517_build_environment(
         r#"
             {}
             import json
-            
-            if get_requires_for_build_wheel := getattr(backend, "get_requires_for_build_wheel", None):
+
+            get_requires_for_build_wheel = getattr(backend, "get_requires_for_build_wheel", None)
+            if get_requires_for_build_wheel:
                 requires = get_requires_for_build_wheel()
             else:
                 requires = []
