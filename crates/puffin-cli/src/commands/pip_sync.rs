@@ -304,7 +304,12 @@ pub(crate) async fn sync_requirements(
             dist: AnyDist::from(distribution),
             kind: ChangeEventKind::Add,
         }))
-        .sorted_unstable_by_key(|event| event.dist.name().clone())
+        .sorted_unstable_by(|a, b| {
+            a.dist
+                .name()
+                .cmp(b.dist.name())
+                .then_with(|| a.kind.cmp(&b.kind))
+        })
     {
         match event.kind {
             ChangeEventKind::Add => {
@@ -331,12 +336,12 @@ pub(crate) async fn sync_requirements(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 enum ChangeEventKind {
-    /// The package was added to the environment.
-    Add,
     /// The package was removed from the environment.
     Remove,
+    /// The package was added to the environment.
+    Add,
 }
 
 #[derive(Debug)]
