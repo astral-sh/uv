@@ -584,9 +584,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .map_err(puffin_client::Error::CacheWrite)?;
         let temp_dir = tempfile::tempdir_in(cache_dir).map_err(puffin_client::Error::CacheWrite)?;
         let sdist_file = temp_dir.path().join(source_dist_filename);
-        let mut writer = tokio::fs::File::create(&sdist_file)
-            .await
-            .map_err(puffin_client::Error::CacheWrite)?;
+        let mut writer = tokio::io::BufWriter::new(
+            tokio::fs::File::create(&sdist_file)
+                .await
+                .map_err(puffin_client::Error::CacheWrite)?,
+        );
         tokio::io::copy(&mut reader, &mut writer)
             .await
             .map_err(puffin_client::Error::CacheWrite)?;
