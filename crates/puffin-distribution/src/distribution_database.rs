@@ -148,7 +148,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let url = Url::parse(&wheel.file.url).map_err(|err| {
                     DistributionDatabaseError::Url(wheel.file.url.to_string(), err)
                 })?;
-                let filename = WheelFilename::from_str(&wheel.file.filename)?;
+                let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
 
                 let reader = self.client.stream_external(&url).await?;
 
@@ -161,8 +161,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     let cache_entry = self.cache.entry(
                         CacheBucket::Wheels,
-                        WheelCache::Index(&wheel.index).remote_wheel_dir(filename.name.as_ref()),
-                        filename.stem(),
+                        WheelCache::Index(&wheel.index)
+                            .remote_wheel_dir(wheel_filename.name.as_ref()),
+                        wheel_filename.stem(),
                     );
 
                     // Read into a buffer.
@@ -174,7 +175,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         dist: dist.clone(),
                         target: cache_entry.path(),
                         buffer,
-                        filename,
+                        filename: wheel_filename,
                     })
                 } else {
                     let size =
@@ -182,23 +183,30 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
+                    let filename = wheel_filename.to_string();
+
+                    // Download the wheel to a temporary file.
+                    let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                    let temp_file = temp_dir.path().join(&filename);
+                    let mut writer =
+                        tokio::io::BufWriter::new(tokio::fs::File::create(&temp_file).await?);
+                    tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+
+                    // Move the temporary file to the cache.
                     let cache_entry = self.cache.entry(
                         CacheBucket::Wheels,
-                        WheelCache::Index(&wheel.index).remote_wheel_dir(filename.name.as_ref()),
-                        filename.to_string(),
+                        WheelCache::Index(&wheel.index)
+                            .remote_wheel_dir(wheel_filename.name.as_ref()),
+                        filename,
                     );
-
-                    // Download the wheel into the cache.
                     fs::create_dir_all(&cache_entry.dir).await?;
-                    let mut writer =
-                        tokio::io::BufWriter::new(fs::File::create(cache_entry.path()).await?);
-                    tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+                    tokio::fs::rename(temp_file, &cache_entry.path()).await?;
 
                     LocalWheel::Disk(DiskWheel {
                         dist: dist.clone(),
                         path: cache_entry.path(),
-                        target: cache_entry.with_file(filename.stem()).path(),
-                        filename,
+                        target: cache_entry.with_file(wheel_filename.stem()).path(),
+                        filename: wheel_filename,
                     })
                 };
 
@@ -212,19 +220,24 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                 debug!("Fetching disk-based wheel from URL: {}", wheel.url);
 
-                // Fetch the wheel.
                 let reader = self.client.stream_external(&wheel.url).await?;
+                let filename = wheel.filename.to_string();
 
-                // Download the wheel into the cache.
+                // Download the wheel to a temporary file.
+                let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                let temp_file = temp_dir.path().join(&filename);
+                let mut writer =
+                    tokio::io::BufWriter::new(tokio::fs::File::create(&temp_file).await?);
+                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+
+                // Move the temporary file to the cache.
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.to_string(),
+                    filename,
                 );
                 fs::create_dir_all(&cache_entry.dir).await?;
-                let mut writer =
-                    tokio::io::BufWriter::new(fs::File::create(&cache_entry.path()).await?);
-                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+                tokio::fs::rename(temp_file, &cache_entry.path()).await?;
 
                 let local_wheel = LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
