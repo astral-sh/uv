@@ -248,7 +248,7 @@ impl BuildContext for BuildDispatch {
                 source_dist,
             )
             .await?;
-            Ok(builder.build(wheel_dir)?)
+            Ok(builder.build(wheel_dir).await?)
         })
     }
 }
