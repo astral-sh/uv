@@ -347,7 +347,7 @@ impl SourceBuild {
     ///
     /// TODO(konstin): Return the actual metadata instead of the dist-info dir
     pub fn get_metadata_without_build(&mut self) -> Result<Option<&Path>, Error> {
-        // setup.py builds don't support this
+        // setup.py builds don't support this.
         let Some(pep517_backend) = &self.pep517_backend else {
             return Ok(None);
         };
@@ -387,15 +387,13 @@ impl SourceBuild {
             .stdout
             .lines()
             .last()
-            // flatten is nightly only :/
             .transpose()
             .map_err(|err| err.to_string())
             .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
             .map_err(|err| {
                 Error::from_command_output(
                     format!(
-                        "Build backend failed to return metadata directory with \
-                        `prepare_metadata_for_build_wheel`: {err}"
+                        "Build backend failed to return metadata directory with `prepare_metadata_for_build_wheel`: {err}"
                     ),
                     &output,
                     &self.package_id,
@@ -556,7 +554,7 @@ async fn create_pep517_build_environment(
     drop(span);
     if !output.status.success() {
         return Err(Error::from_command_output(
-            "Build backend failed to determine extras requires with `get_requires_for_build_wheel`"
+            "Build backend failed to determine extra requires with `get_requires_for_build_wheel`"
                 .to_string(),
             &output,
             package_id,
@@ -566,7 +564,6 @@ async fn create_pep517_build_environment(
         .stdout
         .lines()
         .last()
-        // flatten is nightly only :/
         .transpose()
         .map_err(|err| err.to_string())
         .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
@@ -574,8 +571,7 @@ async fn create_pep517_build_environment(
     let extra_requires: Vec<Requirement> = extra_requires.map_err(|err| {
         Error::from_command_output(
             format!(
-                "Build backend failed to return extras requires with \
-                        `get_requires_for_build_wheel`: {err}"
+                "Build backend failed to return extra requires with `get_requires_for_build_wheel`: {err}"
             ),
             &output,
             package_id,
@@ -615,18 +611,21 @@ async fn create_pep517_build_environment(
 fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {
     if sdist
         .extension()
-        .is_some_and(|extension| extension == "zip")
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
     {
+        // .zip
         let mut archive = ZipArchive::new(File::open(sdist)?)?;
         archive.extract(extracted)?;
-        // .tar.gz
-    } else if sdist.extension().is_some_and(|extension| extension == "gz")
+    } else if sdist
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
         && sdist.file_stem().is_some_and(|stem| {
             Path::new(stem)
                 .extension()
-                .is_some_and(|extension| extension == "tar")
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
         })
     {
+        // .tar.gz
         let mut archive = Archive::new(GzDecoder::new(File::open(sdist)?));
         archive.unpack(extracted)?;
     } else {
@@ -675,7 +674,7 @@ mod test {
     #[test]
     fn missing_header() {
         let output = Output {
-            status: ExitStatus::default(), // This is wrong but `from_raw` is platform gated
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: indoc!(r"
                 running bdist_wheel
                 running build
