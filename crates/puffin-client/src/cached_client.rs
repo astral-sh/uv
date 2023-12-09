@@ -220,8 +220,7 @@ impl CachedClient {
                 }
             }
         } else {
-            debug!("Not cached {url}");
-            // No reusable cache
+            debug!("No cache entry for: {url}");
             self.fresh_request(req, converted_req).await?
         };
         Ok(cached_response)

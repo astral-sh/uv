@@ -153,21 +153,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let reader = self.client.stream_external(&url).await?;
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
-                let small_size = if let Some(size) = wheel.file.size {
-                    let byte_size = ByteSize::b(size as u64);
-                    if byte_size < ByteSize::mb(5) {
-                        Some(size)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-                let local_wheel = if let Some(small_size) = small_size {
-                    debug!(
-                        "Fetching in-memory wheel from registry: {dist} ({})",
-                        ByteSize::b(small_size as u64)
-                    );
+                let byte_size = wheel.file.size.map(|size| ByteSize::b(size as u64));
+                let local_wheel = if let Some(byte_size) =
+                    byte_size.filter(|byte_size| *byte_size < ByteSize::mb(5))
+                {
+                    debug!("Fetching in-memory wheel from registry: {dist} ({byte_size})",);
 
                     let cache_entry = self.cache.entry(
                         CacheBucket::Wheels,
@@ -176,7 +166,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     );
 
                     // Read into a buffer.
-                    let mut buffer = Vec::with_capacity(small_size);
+                    let mut buffer = Vec::with_capacity(wheel.file.size.unwrap_or(0));
                     let mut reader = tokio::io::BufReader::new(reader.compat());
                     tokio::io::copy(&mut reader, &mut buffer).await?;
 
@@ -188,7 +178,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     })
                 } else {
                     let size =
-                        small_size.map_or("unknown size".to_string(), |size| size.to_string());
+                        byte_size.map_or("unknown size".to_string(), |size| size.to_string());
+
                     debug!("Fetching disk-based wheel from registry: {dist} ({size})");
 
                     let cache_entry = self.cache.entry(
