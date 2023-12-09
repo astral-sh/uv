@@ -199,7 +199,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     // Download the wheel into the cache.
                     fs::create_dir_all(&cache_entry.dir).await?;
-                    let mut writer = fs::File::create(cache_entry.path()).await?;
+                    let mut writer =
+                        tokio::io::BufWriter::new(fs::File::create(cache_entry.path()).await?);
                     tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                     LocalWheel::Disk(DiskWheel {
@@ -230,7 +231,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     wheel.filename.to_string(),
                 );
                 fs::create_dir_all(&cache_entry.dir).await?;
-                let mut writer = fs::File::create(&cache_entry.path()).await?;
+                let mut writer =
+                    tokio::io::BufWriter::new(fs::File::create(&cache_entry.path()).await?);
                 tokio::io::copy(&mut reader.compat(), &mut writer).await?;
 
                 let local_wheel = LocalWheel::Disk(DiskWheel {
