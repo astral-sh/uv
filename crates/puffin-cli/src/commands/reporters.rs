@@ -95,13 +95,10 @@ impl From<Printer> for FetcherReporter {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
 
         let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
-        progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
-            ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
-        progress.set_message("Resolving dependencies...");
+        progress.set_message("Fetching packages...");
 
         Self {
             printer,
@@ -135,7 +132,7 @@ impl puffin_distribution::Reporter for FetcherReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!(
             "{} {}",
-            "Building".bold().green(),
+            "Building".bold().cyan(),
             dist.to_color_string()
         ));
 
@@ -148,7 +145,7 @@ impl puffin_distribution::Reporter for FetcherReporter {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
-            "{} {}",
+            "   {} {}",
             "Built".bold().green(),
             dist.to_color_string()
         ));
@@ -167,7 +164,7 @@ impl puffin_distribution::Reporter for FetcherReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!(
             "{} {} ({})",
-            "Updating".bold().green(),
+            "Updating".bold().cyan(),
             url,
             rev.dimmed()
         ));
@@ -182,7 +179,7 @@ impl puffin_distribution::Reporter for FetcherReporter {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
-            "{} {} ({})",
+            " {} {} ({})",
             "Updated".bold().green(),
             url,
             rev.dimmed()
@@ -298,7 +295,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!(
             "{} {}",
-            "Building".bold().green(),
+            "Building".bold().cyan(),
             dist.to_color_string()
         ));
 
@@ -311,7 +308,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
-            "{} {}",
+            "   {} {}",
             "Built".bold().green(),
             dist.to_color_string()
         ));
@@ -330,7 +327,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!(
             "{} {} ({})",
-            "Updating".bold().green(),
+            "Updating".bold().cyan(),
             url,
             rev.dimmed()
         ));
@@ -345,7 +342,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
-            "{} {} ({})",
+            " {} {} ({})",
             "Updated".bold().green(),
             url,
             rev.dimmed()
