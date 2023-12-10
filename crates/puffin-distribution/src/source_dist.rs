@@ -566,6 +566,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         })
     }
 
+    /// Download a source distribution from a URL to a temporary file.
     async fn download_source_dist_url(
         &self,
         response: Response,
@@ -577,12 +578,14 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .into_async_read();
         let mut reader = tokio::io::BufReader::new(reader.compat());
 
-        // Download the source distribution.
+        // Create a temporary directory.
         let cache_dir = self.build_context.cache().bucket(CacheBucket::BuiltWheels);
         fs::create_dir_all(&cache_dir)
             .await
             .map_err(puffin_client::Error::CacheWrite)?;
         let temp_dir = tempfile::tempdir_in(cache_dir).map_err(puffin_client::Error::CacheWrite)?;
+
+        // Download the source distribution to a temporary file.
         let sdist_file = temp_dir.path().join(source_dist_filename);
         let mut writer = tokio::io::BufWriter::new(
             tokio::fs::File::create(&sdist_file)
@@ -592,9 +595,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         tokio::io::copy(&mut reader, &mut writer)
             .await
             .map_err(puffin_client::Error::CacheWrite)?;
+
         Ok((Some(temp_dir), sdist_file))
     }
 
+    /// Download a source distribution from a Git repository.
     async fn download_source_dist_git(
         &self,
         url: &Url,
