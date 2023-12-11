@@ -60,7 +60,7 @@ rayon = { version = "1.8.0" }
 # For correct IO error handling: https://github.com/cargo-bins/reflink-copy/pull/51
 reflink-copy = { git = "https://github.com/cargo-bins/reflink-copy", rev = "7dffdccc4d4152cdc0a460b3ba8e77dd84ad74df" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.11.22", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls"] }
+reqwest = { version = "0.11.22", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls-native-roots"] }
 reqwest-middleware = { version = "0.2.4" }
 reqwest-retry = { version = "0.3.0" }
 rfc2047-decoder = { version = "1.0.1" }
