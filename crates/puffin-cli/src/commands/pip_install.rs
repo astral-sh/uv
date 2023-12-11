@@ -15,7 +15,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Downloader, InstallPlan, Reinstall};
+use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{
     Graph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
@@ -70,6 +70,7 @@ pub(crate) async fn pip_install(
     // Resolve the requirements.
     let resolution = resolve(
         spec,
+        reinstall,
         resolution_mode,
         prerelease_mode,
         &index_urls,
@@ -141,6 +142,7 @@ fn specification(
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
     spec: RequirementsSpecification,
+    reinstall: &Reinstall,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     index_urls: &IndexUrls,
@@ -159,7 +161,18 @@ async fn resolve(
         constraints,
         extras: _,
     } = spec;
-    let preferences = vec![];
+
+    // Respect preferences from the existing environments.
+    let preferences: Vec<Requirement> = match reinstall {
+        Reinstall::All => vec![],
+        Reinstall::None => SitePackages::try_from_executable(venv)?
+            .requirements()
+            .collect(),
+        Reinstall::Packages(packages) => SitePackages::try_from_executable(venv)?
+            .requirements()
+            .filter(|requirement| !packages.contains(&requirement.name))
+            .collect(),
+    };
 
     let manifest = Manifest::new(requirements, constraints, preferences, project);
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);

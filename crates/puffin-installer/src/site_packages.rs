@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use fs_err as fs;
 
-use distribution_types::{InstalledDist, Metadata};
+use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 
@@ -34,6 +34,23 @@ impl SitePackages {
     /// Returns an iterator over the installed distributions.
     pub fn distributions(&self) -> impl Iterator<Item = &InstalledDist> {
         self.0.values()
+    }
+
+    /// Returns an iterator over the the installed distributions, represented as requirements.
+    pub fn requirements(&self) -> impl Iterator<Item = pep508_rs::Requirement> + '_ {
+        self.distributions().map(|dist| pep508_rs::Requirement {
+            name: dist.name().clone(),
+            extras: None,
+            version_or_url: Some(match dist.version_or_url() {
+                VersionOrUrl::Version(version) => {
+                    pep508_rs::VersionOrUrl::VersionSpecifier(pep440_rs::VersionSpecifiers::from(
+                        pep440_rs::VersionSpecifier::equals_version(version.clone()),
+                    ))
+                }
+                VersionOrUrl::Url(url) => pep508_rs::VersionOrUrl::Url(url.clone()),
+            }),
+            marker: None,
+        })
     }
 
     /// Returns the version of the given package, if it is installed.
