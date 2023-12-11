@@ -25,7 +25,6 @@ fs-err = { workspace = true, features = ["tokio"] }
 hex = { workspace = true }
 seahash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

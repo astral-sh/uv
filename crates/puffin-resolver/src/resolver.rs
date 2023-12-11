@@ -24,7 +24,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, Download};
+use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{File, IndexUrl, Metadata21};
@@ -764,9 +764,6 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
 
-    /// Callback to invoke when a wheel is downloaded.
-    fn on_download_progress(&self, download: &Download);
-
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
 
@@ -775,9 +772,6 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when a source distribution build is complete.
     fn on_build_complete(&self, dist: &SourceDist, id: usize);
-
-    /// Callback to invoke when the operation is complete.
-    fn on_download_and_build_complete(&self);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -792,20 +786,12 @@ struct Facade {
 }
 
 impl puffin_distribution::Reporter for Facade {
-    fn on_download_progress(&self, download: &Download) {
-        self.reporter.on_download_progress(download);
-    }
-
     fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }
 
     fn on_build_complete(&self, dist: &SourceDist, id: usize) {
         self.reporter.on_build_complete(dist, id);
-    }
-
-    fn on_download_and_build_complete(&self) {
-        self.reporter.on_download_and_build_complete();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {

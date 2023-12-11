@@ -960,7 +960,6 @@ fn install_url_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
         "###);
@@ -1034,7 +1033,6 @@ fn install_url_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
         "###);
@@ -1074,7 +1072,6 @@ fn install_git_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
         "###);
@@ -1148,7 +1145,6 @@ fn install_git_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
         "###);
@@ -1187,7 +1183,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + future==0.18.3
         "###);
@@ -1261,7 +1256,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + future==0.18.3
         "###);
@@ -1309,7 +1303,6 @@ fn install_path_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
         "###);
@@ -1383,7 +1376,6 @@ fn install_path_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
         "###);
@@ -1431,7 +1423,6 @@ fn install_path_built_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
         "###);
@@ -1505,7 +1496,6 @@ fn install_path_built_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
         "###);
@@ -1544,7 +1534,6 @@ fn install_url_built_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
         "###);
@@ -1618,7 +1607,6 @@ fn install_url_built_dist_cached() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
         "###);
@@ -1693,7 +1681,6 @@ fn duplicate_package_disjoint() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
         "###);
@@ -1730,7 +1717,6 @@ fn reinstall() -> Result<()> {
         ----- stderr -----
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
-        Unzipped 2 packages in [TIME]
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
@@ -1759,7 +1745,6 @@ fn reinstall() -> Result<()> {
         ----- stderr -----
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
-        Unzipped 2 packages in [TIME]
         Uninstalled 2 packages in [TIME]
         Installed 2 packages in [TIME]
          - markupsafe==2.1.3
@@ -1803,7 +1788,6 @@ fn reinstall_package() -> Result<()> {
         ----- stderr -----
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
-        Unzipped 2 packages in [TIME]
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
@@ -1833,7 +1817,6 @@ fn reinstall_package() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
-        Unzipped 1 package in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - tomli==2.0.1

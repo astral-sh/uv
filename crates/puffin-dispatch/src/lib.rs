@@ -16,8 +16,7 @@ use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
-use puffin_distribution::DistributionDatabase;
-use puffin_installer::{InstallPlan, Installer, Reinstall, Unzipper};
+use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, OnceMap};
@@ -164,33 +163,18 @@ impl BuildContext for BuildDispatch {
             let wheels = if remote.is_empty() {
                 vec![]
             } else {
-                // TODO(konstin): Check that there is no endless recursion
-                let fetcher = DistributionDatabase::new(self.cache(), &tags, &self.client, self);
+                // TODO(konstin): Check that there is no endless recursion.
+                let downloader = Downloader::new(self.cache(), &tags, &self.client, self);
                 debug!(
                     "Downloading and building requirement{} for build: {}",
                     if remote.len() == 1 { "" } else { "s" },
                     remote.iter().map(ToString::to_string).join(", ")
                 );
 
-                fetcher
-                    .get_wheels(remote)
+                downloader
+                    .download(remote, &self.in_flight_unzips)
                     .await
                     .context("Failed to download and build distributions")?
-            };
-
-            // Unzip any downloaded distributions.
-            let unzips = if wheels.is_empty() {
-                vec![]
-            } else {
-                debug!(
-                    "Unzipping build requirement{}: {}",
-                    if wheels.len() == 1 { "" } else { "s" },
-                    wheels.iter().map(ToString::to_string).join(", ")
-                );
-                Unzipper::default()
-                    .unzip(wheels, &self.in_flight_unzips)
-                    .await
-                    .context("Failed to unpack build dependencies")?
             };
 
             // Remove any unnecessary packages.
@@ -211,7 +195,7 @@ impl BuildContext for BuildDispatch {
             }
 
             // Install the resolved distributions.
-            let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
+            let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
             if !wheels.is_empty() {
                 debug!(
                     "Installing build requirement{}: {}",

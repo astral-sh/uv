@@ -1,12 +1,10 @@
 use std::borrow::Cow;
-use std::cmp::Reverse;
 use std::io;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use bytesize::ByteSize;
 use fs_err::tokio as fs;
-use futures::StreamExt;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -15,7 +13,7 @@ use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
-use distribution_types::{BuiltDist, Dist, Metadata, RemoteSource, SourceDist};
+use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
@@ -27,8 +25,7 @@ use crate::download::BuiltWheel;
 use crate::locks::Locks;
 use crate::reporter::Facade;
 use crate::{
-    DiskWheel, Download, InMemoryWheel, LocalWheel, Reporter, SourceDistCachedBuilder,
-    SourceDistError,
+    DiskWheel, InMemoryWheel, LocalWheel, Reporter, SourceDistCachedBuilder, SourceDistError,
 };
 
 #[derive(Debug, Error)]
@@ -103,42 +100,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         }
     }
 
-    /// In parallel, either fetch each wheel or build each source distribution.
-    pub async fn get_wheels(
-        &self,
-        dists: Vec<Dist>,
-    ) -> Result<Vec<LocalWheel>, DistributionDatabaseError> {
-        // Sort the distributions by size.
-        let mut dists = dists;
-        dists.sort_unstable_by_key(|distribution| {
-            Reverse(distribution.size().unwrap_or(usize::MAX))
-        });
-
-        // Optimization: Skip source dist download when we must not build them anyway
-        if self.build_context.no_build() && dists.iter().any(|dist| matches!(dist, Dist::Source(_)))
-        {
-            return Err(DistributionDatabaseError::NoBuild);
-        }
-
-        // Fetch the distributions in parallel.
-        let mut downloads_and_builds = Vec::with_capacity(dists.len());
-        let mut fetches = futures::stream::iter(dists)
-            .map(|dist| self.get_or_build_wheel(dist))
-            .buffer_unordered(50);
-
-        while let Some(result) = fetches.next().await.transpose()? {
-            downloads_and_builds.push(result);
-        }
-
-        if let Some(reporter) = self.reporter.as_ref() {
-            reporter.on_download_and_build_complete();
-        }
-
-        Ok(downloads_and_builds)
-    }
-
     /// Either fetch the wheel or fetch and build the source distribution
-    async fn get_or_build_wheel(
+    pub async fn get_or_build_wheel(
         &self,
         dist: Dist,
     ) -> Result<LocalWheel, DistributionDatabaseError> {
@@ -210,10 +173,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     })
                 };
 
-                if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_download_progress(&Download::Wheel(local_wheel.clone()));
-                }
-
                 Ok(local_wheel)
             }
 
@@ -245,10 +204,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     target: cache_entry.with_file(wheel.filename.stem()).path(),
                     filename: wheel.filename.clone(),
                 });
-
-                if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_download_progress(&Download::Wheel(local_wheel.clone()));
-                }
 
                 Ok(local_wheel)
             }

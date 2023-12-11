@@ -6,7 +6,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
 use distribution_types::{CachedDist, Dist, Metadata, SourceDist, VersionOrUrl};
-use puffin_distribution::Download;
 use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
 
@@ -48,49 +47,14 @@ impl puffin_resolver::FinderReporter for FinderReporter {
 }
 
 #[derive(Debug)]
-pub(crate) struct UnzipReporter {
-    progress: ProgressBar,
-}
-
-impl From<Printer> for UnzipReporter {
-    fn from(printer: Printer) -> Self {
-        let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_style(
-            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
-        );
-        progress.set_message("Unzipping wheels...");
-        Self { progress }
-    }
-}
-
-impl UnzipReporter {
-    #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
-        self.progress.set_length(length);
-        self
-    }
-}
-
-impl puffin_installer::UnzipReporter for UnzipReporter {
-    fn on_unzip_progress(&self, wheel: &Dist) {
-        self.progress.set_message(format!("{wheel}"));
-        self.progress.inc(1);
-    }
-
-    fn on_unzip_complete(&self) {
-        self.progress.finish_and_clear();
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct FetcherReporter {
+pub(crate) struct DownloadReporter {
     printer: Printer,
     multi_progress: MultiProgress,
     progress: ProgressBar,
     bars: Arc<Mutex<Vec<ProgressBar>>>,
 }
 
-impl From<Printer> for FetcherReporter {
+impl From<Printer> for DownloadReporter {
     fn from(printer: Printer) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
 
@@ -109,7 +73,7 @@ impl From<Printer> for FetcherReporter {
     }
 }
 
-impl FetcherReporter {
+impl DownloadReporter {
     #[must_use]
     pub(crate) fn with_length(self, length: u64) -> Self {
         self.progress.set_length(length);
@@ -117,10 +81,14 @@ impl FetcherReporter {
     }
 }
 
-impl puffin_distribution::Reporter for FetcherReporter {
-    fn on_download_progress(&self, download: &Download) {
-        self.progress.set_message(format!("{download}"));
+impl puffin_installer::DownloadReporter for DownloadReporter {
+    fn on_progress(&self, wheel: &CachedDist) {
+        self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
+    }
+
+    fn on_complete(&self) {
+        self.progress.finish_and_clear();
     }
 
     fn on_build_start(&self, dist: &SourceDist) -> usize {
@@ -149,10 +117,6 @@ impl puffin_distribution::Reporter for FetcherReporter {
             "Built".bold().green(),
             dist.to_color_string()
         ));
-    }
-
-    fn on_download_and_build_complete(&self) {
-        self.progress.finish_and_clear();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -277,11 +241,6 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         }
     }
 
-    fn on_download_progress(&self, download: &Download) {
-        self.progress.set_message(format!("{download}"));
-        self.progress.inc(1);
-    }
-
     fn on_complete(&self) {
         self.progress.finish_and_clear();
     }
@@ -312,10 +271,6 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
             "Built".bold().green(),
             dist.to_color_string()
         ));
-    }
-
-    fn on_download_and_build_complete(&self) {
-        self.progress.finish_and_clear();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {

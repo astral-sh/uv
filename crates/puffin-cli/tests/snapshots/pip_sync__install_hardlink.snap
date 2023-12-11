@@ -8,9 +8,9 @@ info:
     - "--link-mode"
     - hardlink
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpAoHlVb
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp2ffev6
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpmzbaq2/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpE4BeOR/.venv
 ---
 success: true
 exit_code: 0
@@ -19,7 +19,6 @@ exit_code: 0
 ----- stderr -----
 Resolved 1 package in [TIME]
 Downloaded 1 package in [TIME]
-Unzipped 1 package in [TIME]
 Installed 1 package in [TIME]
  + markupsafe==2.1.3
 

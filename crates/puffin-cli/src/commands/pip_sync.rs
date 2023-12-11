@@ -14,13 +14,12 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_distribution::DistributionDatabase;
-use puffin_installer::{InstallPlan, Reinstall};
+use puffin_installer::{Downloader, InstallPlan, Reinstall};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
 
-use crate::commands::reporters::{FetcherReporter, FinderReporter, InstallReporter, UnzipReporter};
+use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
@@ -175,7 +174,7 @@ pub(crate) async fn sync_requirements(
         }
     }
 
-    // Download any missing distributions.
+    // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         vec![]
     } else {
@@ -190,12 +189,11 @@ pub(crate) async fn sync_requirements(
             index_urls.clone(),
         );
 
-        let distribution_database =
-            DistributionDatabase::new(cache, &tags, &client, &build_dispatch)
-                .with_reporter(FetcherReporter::from(printer).with_length(remote.len() as u64));
+        let downloader = Downloader::new(cache, &tags, &client, &build_dispatch)
+            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = distribution_database
-            .get_wheels(remote)
+        let wheels = downloader
+            .download(remote, &OnceMap::default())
             .await
             .context("Failed to download distributions")?;
 
@@ -212,35 +210,6 @@ pub(crate) async fn sync_requirements(
         )?;
 
         wheels
-    };
-
-    // Unzip any downloaded distributions.
-    let unzips = if wheels.is_empty() {
-        vec![]
-    } else {
-        let start = std::time::Instant::now();
-
-        let unzipper = puffin_installer::Unzipper::default()
-            .with_reporter(UnzipReporter::from(printer).with_length(wheels.len() as u64));
-
-        let unzips = unzipper
-            .unzip(wheels, &OnceMap::default())
-            .await
-            .context("Failed to unpack wheels")?;
-
-        let s = if unzips.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer,
-            "{}",
-            format!(
-                "Unzipped {} in {}",
-                format!("{} package{}", unzips.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        unzips
     };
 
     // Remove any unnecessary packages.
@@ -273,7 +242,7 @@ pub(crate) async fn sync_requirements(
     }
 
     // Install the resolved distributions.
-    let wheels = unzips.into_iter().chain(local).collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         puffin_installer::Installer::new(&venv)

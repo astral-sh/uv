@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp5ZOhrc
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpx6Z5Ib
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpTMqlR7/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp07DJfx/.venv
 ---
 success: true
 exit_code: 0
@@ -17,7 +17,6 @@ exit_code: 0
 ----- stderr -----
 Resolved 2 packages in [TIME]
 Downloaded 2 packages in [TIME]
-Unzipped 2 packages in [TIME]
 Installed 2 packages in [TIME]
  + markupsafe==2.1.3
  + tomli==2.0.1
