@@ -16,17 +16,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: LessThan,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            2,
-                                            2,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "2.2",
                                 },
                             ],
                         ),
@@ -50,18 +40,7 @@ RequirementsTxt {
                         [
                             VersionSpecifier {
                                 operator: Equal,
-                                version: Version {
-                                    epoch: 0,
-                                    release: [
-                                        2,
-                                        1,
-                                        15,
-                                    ],
-                                    pre: None,
-                                    post: None,
-                                    dev: None,
-                                    local: None,
-                                },
+                                version: "2.1.15",
                             },
                         ],
                     ),
@@ -80,17 +59,7 @@ RequirementsTxt {
                         [
                             VersionSpecifier {
                                 operator: Equal,
-                                version: Version {
-                                    epoch: 0,
-                                    release: [
-                                        2023,
-                                        3,
-                                    ],
-                                    pre: None,
-                                    post: None,
-                                    dev: None,
-                                    local: None,
-                                },
+                                version: "2023.3",
                             },
                         ],
                     ),

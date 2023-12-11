@@ -3,7 +3,7 @@ use std::str::FromStr;
 use once_cell::sync::Lazy;
 
 /// A PubGrub-compatible wrapper around a PEP 440 version.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PubGrubVersion(pep440_rs::Version);
 
 impl PubGrubVersion {
@@ -27,6 +27,12 @@ impl PubGrubVersion {
 }
 
 impl std::fmt::Display for PubGrubVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::fmt::Debug for PubGrubVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
