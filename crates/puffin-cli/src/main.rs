@@ -66,6 +66,8 @@ enum Commands {
     PipCompile(PipCompileArgs),
     /// Sync dependencies from a `requirements.txt` file.
     PipSync(PipSyncArgs),
+    /// Install packages into the current environment.
+    PipInstall(PipInstallArgs),
     /// Uninstall packages from the current environment.
     PipUninstall(PipUninstallArgs),
     /// Clear the cache.
@@ -145,8 +147,9 @@ struct PipCompileArgs {
 
     /// Don't build source distributions.
     ///
-    /// This means resolving will not run arbitrary code. The cached wheels of already built source
-    /// distributions will be reused.
+    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
     #[clap(long)]
     no_build: bool,
 
@@ -172,6 +175,7 @@ struct PipCompileArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct PipSyncArgs {
     /// Include all packages listed in the given `requirements.txt` files.
     #[clap(required(true))]
@@ -203,13 +207,98 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// Don't build source distributions. This means resolving will not run arbitrary code. The
-    /// cached wheels of already built source distributions will be reused.
+    /// Don't build source distributions.
+    ///
+    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
     #[clap(long)]
     no_build: bool,
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+#[command(group = clap::ArgGroup::new("sources").required(true))]
+struct PipInstallArgs {
+    /// Install all listed packages.
+    #[clap(group = "sources")]
+    package: Vec<String>,
+
+    /// Install all packages listed in the given requirements files.
+    #[clap(short, long, group = "sources")]
+    requirement: Vec<PathBuf>,
+
+    /// Constrain versions using the given constraints files.
+    #[clap(short, long)]
+    constraint: Vec<PathBuf>,
+
+    /// Include optional dependencies in the given extra group name; may be provided more than once.
+    #[clap(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    extra: Vec<ExtraName>,
+
+    /// Include all optional dependencies.
+    #[clap(long, conflicts_with = "extra")]
+    all_extras: bool,
+
+    /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
+    /// packages in the environment.
+    #[clap(long)]
+    reinstall: bool,
+
+    /// Reinstall a specific package, overwriting any entries in the cache and replacing any
+    /// existing versions in the environment.
+    #[clap(long)]
+    reinstall_package: Vec<PackageName>,
+
+    /// The method to use when installing packages from the global cache.
+    #[clap(long, value_enum)]
+    link_mode: Option<install_wheel_rs::linker::LinkMode>,
+
+    #[clap(long, value_enum)]
+    resolution: Option<ResolutionMode>,
+
+    #[clap(long, value_enum)]
+    prerelease: Option<PreReleaseMode>,
+
+    /// Write the compiled requirements to the given `requirements.txt` file.
+    #[clap(short, long)]
+    output_file: Option<PathBuf>,
+
+    /// The URL of the Python Package Index.
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
+    index_url: IndexUrl,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    #[clap(long)]
+    extra_index_url: Vec<IndexUrl>,
+
+    /// Ignore the package index, instead relying on local archives and caches.
+    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    no_index: bool,
+
+    /// Don't build source distributions.
+    ///
+    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
+    #[clap(long)]
+    no_build: bool,
+
+    /// Try to resolve at a past time.
+    ///
+    /// This works by filtering out files with a more recent upload time, so if the index you use
+    /// does not provide upload times, the results might be inaccurate. pypi provides upload times
+    /// for all files.
+    ///
+    /// Timestamps are given either as RFC 3339 timestamps such as `2006-12-02T02:07:43Z` or as
+    /// UTC dates in the same format such as `2006-12-02`. Dates are interpreted as including this
+    /// day, i.e. until midnight UTC that day.
+    #[arg(long, value_parser = date_or_datetime)]
+    exclude_newer: Option<DateTime<Utc>>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true))]
 struct PipUninstallArgs {
     /// Uninstall all listed packages.
@@ -222,12 +311,14 @@ struct PipUninstallArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct CleanArgs {
     /// The packages to remove from the cache.
     package: Vec<PackageName>,
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     // Short `-p` to match `virtualenv`
@@ -241,12 +332,14 @@ struct VenvArgs {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct AddArgs {
     /// The name of the package to add (e.g., `Django==4.2.6`).
     name: String,
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct RemoveArgs {
     /// The name of the package to remove (e.g., `Django`).
     name: PackageName,
@@ -285,7 +378,6 @@ async fn inner() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             let index_urls =
                 IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
-
             let extras = if args.all_extras {
                 ExtrasSpecification::All
             } else if args.extra.is_empty() {
@@ -293,7 +385,6 @@ async fn inner() -> Result<ExitStatus> {
             } else {
                 ExtrasSpecification::Some(&args.extra)
             };
-
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -326,6 +417,44 @@ async fn inner() -> Result<ExitStatus> {
                 args.link_mode.unwrap_or_default(),
                 index_urls,
                 args.no_build,
+                cache,
+                printer,
+            )
+            .await
+        }
+        Commands::PipInstall(args) => {
+            let requirements = args
+                .package
+                .into_iter()
+                .map(RequirementsSource::from)
+                .chain(args.requirement.into_iter().map(RequirementsSource::from))
+                .collect::<Vec<_>>();
+            let constraints = args
+                .constraint
+                .into_iter()
+                .map(RequirementsSource::from)
+                .collect::<Vec<_>>();
+            let index_urls =
+                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            let extras = if args.all_extras {
+                ExtrasSpecification::All
+            } else if args.extra.is_empty() {
+                ExtrasSpecification::None
+            } else {
+                ExtrasSpecification::Some(&args.extra)
+            };
+            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
+            commands::pip_install(
+                &requirements,
+                &constraints,
+                &extras,
+                args.resolution.unwrap_or_default(),
+                args.prerelease.unwrap_or_default(),
+                index_urls,
+                &reinstall,
+                args.link_mode.unwrap_or_default(),
+                args.no_build,
+                args.exclude_newer,
                 cache,
                 printer,
             )

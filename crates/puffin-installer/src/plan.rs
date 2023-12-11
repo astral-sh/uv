@@ -28,7 +28,11 @@ pub struct InstallPlan {
     /// not available in the local cache.
     pub remote: Vec<Requirement>,
 
-    /// The distributions that are already installed in the current environment, and are
+    /// Any distributions that are already installed in the current environment, but will be
+    /// re-installed (including upgraded) to satisfy the requirements.
+    pub reinstalls: Vec<InstalledDist>,
+
+    /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
     pub extraneous: Vec<InstalledDist>,
 }
@@ -54,6 +58,7 @@ impl InstallPlan {
 
         let mut local = vec![];
         let mut remote = vec![];
+        let mut reinstalls = vec![];
         let mut extraneous = vec![];
         let mut seen =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
@@ -81,36 +86,42 @@ impl InstallPlan {
                 // If necessary, purge the cached distributions.
                 debug!("Purging cached distributions for: {requirement}");
                 cache.purge(&requirement.name)?;
-            } else if let Some(distribution) = site_packages.remove(&requirement.name) {
-                // Filter out already-installed packages.
-                match requirement.version_or_url.as_ref() {
-                    // If the requirement comes from a registry, check by name.
-                    None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                        if requirement.is_satisfied_by(distribution.version()) {
-                            debug!("Requirement already satisfied: {distribution}");
-                            continue;
+                if let Some(distribution) = site_packages.remove(&requirement.name) {
+                    reinstalls.push(distribution);
+                }
+            } else {
+                if let Some(distribution) = site_packages.remove(&requirement.name) {
+                    // Filter out already-installed packages.
+                    match requirement.version_or_url.as_ref() {
+                        // If the requirement comes from a registry, check by name.
+                        None | Some(VersionOrUrl::VersionSpecifier(_)) => {
+                            if requirement.is_satisfied_by(distribution.version()) {
+                                debug!("Requirement already satisfied: {distribution}");
+                                continue;
+                            }
                         }
-                    }
 
-                    // If the requirement comes from a direct URL, check by URL.
-                    Some(VersionOrUrl::Url(url)) => {
-                        if let InstalledDist::Url(distribution) = &distribution {
-                            if let Ok(direct_url) = DirectUrl::try_from(url) {
-                                if let Ok(direct_url) = pypi_types::DirectUrl::try_from(&direct_url)
-                                {
-                                    // TODO(charlie): These don't need to be strictly equal. We only care
-                                    // about a subset of the fields.
-                                    if direct_url == distribution.url {
-                                        debug!("Requirement already satisfied: {distribution}");
-                                        continue;
+                        // If the requirement comes from a direct URL, check by URL.
+                        Some(VersionOrUrl::Url(url)) => {
+                            if let InstalledDist::Url(distribution) = &distribution {
+                                if let Ok(direct_url) = DirectUrl::try_from(url) {
+                                    if let Ok(direct_url) =
+                                        pypi_types::DirectUrl::try_from(&direct_url)
+                                    {
+                                        // TODO(charlie): These don't need to be strictly equal. We only care
+                                        // about a subset of the fields.
+                                        if direct_url == distribution.url {
+                                            debug!("Requirement already satisfied: {distribution}");
+                                            continue;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                extraneous.push(distribution);
+                    reinstalls.push(distribution);
+                }
             }
 
             // Identify any locally-available distributions that satisfy the requirement.
@@ -267,6 +278,7 @@ impl InstallPlan {
         Ok(InstallPlan {
             local,
             remote,
+            reinstalls,
             extraneous,
         })
     }

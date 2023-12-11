@@ -3,8 +3,10 @@ use std::time::Duration;
 
 pub(crate) use add::add;
 pub(crate) use clean::clean;
+use distribution_types::Metadata;
 pub(crate) use freeze::freeze;
 pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile};
+pub(crate) use pip_install::pip_install;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
 pub(crate) use remove::remove;
@@ -14,6 +16,7 @@ mod add;
 mod clean;
 mod freeze;
 mod pip_compile;
+mod pip_install;
 mod pip_sync;
 mod pip_uninstall;
 mod remove;
@@ -56,4 +59,18 @@ pub(super) fn elapsed(duration: Duration) -> String {
     } else {
         format!("{}ms", duration.subsec_millis())
     }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub(super) enum ChangeEventKind {
+    /// The package was removed from the environment.
+    Removed,
+    /// The package was added to the environment.
+    Added,
+}
+
+#[derive(Debug)]
+pub(super) struct ChangeEvent<T: Metadata> {
+    dist: T,
+    kind: ChangeEventKind,
 }
