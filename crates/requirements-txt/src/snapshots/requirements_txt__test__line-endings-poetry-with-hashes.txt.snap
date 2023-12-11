@@ -16,18 +16,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            2,
-                                            2,
-                                            3,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "2.2.3",
                                 },
                             ],
                         ),
@@ -79,18 +68,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            1,
-                                            26,
-                                            15,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "1.26.15",
                                 },
                             ],
                         ),
@@ -142,18 +120,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            1,
-                                            89,
-                                            0,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "1.89.0",
                                 },
                             ],
                         ),
@@ -216,18 +183,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            1,
-                                            3,
-                                            1,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "1.3.1",
                                 },
                             ],
                         ),
@@ -280,18 +236,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            2,
-                                            9,
-                                            5,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "2.9.5",
                                 },
                             ],
                         ),

@@ -28,18 +28,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            1,
-                                            24,
-                                            2,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "1.24.2",
                                 },
                             ],
                         ),

@@ -11,7 +11,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::{max, Ordering};
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::iter;
 use std::str::FromStr;
@@ -259,7 +259,7 @@ impl FromStr for LocalSegment {
 ///
 /// let version = Version::from_str("1.19").unwrap();
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Version {
     /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
     /// but you can increment it if you switched the versioning scheme.
@@ -530,6 +530,12 @@ impl Display for Version {
             })
             .unwrap_or_default();
         write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
+    }
+}
+
+impl Debug for Version {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{}\"", self)
     }
 }
 

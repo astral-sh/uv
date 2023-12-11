@@ -16,18 +16,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            0,
-                                            5,
-                                            1,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "0.5.1",
                                 },
                             ],
                         ),
@@ -50,17 +39,7 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: Equal,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            0,
-                                            4,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "0.4",
                                 },
                             ],
                         ),
@@ -101,29 +80,11 @@ RequirementsTxt {
                             [
                                 VersionSpecifier {
                                     operator: GreaterThanEqual,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            1,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "1",
                                 },
                                 VersionSpecifier {
                                     operator: LessThan,
-                                    version: Version {
-                                        epoch: 0,
-                                        release: [
-                                            2,
-                                        ],
-                                        pre: None,
-                                        post: None,
-                                        dev: None,
-                                        local: None,
-                                    },
+                                    version: "2",
                                 },
                             ],
                         ),
