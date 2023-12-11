@@ -7,6 +7,7 @@
 #   offlinepi-wait-ready <pid>
 
 projectroot=$(realpath "$(dirname "$0")")
+healthcheck="$projectroot/offlinepi-healthcheck"
 
 pid=$1
 shift
@@ -16,15 +17,15 @@ if [ -z "$pid" ]; then
     exit 1
 fi
 
-if [ ! -z "$*" ]; then
+if [ -n "$*" ]; then
     echo "Unexpected extra arguments: $*"
     exit 1
 fi
 
 
 # Wait until the server is ready
-until $($projectroot/offlinepi-healthcheck); do
-    if ! kill -0 $pid 2> /dev/null; then
+until $healthcheck; do
+    if ! kill -0 "$pid" 2> /dev/null; then
         exit 1
     fi
     sleep 1

@@ -16,12 +16,12 @@ if [ -z "$path" ]; then
     exit 1
 fi
 
-if [ ! -z "$*" ]; then
+if [ -n "$*" ]; then
     echo "Unexpected extra arguments: $*"
     exit 1
 fi
 
-exec mitmdump --server-replay $path \
+exec mitmdump --server-replay "$path" \
     --server-replay-extra 500 \
     --set connection_strategy=lazy
 

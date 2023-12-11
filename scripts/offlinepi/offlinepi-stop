@@ -14,11 +14,11 @@ if [ -z "$pid" ]; then
     exit 1
 fi
 
-if [ ! -z "$*" ]; then
+if [ -n "$*" ]; then
     echo "Unexpected extra arguments: $*"
     exit 1
 fi
 
-kill $pid 2> /dev/null
-wait $pid 2> /dev/null
+kill "$pid" 2> /dev/null
+wait "$pid" 2> /dev/null
 echo "Done!"

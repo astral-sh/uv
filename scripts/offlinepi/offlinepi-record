@@ -14,17 +14,17 @@ if [ -z "$path" ]; then
     exit 1
 fi
 
-if [ ! -z "$*" ]; then
+if [ -n "$*" ]; then
     echo "Unexpected extra arguments: $*"
     exit 1
 fi
 
 # Remove the file before starting
-rm $path 2> /dev/null
+rm "$path" 2> /dev/null
 
 # N.B. Additional options must be added _before_ the filter string
 exec mitmdump \
-    -w $path \
+    -w "$path" \
     --set stream_large_bodies=1000m \
     "~d pypi.org|files.pythonhosted.org|mitm.it"
 
