@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#
+# Start a proxy that replays server responses from a recording.
+# Unknown responses will result in a 500.
+# Each response can only be replayed once or it will be treated as unknown.
+#
+# Usage:
+#
+#   offlinepi-start-replay <path>
+
+path=$1
+shift
+
+if [ -z "$path" ]; then
+    echo 'A recording path must be provided.'
+    exit 1
+fi
+
+if [ ! -z "$*" ]; then
+    echo "Unexpected extra arguments: $*"
+    exit 1
+fi
+
+exec mitmdump --server-replay $path \
+    --server-replay-extra 500 \
+    --set connection_strategy=lazy
+
+# server-replay-extra: configures behavior when a response is unknown.
+# connection_stategy: lazy is required to replay offline

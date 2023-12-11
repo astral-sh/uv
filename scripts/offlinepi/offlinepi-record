@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Start a proxy that records client server interactions to a file.
+#
+# Usage:
+#
+#   offlinepi-record <path>
+
+path=$1
+shift
+
+if [ -z "$path" ]; then
+    echo 'A recording path must be provided.'
+    exit 1
+fi
+
+if [ ! -z "$*" ]; then
+    echo "Unexpected extra arguments: $*"
+    exit 1
+fi
+
+# Remove the file before starting
+rm $path 2> /dev/null
+
+# N.B. Additional options must be added _before_ the filter string
+exec mitmdump \
+    -w $path \
+    --set stream_large_bodies=1000m \
+    "~d pypi.org|files.pythonhosted.org|mitm.it"
+
+# stream_large_bodies: must be set to a large value or large responses will not be recorded
+#   resulting in an unexpected file endings during replays
+# ~d: only interactions with package index domains should be recorded
+#   we also allow `mitm.it` so healthchecks succeed when replaying

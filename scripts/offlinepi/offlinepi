@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# Run a command, recording or replaying interaction with the PyPI server.
+#
+# Usage:
+#
+#   offlinepi <record|replay> <command>
+#
+
+projectroot=$(realpath "$(dirname "$0")")
+responsefile=$projectroot/responses.dat
+
+mode=$1
+shift
+
+if [ -z "$mode" ]; then
+    echo 'A mode must be provided e.g. `offlinepi record ...`'
+    exit 1
+fi
+
+if [[ "${mode}" != @(record|replay) ]]; then
+    echo "Invalid mode \"$mode\"; expected either \"record\" or \"replay\"."
+    exit 1
+fi
+
+if $projectroot/offlinepi-healthcheck; then
+    echo "Proxy is already running at localhost:8080"
+    echo "Aborted!"
+    exit 1
+fi
+
+echo "Starting proxy server to $mode responses..."
+$projectroot/offlinepi-$mode $responsefile&
+PROXY_PID=$!
+
+if ! $projectroot/offlinepi-wait $PROXY_PID; then
+    echo "Server failed to start!"
+    echo "Aborted!"
+    $projectroot/offlinepi-stop $PROXY_PID
+    exit 1
+fi
+
+export HTTP_PROXY=http://localhost:8080
+export HTTPS_PROXY=https://localhost:8080
+
+echo "Running provided command..."
+"$@"
+
+echo "Stopping proxy server..."
+$projectroot/offlinepi-stop $PROXY_PID
