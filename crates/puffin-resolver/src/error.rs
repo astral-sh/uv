@@ -159,9 +159,9 @@ impl std::fmt::Display for NoSolutionError {
 }
 
 impl NoSolutionError {
-    pub fn update_available_versions<'a>(
+    pub(crate) fn update_available_versions(
         mut self,
-        package_versions: &'a WaitMap<PackageName, (IndexUrl, VersionMap)>,
+        package_versions: &WaitMap<PackageName, (IndexUrl, VersionMap)>,
     ) -> Self {
         for package in self.derivation_tree.packages() {
             if let PubGrubPackage::Package(name, ..) = package {

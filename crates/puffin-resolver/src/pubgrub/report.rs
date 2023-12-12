@@ -3,7 +3,6 @@ use pubgrub::range::Range;
 use pubgrub::report::{External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
-use puffin_normalize::PackageName;
 
 use super::{PubGrubPackage, PubGrubVersion};
 

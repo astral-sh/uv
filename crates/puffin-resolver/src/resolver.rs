@@ -31,7 +31,7 @@ use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::{NoSolutionError, ResolveError};
+use crate::error::ResolveError;
 use crate::file::DistFile;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
