@@ -1,8 +1,8 @@
-use rustc_hash::FxHashMap;
 use pubgrub::range::Range;
 use pubgrub::report::{External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
+use rustc_hash::FxHashMap;
 
 use super::{PubGrubPackage, PubGrubVersion};
 

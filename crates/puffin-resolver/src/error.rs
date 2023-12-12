@@ -1,9 +1,9 @@
 use std::fmt::Formatter;
 
-use rustc_hash::FxHashMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use pypi_types::IndexUrl;
+use rustc_hash::FxHashMap;
 use thiserror::Error;
 use url::Url;
 
