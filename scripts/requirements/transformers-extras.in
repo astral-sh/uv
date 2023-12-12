@@ -1,0 +1,1 @@
+transformers[accelerate,agents,audio,codecarbon,deepspeed,deepspeed-testing,dev,dev-tensorflow,dev-torch,flax,flax-speech,ftfy,integrations,ja,modelcreation,onnx,onnxruntime,optuna,quality,ray,retrieval,sagemaker,sentencepiece,sigopt,sklearn,speech,testing,tf,tf-cpu,tf-speech,timm,tokenizers,torch,torch-speech,torch-vision,torchhub,video,vision]
