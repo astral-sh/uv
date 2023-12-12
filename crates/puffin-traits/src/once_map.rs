@@ -1,9 +1,10 @@
 use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
+
 use std::hash::Hash;
+use std::sync::Mutex;
 
 use rustc_hash::FxHashSet;
-use tokio::sync::Mutex;
 use waitmap::{Ref, WaitMap};
 
 /// Run tasks only once and store the results in a parallel hash map.
@@ -19,38 +20,17 @@ pub struct OnceMap<K: Eq + Hash, V> {
 }
 
 impl<K: Eq + Hash, V> OnceMap<K, V> {
-    /// Return the result of an in-flight request or register a new in-flight request.
-    ///
-    /// You must call [`OnceMap::done`] or other tasks will hang.
-    pub async fn wait_or_register<'a>(&self, key: &'a K) -> Option<Ref<'_, K, V, RandomState>>
-    where
-        K: Clone + From<&'a K> + 'a,
-    {
-        let mut in_flight_lock = self.started.lock().await;
-        if in_flight_lock.contains(key) {
-            let reference = self
-                .wait_map
-                .wait(key)
-                .await
-                .expect("This operation is never cancelled");
-            Some(reference)
-        } else {
-            in_flight_lock.insert(key.clone());
-            None
-        }
-    }
-
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
     /// or other tasks will hang. If it returns `false`, this job is already in progress and you
     /// can [`OnceMap::wait`] for the result.
-    pub async fn register<Q>(&self, key: &Q) -> bool
+    pub fn register<Q>(&self, key: &Q) -> bool
     where
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq + ToOwned<Owned = K>,
     {
-        let mut lock = self.started.lock().await;
+        let mut lock = self.started.lock().unwrap();
         if lock.contains(key) {
             return false;
         }

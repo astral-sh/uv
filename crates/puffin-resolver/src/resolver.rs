@@ -110,11 +110,6 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
             self.client
                 .simple(package_name)
                 .map_ok(move |(index, metadata)| {
-                    // TODO(konstin): I think the client should return something in between
-                    // `SimpleJson` and `VersionMap`, with source dists and wheels grouped by
-                    // version, but python version and exclude newer not yet applied. This should
-                    // work well with caching, testing and PEP 503 html APIs.
-                    // (https://github.com/astral-sh/puffin/issues/412)
                     (
                         index,
                         VersionMap::from_metadata(
@@ -284,8 +279,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             state.unit_propagation(next)?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-            self.pre_visit(state.partial_solution.prioritized_packages(), request_sink)
-                .await?;
+            self.pre_visit(state.partial_solution.prioritized_packages(), request_sink)?;
 
             // Choose a package version.
             let Some(highest_priority_pkg) =
@@ -393,7 +387,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
-    async fn visit_package(
+    fn visit_package(
         package: &PubGrubPackage,
         priorities: &mut PubGrubPriorities,
         index: &Index,
@@ -403,14 +397,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
-                if index.packages.register(package_name).await {
+                if index.packages.register(package_name) {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
-                if index.redirects.register(url).await {
+                if index.redirects.register(url) {
                     let distribution = Dist::from_url(package_name.clone(), url.clone())?;
                     priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
@@ -422,7 +416,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
     /// metadata for all of the packages in parallel.
-    async fn pre_visit(
+    fn pre_visit(
         &self,
         packages: impl Iterator<Item = (&'a PubGrubPackage, &'a Range<PubGrubVersion>)>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
@@ -452,7 +446,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 .index
                 .distributions
                 .register(candidate.resolve().sha256())
-                .await
             {
                 let distribution = candidate.into_distribution(index.clone());
                 request_sink.unbounded_send(Request::Dist(distribution))?;
@@ -537,7 +530,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .index
                     .distributions
                     .register(candidate.resolve().sha256())
-                    .await
                 {
                     let distribution = candidate.into_distribution(index.clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
@@ -580,7 +572,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(package, priorities, index, request_sink).await?;
+                    Self::visit_package(package, priorities, index, request_sink)?;
                 }
 
                 Ok(Dependencies::Known(constraints.into()))
@@ -607,7 +599,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(package, priorities, index, request_sink).await?;
+                    Self::visit_package(package, priorities, index, request_sink)?;
                 }
 
                 if let Some(extra) = extra {
