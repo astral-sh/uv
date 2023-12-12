@@ -18,14 +18,12 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{
-    Graph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
+    Graph, Manifest, PreReleaseMode, Resolution, ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::OnceMap;
 use pypi_types::IndexUrls;
 
-use crate::commands::reporters::{
-    DownloadReporter, FinderReporter, InstallReporter, ResolverReporter,
-};
+use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
@@ -84,7 +82,7 @@ pub(crate) async fn pip_install(
 
     // Sync the environment.
     install(
-        &resolution.requirements(),
+        &resolution.into(),
         reinstall,
         link_mode,
         index_urls,
@@ -241,7 +239,7 @@ async fn resolve(
 /// Install a set of requirements into the current environment.
 #[allow(clippy::too_many_arguments)]
 async fn install(
-    requirements: &[Requirement],
+    resolution: &Resolution,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
@@ -264,7 +262,7 @@ async fn install(
         reinstalls,
         extraneous: _,
     } = InstallPlan::from_requirements(
-        requirements,
+        &resolution.requirements(),
         reinstall,
         &index_urls,
         cache,
@@ -276,13 +274,13 @@ async fn install(
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
-        let s = if requirements.len() == 1 { "" } else { "s" };
+        let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Audited {} in {}",
-                format!("{} package{}", requirements.len(), s).bold(),
+                format!("{} package{}", resolution.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
@@ -297,34 +295,15 @@ async fn install(
         .build();
 
     // Resolve any registry-based requirements.
-    // TODO(charlie): We should be able to reuse the resolution from the `resolve` step. All the
-    // responses will be cached, so this isn't _terrible_, but it is wasteful. (Note that the
-    // distributions chosen when resolving won't necessarily be the same as those chosen by the
-    // `DistFinder`, since we allow the use of incompatible wheels when resolving, as long as a
-    // source distribution is present.)
-    let remote = if remote.is_empty() {
-        Vec::new()
-    } else {
-        let start = std::time::Instant::now();
-
-        let wheel_finder = puffin_resolver::DistFinder::new(&tags, &client, venv.interpreter())
-            .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
-        let resolution = wheel_finder.resolve(&remote).await?;
-
-        let s = if resolution.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer,
-            "{}",
-            format!(
-                "Resolved {} in {}",
-                format!("{} package{}", resolution.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        resolution.into_distributions().collect::<Vec<_>>()
-    };
+    let remote = remote
+        .iter()
+        .map(|dist| {
+            resolution
+                .get(&dist.name)
+                .cloned()
+                .expect("Resolution should contain all packages")
+        })
+        .collect::<Vec<_>>();
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {

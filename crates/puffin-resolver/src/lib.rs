@@ -3,7 +3,7 @@ pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use prerelease_mode::PreReleaseMode;
 pub use pubgrub::PubGrubReportFormatter;
-pub use resolution::Graph;
+pub use resolution::{Graph, Resolution};
 pub use resolution_mode::ResolutionMode;
 pub use resolution_options::ResolutionOptions;
 pub use resolver::{
@@ -15,6 +15,7 @@ mod error;
 mod file;
 mod finder;
 mod manifest;
+mod pins;
 mod prerelease_mode;
 mod pubgrub;
 mod resolution;

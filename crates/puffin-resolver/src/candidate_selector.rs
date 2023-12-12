@@ -1,14 +1,16 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
+use distribution_types::Dist;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
+use pypi_types::IndexUrl;
 
 use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::VersionMap;
+use crate::version_map::{ResolvableFile, VersionMap};
 use crate::{Manifest, ResolutionOptions};
 
 #[derive(Debug)]
@@ -76,22 +78,18 @@ enum AllowPreRelease {
 
 impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
-    pub(crate) fn select(
-        &self,
-        package_name: &PackageName,
+    pub(crate) fn select<'a>(
+        &'a self,
+        package_name: &'a PackageName,
         range: &Range<PubGrubVersion>,
-        version_map: &VersionMap,
-    ) -> Option<Candidate> {
+        version_map: &'a VersionMap,
+    ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
         if let Some(version) = self.preferences.get(package_name) {
             if range.contains(version) {
                 if let Some(file) = version_map.get(version) {
-                    return Some(Candidate {
-                        package_name: package_name.clone(),
-                        version: version.clone(),
-                        file: file.clone(),
-                    });
+                    return Some(Candidate::new(package_name, version, file));
                 }
             }
         }
@@ -150,15 +148,15 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over sdists.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a PubGrubVersion, &'a DistFile)>,
-        package_name: &PackageName,
+        versions: impl Iterator<Item = (&'a PubGrubVersion, ResolvableFile<'a>)>,
+        package_name: &'a PackageName,
         range: &Range<PubGrubVersion>,
         allow_prerelease: AllowPreRelease,
-    ) -> Option<Candidate> {
+    ) -> Option<Candidate<'a>> {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a PubGrubVersion, &'a DistFile),
+            IfNecessary(&'a PubGrubVersion, ResolvableFile<'a>),
         }
 
         let mut prerelease = None;
@@ -169,11 +167,7 @@ impl CandidateSelector {
                         AllowPreRelease::Yes => {
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            return Some(Candidate {
-                                package_name: package_name.clone(),
-                                version: version.clone(),
-                                file: file.clone(),
-                            });
+                            return Some(Candidate::new(package_name, version, file));
                         }
                         AllowPreRelease::IfNecessary => {
                             // If pre-releases are allowed as a fallback, store the
@@ -195,32 +189,66 @@ impl CandidateSelector {
 
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
-                    return Some(Candidate {
-                        package_name: package_name.clone(),
-                        version: version.clone(),
-                        file: file.clone(),
-                    });
+                    return Some(Candidate::new(package_name, version, file));
                 }
             }
         }
         match prerelease {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, file)) => Some(Candidate {
-                package_name: package_name.clone(),
-                version: version.clone(),
-                file: file.clone(),
-            }),
+            Some(PreReleaseCandidate::IfNecessary(version, file)) => {
+                Some(Candidate::new(package_name, version, file))
+            }
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Candidate {
+pub(crate) struct Candidate<'a> {
     /// The name of the package.
-    pub(crate) package_name: PackageName,
+    name: &'a PackageName,
     /// The version of the package.
-    pub(crate) version: PubGrubVersion,
-    /// The file of the package.
-    pub(crate) file: DistFile,
+    version: &'a PubGrubVersion,
+    /// The file to use for resolving and installing the package.
+    file: ResolvableFile<'a>,
+}
+
+impl<'a> Candidate<'a> {
+    fn new(name: &'a PackageName, version: &'a PubGrubVersion, file: ResolvableFile<'a>) -> Self {
+        Self {
+            name,
+            version,
+            file,
+        }
+    }
+
+    /// Return the name of the package.
+    pub(crate) fn name(&self) -> &PackageName {
+        self.name
+    }
+
+    /// Return the version of the package.
+    pub(crate) fn version(&self) -> &PubGrubVersion {
+        self.version
+    }
+
+    /// Return the [`DistFile`] to use when resolving the package.
+    pub(crate) fn resolve(&self) -> &DistFile {
+        self.file.resolve()
+    }
+
+    /// Return the [`DistFile`] to use when installing the package.
+    pub(crate) fn install(&self) -> &DistFile {
+        self.file.install()
+    }
+
+    /// Return the [`Dist`] to use when resolving the candidate.
+    pub(crate) fn into_distribution(self, index: IndexUrl) -> Dist {
+        Dist::from_registry(
+            self.name().clone(),
+            self.version().clone().into(),
+            self.resolve().clone().into(),
+            index,
+        )
+    }
 }

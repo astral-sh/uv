@@ -7,6 +7,7 @@ use tracing::warn;
 use distribution_filename::DistFilename;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::{TagPriority, Tags};
+use puffin_client::SimpleMetadata;
 use puffin_interpreter::Interpreter;
 use puffin_macros::warn_once;
 use puffin_normalize::PackageName;
@@ -15,7 +16,6 @@ use pypi_types::Yanked;
 use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::pubgrub::PubGrubVersion;
 use crate::yanks::AllowedYanks;
-use puffin_client::SimpleMetadata;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default)]
@@ -117,12 +117,14 @@ impl VersionMap {
     }
 
     /// Return the [`DistFile`] for the given version, if any.
-    pub(crate) fn get(&self, version: &PubGrubVersion) -> Option<&DistFile> {
-        self.0.get(version).and_then(|file| file.get())
+    pub(crate) fn get(&self, version: &PubGrubVersion) -> Option<ResolvableFile> {
+        self.0.get(version).and_then(PrioritizedDistribution::get)
     }
 
     /// Return an iterator over the versions and distributions.
-    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&PubGrubVersion, &DistFile)> {
+    pub(crate) fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&PubGrubVersion, ResolvableFile)> {
         self.0
             .iter()
             .filter_map(|(version, file)| Some((version, file.get()?)))
@@ -190,22 +192,53 @@ impl PrioritizedDistribution {
     }
 
     /// Return the highest-priority distribution for the package version, if any.
-    fn get(&self) -> Option<&DistFile> {
+    fn get(&self) -> Option<ResolvableFile> {
         match (
             &self.compatible_wheel,
             &self.source,
             &self.incompatible_wheel,
         ) {
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((file, _)), _, _) => Some(file),
+            (Some((wheel, _)), _, _) => Some(ResolvableFile::CompatibleWheel(wheel)),
             // If we have a source distribution and an incompatible wheel, return the wheel.
             // We assume that all distributions have the same metadata for a given package version.
             // If a source distribution exists, we assume we can build it, but using the wheel is
             // faster.
-            (_, Some(_), Some(file)) => Some(file),
+            (_, Some(sdist), Some(wheel)) => Some(ResolvableFile::IncompatibleWheel(sdist, wheel)),
             // Otherwise, return the source distribution.
-            (_, Some(file), _) => Some(file),
+            (_, Some(sdist), _) => Some(ResolvableFile::SourceDist(sdist)),
             _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ResolvableFile<'a> {
+    /// The distribution should be resolved and installed using a source distribution.
+    SourceDist(&'a DistFile),
+    /// The distribution should be resolved and installed using a wheel distribution.
+    CompatibleWheel(&'a DistFile),
+    /// The distribution should be resolved using an incompatible wheel distribution, but
+    /// installed using a source distribution.
+    IncompatibleWheel(&'a DistFile, &'a DistFile),
+}
+
+impl<'a> ResolvableFile<'a> {
+    /// Return the [`DistFile`] to use during resolution.
+    pub(crate) fn resolve(&self) -> &DistFile {
+        match self {
+            ResolvableFile::SourceDist(sdist) => sdist,
+            ResolvableFile::CompatibleWheel(wheel) => wheel,
+            ResolvableFile::IncompatibleWheel(_, wheel) => wheel,
+        }
+    }
+
+    /// Return the [`DistFile`] to use during installation.
+    pub(crate) fn install(&self) -> &DistFile {
+        match self {
+            ResolvableFile::SourceDist(sdist) => sdist,
+            ResolvableFile::CompatibleWheel(wheel) => wheel,
+            ResolvableFile::IncompatibleWheel(sdist, _) => sdist,
         }
     }
 }

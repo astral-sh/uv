@@ -78,7 +78,6 @@ fn install_package() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
          + blinker==1.7.0
@@ -125,7 +124,6 @@ fn install_requirements_txt() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 7 packages in [TIME]
         Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
@@ -204,7 +202,6 @@ fn respect_installed() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
          + blinker==1.7.0
@@ -273,7 +270,6 @@ fn respect_installed() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          - flask==2.3.2
@@ -307,7 +303,6 @@ fn respect_installed() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          - flask==2.3.3
@@ -349,7 +344,6 @@ fn allow_incompatibilities() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
          + blinker==1.7.0
@@ -388,7 +382,6 @@ fn allow_incompatibilities() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          - jinja2==3.1.2
