@@ -1,4 +1,4 @@
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 use pubgrub::range::Range;
 use pubgrub::report::{External, ReportFormatter};
 use pubgrub::term::Term;

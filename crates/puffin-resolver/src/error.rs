@@ -1,6 +1,6 @@
 use std::fmt::Formatter;
 
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use pypi_types::IndexUrl;
@@ -11,7 +11,7 @@ use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
-use waitmap::WaitMap;
+use puffin_traits::OnceMap;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 use crate::version_map::VersionMap;
@@ -166,7 +166,7 @@ impl NoSolutionError {
     /// Only packages used in the error's deriviation tree will be retrieved.
     pub(crate) fn update_available_versions(
         mut self,
-        package_versions: &WaitMap<PackageName, (IndexUrl, VersionMap)>,
+        package_versions: &OnceMap<PackageName, (IndexUrl, VersionMap)>,
     ) -> Self {
         for package in self.derivation_tree.packages() {
             if let PubGrubPackage::Package(name, ..) = package {

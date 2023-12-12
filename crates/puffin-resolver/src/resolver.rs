@@ -12,8 +12,6 @@ use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
-use pubgrub::version;
-use reqwest::header::Entry;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::select;
 use tracing::{debug, trace};
@@ -32,7 +30,6 @@ use pypi_types::{IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
-use crate::file::DistFile;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::pubgrub::{
