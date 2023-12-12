@@ -1,7 +1,7 @@
 //! Avoid cyclic crate dependencies between resolver, installer and builder.
 
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use anyhow::Result;
@@ -22,7 +22,7 @@ mod once_map;
 /// them and then build. The installer, the resolver and the source distribution builder are each in
 /// their own crate. To avoid circular crate dependencies, this type dispatches between the three
 /// crates with its three main methods ([`BuildContext::resolve`], [`BuildContext::install`] and
-/// [`BuildContext::build_source`]).
+/// [`BuildContext::setup_build`]).
 ///
 /// The overall main crate structure looks like this:
 ///
@@ -53,6 +53,8 @@ mod once_map;
 
 // TODO(konstin): Proper error types
 pub trait BuildContext {
+    type SourceDistBuilder: SourceBuildTrait + Send + Sync;
+
     fn cache(&self) -> &Cache;
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
@@ -62,7 +64,7 @@ pub trait BuildContext {
     /// The system (or conda) python interpreter to create venvs.
     fn base_python(&self) -> &Path;
 
-    /// Whether source distribution building is disabled. This [`BuildContext::build_source`] calls
+    /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
     /// we can't build them
     fn no_build(&self) -> bool {
@@ -83,16 +85,42 @@ pub trait BuildContext {
         venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
-    /// Build a source distribution into a wheel from an archive.
+    /// Setup a source distribution build by installing the required dependencies. A wrapper for
+    /// `puffin_build::SourceBuild::setup`.
     ///
-    /// Returns the filename of the built wheel inside the given `wheel_dir`.
+    /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
     ///
     /// `package_id` is for error reporting only.
-    fn build_source<'a>(
+    fn setup_build<'a>(
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
-        wheel_dir: &'a Path,
         package_id: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a>>;
+}
+
+/// A wrapper for `puffin_build::SourceBuild` to avoid cyclical crate dependencies.
+///
+/// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
+/// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
+pub trait SourceBuildTrait {
+    /// A wrapper for `puffin_build::SourceBuild::get_metadata_without_build`.
+    ///
+    /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`
+    ///
+    /// Returns the metadata directory if we're having a PEP 517 build and the
+    /// `prepare_metadata_for_build_wheel` hook exists
+    fn metadata<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<PathBuf>>> + Send + 'a>>;
+
+    /// A wrapper for `puffin_build::SourceBuild::build`.
+    ///
+    /// For PEP 517 builds, this calls `build_wheel`.
+    ///
+    /// Returns the filename of the built wheel inside the given `wheel_dir`.
+    fn wheel<'a>(
+        &'a self,
+        wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>;
 }

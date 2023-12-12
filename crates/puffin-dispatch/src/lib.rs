@@ -66,6 +66,8 @@ impl BuildDispatch {
 }
 
 impl BuildContext for BuildDispatch {
+    type SourceDistBuilder = SourceBuild;
+
     fn cache(&self) -> &Cache {
         &self.cache
     }
@@ -213,13 +215,12 @@ impl BuildContext for BuildDispatch {
     }
 
     #[instrument(skip_all, fields(source_dist = source_dist, subdirectory = ?subdirectory))]
-    fn build_source<'a>(
+    fn setup_build<'a>(
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
-        wheel_dir: &'a Path,
         source_dist: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<SourceBuild>> + Send + 'a>> {
         Box::pin(async move {
             if self.no_build {
                 bail!("Building source distributions is disabled");
@@ -234,7 +235,7 @@ impl BuildContext for BuildDispatch {
                 BuildKind::Wheel,
             )
             .await?;
-            Ok(builder.build(wheel_dir).await?)
+            Ok(builder)
         })
     }
 }

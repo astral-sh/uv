@@ -4,9 +4,11 @@
 
 use std::env;
 use std::fmt::{Display, Formatter};
+use std::future::Future;
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -30,7 +32,7 @@ use zip::ZipArchive;
 
 use pep508_rs::Requirement;
 use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -370,14 +372,19 @@ impl SourceBuild {
     }
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
-    /// actual build
+    /// actual build.
     ///
     /// TODO(konstin): Return the actual metadata instead of the dist-info dir
-    pub async fn get_metadata_without_build(&mut self) -> Result<Option<&Path>, Error> {
+    pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
         // setup.py builds don't support this.
         let Some(pep517_backend) = &self.pep517_backend else {
             return Ok(None);
         };
+
+        // We've already called this method, but return the existing result is easier than erroring
+        if let Some(metadata_dir) = &self.metadata_directory {
+            return Ok(Some(metadata_dir.clone()));
+        }
 
         let metadata_directory = self.temp_dir.path().join("metadata_directory");
         fs::create_dir(&metadata_directory)?;
@@ -430,7 +437,7 @@ impl SourceBuild {
             return Ok(None);
         }
         self.metadata_directory = Some(metadata_directory.join(message));
-        return Ok(self.metadata_directory.as_deref());
+        Ok(self.metadata_directory.clone())
     }
 
     /// Build a source distribution from an archive (`.zip` or `.tar.gz`), return the location of the
@@ -546,6 +553,21 @@ impl SourceBuild {
             ));
         };
         Ok(distribution_filename.to_string())
+    }
+}
+
+impl SourceBuildTrait for SourceBuild {
+    fn metadata<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<PathBuf>>> + Send + 'a>> {
+        Box::pin(async { Ok(self.get_metadata_without_build().await?) })
+    }
+
+    fn wheel<'a>(
+        &'a self,
+        wheel_dir: &'a Path,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+        Box::pin(async { Ok(self.build(wheel_dir).await?) })
     }
 }
 
