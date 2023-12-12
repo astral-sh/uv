@@ -24,7 +24,7 @@ use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
-use puffin_normalize::{ExtraName, PackageName};
+use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{IndexUrl, Metadata21};
 
@@ -711,15 +711,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         if let Some(reporter) = self.reporter.as_ref() {
             match package {
                 PubGrubPackage::Root(_) => {}
-                PubGrubPackage::Package(package_name, extra, Some(url)) => {
-                    reporter.on_progress(package_name, extra.as_ref(), VersionOrUrl::Url(url));
+                PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                    reporter.on_progress(package_name, VersionOrUrl::Url(url));
                 }
-                PubGrubPackage::Package(package_name, extra, None) => {
-                    reporter.on_progress(
-                        package_name,
-                        extra.as_ref(),
-                        VersionOrUrl::Version(version.into()),
-                    );
+                PubGrubPackage::Package(package_name, _extra, None) => {
+                    reporter.on_progress(package_name, VersionOrUrl::Version(version.into()));
                 }
             }
         }
@@ -736,7 +732,7 @@ pub type BuildId = usize;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_progress(&self, name: &PackageName, extra: Option<&ExtraName>, version: VersionOrUrl);
+    fn on_progress(&self, name: &PackageName, version: VersionOrUrl);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

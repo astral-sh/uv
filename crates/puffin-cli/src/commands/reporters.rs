@@ -6,7 +6,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
 use distribution_types::{CachedDist, Dist, Metadata, SourceDist, VersionOrUrl};
-use puffin_normalize::ExtraName;
 use puffin_normalize::PackageName;
 
 use crate::printer::Printer;
@@ -217,26 +216,13 @@ impl From<Printer> for ResolverReporter {
 }
 
 impl puffin_resolver::ResolverReporter for ResolverReporter {
-    fn on_progress(
-        &self,
-        name: &PackageName,
-        extra: Option<&ExtraName>,
-        version_or_url: VersionOrUrl,
-    ) {
-        match (extra, version_or_url) {
-            (None, VersionOrUrl::Version(version)) => {
+    fn on_progress(&self, name: &PackageName, version_or_url: VersionOrUrl) {
+        match version_or_url {
+            VersionOrUrl::Version(version) => {
                 self.progress.set_message(format!("{name}=={version}"));
             }
-            (None, VersionOrUrl::Url(url)) => {
+            VersionOrUrl::Url(url) => {
                 self.progress.set_message(format!("{name} @ {url}"));
-            }
-            (Some(extra), VersionOrUrl::Version(version)) => {
-                self.progress
-                    .set_message(format!("{name}[{extra}]=={version}"));
-            }
-            (Some(extra), VersionOrUrl::Url(url)) => {
-                self.progress
-                    .set_message(format!("{name}[{extra}] @ {url}"));
             }
         }
     }
