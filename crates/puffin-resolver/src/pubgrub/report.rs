@@ -33,6 +33,25 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     format!("dependencies of {package} at version {set} are unavailable")
                 }
             }
+            External::UnusableVersions(package, set, reason) => {
+                if let Some(reason) = reason {
+                    if matches!(package, PubGrubPackage::Root(_)) {
+                        format!("{package} is unusable: {reason}")
+                    } else {
+                        if set == &Range::full() {
+                            format!("all versions of {package} are unusable: {reason}")
+                        } else {
+                            format!("{package}{set} is unusable: {reason}",)
+                        }
+                    }
+                } else {
+                    if set == &Range::full() {
+                        format!("all versions of {package} are unusable")
+                    } else {
+                        format!("{package}{set} is unusable")
+                    }
+                }
+            }
             External::UnusableDependencies(package, set, reason) => {
                 if let Some(reason) = reason {
                     if matches!(package, PubGrubPackage::Root(_)) {
