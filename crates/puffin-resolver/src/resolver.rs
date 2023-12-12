@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use futures::{FutureExt, pin_mut, StreamExt, TryFutureExt};
 use futures::channel::mpsc::UnboundedReceiver;
+use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
@@ -26,18 +26,19 @@ use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::{BuildContext, OnceMap};
-use pypi_types::{File, IndexUrl, Metadata21};
+use pypi_types::{IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
+use crate::pins::FilePins;
 use crate::pubgrub::{
-    MIN_VERSION, PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion,
+    PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
 };
 use crate::resolution::Graph;
-use crate::ResolutionOptions;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
+use crate::ResolutionOptions;
 
 type VersionMapResponse = Result<(IndexUrl, VersionMap), puffin_client::Error>;
 type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
@@ -269,7 +270,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         // Keep track of the packages for which we've requested metadata.
         let index = Index::default();
-        let mut pins = FxHashMap::default();
+        let mut pins = FilePins::default();
         let mut priorities = PubGrubPriorities::default();
 
         // Start the solve.
@@ -341,13 +342,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Retrieve that package dependencies.
                 let package = &next;
                 let dependencies = match self
-                    .get_dependencies(
-                        package,
-                        &version,
-                        &mut priorities,
-                        &index,
-                        request_sink,
-                    )
+                    .get_dependencies(package, &version, &mut priorities, &index, request_sink)
                     .await?
                 {
                     Dependencies::Unknown => {
@@ -456,15 +451,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             if self
                 .index
                 .distributions
-                .register(candidate.resolve_file().sha256())
+                .register(candidate.resolve().sha256())
                 .await
             {
-                let distribution = Dist::from_registry(
-                    candidate.package_name.clone(),
-                    candidate.version.clone().into(),
-                    candidate.resolve_file().clone().into(),
-                    index.clone(),
-                );
+                let distribution = candidate.into_distribution(index.clone());
                 request_sink.unbounded_send(Request::Dist(distribution))?;
             }
         }
@@ -477,7 +467,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         &self,
         package: &PubGrubPackage,
         range: &Range<PubGrubVersion>,
-        pins: &mut FxHashMap<PackageName, FxHashMap<pep440_rs::Version, (IndexUrl, File)>>,
+        pins: &mut FilePins,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Option<PubGrubVersion>, ResolveError> {
         return match package {
@@ -531,35 +521,25 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 debug!(
                     "Selecting: {}=={} ({})",
-                    candidate.package_name,
-                    candidate.version,
-                    candidate.resolve_file().filename()
+                    candidate.name(),
+                    candidate.version(),
+                    candidate.resolve().filename()
                 );
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
-                pins.entry(candidate.package_name.clone())
-                    .or_default()
-                    .insert(
-                        candidate.version.clone().into(),
-                        (index.clone(), candidate.install_file().clone().into()),
-                    );
+                pins.insert(&candidate, index);
 
-                let version = candidate.version.clone();
+                let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
                 if self
                     .index
                     .distributions
-                    .register(candidate.resolve_file().sha256())
+                    .register(candidate.resolve().sha256())
                     .await
                 {
-                    let distribution = Dist::from_registry(
-                        candidate.package_name.clone(),
-                        candidate.version.clone().into(),
-                        candidate.resolve_file().clone().into(),
-                        index.clone(),
-                    );
+                    let distribution = candidate.into_distribution(index.clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
 
@@ -608,15 +588,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
-                let entry = match url {
-                    Some(url) => {
-                        let dist = PubGrubDistribution::from_url(package_name, url);
-                        self.index.distributions.wait(&dist.package_id()).await },
-                    None => {
-                        let dist = PubGrubDistribution::from_registry(package_name, version);
-                        self.index.distributions.wait(&dist.package_id()).await
-                    }
+                let dist = match url {
+                    Some(url) => PubGrubDistribution::from_url(package_name, url),
+                    None => PubGrubDistribution::from_registry(package_name, version),
                 };
+                let entry = self.index.distributions.wait(&dist.package_id()).await;
                 let metadata = entry.value();
 
                 let mut constraints = PubGrubDependencies::try_from_requirements(
@@ -888,7 +864,7 @@ impl Metadata for PubGrubDistribution<'_> {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
             Self::Registry(_, version) => VersionOrUrl::Version((*version).into()),
-            Self::Url(_, url) => VersionOrUrl::Url(*url),
+            Self::Url(_, url) => VersionOrUrl::Url(url),
         }
     }
 }

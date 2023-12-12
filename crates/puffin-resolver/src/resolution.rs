@@ -16,8 +16,8 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
-use pypi_types::{File, IndexUrl};
 
+use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
 use crate::ResolveError;
 
@@ -68,9 +68,9 @@ pub struct Graph(pub petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgrap
 
 impl Graph {
     /// Create a new graph from the resolved `PubGrub` state.
-    pub fn from_state(
+    pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
-        pins: &FxHashMap<PackageName, FxHashMap<Version, (IndexUrl, File)>>,
+        pins: &FilePins,
         redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Result<Self, ResolveError> {
@@ -86,9 +86,8 @@ impl Graph {
                 PubGrubPackage::Package(package_name, None, None) => {
                     let version = Version::from(version.clone());
                     let (index, file) = pins
-                        .get(package_name)
-                        .and_then(|versions| versions.get(&version))
-                        .unwrap()
+                        .get(package_name, &version)
+                        .expect("Every package should be pinned")
                         .clone();
                     let pinned_package =
                         Dist::from_registry(package_name.clone(), version, file, index);

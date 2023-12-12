@@ -118,7 +118,7 @@ impl VersionMap {
 
     /// Return the [`DistFile`] for the given version, if any.
     pub(crate) fn get(&self, version: &PubGrubVersion) -> Option<ResolvableFile> {
-        self.0.get(version).and_then(|file| file.get())
+        self.0.get(version).and_then(PrioritizedDistribution::get)
     }
 
     /// Return an iterator over the versions and distributions.

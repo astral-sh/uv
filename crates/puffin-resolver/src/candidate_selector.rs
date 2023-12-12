@@ -1,8 +1,10 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
+use distribution_types::Dist;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
+use pypi_types::IndexUrl;
 
 use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
@@ -204,33 +206,49 @@ impl CandidateSelector {
 #[derive(Debug, Clone)]
 pub(crate) struct Candidate<'a> {
     /// The name of the package.
-    pub(crate) package_name: &'a PackageName,
+    name: &'a PackageName,
     /// The version of the package.
-    pub(crate) version: &'a PubGrubVersion,
+    version: &'a PubGrubVersion,
     /// The file to use for resolving and installing the package.
-    pub(crate) file: ResolvableFile<'a>,
+    file: ResolvableFile<'a>,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(
-        package_name: &'a PackageName,
-        version: &'a PubGrubVersion,
-        file: ResolvableFile<'a>,
-    ) -> Self {
+    fn new(name: &'a PackageName, version: &'a PubGrubVersion, file: ResolvableFile<'a>) -> Self {
         Self {
-            package_name,
+            name,
             version,
             file,
         }
     }
 
+    /// Return the name of the package.
+    pub(crate) fn name(&self) -> &PackageName {
+        self.name
+    }
+
+    /// Return the version of the package.
+    pub(crate) fn version(&self) -> &PubGrubVersion {
+        self.version
+    }
+
     /// Return the [`DistFile`] to use when resolving the package.
-    pub(crate) fn resolve_file(&self) -> &DistFile {
+    pub(crate) fn resolve(&self) -> &DistFile {
         self.file.resolve()
     }
 
     /// Return the [`DistFile`] to use when installing the package.
-    pub(crate) fn install_file(&self) -> &DistFile {
+    pub(crate) fn install(&self) -> &DistFile {
         self.file.install()
+    }
+
+    /// Return the [`Dist`] to use when resolving the candidate.
+    pub(crate) fn into_distribution(self, index: IndexUrl) -> Dist {
+        Dist::from_registry(
+            self.name().clone(),
+            self.version().clone().into(),
+            self.resolve().clone().into(),
+            index,
+        )
     }
 }
