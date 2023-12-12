@@ -31,7 +31,7 @@ use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::write_atomic;
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, SourceBuildTrait};
 use pypi_types::Metadata21;
 
 use crate::locks::LockedFile;
@@ -643,12 +643,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         fs::create_dir_all(&cache_entry.dir).await?;
         let disk_filename = self
             .build_context
-            .build_source(
-                source_dist,
-                subdirectory,
-                &cache_entry.dir,
-                &dist.to_string(),
-            )
+            .setup_build(source_dist, subdirectory, &dist.to_string())
+            .await
+            .map_err(|err| SourceDistError::Build(Box::new(dist.clone()), err))?
+            .wheel(&cache_entry.dir)
             .await
             .map_err(|err| SourceDistError::Build(Box::new(dist.clone()), err))?;
 

@@ -62,6 +62,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         false,
         IndexUrls::default(),
     );
+
     let builder = SourceBuild::setup(
         &args.sdist,
         args.subdirectory.as_deref(),

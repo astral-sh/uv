@@ -21,7 +21,7 @@ use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
     Graph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, SourceBuildTrait};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -36,6 +36,8 @@ struct DummyContext {
 }
 
 impl BuildContext for DummyContext {
+    type SourceDistBuilder = DummyBuilder;
+
     fn cache(&self) -> &Cache {
         &self.cache
     }
@@ -63,12 +65,28 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    fn build_source<'a>(
+    fn setup_build<'a>(
         &'a self,
-        _sdist: &'a Path,
+        _source: &'a Path,
         _subdirectory: Option<&'a Path>,
-        _wheel_dir: &'a Path,
         _package_id: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a>> {
+        Box::pin(async { Ok(DummyBuilder) })
+    }
+}
+
+struct DummyBuilder;
+
+impl SourceBuildTrait for DummyBuilder {
+    fn metadata<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<PathBuf>>> + Send + 'a>> {
+        panic!("The test should not need to build source distributions")
+    }
+
+    fn wheel<'a>(
+        &'a self,
+        _wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")
     }
