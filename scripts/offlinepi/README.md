@@ -2,6 +2,14 @@
 
 Utilities for managing an offline version of PyPI.
 
+## Installation
+
+Installation requires `mitmproxy`. We require unreleased changes, it is recommended to install from GitHub:
+
+```
+pip install git+https://github.com/mitmproxy/mitmproxy@1fcd0335d59c301d73d1b1ef676ecafcf520ab79
+```
+
 ## Usage
 
 Record PyPI responses during a command:
