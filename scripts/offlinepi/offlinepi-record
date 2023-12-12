@@ -19,16 +19,18 @@ if [ -n "$*" ]; then
     exit 1
 fi
 
-# Remove the file before starting
-rm "$path" 2> /dev/null
-
 # N.B. Additional options must be added _before_ the filter string
 exec mitmdump \
-    -w "$path" \
     --set stream_large_bodies=1000m \
+    --set hardump="$path" \
     "~d pypi.org|files.pythonhosted.org|mitm.it"
 
 # stream_large_bodies: must be set to a large value or large responses will not be recorded
 #   resulting in an unexpected file endings during replays
+# hardump: we use a HAR file instead of the binary format (-w <path>) so it the output is
+#    human readable
 # ~d: only interactions with package index domains should be recorded
 #   we also allow `mitm.it` so healthchecks succeed when replaying
+
+# Helpful notes for development
+# --flow-detail <0-4> can be used to adjust the amount information displayed about traffic

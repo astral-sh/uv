@@ -22,6 +22,7 @@ if [ -n "$*" ]; then
 fi
 
 exec mitmdump --server-replay "$path" \
+    --flow-detail 3 \
     --server-replay-extra 500 \
     --set connection_strategy=lazy
 

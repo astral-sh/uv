@@ -8,7 +8,7 @@
 #
 
 projectroot=$(realpath "$(dirname "$0")")
-responsefile=$projectroot/responses.dat
+responsefile=$projectroot/responses.har
 
 mode=$1
 shift
