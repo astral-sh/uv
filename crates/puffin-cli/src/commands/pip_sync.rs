@@ -20,7 +20,7 @@ use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -88,6 +88,7 @@ pub(crate) async fn sync_requirements(
     let InstallPlan {
         local,
         remote,
+        reinstalls,
         extraneous,
     } = InstallPlan::from_requirements(
         requirements,
@@ -101,7 +102,7 @@ pub(crate) async fn sync_requirements(
     .context("Failed to determine installation plan")?;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && extraneous.is_empty() {
+    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if requirements.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -213,10 +214,10 @@ pub(crate) async fn sync_requirements(
     };
 
     // Remove any unnecessary packages.
-    if !extraneous.is_empty() {
+    if !extraneous.is_empty() || !reinstalls.is_empty() {
         let start = std::time::Instant::now();
 
-        for dist_info in &extraneous {
+        for dist_info in extraneous.iter().chain(reinstalls.iter()) {
             let summary = puffin_installer::uninstall(dist_info).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
@@ -228,13 +229,17 @@ pub(crate) async fn sync_requirements(
             );
         }
 
-        let s = if extraneous.len() == 1 { "" } else { "s" };
+        let s = if extraneous.len() + reinstalls.len() == 1 {
+            ""
+        } else {
+            "s"
+        };
         writeln!(
             printer,
             "{}",
             format!(
                 "Uninstalled {} in {}",
-                format!("{} package{}", extraneous.len(), s).bold(),
+                format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
@@ -265,13 +270,14 @@ pub(crate) async fn sync_requirements(
 
     for event in extraneous
         .into_iter()
+        .chain(reinstalls.into_iter())
         .map(|distribution| ChangeEvent {
             dist: AnyDist::from(distribution),
-            kind: ChangeEventKind::Remove,
+            kind: ChangeEventKind::Removed,
         })
         .chain(wheels.into_iter().map(|distribution| ChangeEvent {
             dist: AnyDist::from(distribution),
-            kind: ChangeEventKind::Add,
+            kind: ChangeEventKind::Added,
         }))
         .sorted_unstable_by(|a, b| {
             a.dist
@@ -281,7 +287,7 @@ pub(crate) async fn sync_requirements(
         })
     {
         match event.kind {
-            ChangeEventKind::Add => {
+            ChangeEventKind::Added => {
                 writeln!(
                     printer,
                     " {} {}{}",
@@ -290,7 +296,7 @@ pub(crate) async fn sync_requirements(
                     event.dist.version_or_url().to_string().dimmed()
                 )?;
             }
-            ChangeEventKind::Remove => {
+            ChangeEventKind::Removed => {
                 writeln!(
                     printer,
                     " {} {}{}",
@@ -303,18 +309,4 @@ pub(crate) async fn sync_requirements(
     }
 
     Ok(ExitStatus::Success)
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-enum ChangeEventKind {
-    /// The package was removed from the environment.
-    Remove,
-    /// The package was added to the environment.
-    Add,
-}
-
-#[derive(Debug)]
-struct ChangeEvent {
-    dist: AnyDist,
-    kind: ChangeEventKind,
 }

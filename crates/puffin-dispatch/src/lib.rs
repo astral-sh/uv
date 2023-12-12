@@ -132,6 +132,7 @@ impl BuildContext for BuildDispatch {
             let InstallPlan {
                 local,
                 remote,
+                reinstalls,
                 extraneous,
             } = InstallPlan::from_requirements(
                 requirements,
@@ -178,8 +179,8 @@ impl BuildContext for BuildDispatch {
             };
 
             // Remove any unnecessary packages.
-            if !extraneous.is_empty() {
-                for dist_info in &extraneous {
+            if !extraneous.is_empty() || !reinstalls.is_empty() {
+                for dist_info in extraneous.iter().chain(reinstalls.iter()) {
                     let summary = puffin_installer::uninstall(dist_info)
                         .await
                         .context("Failed to uninstall build dependencies")?;
