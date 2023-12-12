@@ -51,6 +51,8 @@ pub enum Error {
     InvalidSourceDist(String),
     #[error("Invalid pyproject.toml")]
     InvalidPyprojectToml(#[from] toml::de::Error),
+    #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
+    EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] anyhow::Error),
     #[error("Failed to create temporary virtual environment")]
@@ -181,6 +183,24 @@ impl Pep517Backend {
     }
 }
 
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum BuildKind {
+    /// A regular PEP 517 wheel build
+    #[default]
+    Wheel,
+    /// A PEP 660 editable installation wheel build
+    Editable,
+}
+
+impl Display for BuildKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuildKind::Wheel => f.write_str("wheel"),
+            BuildKind::Editable => f.write_str("editable"),
+        }
+    }
+}
+
 /// Uses an [`Arc`] internally, clone freely
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
@@ -212,6 +232,8 @@ pub struct SourceBuild {
     metadata_directory: Option<PathBuf>,
     /// Package id such as `foo-1.2.3`, for error reporting
     package_id: String,
+    /// Whether we do a regular PEP 517 build or an PEP 660 editable build
+    build_kind: BuildKind,
 }
 
 impl SourceBuild {
@@ -226,6 +248,7 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         source_dist: &str,
+        build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
 
@@ -324,6 +347,7 @@ impl SourceBuild {
                 pep517_backend,
                 build_context,
                 source_dist,
+                build_kind,
             )
             .await?;
         } else if !source_tree.join("setup.py").is_file() {
@@ -338,6 +362,7 @@ impl SourceBuild {
             source_tree,
             pep517_backend,
             venv,
+            build_kind,
             metadata_directory: None,
             package_id: source_dist.to_string(),
         })
@@ -423,16 +448,16 @@ impl SourceBuild {
         if let Some(pep517_backend) = &self.pep517_backend {
             // Prevent clashes from two puffin processes building wheels in parallel.
             let tmp_dir = tempdir_in(&wheel_dir)?;
-            let filename = self
-                .pep517_build_wheel(tmp_dir.path(), pep517_backend)
-                .await?;
+            let filename = self.pep517_build(tmp_dir.path(), pep517_backend).await?;
 
             let from = tmp_dir.path().join(&filename);
             let to = wheel_dir.join(&filename);
             fs_err::rename(from, to)?;
-
             Ok(filename)
         } else {
+            if self.build_kind != BuildKind::Wheel {
+                return Err(Error::EditableSetupPy);
+            }
             // We checked earlier that setup.py exists.
             let python_interpreter = self.venv.python_executable();
             let output = Command::new(&python_interpreter)
@@ -468,7 +493,7 @@ impl SourceBuild {
         }
     }
 
-    async fn pep517_build_wheel(
+    async fn pep517_build(
         &self,
         wheel_dir: &Path,
         pep517_backend: &Pep517Backend,
@@ -480,18 +505,18 @@ impl SourceBuild {
                 format!(r#""{}""#, escape_path_for_python(path))
             });
         debug!(
-            "Calling `{}.build_wheel(metadata_directory={})`",
-            pep517_backend.backend, metadata_directory
+            "Calling `{}.build_{}(metadata_directory={})`",
+            pep517_backend.backend, self.build_kind, metadata_directory
         );
         let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
             r#"{}
-            print(backend.build_wheel("{}", metadata_directory={}))
-            "#, pep517_backend.backend_import(), escaped_wheel_dir, metadata_directory 
+            print(backend.build_{}("{}", metadata_directory={}))
+            "#, pep517_backend.backend_import(), self.build_kind, escaped_wheel_dir, metadata_directory 
         };
         let span = info_span!(
             "run_python_script",
-            name="build_wheel",
+            name=format!("build_{}", self.build_kind),
             python_version = %self.venv.interpreter().version()
         );
         let output =
@@ -499,7 +524,10 @@ impl SourceBuild {
         drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
-                "Build backend failed to build wheel through `build_wheel()`".to_string(),
+                format!(
+                    "Build backend failed to build wheel through `build_{}()`",
+                    self.build_kind
+                ),
                 &output,
                 &self.package_id,
             ));
@@ -510,8 +538,10 @@ impl SourceBuild {
             distribution_filename.filter(|wheel| wheel_dir.join(wheel).is_file())
         else {
             return Err(Error::from_command_output(
-                "Build backend did not return the wheel filename through `build_wheel()`"
-                    .to_string(),
+                format!(
+                    "Build backend failed to build wheel through `build_{}()`",
+                    self.build_kind
+                ),
                 &output,
                 &self.package_id,
             ));
@@ -533,23 +563,24 @@ async fn create_pep517_build_environment(
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
     package_id: &str,
+    build_kind: BuildKind,
 ) -> Result<(), Error> {
     debug!(
-        "Calling `{}.get_requires_for_build_wheel()`",
-        pep517_backend.backend
+        "Calling `{}.get_requires_for_build_{}()`",
+        pep517_backend.backend, build_kind
     );
     let script = formatdoc! {
         r#"
             {}
             import json
 
-            get_requires_for_build_wheel = getattr(backend, "get_requires_for_build_wheel", None)
-            if get_requires_for_build_wheel:
-                requires = get_requires_for_build_wheel()
+            get_requires_for_build = getattr(backend, "get_requires_for_build_{}", None)
+            if get_requires_for_build:
+                requires = get_requires_for_build()
             else:
                 requires = []
             print(json.dumps(requires))
-        "#, pep517_backend.backend_import()
+        "#, pep517_backend.backend_import(), build_kind
     };
     let span = info_span!(
         "get_requires_for_build_wheel",
@@ -560,8 +591,7 @@ async fn create_pep517_build_environment(
     drop(span);
     if !output.status.success() {
         return Err(Error::from_command_output(
-            "Build backend failed to determine extra requires with `get_requires_for_build_wheel`"
-                .to_string(),
+            format!("Build backend failed to determine extra requires with `build_{build_kind}()`",),
             &output,
             package_id,
         ));
@@ -577,7 +607,7 @@ async fn create_pep517_build_environment(
     let extra_requires: Vec<Requirement> = extra_requires.map_err(|err| {
         Error::from_command_output(
             format!(
-                "Build backend failed to return extra requires with `get_requires_for_build_wheel`: {err}"
+                "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
             ),
             &output,
             package_id,
