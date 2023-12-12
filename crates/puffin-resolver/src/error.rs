@@ -1,7 +1,9 @@
 use std::fmt::Formatter;
 
 use pubgrub::range::Range;
-use pubgrub::report::{DefaultStringReporter, Reporter};
+use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
+use pypi_types::IndexUrl;
+use rustc_hash::FxHashMap;
 use thiserror::Error;
 use url::Url;
 
@@ -9,8 +11,10 @@ use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
+use puffin_traits::OnceMap;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
+use crate::version_map::VersionMap;
 use crate::PubGrubReportFormatter;
 
 #[derive(Error, Debug)]
@@ -29,9 +33,6 @@ pub enum ResolveError {
 
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
-
-    #[error(transparent)]
-    PubGrub(#[from] RichPubGrubError),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
@@ -65,6 +66,37 @@ pub enum ResolveError {
 
     #[error("Failed to build: {0}")]
     Build(Box<PathSourceDist>, #[source] DistributionDatabaseError),
+
+    #[error(transparent)]
+    NoSolution(#[from] NoSolutionError),
+
+    #[error("Retrieving dependencies of {package} {version} failed")]
+    ErrorRetrievingDependencies {
+        /// Package whose dependencies we want.
+        package: Box<PubGrubPackage>,
+        /// Version of the package for which we want the dependencies.
+        version: Box<PubGrubVersion>,
+        /// Error raised by the implementer of [DependencyProvider](crate::solver::DependencyProvider).
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("{package} {version} depends on itself")]
+    SelfDependency {
+        /// Package whose dependencies we want.
+        package: Box<PubGrubPackage>,
+        /// Version of the package for which we want the dependencies.
+        version: Box<PubGrubVersion>,
+    },
+
+    #[error("Decision making failed")]
+    ErrorChoosingPackageVersion(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("We should cancel")]
+    ErrorInShouldCancel(Box<dyn std::error::Error + Send + Sync>),
+
+    /// Something unexpected happened.
+    #[error("{0}")]
+    Failure(String),
 }
 
 impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
@@ -73,28 +105,83 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
     }
 }
 
-/// A wrapper around [`pubgrub::error::PubGrubError`] that displays a resolution failure report.
-#[derive(Debug)]
-pub struct RichPubGrubError {
-    source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
-}
-
-impl std::error::Error for RichPubGrubError {}
-
-impl std::fmt::Display for RichPubGrubError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
-            let formatter = PubGrubReportFormatter;
-            let report = DefaultStringReporter::report_with_formatter(derivation_tree, &formatter);
-            write!(f, "{report}")
-        } else {
-            write!(f, "{}", self.source)
+impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
+    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+        match value {
+            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(inner) => {
+                ResolveError::ErrorChoosingPackageVersion(inner)
+            }
+            pubgrub::error::PubGrubError::ErrorInShouldCancel(inner) => {
+                ResolveError::ErrorInShouldCancel(inner)
+            }
+            pubgrub::error::PubGrubError::ErrorRetrievingDependencies {
+                package,
+                version,
+                source,
+            } => ResolveError::ErrorRetrievingDependencies {
+                package: Box::new(package),
+                version: Box::new(version),
+                source,
+            },
+            pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
+            pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
+                ResolveError::NoSolution(NoSolutionError {
+                    derivation_tree,
+                    available_versions: FxHashMap::default(),
+                })
+            }
+            pubgrub::error::PubGrubError::SelfDependency { package, version } => {
+                ResolveError::SelfDependency {
+                    package: Box::new(package),
+                    version: Box::new(version),
+                }
+            }
         }
     }
 }
 
-impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
-    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
-        ResolveError::PubGrub(RichPubGrubError { source: value })
+/// A wrapper around [`pubgrub::error::PubGrubError::NoSolution`] that displays a resolution failure report.
+#[derive(Debug)]
+pub struct NoSolutionError {
+    derivation_tree: DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
+    available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+}
+
+impl std::error::Error for NoSolutionError {}
+
+impl std::fmt::Display for NoSolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let formatter = PubGrubReportFormatter {
+            available_versions: &self.available_versions,
+        };
+        let report =
+            DefaultStringReporter::report_with_formatter(&self.derivation_tree, &formatter);
+        write!(f, "{report}")
+    }
+}
+
+impl NoSolutionError {
+    /// Update the available versions attached to the error using the given package version index.
+    ///
+    /// Only packages used in the error's deriviation tree will be retrieved.
+    pub(crate) fn update_available_versions(
+        mut self,
+        package_versions: &OnceMap<PackageName, (IndexUrl, VersionMap)>,
+    ) -> Self {
+        for package in self.derivation_tree.packages() {
+            if let PubGrubPackage::Package(name, ..) = package {
+                if let Some(entry) = package_versions.get(name) {
+                    let (_, version_map) = entry.value();
+                    self.available_versions.insert(
+                        package.clone(),
+                        version_map
+                            .iter()
+                            .map(|(version, _)| version.clone())
+                            .collect(),
+                    );
+                }
+            }
+        }
+        self
     }
 }

@@ -237,14 +237,14 @@ async fn resolve(
     let resolver = Resolver::new(manifest, options, markers, &tags, &client, &build_dispatch)
         .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
-        Err(puffin_resolver::ResolveError::PubGrub(err)) => {
+        Err(puffin_resolver::ResolveError::NoSolution(err)) => {
             #[allow(clippy::print_stderr)]
             {
                 let report = miette::Report::msg(format!("{err}"))
                     .context("No solution found when resolving dependencies:");
                 eprint!("{report:?}");
             }
-            return Err(puffin_resolver::ResolveError::PubGrub(err).into());
+            return Err(puffin_resolver::ResolveError::NoSolution(err).into());
         }
         result => result,
     }?;

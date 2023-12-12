@@ -247,7 +247,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 return Err(ResolveError::StreamTermination);
             }
             resolution = resolve_fut => {
-                resolution?
+                resolution.map_err(|err| {
+                    // Add version information to improve unsat error messages
+                    if let ResolveError::NoSolution(err) = err {
+                        ResolveError::NoSolution(err.update_available_versions(&self.index.packages))
+                    } else {
+                        err
+                    }
+                })?
             }
         };
 
