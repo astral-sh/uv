@@ -36,6 +36,11 @@ impl Resolution {
         self.0.get(package_name)
     }
 
+    /// Iterate over the [`PackageName`] entities in this resolution.
+    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
+        self.0.keys()
+    }
+
     /// Iterate over the [`Dist`] entities in this resolution.
     pub fn into_distributions(self) -> impl Iterator<Item = Dist> {
         self.0.into_values()

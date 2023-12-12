@@ -78,11 +78,12 @@ pub(crate) async fn pip_install(
         &venv,
         printer,
     )
-    .await?;
+    .await?
+    .into();
 
     // Sync the environment.
     install(
-        &resolution.into(),
+        &resolution,
         reinstall,
         link_mode,
         index_urls,
@@ -92,6 +93,9 @@ pub(crate) async fn pip_install(
         printer,
     )
     .await?;
+
+    // Validate the environment.
+    validate(&resolution, &venv, printer)?;
 
     Ok(ExitStatus::Success)
 }
@@ -419,5 +423,27 @@ async fn install(
         }
     }
 
+    Ok(())
+}
+
+/// Validate the installed packages in the virtual environment.
+fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<()> {
+    let site_packages = SitePackages::try_from_executable(venv)?;
+    let diagnostics = site_packages.diagnostics()?;
+    for diagnostic in diagnostics {
+        // Only surface diagnostics that are "relevant" to the current resolution.
+        if resolution
+            .packages()
+            .any(|package| diagnostic.includes(package))
+        {
+            writeln!(
+                printer,
+                "{}{} {}",
+                "warning".yellow().bold(),
+                ":".bold(),
+                diagnostic.message().bold()
+            )?;
+        }
+    }
     Ok(())
 }
