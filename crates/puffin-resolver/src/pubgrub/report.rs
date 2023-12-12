@@ -12,6 +12,21 @@ pub struct PubGrubReportFormatter<'a> {
     pub available_versions: &'a FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
+impl PubGrubReportFormatter<'_> {
+    fn simplify_set(
+        &self,
+        set: &Range<PubGrubVersion>,
+        package: &PubGrubPackage,
+    ) -> Range<PubGrubVersion> {
+        set.simplify(
+            self.available_versions
+                .get(package)
+                .unwrap_or(&vec![])
+                .iter(),
+        )
+    }
+}
+
 impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFormatter<'_> {
     type Output = String;
 
@@ -27,12 +42,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if set == &Range::full() {
                     format!("there is no available version for {package}")
                 } else {
-                    let set = set.simplify(
-                        self.available_versions
-                            .get(package)
-                            .unwrap_or(&vec![])
-                            .iter(),
-                    );
+                    let set = self.simplify_set(set, package);
                     format!("there is no version of {package} available matching {set}")
                 }
             }
@@ -40,12 +50,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if set == &Range::full() {
                     format!("dependencies of {package} are unavailable")
                 } else {
-                    let set = set.simplify(
-                        self.available_versions
-                            .get(package)
-                            .unwrap_or(&vec![])
-                            .iter(),
-                    );
+                    let set = self.simplify_set(set, package);
                     format!("dependencies of {package} at version {set} are unavailable")
                 }
             }
@@ -57,12 +62,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         if set == &Range::full() {
                             format!("dependencies of {package} are unusable: {reason}")
                         } else {
-                            let set = set.simplify(
-                                self.available_versions
-                                    .get(package)
-                                    .unwrap_or(&vec![])
-                                    .iter(),
-                            );
+                            let set = self.simplify_set(set, package);
                             format!("dependencies of {package}{set} are unusable: {reason}",)
                         }
                     }
@@ -70,12 +70,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     if set == &Range::full() {
                         format!("dependencies of {package} are unusable")
                     } else {
-                        let set = set.simplify(
-                            self.available_versions
-                                .get(package)
-                                .unwrap_or(&vec![])
-                                .iter(),
-                        );
+                        let set = self.simplify_set(set, package);
                         format!("dependencies of {package}{set} are unusable")
                     }
                 }
@@ -84,43 +79,23 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if package_set == &Range::full() && dependency_set == &Range::full() {
                     format!("{package} depends on {dependency}")
                 } else if package_set == &Range::full() {
-                    let dependency_set = dependency_set.simplify(
-                        self.available_versions
-                            .get(package)
-                            .unwrap_or(&vec![])
-                            .iter(),
-                    );
+                    let dependency_set = self.simplify_set(dependency_set, package);
                     format!("{package} depends on {dependency}{dependency_set}")
                 } else if dependency_set == &Range::full() {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         format!("{package} depends on {dependency}")
                     } else {
-                        let package_set = package_set.simplify(
-                            self.available_versions
-                                .get(package)
-                                .unwrap_or(&vec![])
-                                .iter(),
-                        );
+                        let package_set = self.simplify_set(package_set, package);
                         format!("{package}{package_set} depends on {dependency}")
                     }
                 } else {
-                    let dependency_set = dependency_set.simplify(
-                        self.available_versions
-                            .get(package)
-                            .unwrap_or(&vec![])
-                            .iter(),
-                    );
+                    let dependency_set = self.simplify_set(dependency_set, package);
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         format!("{package} depends on {dependency}{dependency_set}")
                     } else {
-                        let package_set = package_set.simplify(
-                            self.available_versions
-                                .get(package)
-                                .unwrap_or(&vec![])
-                                .iter(),
-                        );
+                        let package_set = self.simplify_set(package_set, package);
                         format!("{package}{package_set} depends on {dependency}{dependency_set}")
                     }
                 }
