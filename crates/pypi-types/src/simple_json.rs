@@ -8,9 +8,6 @@ use crate::lenient_requirement::LenientVersionSpecifiers;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleJson {
     pub files: Vec<File>,
-    pub meta: Meta,
-    pub name: String,
-    pub versions: Vec<String>,
 }
 
 /// A single (remote) file belonging to a package, generally either a wheel or a source dist.
@@ -87,12 +84,4 @@ impl Yanked {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hashes {
     pub sha256: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct Meta {
-    #[serde(rename = "_last-serial")]
-    pub last_serial: i64,
-    pub api_version: String,
 }
