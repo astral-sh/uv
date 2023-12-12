@@ -307,4 +307,9 @@ impl Reinstall {
             Self::None
         }
     }
+
+    /// Returns `true` if no packages should be reinstalled.
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
 }
