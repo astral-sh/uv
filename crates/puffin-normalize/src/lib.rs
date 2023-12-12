@@ -23,19 +23,19 @@ pub(crate) fn validate_and_normalize_ref(
     let mut normalized = String::with_capacity(name.as_ref().len());
 
     let mut last = None;
-    for char in name.as_ref().chars() {
+    for char in name.as_ref().bytes() {
         match char {
-            'A'..='Z' => {
-                normalized.push(char.to_ascii_lowercase());
+            b'A'..=b'Z' => {
+                normalized.push(char.to_ascii_lowercase() as char);
             }
-            'a'..='z' | '0'..='9' => {
-                normalized.push(char);
+            b'a'..=b'z' | b'0'..=b'9' => {
+                normalized.push(char as char);
             }
-            '-' | '_' | '.' => {
+            b'-' | b'_' | b'.' => {
                 match last {
                     // Names can't start with punctuation.
                     None => return Err(InvalidNameError(name.as_ref().to_string())),
-                    Some('-') | Some('_') | Some('.') => {}
+                    Some(b'-') | Some(b'_') | Some(b'.') => {}
                     Some(_) => normalized.push('-'),
                 }
             }
@@ -45,7 +45,7 @@ pub(crate) fn validate_and_normalize_ref(
     }
 
     // Names can't end with punctuation.
-    if matches!(last, Some('-') | Some('_') | Some('.')) {
+    if matches!(last, Some(b'-') | Some(b'_') | Some(b'.')) {
         return Err(InvalidNameError(name.as_ref().to_string()));
     }
 
@@ -55,22 +55,22 @@ pub(crate) fn validate_and_normalize_ref(
 /// Returns `true` if the name is already normalized.
 fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
     let mut last = None;
-    for char in name.as_ref().chars() {
+    for char in name.as_ref().bytes() {
         match char {
-            'A'..='Z' => {
+            b'A'..=b'Z' => {
                 // Uppercase characters need to be converted to lowercase.
                 return Ok(false);
             }
-            'a'..='z' | '0'..='9' => {}
-            '_' | '.' => {
+            b'a'..=b'z' | b'0'..=b'9' => {}
+            b'_' | b'.' => {
                 // `_` and `.` are normalized to `-`.
                 return Ok(false);
             }
-            '-' => {
+            b'-' => {
                 match last {
                     // Names can't start with punctuation.
                     None => return Err(InvalidNameError(name.as_ref().to_string())),
-                    Some('-') => {
+                    Some(b'-') => {
                         // Runs of `-` are normalized to a single `-`.
                         return Ok(false);
                     }
@@ -83,7 +83,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
     }
 
     // Names can't end with punctuation.
-    if matches!(last, Some('-') | Some('_') | Some('.')) {
+    if matches!(last, Some(b'-') | Some(b'_') | Some(b'.')) {
         return Err(InvalidNameError(name.as_ref().to_string()));
     }
 
@@ -174,6 +174,7 @@ mod tests {
             "ends-with-space ",
             "includes!invalid-char",
             "space in middle",
+            "alpha-α",
         ];
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
