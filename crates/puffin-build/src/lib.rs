@@ -2,6 +2,7 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
+use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
@@ -401,8 +402,7 @@ impl SourceBuild {
             name="prepare_metadata_for_build_wheel",
             python_version = %self.venv.interpreter().version()
         );
-        let output =
-            run_python_script(&self.venv.python_executable(), &script, &self.source_tree).await?;
+        let output = run_python_script(&self.venv, &script, &self.source_tree).await?;
         drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
@@ -519,8 +519,7 @@ impl SourceBuild {
             name=format!("build_{}", self.build_kind),
             python_version = %self.venv.interpreter().version()
         );
-        let output =
-            run_python_script(&self.venv.python_executable(), &script, &self.source_tree).await?;
+        let output = run_python_script(&self.venv, &script, &self.source_tree).await?;
         drop(span);
         if !output.status.success() {
             return Err(Error::from_command_output(
@@ -587,7 +586,7 @@ async fn create_pep517_build_environment(
         name="build_wheel",
         python_version = %venv.interpreter().version()
     );
-    let output = run_python_script(&venv.python_executable(), &script, source_tree).await?;
+    let output = run_python_script(venv, &script, source_tree).await?;
     drop(span);
     if !output.status.success() {
         return Err(Error::from_command_output(
@@ -688,16 +687,25 @@ fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> 
 
 /// It is the caller's responsibility to create an informative span.
 async fn run_python_script(
-    python_interpreter: &Path,
+    venv: &Virtualenv,
     script: &str,
     source_tree: &Path,
 ) -> Result<Output, Error> {
-    Command::new(python_interpreter)
+    // `OsString` doesn't impl `Add`
+    let mut new_path = venv.bin_dir().into_os_string();
+    if let Some(path) = env::var_os("PATH") {
+        new_path.push(":");
+        new_path.push(path);
+    }
+    Command::new(venv.python_executable())
         .args(["-c", script])
         .current_dir(source_tree)
+        // Activate the venv
+        .env("VIRTUAL_ENV", venv.root())
+        .env("PATH", new_path)
         .output()
         .await
-        .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))
+        .map_err(|err| Error::CommandFailed(venv.python_executable(), err))
 }
 
 #[cfg(test)]

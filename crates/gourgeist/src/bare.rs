@@ -82,7 +82,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         }
         #[cfg(windows)]
         {
-            location.join("Bin")
+            location.join("Scripts")
         }
         #[cfg(not(any(unix, windows)))]
         {
