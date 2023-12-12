@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
+use std::hash::BuildHasherDefault;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
+use rustc_hash::FxHashSet;
 
 use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
-use pypi_types::Metadata21;
 
 #[derive(Debug)]
 pub struct SitePackages<'a> {
@@ -92,10 +93,7 @@ impl<'a> SitePackages<'a> {
 
         for (package, distribution) in &self.index {
             // Determine the dependencies for the given package.
-            let path = distribution.path().join("METADATA");
-            let contents = fs::read(&path)?;
-            let metadata = Metadata21::parse(&contents)
-                .with_context(|| format!("Failed to parse METADATA file at: {}", path.display()))?;
+            let metadata = distribution.metadata()?;
 
             // Verify that the dependencies are installed.
             for requirement in &metadata.requires_dist {
@@ -129,6 +127,63 @@ impl<'a> SitePackages<'a> {
         }
 
         Ok(diagnostics)
+    }
+
+    /// Returns `true` if the installed packages satisfy the given requirements.
+    pub fn satisfies(
+        &self,
+        requirements: &[Requirement],
+        constraints: &[Requirement],
+    ) -> Result<bool> {
+        let mut requirements = requirements.to_vec();
+        let mut seen =
+            FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+
+        while let Some(requirement) = requirements.pop() {
+            if !requirement.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                continue;
+            }
+
+            let Some(distribution) = self.index.get(&requirement.name) else {
+                // The package isn't installed.
+                return Ok(false);
+            };
+
+            // Validate that the installed version matches the requirement.
+            match &requirement.version_or_url {
+                None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
+                    // The installed version doesn't satisfy the requirement.
+                    if !version_specifier.contains(distribution.version()) {
+                        return Ok(false);
+                    }
+                }
+            }
+
+            // Validate that the installed version satisfies the constraints.
+            for constraint in constraints {
+                if !constraint.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                    continue;
+                }
+
+                match &constraint.version_or_url {
+                    None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                    Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
+                        // The installed version doesn't satisfy the constraint.
+                        if !version_specifier.contains(distribution.version()) {
+                            return Ok(false);
+                        }
+                    }
+                }
+            }
+
+            // Recurse into the dependencies.
+            if seen.insert(requirement) {
+                requirements.extend(distribution.metadata()?.requires_dist);
+            }
+        }
+
+        Ok(true)
     }
 }
 

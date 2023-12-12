@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
+use fs_err as fs;
 
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
-use pypi_types::DirectUrl;
+use pypi_types::{DirectUrl, Metadata21};
 
 use crate::{Metadata, VersionOrUrl};
 
@@ -114,6 +115,7 @@ impl InstalledDist {
         }
     }
 
+    /// Return the [`Version`] of the distribution.
     pub fn version(&self) -> &Version {
         match self {
             Self::Registry(dist) => &dist.version,
@@ -129,5 +131,13 @@ impl InstalledDist {
         };
         let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
         Ok(Some(direct_url))
+    }
+
+    /// Read the `METADATA` file from a `.dist-info` directory.
+    pub fn metadata(&self) -> Result<Metadata21> {
+        let path = self.path().join("METADATA");
+        let contents = fs::read(&path)?;
+        Metadata21::parse(&contents)
+            .with_context(|| format!("Failed to parse METADATA file at: {}", path.display()))
     }
 }

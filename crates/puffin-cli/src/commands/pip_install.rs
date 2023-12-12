@@ -42,7 +42,7 @@ pub(crate) async fn pip_install(
     no_build: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: Cache,
-    printer: Printer,
+    mut printer: Printer,
 ) -> Result<ExitStatus> {
     miette::set_hook(Box::new(|_| {
         Box::new(
@@ -54,6 +54,8 @@ pub(crate) async fn pip_install(
         )
     }))?;
 
+    let start = std::time::Instant::now();
+
     // Determine the requirements.
     let spec = specification(requirements, constraints, extras)?;
 
@@ -64,6 +66,23 @@ pub(crate) async fn pip_install(
         "Using Python interpreter: {}",
         venv.python_executable().display()
     );
+
+    // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
+    // enough to let us remove this check. But right now, for large environments, it's an order of
+    // magnitude faster to validate the environment than to resolve the requirements.
+    if reinstall.is_none() && satisfied(&spec, &venv)? {
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Audited {} in {}",
+                format!("{} package{}", spec.requirements.len(), "s").bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+        return Ok(ExitStatus::Success);
+    }
 
     // Resolve the requirements.
     let resolution = resolve(
@@ -138,6 +157,11 @@ fn specification(
     }
 
     Ok(spec)
+}
+
+/// Returns `true` if the requirements are already satisfied.
+fn satisfied(spec: &RequirementsSpecification, venv: &Virtualenv) -> Result<bool> {
+    SitePackages::try_from_executable(venv)?.satisfies(&spec.requirements, &spec.constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip-compile`.
