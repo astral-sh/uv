@@ -98,7 +98,11 @@ impl Display for MissingHeaderCause {
 }
 
 impl Error {
-    fn from_command_output(message: String, output: &Output, package_id: &str) -> Self {
+    fn from_command_output(
+        message: String,
+        output: &Output,
+        package_id: impl Into<String>,
+    ) -> Self {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
@@ -115,7 +119,7 @@ impl Error {
                 stderr,
                 missing_header_cause: MissingHeaderCause {
                     header,
-                    package_id: package_id.to_string(),
+                    package_id: package_id.into(),
                 },
             };
         }
@@ -250,7 +254,7 @@ impl SourceBuild {
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        source_dist: &str,
+        source_dist: String,
         build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
@@ -349,7 +353,7 @@ impl SourceBuild {
                 &venv,
                 pep517_backend,
                 build_context,
-                source_dist,
+                &source_dist,
                 build_kind,
             )
             .await?;
@@ -367,14 +371,14 @@ impl SourceBuild {
             venv,
             build_kind,
             metadata_directory: None,
-            package_id: source_dist.to_string(),
+            package_id: source_dist,
         })
     }
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
     ///
-    /// TODO(konstin): Return the actual metadata instead of the dist-info dir
+    /// TODO(konstin): Return the actual metadata instead of the dist-info dir.
     pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
         // setup.py builds don't support this.
         let Some(pep517_backend) = &self.pep517_backend else {
@@ -415,7 +419,8 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
                 &output,
-                &self.package_id));
+                &self.package_id,
+            ));
         }
         let message = output
             .stdout
@@ -612,7 +617,7 @@ async fn create_pep517_build_environment(
     drop(span);
     if !output.status.success() {
         return Err(Error::from_command_output(
-            format!("Build backend failed to determine extra requires with `build_{build_kind}()`",),
+            format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
             &output,
             package_id,
         ));
