@@ -161,6 +161,30 @@ async fn black_colorama() -> Result<()> {
     Ok(())
 }
 
+/// Resolve Black with an invalid extra. The resolver should ignore the extra.
+#[tokio::test]
+async fn black_tensorboard() -> Result<()> {
+    colored::control::set_override(false);
+
+    let manifest = Manifest::new(
+        vec![Requirement::from_str("black[tensorboard]<=23.9.1").unwrap()],
+        vec![],
+        vec![],
+        None,
+    );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
+
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn black_python_310() -> Result<()> {
     colored::control::set_override(false);

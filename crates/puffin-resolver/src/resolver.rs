@@ -350,13 +350,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .get_dependencies(package, &version, &mut priorities, &index, request_sink)
                     .await?
                 {
-                    Dependencies::Unknown => {
-                        state.add_incompatibility(Incompatibility::unavailable_dependencies(
-                            package.clone(),
-                            version.clone(),
-                        ));
-                        continue;
-                    }
                     Dependencies::Unusable(reason) => {
                         state.add_incompatibility(Incompatibility::unusable_dependencies(
                             package.clone(),
@@ -639,14 +632,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Self::visit_package(package, priorities, index, request_sink)?;
                 }
 
-                if let Some(extra) = extra {
-                    if !metadata
-                        .provides_extras
-                        .iter()
-                        .any(|provided_extra| provided_extra == extra)
-                    {
-                        return Ok(Dependencies::Unknown);
-                    }
+                if extra.is_some() {
                     constraints.insert(
                         PubGrubPackage::Package(package_name.clone(), None, None),
                         Range::singleton(version.clone()),
@@ -854,8 +840,6 @@ impl<'a> FromIterator<&'a Url> for AllowedUrls {
 /// For each [Package] there is a set of versions allowed as a dependency.
 #[derive(Clone)]
 enum Dependencies {
-    /// Package dependencies are unavailable.
-    Unknown,
     /// Package dependencies are not usable
     Unusable(Option<String>),
     /// Container for all available package versions.
