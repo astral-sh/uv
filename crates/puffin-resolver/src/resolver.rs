@@ -466,8 +466,16 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         return match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
-            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                debug!("Searching for a compatible version of {package_name} @ {url} ({range})",);
+            PubGrubPackage::Package(package_name, extra, Some(url)) => {
+                if let Some(extra) = extra {
+                    debug!(
+                        "Searching for a compatible version of {package_name}[{extra}] @ {url} ({range})",
+                    );
+                } else {
+                    debug!(
+                        "Searching for a compatible version of {package_name} @ {url} ({range})"
+                    );
+                }
 
                 // If the URL wasn't declared in the direct dependencies or constraints, reject it.
                 if !self.allowed_urls.contains(url) {
@@ -499,12 +507,18 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
             }
 
-            PubGrubPackage::Package(package_name, _extra, None) => {
+            PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await;
                 let (index, version_map) = entry.value();
 
-                debug!("Searching for a compatible version of {package_name} ({range})");
+                if let Some(extra) = extra {
+                    debug!(
+                        "Searching for a compatible version of {package_name}[{extra}] ({range})",
+                    );
+                } else {
+                    debug!("Searching for a compatible version of {package_name} ({range})");
+                }
 
                 // Find a compatible version.
                 let Some(candidate) = self.selector.select(package_name, range, version_map) else {
@@ -512,12 +526,22 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                debug!(
-                    "Selecting: {}=={} ({})",
-                    candidate.name(),
-                    candidate.version(),
-                    candidate.resolve().filename()
-                );
+                if let Some(extra) = extra {
+                    debug!(
+                        "Selecting: {}[{}]=={} ({})",
+                        candidate.name(),
+                        extra,
+                        candidate.version(),
+                        candidate.resolve().filename()
+                    );
+                } else {
+                    debug!(
+                        "Selecting: {}=={} ({})",
+                        candidate.name(),
+                        candidate.version(),
+                        candidate.resolve().filename()
+                    );
+                }
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
