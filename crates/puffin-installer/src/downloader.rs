@@ -116,9 +116,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             .await?;
 
         let target = download.target().to_path_buf();
-        let wheel = if let Some(cached_dist) = in_flight.wait_or_register(&target).await {
-            cached_dist.value().clone().map_err(Error::Thread)?
-        } else {
+        let wheel = if in_flight.register(&target) {
             let result = Self::unzip_wheel(download).await;
             match result {
                 Ok(cached) => {
@@ -130,6 +128,13 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                     return Err(Error::Unzip(dist, err));
                 }
             }
+        } else {
+            in_flight
+                .wait(&target)
+                .await
+                .value()
+                .clone()
+                .map_err(Error::Thread)?
         };
 
         Ok(wheel)
