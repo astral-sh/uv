@@ -12,6 +12,8 @@ use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
+use pubgrub::version;
+use reqwest::header::Entry;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::select;
 use tracing::{debug, trace};
@@ -29,7 +31,8 @@ use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{IndexUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::ResolveError;
+use crate::error::{ResolveError, RichPubGrubError};
+use crate::file::DistFile;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::pubgrub::{
@@ -281,7 +284,30 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         loop {
             // Run unit propagation.
-            state.unit_propagation(next)?;
+            state.unit_propagation(next).map_err(|err| {
+                let mut versions = FxHashMap::default();
+                if matches!(err, pubgrub::error::PubGrubError::NoSolution(_)) {
+                    for package in added_dependencies.keys() {
+                        if let PubGrubPackage::Package(package_name, ..) = package {
+                            if let Some(entry) = self.index.packages.get(package_name) {
+                                let (_index, version_map) = entry.value();
+                                versions.insert(
+                                    package.clone(),
+                                    version_map
+                                        .iter()
+                                        .map(|(version, _)| version.clone())
+                                        .collect(),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                RichPubGrubError {
+                    source: err,
+                    versions,
+                }
+            })?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
             self.pre_visit(state.partial_solution.prioritized_packages(), request_sink)

@@ -1,5 +1,6 @@
 use std::fmt::Formatter;
 
+use fxhash::FxHashMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, Reporter};
 use thiserror::Error;
@@ -76,7 +77,8 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
 /// A wrapper around [`pubgrub::error::PubGrubError`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct RichPubGrubError {
-    source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+    pub source: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>,
+    pub versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
 impl std::error::Error for RichPubGrubError {}
@@ -84,7 +86,9 @@ impl std::error::Error for RichPubGrubError {}
 impl std::fmt::Display for RichPubGrubError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let pubgrub::error::PubGrubError::NoSolution(derivation_tree) = &self.source {
-            let formatter = PubGrubReportFormatter;
+            let formatter = PubGrubReportFormatter {
+                available_versions: self.versions.clone(),
+            };
             let report = DefaultStringReporter::report_with_formatter(derivation_tree, &formatter);
             write!(f, "{report}")
         } else {
@@ -95,6 +99,9 @@ impl std::fmt::Display for RichPubGrubError {
 
 impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
     fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
-        ResolveError::PubGrub(RichPubGrubError { source: value })
+        ResolveError::PubGrub(RichPubGrubError {
+            source: value,
+            versions: FxHashMap::default(),
+        })
     }
 }
