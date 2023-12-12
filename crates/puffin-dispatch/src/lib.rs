@@ -231,7 +231,7 @@ impl BuildContext for BuildDispatch {
                 &self.interpreter,
                 self,
                 self.source_build_context.clone(),
-                source_dist,
+                source_dist.to_string(),
                 BuildKind::Wheel,
             )
             .await?;

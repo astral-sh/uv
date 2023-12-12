@@ -69,8 +69,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         build_dispatch.interpreter(),
         &build_dispatch,
         SourceBuildContext::default(),
-        // Good enough for the dev command
-        &args.sdist.display().to_string(),
+        args.sdist.display().to_string(),
         build_kind,
     )
     .await?;
