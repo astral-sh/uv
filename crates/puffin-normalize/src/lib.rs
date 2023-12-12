@@ -1,42 +1,93 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use once_cell::sync::Lazy;
-use regex::Regex;
-
 pub use extra_name::ExtraName;
 pub use package_name::PackageName;
 
 mod extra_name;
 mod package_name;
 
-pub(crate) static NAME_NORMALIZE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-_.]+").unwrap());
-pub(crate) static NAME_VALIDATE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$").unwrap());
+/// Validate and normalize an owned package or extra name.
+pub(crate) fn validate_and_normalize_owned(name: String) -> Result<String, InvalidNameError> {
+    if is_normalized(&name)? {
+        Ok(name)
+    } else {
+        validate_and_normalize_ref(name)
+    }
+}
 
+/// Validate and normalize an unowned package or extra name.
 pub(crate) fn validate_and_normalize_ref(
     name: impl AsRef<str>,
 ) -> Result<String, InvalidNameError> {
-    if !NAME_VALIDATE.is_match(name.as_ref()) {
+    let mut normalized = String::with_capacity(name.as_ref().len());
+
+    let mut last = None;
+    for char in name.as_ref().chars() {
+        match char {
+            'A'..='Z' => {
+                normalized.push(char.to_ascii_lowercase());
+            }
+            'a'..='z' | '0'..='9' => {
+                normalized.push(char);
+            }
+            '-' | '_' | '.' => {
+                match last {
+                    // Names can't start with punctuation.
+                    None => return Err(InvalidNameError(name.as_ref().to_string())),
+                    Some('-') | Some('_') | Some('.') => {}
+                    Some(_) => normalized.push('-'),
+                }
+            }
+            _ => return Err(InvalidNameError(name.as_ref().to_string())),
+        }
+        last = Some(char);
+    }
+
+    // Names can't end with punctuation.
+    if matches!(last, Some('-') | Some('_') | Some('.')) {
         return Err(InvalidNameError(name.as_ref().to_string()));
     }
-    let mut normalized = NAME_NORMALIZE.replace_all(name.as_ref(), "-").to_string();
-    normalized.make_ascii_lowercase();
+
     Ok(normalized)
 }
 
-pub(crate) fn validate_and_normalize_owned(mut name: String) -> Result<String, InvalidNameError> {
-    if !NAME_VALIDATE.is_match(name.as_ref()) {
-        return Err(InvalidNameError(name));
+/// Returns `true` if the name is already normalized.
+fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
+    let mut last = None;
+    for char in name.as_ref().chars() {
+        match char {
+            'A'..='Z' => {
+                // Uppercase characters need to be converted to lowercase.
+                return Ok(false);
+            }
+            'a'..='z' | '0'..='9' => {}
+            '_' | '.' => {
+                // `_` and `.` are normalized to `-`.
+                return Ok(false);
+            }
+            '-' => {
+                match last {
+                    // Names can't start with punctuation.
+                    None => return Err(InvalidNameError(name.as_ref().to_string())),
+                    Some('-') => {
+                        // Runs of `-` are normalized to a single `-`.
+                        return Ok(false);
+                    }
+                    Some(_) => {}
+                }
+            }
+            _ => return Err(InvalidNameError(name.as_ref().to_string())),
+        }
+        last = Some(char);
     }
-    let normalized = NAME_NORMALIZE.replace_all(&name, "-");
-    // fast path: Don't allocate if we don't need to. An inplace ascii char replace would be
-    // nicer but doesn't exist
-    if normalized != name {
-        name = normalized.to_string();
+
+    // Names can't end with punctuation.
+    if matches!(last, Some('-') | Some('_') | Some('.')) {
+        return Err(InvalidNameError(name.as_ref().to_string()));
     }
-    name.make_ascii_lowercase();
-    Ok(name)
+
+    Ok(true)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,7 +98,7 @@ impl Display for InvalidNameError {
         write!(
             f,
             "Not a valid package or extra name: \"{}\". Names must start and end with a letter or \
-            digit and may only contain -, _, ., and alphanumeric characters",
+            digit and may only contain -, _, ., and alphanumeric characters.",
             self.0
         )
     }
@@ -68,6 +119,7 @@ mod tests {
             "friendly.bard",
             "friendly_bard",
             "friendly--bard",
+            "friendly-.bard",
             "FrIeNdLy-._.-bArD",
         ];
         for input in inputs {
@@ -76,6 +128,26 @@ mod tests {
                 validate_and_normalize_owned(input.to_string()).unwrap(),
                 "friendly-bard"
             );
+        }
+    }
+
+    #[test]
+    fn check() {
+        let inputs = ["friendly-bard", "friendlybard"];
+        for input in inputs {
+            assert!(is_normalized(input).unwrap(), "{:?}", input);
+        }
+
+        let inputs = [
+            "friendly.bard",
+            "friendly.BARD",
+            "friendly_bard",
+            "friendly--bard",
+            "friendly-.bard",
+            "FrIeNdLy-._.-bArD",
+        ];
+        for input in inputs {
+            assert!(!is_normalized(input).unwrap(), "{:?}", input);
         }
     }
 
@@ -89,6 +161,7 @@ mod tests {
                 validate_and_normalize_owned(input.to_string()).unwrap(),
                 input
             );
+            assert!(is_normalized(input).unwrap());
         }
     }
 
@@ -104,7 +177,8 @@ mod tests {
         ];
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
-            assert!(validate_and_normalize_owned(input.to_string()).is_err(),);
+            assert!(validate_and_normalize_owned(input.to_string()).is_err());
+            assert!(is_normalized(input).is_err());
         }
     }
 }
