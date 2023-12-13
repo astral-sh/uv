@@ -689,6 +689,8 @@ fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> 
     {
         // .tar.gz
         let mut archive = Archive::new(GzDecoder::new(File::open(sdist)?));
+        // https://github.com/alexcrichton/tar-rs/issues/349
+        archive.set_preserve_mtime(false);
         archive.unpack(extracted)?;
     } else {
         return Err(Error::UnsupportedArchiveType(
