@@ -768,8 +768,9 @@ fn warn_on_yanked_version() -> Result<()> {
 
     let requirements_in = temp_dir.child("requirements.txt");
     requirements_in.touch()?;
-    // This version is yanked
-    requirements_in.write_str("ipython==8.13.0")?;
+
+    // This version is yanked.
+    requirements_in.write_str("colorama==0.4.2")?;
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
