@@ -2327,6 +2327,7 @@ dependencies = [
  "puffin-normalize",
  "puffin-resolver",
  "puffin-traits",
+ "puffin-warnings",
  "puffin-workspace",
  "pypi-types",
  "pyproject-toml",
@@ -2561,21 +2562,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-macros"
-version = "0.0.1"
-dependencies = [
- "colored",
- "once_cell",
- "rustc-hash",
- "tracing",
-]
-
-[[package]]
 name = "puffin-normalize"
 version = "0.0.1"
 dependencies = [
- "once_cell",
- "regex",
  "serde",
 ]
 
@@ -2610,9 +2599,9 @@ dependencies = [
  "puffin-distribution",
  "puffin-git",
  "puffin-interpreter",
- "puffin-macros",
  "puffin-normalize",
  "puffin-traits",
+ "puffin-warnings",
  "pypi-types",
  "reqwest",
  "rustc-hash",
@@ -2639,6 +2628,15 @@ dependencies = [
  "rustc-hash",
  "tokio",
  "waitmap",
+]
+
+[[package]]
+name = "puffin-warnings"
+version = "0.0.1"
+dependencies = [
+ "colored",
+ "once_cell",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -2738,8 +2736,8 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
- "puffin-macros",
  "puffin-normalize",
+ "puffin-warnings",
  "regex",
  "rfc2047-decoder",
  "serde",

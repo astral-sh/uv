@@ -12,6 +12,7 @@ pub(crate) enum Printer {
 }
 
 impl Printer {
+    /// Return the [`ProgressDrawTarget`] for this printer.
     pub(crate) fn target(self) -> ProgressDrawTarget {
         match self {
             Self::Default => ProgressDrawTarget::stderr(),

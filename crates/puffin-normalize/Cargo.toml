@@ -5,6 +5,4 @@ edition = "2021"
 description = "Normalization for distribution, package and extra anmes"
 
 [dependencies]
-once_cell = { workspace = true }
-regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

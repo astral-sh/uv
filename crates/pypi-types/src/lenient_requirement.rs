@@ -6,7 +6,7 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 
 use pep440_rs::{Pep440Error, VersionSpecifiers};
 use pep508_rs::{Pep508Error, Requirement};
-use puffin_macros::warn_once;
+use puffin_warnings::warn_once;
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -63,8 +63,8 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
 
             if let Ok(requirement) = T::from_str(&patched_input) {
                 warn_once!(
-                    "{} to fix invalid {type_name} (before: `{input}`; after: `{patched_input}`)",
-                    messages.join(" and ")
+                    "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched_input}`)",
+                    messages.join(", ")
                 );
                 return Ok(requirement);
             }

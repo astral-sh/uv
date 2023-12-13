@@ -84,10 +84,6 @@ Functionality for installing Python packages into a virtual environment.
 
 Functionality for detecting and leveraging the current Python interpreter.
 
-## [puffin-macros](./puffin-macros)
-
-Reusable procedural macros for Puffin.
-
 ## [puffin-normalize](./puffin-normalize)
 
 Normalize package and extra names as per Python specifications.
@@ -107,6 +103,10 @@ Shared traits for Puffin, to avoid circular dependencies.
 ## [pypi-types](./pypi-types)
 
 General-purpose type definitions for types used in PyPI-compatible APIs.
+
+## [puffin-warnings](./puffin-warnings)
+
+User-facing warnings for Puffin.
 
 ## [requirements-txt](./requirements-txt)
 

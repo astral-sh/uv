@@ -1,5 +1,5 @@
 [package]
-name = "puffin-macros"
+name = "puffin-warnings"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,4 +16,3 @@ workspace = true
 colored = { workspace = true }
 once_cell = { workspace = true }
 rustc-hash = { workspace = true }
-tracing = { workspace = true }
