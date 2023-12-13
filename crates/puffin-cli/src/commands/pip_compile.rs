@@ -36,6 +36,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     extras: ExtrasSpecification<'_>,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -76,8 +77,9 @@ pub(crate) async fn pip_compile(
         project,
         requirements,
         constraints,
+        overrides,
         extras: used_extras,
-    } = RequirementsSpecification::from_sources(requirements, constraints, &extras)?;
+    } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -108,7 +110,7 @@ pub(crate) async fn pip_compile(
         .unwrap_or_default();
 
     // Create a manifest of the requirements.
-    let manifest = Manifest::new(requirements, constraints, preferences, project);
+    let manifest = Manifest::new(requirements, constraints, overrides, preferences, project);
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     // Detect the current Python interpreter.

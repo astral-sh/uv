@@ -64,6 +64,8 @@ pub(crate) struct RequirementsSpecification {
     pub(crate) requirements: Vec<Requirement>,
     /// The constraints for the project.
     pub(crate) constraints: Vec<Requirement>,
+    /// The overrides for the project.
+    pub(crate) overrides: Vec<Requirement>,
     /// The extras used to collect requirements.
     pub(crate) extras: FxHashSet<ExtraName>,
 }
@@ -82,6 +84,7 @@ impl RequirementsSpecification {
                     project: None,
                     requirements: vec![requirement],
                     constraints: vec![],
+                    overrides: vec![],
                     extras: FxHashSet::default(),
                 }
             }
@@ -95,6 +98,7 @@ impl RequirementsSpecification {
                         .map(|entry| entry.requirement)
                         .collect(),
                     constraints: requirements_txt.constraints.into_iter().collect(),
+                    overrides: vec![],
                     extras: FxHashSet::default(),
                 }
             }
@@ -131,6 +135,7 @@ impl RequirementsSpecification {
                     project: project_name,
                     requirements,
                     constraints: vec![],
+                    overrides: vec![],
                     extras: used_extras,
                 }
             }
@@ -141,6 +146,7 @@ impl RequirementsSpecification {
     pub(crate) fn from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
+        overrides: &[RequirementsSource],
         extras: &ExtrasSpecification,
     ) -> Result<Self> {
         let mut spec = Self::default();
@@ -152,6 +158,7 @@ impl RequirementsSpecification {
             let source = Self::from_source(source, extras)?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
+            spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
 
             // Use the first project name discovered
@@ -160,11 +167,20 @@ impl RequirementsSpecification {
             }
         }
 
-        // Read all constraints, treating both requirements _and_ constraints as constraints.
+        // Read all constraints, treating _everything_ as a constraint.
         for source in constraints {
             let source = Self::from_source(source, extras)?;
             spec.constraints.extend(source.requirements);
             spec.constraints.extend(source.constraints);
+            spec.constraints.extend(source.overrides);
+        }
+
+        // Read all overrides, treating both requirements _and_ constraints as overrides.
+        for source in overrides {
+            let source = Self::from_source(source, extras)?;
+            spec.overrides.extend(source.requirements);
+            spec.overrides.extend(source.constraints);
+            spec.overrides.extend(source.overrides);
         }
 
         Ok(spec)
@@ -172,6 +188,6 @@ impl RequirementsSpecification {
 
     /// Read the requirements from a set of sources.
     pub(crate) fn requirements(requirements: &[RequirementsSource]) -> Result<Vec<Requirement>> {
-        Ok(Self::from_sources(requirements, &[], &ExtrasSpecification::None)?.requirements)
+        Ok(Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)?.requirements)
     }
 }

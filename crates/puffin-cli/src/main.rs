@@ -107,9 +107,27 @@ struct PipCompileArgs {
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
-    /// Constrain versions using the given constraints files.
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
     #[clap(short, long)]
     constraint: Vec<PathBuf>,
+
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    #[clap(long)]
+    r#override: Vec<PathBuf>,
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
     #[clap(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -228,9 +246,27 @@ struct PipInstallArgs {
     #[clap(short, long, group = "sources")]
     requirement: Vec<PathBuf>,
 
-    /// Constrain versions using the given constraints files.
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
     #[clap(short, long)]
     constraint: Vec<PathBuf>,
+
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    #[clap(long)]
+    r#override: Vec<PathBuf>,
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
     #[clap(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -383,6 +419,11 @@ async fn inner() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
+            let overrides = args
+                .r#override
+                .into_iter()
+                .map(RequirementsSource::from)
+                .collect::<Vec<_>>();
             let index_urls =
                 IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
             let extras = if args.all_extras {
@@ -395,6 +436,7 @@ async fn inner() -> Result<ExitStatus> {
             commands::pip_compile(
                 &requirements,
                 &constraints,
+                &overrides,
                 extras,
                 args.output_file.as_deref(),
                 args.resolution.unwrap_or_default(),
@@ -441,6 +483,11 @@ async fn inner() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
+            let overrides = args
+                .r#override
+                .into_iter()
+                .map(RequirementsSource::from)
+                .collect::<Vec<_>>();
             let index_urls =
                 IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
             let extras = if args.all_extras {
@@ -454,6 +501,7 @@ async fn inner() -> Result<ExitStatus> {
             commands::pip_install(
                 &requirements,
                 &constraints,
+                &overrides,
                 &extras,
                 args.resolution.unwrap_or_default(),
                 args.prerelease.unwrap_or_default(),

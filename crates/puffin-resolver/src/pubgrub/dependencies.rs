@@ -7,6 +7,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::{ExtraName, PackageName};
 
+use crate::overrides::Overrides;
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 use crate::ResolveError;
@@ -19,6 +20,7 @@ impl PubGrubDependencies {
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
         constraints: &[Requirement],
+        overrides: &Overrides,
         extra: Option<&ExtraName>,
         source: Option<&PackageName>,
         env: &MarkerEnvironment,
@@ -27,7 +29,7 @@ impl PubGrubDependencies {
             DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
 
         // Iterate over all declared requirements.
-        for requirement in requirements {
+        for requirement in overrides.apply(requirements) {
             // Avoid self-dependencies.
             if source.is_some_and(|source| source == &requirement.name) {
                 warn!("{} has a dependency on itself", requirement.name);
@@ -75,6 +77,11 @@ impl PubGrubDependencies {
 
         // If any requirements were further constrained by the user, add those constraints.
         for constraint in constraints {
+            // If a requirement was overridden, skip it.
+            if overrides.get(&constraint.name).is_some() {
+                continue;
+            }
+
             // Avoid self-dependencies.
             if source.is_some_and(|source| source == &constraint.name) {
                 warn!("{} has a dependency on itself", constraint.name);

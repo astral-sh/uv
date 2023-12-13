@@ -121,6 +121,7 @@ async fn black() -> Result<()> {
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -144,6 +145,7 @@ async fn black_colorama() -> Result<()> {
         vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
         vec![],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -165,6 +167,7 @@ async fn black_python_310() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![],
         vec![],
         vec![],
         None,
@@ -192,6 +195,7 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions<0.4.4").unwrap()],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -216,6 +220,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap()],
+        vec![],
         vec![],
         None,
     );
@@ -242,6 +247,7 @@ async fn black_flake8() -> Result<()> {
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("flake8<1").unwrap()],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -263,6 +269,7 @@ async fn black_lowest() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black>21").unwrap()],
+        vec![],
         vec![],
         vec![],
         None,
@@ -288,6 +295,7 @@ async fn black_lowest_direct() -> Result<()> {
         vec![Requirement::from_str("black>21").unwrap()],
         vec![],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -309,6 +317,7 @@ async fn black_respect_preference() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![],
         vec![],
         vec![Requirement::from_str("black==23.9.0").unwrap()],
         None,
@@ -333,6 +342,7 @@ async fn black_ignore_preference() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
+        vec![],
         vec![Requirement::from_str("black==23.9.2").unwrap()],
         None,
     );
@@ -355,6 +365,7 @@ async fn black_disallow_prerelease() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=20.0").unwrap()],
+        vec![],
         vec![],
         vec![],
         None,
@@ -382,6 +393,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         vec![Requirement::from_str("black<=20.0").unwrap()],
         vec![],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -407,6 +419,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
         vec![Requirement::from_str("pylint==2.3.0").unwrap()],
         vec![],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -428,6 +441,7 @@ async fn pylint_allow_prerelease() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("pylint==2.3.0").unwrap()],
+        vec![],
         vec![],
         vec![],
         None,
@@ -456,6 +470,7 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
         ],
         vec![],
         vec![],
+        vec![],
         None,
     );
     let options = ResolutionOptions::new(
@@ -480,6 +495,7 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
             Requirement::from_str("pylint==2.3.0").unwrap(),
             Requirement::from_str("isort>=5.0.0b").unwrap(),
         ],
+        vec![],
         vec![],
         vec![],
         None,

@@ -15,6 +15,7 @@ mod error;
 mod file;
 mod finder;
 mod manifest;
+mod overrides;
 mod pins;
 mod prerelease_mode;
 mod pubgrub;
