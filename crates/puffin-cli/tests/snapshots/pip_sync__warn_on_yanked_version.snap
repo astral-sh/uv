@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpR0i3bZ
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpQOqXCr
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmplFEoko/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpyEEM5q/.venv
 ---
 success: true
 exit_code: 0
@@ -16,8 +16,8 @@ exit_code: 0
 
 ----- stderr -----
 Resolved 1 package in [TIME]
-warning: ipython==8.13.0 is yanked (reason: "Wrong Python Pinning"). Refresh your lockfile to pin an un-yanked version.
+warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
 Downloaded 1 package in [TIME]
 Installed 1 package in [TIME]
- + ipython==8.13.0
+ + colorama==0.4.2
 

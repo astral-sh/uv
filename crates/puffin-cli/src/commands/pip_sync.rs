@@ -14,7 +14,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Downloader, InstallPlan, Reinstall};
+use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
@@ -263,6 +263,7 @@ pub(crate) async fn sync_requirements(
         )?;
     }
 
+    // Report on any changes in the environment.
     for event in extraneous
         .into_iter()
         .chain(reinstalls.into_iter())
@@ -301,6 +302,18 @@ pub(crate) async fn sync_requirements(
                 )?;
             }
         }
+    }
+
+    // Validate that the environment is consistent.
+    let site_packages = SitePackages::try_from_executable(&venv)?;
+    for diagnostic in site_packages.diagnostics()? {
+        writeln!(
+            printer,
+            "{}{} {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            diagnostic.message().bold()
+        )?;
     }
 
     Ok(ExitStatus::Success)

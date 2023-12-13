@@ -6,9 +6,9 @@ info:
     - pip-sync
     - requirements.txt
     - "--cache-dir"
-    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpcRNTPf
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpOX4pkP
   env:
-    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpK40oCA/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpCpUYiO/.venv
 ---
 success: true
 exit_code: 0
@@ -19,4 +19,5 @@ Resolved 1 package in [TIME]
 Downloaded 1 package in [TIME]
 Installed 1 package in [TIME]
  + dtlssocket @ https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz
+warning: The package `dtlssocket` requires `cython <3`, but it's not installed.
 
