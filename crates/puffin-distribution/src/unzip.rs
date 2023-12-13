@@ -1,39 +1,49 @@
+use std::io;
 use std::io::{Read, Seek};
 use std::path::Path;
 
-use anyhow::Result;
 use rayon::prelude::*;
+use thiserror::Error;
+use zip::result::ZipError;
 use zip::ZipArchive;
 
 use crate::download::BuiltWheel;
 use crate::vendor::{CloneableSeekableReader, HasLength};
 use crate::{DiskWheel, InMemoryWheel, LocalWheel};
 
+#[derive(Debug, Error)]
+pub enum UnzipError {
+    #[error(transparent)]
+    Zip(#[from] ZipError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+}
+
 pub trait Unzip {
     /// Unzip a wheel into the target directory.
-    fn unzip(&self, target: &Path) -> Result<()>;
+    fn unzip(&self, target: &Path) -> Result<(), UnzipError>;
 }
 
 impl Unzip for InMemoryWheel {
-    fn unzip(&self, target: &Path) -> Result<()> {
+    fn unzip(&self, target: &Path) -> Result<(), UnzipError> {
         unzip_archive(std::io::Cursor::new(&self.buffer), target)
     }
 }
 
 impl Unzip for DiskWheel {
-    fn unzip(&self, target: &Path) -> Result<()> {
+    fn unzip(&self, target: &Path) -> Result<(), UnzipError> {
         unzip_archive(fs_err::File::open(&self.path)?, target)
     }
 }
 
 impl Unzip for BuiltWheel {
-    fn unzip(&self, target: &Path) -> Result<()> {
+    fn unzip(&self, target: &Path) -> Result<(), UnzipError> {
         unzip_archive(fs_err::File::open(&self.path)?, target)
     }
 }
 
 impl Unzip for LocalWheel {
-    fn unzip(&self, target: &Path) -> Result<()> {
+    fn unzip(&self, target: &Path) -> Result<(), UnzipError> {
         match self {
             LocalWheel::InMemory(wheel) => wheel.unzip(target),
             LocalWheel::Disk(wheel) => wheel.unzip(target),
@@ -43,7 +53,10 @@ impl Unzip for LocalWheel {
 }
 
 /// Unzip a zip archive into the target directory.
-fn unzip_archive<R: Send + Read + Seek + HasLength>(reader: R, target: &Path) -> Result<()> {
+fn unzip_archive<R: Send + Read + Seek + HasLength>(
+    reader: R,
+    target: &Path,
+) -> Result<(), UnzipError> {
     // Unzip in parallel.
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     (0..archive.len())
@@ -85,5 +98,5 @@ fn unzip_archive<R: Send + Read + Seek + HasLength>(reader: R, target: &Path) ->
 
             Ok(())
         })
-        .collect::<Result<_>>()
+        .collect::<Result<_, UnzipError>>()
 }

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use std::sync::Arc;
 
-use anyhow::Result;
 use futures::{StreamExt, TryFutureExt};
+use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
 
@@ -12,17 +12,20 @@ use distribution_types::{CachedDist, Dist, RemoteSource, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, LocalWheel, Unzip};
+use puffin_distribution::{
+    DistributionDatabase, DistributionDatabaseError, LocalWheel, Unzip, UnzipError,
+};
 use puffin_traits::{BuildContext, OnceMap};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Failed to unzip wheel: {0}")]
-    Unzip(Dist, #[source] anyhow::Error),
-
+    Unzip(Dist, #[source] UnzipError),
     #[error("Failed to fetch wheel: {0}")]
     Fetch(Dist, #[source] DistributionDatabaseError),
-
+    /// Should not occur, i've only seen it when another task panicked
+    #[error("The task executor is broken, did some other task panic?")]
+    Join(#[from] JoinError),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -125,7 +128,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 }
                 Err(err) => {
                     in_flight.done(target, Err(err.to_string()));
-                    return Err(Error::Unzip(dist, err));
+                    return Err(err);
                 }
             }
         } else {
@@ -141,7 +144,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Unzip a locally-available wheel into the cache.
-    async fn unzip_wheel(download: LocalWheel) -> Result<CachedDist> {
+    async fn unzip_wheel(download: LocalWheel) -> Result<CachedDist, Error> {
         let remote = download.remote().clone();
         let filename = download.filename().clone();
 
@@ -157,7 +160,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
 
         // Unzip the wheel.
         let normalized_path = tokio::task::spawn_blocking({
-            move || -> Result<PathBuf> {
+            move || -> Result<PathBuf, UnzipError> {
                 // Unzip the wheel into a temporary directory.
                 let parent = download
                     .target()
@@ -181,7 +184,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 Ok(download.target().to_path_buf())
             }
         })
-        .await??;
+        .await?
+        .map_err(|err| Error::Unzip(remote.clone(), err))?;
 
         Ok(CachedDist::from_remote(remote, filename, normalized_path))
     }
