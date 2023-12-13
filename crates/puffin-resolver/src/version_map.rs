@@ -9,8 +9,8 @@ use pep508_rs::MarkerEnvironment;
 use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
 use puffin_interpreter::Interpreter;
-use puffin_macros::warn_once;
 use puffin_normalize::PackageName;
+use puffin_warnings::warn_once;
 use pypi_types::Yanked;
 
 use crate::file::{DistFile, SdistFile, WheelFile};
@@ -64,7 +64,7 @@ impl VersionMap {
                         }
                         None => {
                             warn_once!(
-                                "{} is missing an upload date, but user provided {}",
+                                "{} is missing an upload date, but user provided: {}",
                                 file.filename,
                                 exclude_newer,
                             );

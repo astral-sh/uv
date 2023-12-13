@@ -17,6 +17,7 @@ name = "puffin"
 path = "src/main.rs"
 
 [dependencies]
+distribution-types = { path = "../distribution-types" }
 gourgeist = { path = "../gourgeist" }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
 pep440_rs = { path = "../pep440-rs" }
@@ -26,13 +27,13 @@ platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache", features = ["clap"] }
 puffin-client = { path = "../puffin-client" }
 puffin-dispatch = { path = "../puffin-dispatch" }
-distribution-types = { path = "../distribution-types" }
 puffin-distribution = { path = "../puffin-distribution" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-traits = { path = "../puffin-traits" }
+puffin-warnings = { path = "../puffin-warnings" }
 puffin-workspace = { path = "../puffin-workspace" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }

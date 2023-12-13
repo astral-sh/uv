@@ -348,12 +348,14 @@ struct RemoveArgs {
 async fn inner() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
+    // Configure the `tracing` crate, which controls internal logging.
     logging::setup_logging(if cli.verbose {
         logging::Level::Verbose
     } else {
         logging::Level::Default
     });
 
+    // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if cli.quiet {
         printer::Printer::Quiet
     } else if cli.verbose {
@@ -361,6 +363,11 @@ async fn inner() -> Result<ExitStatus> {
     } else {
         printer::Printer::Default
     };
+
+    // Configure the `warn!` macros, which control user-facing warnings in the CLI.
+    if !cli.quiet {
+        puffin_warnings::enable();
+    }
 
     let cache = Cache::try_from(cli.cache_args)?;
 

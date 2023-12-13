@@ -8,9 +8,11 @@ info:
     - "--constraint"
     - constraints.txt
     - "--cache-dir"
-    - /tmp/.tmpZMtiDp
+    - /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpzGLCFa
+    - "--exclude-newer"
+    - "2023-11-18T12:00:00Z"
   env:
-    VIRTUAL_ENV: /tmp/.tmpYzlRGF/.venv
+    VIRTUAL_ENV: /var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmp8uVkTx/.venv
 ---
 success: true
 exit_code: 0

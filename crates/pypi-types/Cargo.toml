@@ -16,7 +16,7 @@ workspace = true
 pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 puffin-normalize = { path = "../puffin-normalize" }
-puffin-macros = { path = "../puffin-macros" }
+puffin-warnings = { path = "../puffin-warnings" }
 
 chrono = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
