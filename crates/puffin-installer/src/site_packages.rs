@@ -6,7 +6,7 @@ use fs_err as fs;
 use rustc_hash::FxHashSet;
 
 use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
@@ -94,6 +94,17 @@ impl<'a> SitePackages<'a> {
         for (package, distribution) in &self.index {
             // Determine the dependencies for the given package.
             let metadata = distribution.metadata()?;
+
+            // Verify that the package is compatible with the current Python version.
+            if let Some(requires_python) = metadata.requires_python.as_ref() {
+                if !requires_python.contains(self.venv.interpreter().version()) {
+                    diagnostics.push(Diagnostic::IncompatiblePythonVersion {
+                        package: package.clone(),
+                        version: self.venv.interpreter().version().clone(),
+                        requires_python: requires_python.clone(),
+                    });
+                }
+            }
 
             // Verify that the dependencies are installed.
             for requirement in &metadata.requires_dist {
@@ -198,6 +209,14 @@ impl IntoIterator for SitePackages<'_> {
 
 #[derive(Debug)]
 pub enum Diagnostic {
+    IncompatiblePythonVersion {
+        /// The package that requires a different version of Python.
+        package: PackageName,
+        /// The version of Python that is installed.
+        version: Version,
+        /// The version of Python that is required.
+        requires_python: VersionSpecifiers,
+    },
     MissingDependency {
         /// The package that is missing a dependency.
         package: PackageName,
@@ -218,18 +237,25 @@ impl Diagnostic {
     /// Convert the diagnostic into a user-facing message.
     pub fn message(&self) -> String {
         match self {
+            Self::IncompatiblePythonVersion {
+                package,
+                version,
+                requires_python,
+            } => format!(
+                "The package `{package}` requires Python {requires_python}, but `{version}` is installed."
+            ),
             Self::MissingDependency {
                 package,
                 requirement,
             } => {
-                format!("The package `{package}` requires `{requirement}` but it is not installed.")
+                format!("The package `{package}` requires `{requirement}`, but it's not installed.")
             }
             Self::IncompatibleDependency {
                 package,
                 version,
                 requirement,
             } => format!(
-                "The package `{package}` requires `{requirement}` but `{version}` is installed."
+                "The package `{package}` requires `{requirement}`, but `{version}` is installed."
             ),
         }
     }
@@ -237,6 +263,7 @@ impl Diagnostic {
     /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
     pub fn includes(&self, name: &PackageName) -> bool {
         match self {
+            Self::IncompatiblePythonVersion { package, .. } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {
                 package,

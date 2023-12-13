@@ -384,7 +384,7 @@ fn allow_incompatibilities() -> Result<()> {
         Installed 1 package in [TIME]
          - jinja2==3.1.2
          + jinja2==2.11.3
-        warning: The package `flask` requires `jinja2 >=3.1.2` but `2.11.3` is installed.
+        warning: The package `flask` requires `jinja2 >=3.1.2`, but `2.11.3` is installed.
         "###);
     });
 
