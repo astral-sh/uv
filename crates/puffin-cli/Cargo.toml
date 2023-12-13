@@ -51,6 +51,7 @@ itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 pubgrub = { workspace = true }
 pyproject-toml = { workspace = true }
+rustc-hash = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
