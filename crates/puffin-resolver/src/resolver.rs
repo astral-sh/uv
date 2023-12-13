@@ -34,9 +34,10 @@ use crate::manifest::Manifest;
 use crate::overrides::Overrides;
 use crate::pins::FilePins;
 use crate::pubgrub::{
-    PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
+    PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubVersion,
+    MIN_VERSION,
 };
-use crate::resolution::Graph;
+use crate::resolution::ResolutionGraph;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 use crate::ResolutionOptions;
@@ -230,7 +231,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
-    pub async fn resolve(self) -> Result<Graph, ResolveError> {
+    pub async fn resolve(self) -> Result<ResolutionGraph, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
@@ -271,7 +272,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     async fn solve(
         &self,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-    ) -> Result<Graph, ResolveError> {
+    ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
 
         // Keep track of the packages for which we've requested metadata.
@@ -301,7 +302,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     })
             else {
                 let selection = state.partial_solution.extract_solution();
-                return Graph::from_state(&selection, &pins, &self.index.redirects, &state);
+                return ResolutionGraph::from_state(
+                    &selection,
+                    &pins,
+                    &self.index.distributions,
+                    &self.index.redirects,
+                    &state,
+                );
             };
             next = highest_priority_pkg;
 
@@ -350,13 +357,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .get_dependencies(package, &version, &mut priorities, &index, request_sink)
                     .await?
                 {
-                    Dependencies::Unknown => {
-                        state.add_incompatibility(Incompatibility::unavailable_dependencies(
-                            package.clone(),
-                            version.clone(),
-                        ));
-                        continue;
-                    }
                     Dependencies::Unusable(reason) => {
                         state.add_incompatibility(Incompatibility::unusable_dependencies(
                             package.clone(),
@@ -639,14 +639,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Self::visit_package(package, priorities, index, request_sink)?;
                 }
 
-                if let Some(extra) = extra {
-                    if !metadata
-                        .provides_extras
-                        .iter()
-                        .any(|provided_extra| provided_extra == extra)
-                    {
-                        return Ok(Dependencies::Unknown);
-                    }
+                if extra.is_some() {
                     constraints.insert(
                         PubGrubPackage::Package(package_name.clone(), None, None),
                         Range::singleton(version.clone()),
@@ -854,42 +847,8 @@ impl<'a> FromIterator<&'a Url> for AllowedUrls {
 /// For each [Package] there is a set of versions allowed as a dependency.
 #[derive(Clone)]
 enum Dependencies {
-    /// Package dependencies are unavailable.
-    Unknown,
     /// Package dependencies are not usable
     Unusable(Option<String>),
     /// Container for all available package versions.
     Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
-}
-
-#[derive(Debug)]
-enum PubGrubDistribution<'a> {
-    Registry(&'a PackageName, &'a PubGrubVersion),
-    Url(&'a PackageName, &'a Url),
-}
-
-impl<'a> PubGrubDistribution<'a> {
-    fn from_registry(name: &'a PackageName, version: &'a PubGrubVersion) -> Self {
-        Self::Registry(name, version)
-    }
-
-    fn from_url(name: &'a PackageName, url: &'a Url) -> Self {
-        Self::Url(name, url)
-    }
-}
-
-impl Metadata for PubGrubDistribution<'_> {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(name, _) => name,
-            Self::Url(name, _) => name,
-        }
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Registry(_, version) => VersionOrUrl::Version((*version).into()),
-            Self::Url(_, url) => VersionOrUrl::Url(url),
-        }
-    }
 }

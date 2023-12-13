@@ -19,7 +19,7 @@ use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
-    Graph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
+    Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::{BuildContext, SourceBuildTrait};
 
@@ -97,7 +97,7 @@ async fn resolve(
     options: ResolutionOptions,
     markers: &'static MarkerEnvironment,
     tags: &Tags,
-) -> Result<Graph> {
+) -> Result<ResolutionGraph> {
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
     let build_context = DummyContext {
         cache: Cache::temp()?,
@@ -143,6 +143,31 @@ async fn black_colorama() -> Result<()> {
 
     let manifest = Manifest::new(
         vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
+        vec![],
+        vec![],
+        vec![],
+        None,
+    );
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
+
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
+
+    insta::assert_display_snapshot!(resolution);
+
+    Ok(())
+}
+
+/// Resolve Black with an invalid extra. The resolver should ignore the extra.
+#[tokio::test]
+async fn black_tensorboard() -> Result<()> {
+    colored::control::set_override(false);
+
+    let manifest = Manifest::new(
+        vec![Requirement::from_str("black[tensorboard]<=23.9.1").unwrap()],
         vec![],
         vec![],
         vec![],

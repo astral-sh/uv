@@ -178,6 +178,18 @@ pub(crate) async fn pip_compile(
         .dimmed()
     )?;
 
+    // Notify the user of any diagnostics.
+    for diagnostic in resolution.diagnostics() {
+        writeln!(
+            printer,
+            "{}{} {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            diagnostic.message().bold()
+        )?;
+    }
+
+    // Write the resolved dependencies to the output channel.
     let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
         Box::new(AutoStream::auto(fs::File::create(output_file)?))
     } else {

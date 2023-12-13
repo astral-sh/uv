@@ -14,18 +14,19 @@ use url::Url;
 use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_normalize::PackageName;
+use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::OnceMap;
+use pypi_types::Metadata21;
 
 use crate::pins::FilePins;
-use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVersion};
+use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority, PubGrubVersion};
 use crate::ResolveError;
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default)]
-pub struct Resolution(FxHashMap<PackageName, Dist>);
+pub struct ResolutionManifest(FxHashMap<PackageName, Dist>);
 
-impl Resolution {
+impl ResolutionManifest {
     /// Create a new resolution from the given pinned packages.
     pub(crate) fn new(packages: FxHashMap<PackageName, Dist>) -> Self {
         Self(packages)
@@ -69,19 +70,26 @@ impl Resolution {
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct Graph(pub petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>);
+pub struct ResolutionGraph {
+    /// The underlying graph.
+    petgraph: petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>,
+    /// Any diagnostics that were encountered while building the graph.
+    diagnostics: Vec<Diagnostic>,
+}
 
-impl Graph {
+impl ResolutionGraph {
     /// Create a new graph from the resolved `PubGrub` state.
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FilePins,
+        distributions: &OnceMap<String, Metadata21>,
         redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
-        let mut graph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
+        let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
+        let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
         let mut inverse =
@@ -97,7 +105,7 @@ impl Graph {
                     let pinned_package =
                         Dist::from_registry(package_name.clone(), version, file, index);
 
-                    let index = graph.add_node(pinned_package);
+                    let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
@@ -106,8 +114,51 @@ impl Graph {
                         .map_or_else(|| url.clone(), |url| url.value().clone());
                     let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
-                    let index = graph.add_node(pinned_package);
+                    let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
+                }
+                PubGrubPackage::Package(package_name, Some(extra), None) => {
+                    // Validate that the `extra` exists.
+                    let dist = PubGrubDistribution::from_registry(package_name, version);
+                    let entry = distributions
+                        .get(&dist.package_id())
+                        .expect("Every package should have metadata");
+                    let metadata = entry.value();
+
+                    if !metadata.provides_extras.contains(extra) {
+                        let version = Version::from(version.clone());
+                        let (index, file) = pins
+                            .get(package_name, &version)
+                            .expect("Every package should be pinned")
+                            .clone();
+                        let pinned_package =
+                            Dist::from_registry(package_name.clone(), version, file, index);
+
+                        diagnostics.push(Diagnostic::MissingExtra {
+                            dist: pinned_package,
+                            extra: extra.clone(),
+                        });
+                    }
+                }
+                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
+                    // Validate that the `extra` exists.
+                    let dist = PubGrubDistribution::from_url(package_name, url);
+                    let entry = distributions
+                        .get(&dist.package_id())
+                        .expect("Every package should have metadata");
+                    let metadata = entry.value();
+
+                    if !metadata.provides_extras.contains(extra) {
+                        let url = redirects
+                            .get(url)
+                            .map_or_else(|| url.clone(), |url| url.value().clone());
+                        let pinned_package = Dist::from_url(package_name.clone(), url)?;
+
+                        diagnostics.push(Diagnostic::MissingExtra {
+                            dist: pinned_package,
+                            extra: extra.clone(),
+                        });
+                    }
                 }
                 _ => {}
             };
@@ -134,56 +185,68 @@ impl Graph {
                     if self_version.contains(version) {
                         let self_index = &inverse[self_package];
                         let dependency_index = &inverse[dependency_package];
-                        graph.update_edge(*self_index, *dependency_index, dependency_range.clone());
+                        petgraph.update_edge(
+                            *self_index,
+                            *dependency_index,
+                            dependency_range.clone(),
+                        );
                     }
                 }
             }
         }
 
-        Ok(Self(graph))
+        Ok(Self {
+            petgraph,
+            diagnostics,
+        })
     }
 
     /// Return the number of packages in the graph.
     pub fn len(&self) -> usize {
-        self.0.node_count()
+        self.petgraph.node_count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.0.node_count() == 0
+        self.petgraph.node_count() == 0
     }
 
     /// Return the set of [`Requirement`]s that this graph represents.
     pub fn requirements(&self) -> Vec<Requirement> {
         // Collect and sort all packages.
         let mut nodes = self
-            .0
+            .petgraph
             .node_indices()
-            .map(|node| (node, &self.0[node]))
+            .map(|node| (node, &self.petgraph[node]))
             .collect::<Vec<_>>();
         nodes.sort_unstable_by_key(|(_, package)| package.name());
-        self.0
+        self.petgraph
             .node_indices()
-            .map(|node| as_requirement(&self.0[node]))
+            .map(|node| as_requirement(&self.petgraph[node]))
             .collect()
+    }
+
+    /// Return the [`Diagnostic`]s that were encountered while building the graph.
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 
     /// Return the underlying graph.
     pub fn petgraph(
         &self,
     ) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
-        &self.0
+        &self.petgraph
     }
 }
 
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
-impl std::fmt::Display for Graph {
+impl std::fmt::Display for ResolutionGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Collect and sort all packages.
         let mut nodes = self
-            .0
+            .petgraph
             .node_indices()
-            .map(|node| (node, &self.0[node]))
+            .map(|node| (node, &self.petgraph[node]))
             .collect::<Vec<_>>();
         nodes.sort_unstable_by_key(|(_, package)| package.name());
 
@@ -192,9 +255,9 @@ impl std::fmt::Display for Graph {
             writeln!(f, "{package}")?;
 
             let mut edges = self
-                .0
+                .petgraph
                 .edges_directed(index, Direction::Incoming)
-                .map(|edge| &self.0[edge.source()])
+                .map(|edge| &self.petgraph[edge.source()])
                 .collect::<Vec<_>>();
             edges.sort_unstable_by_key(|package| package.name());
 
@@ -218,13 +281,18 @@ impl std::fmt::Display for Graph {
     }
 }
 
-impl From<Graph> for Resolution {
-    fn from(graph: Graph) -> Self {
+impl From<ResolutionGraph> for ResolutionManifest {
+    fn from(graph: ResolutionGraph) -> Self {
         Self(
             graph
-                .0
+                .petgraph
                 .node_indices()
-                .map(|node| (graph.0[node].name().clone(), graph.0[node].clone()))
+                .map(|node| {
+                    (
+                        graph.petgraph[node].name().clone(),
+                        graph.petgraph[node].clone(),
+                    )
+                })
                 .collect(),
         )
     }
@@ -279,5 +347,34 @@ fn as_requirement(dist: &Dist) -> Requirement {
             version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
             marker: None,
         },
+    }
+}
+
+#[derive(Debug)]
+pub enum Diagnostic {
+    MissingExtra {
+        /// The distribution that was requested with an non-existent extra. For example,
+        /// `black==23.10.0`.
+        dist: Dist,
+        /// The extra that was requested. For example, `colorama` in `black[colorama]`.
+        extra: ExtraName,
+    },
+}
+
+impl Diagnostic {
+    /// Convert the diagnostic into a user-facing message.
+    pub fn message(&self) -> String {
+        match self {
+            Self::MissingExtra { dist, extra } => {
+                format!("The package `{dist}` does not have an extra named `{extra}`.")
+            }
+        }
+    }
+
+    /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
+    pub fn includes(&self, name: &PackageName) -> bool {
+        match self {
+            Self::MissingExtra { dist, .. } => name == dist.name(),
+        }
     }
 }
