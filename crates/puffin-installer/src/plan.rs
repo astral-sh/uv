@@ -104,7 +104,7 @@ impl InstallPlan {
                         // If the requirement comes from a direct URL, check by URL.
                         Some(VersionOrUrl::Url(url)) => {
                             if let InstalledDist::Url(distribution) = &distribution {
-                                if let Ok(direct_url) = DirectUrl::try_from(url) {
+                                if let Ok(direct_url) = DirectUrl::try_from(url.raw()) {
                                     if let Ok(direct_url) =
                                         pypi_types::DirectUrl::try_from(&direct_url)
                                     {

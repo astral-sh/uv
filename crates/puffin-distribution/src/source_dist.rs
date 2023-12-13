@@ -161,7 +161,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     .filename()
                     .unwrap_or(direct_url_source_dist.url.path());
                 let DirectArchiveUrl { url, subdirectory } =
-                    DirectArchiveUrl::from(&direct_url_source_dist.url);
+                    DirectArchiveUrl::from(direct_url_source_dist.url.raw());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(

@@ -1,6 +1,5 @@
-use url::Url;
-
 use distribution_types::{Metadata, VersionOrUrl};
+use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 
 use crate::pubgrub::PubGrubVersion;
@@ -8,7 +7,7 @@ use crate::pubgrub::PubGrubVersion;
 #[derive(Debug)]
 pub(crate) enum PubGrubDistribution<'a> {
     Registry(&'a PackageName, &'a PubGrubVersion),
-    Url(&'a PackageName, &'a Url),
+    Url(&'a PackageName, &'a VerbatimUrl),
 }
 
 impl<'a> PubGrubDistribution<'a> {
@@ -16,7 +15,7 @@ impl<'a> PubGrubDistribution<'a> {
         Self::Registry(name, version)
     }
 
-    pub(crate) fn from_url(name: &'a PackageName, url: &'a Url) -> Self {
+    pub(crate) fn from_url(name: &'a PackageName, url: &'a VerbatimUrl) -> Self {
         Self::Url(name, url)
     }
 }

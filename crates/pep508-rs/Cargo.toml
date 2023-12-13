@@ -20,6 +20,7 @@ crate-type = ["cdylib", "rlib"]
 pep440_rs = { path = "../pep440-rs" }
 puffin-normalize = { path = "../puffin-normalize" }
 
+derivative = { workspace = true }
 once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }

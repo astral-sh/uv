@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use url::Url;
 
 use distribution_filename::WheelFilename;
+use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 
 use crate::direct_url::DirectUrl;
@@ -28,7 +28,7 @@ pub struct CachedRegistryDist {
 #[derive(Debug, Clone)]
 pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
-    pub url: Url,
+    pub url: VerbatimUrl,
     pub path: PathBuf,
 }
 
@@ -118,14 +118,14 @@ impl CachedDist {
     pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
         match self {
             CachedDist::Registry(_) => Ok(None),
-            CachedDist::Url(dist) => DirectUrl::try_from(&dist.url).map(Some),
+            CachedDist::Url(dist) => DirectUrl::try_from(dist.url.raw()).map(Some),
         }
     }
 }
 
 impl CachedDirectUrlDist {
     /// Initialize a [`CachedDirectUrlDist`] from a [`WheelFilename`], [`Url`], and [`Path`].
-    pub fn from_url(filename: WheelFilename, url: Url, path: PathBuf) -> Self {
+    pub fn from_url(filename: WheelFilename, url: VerbatimUrl, path: PathBuf) -> Self {
         Self {
             filename,
             url,
@@ -172,7 +172,7 @@ impl CachedWheel {
     }
 
     /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`].
-    pub fn into_url_dist(self, url: Url) -> CachedDirectUrlDist {
+    pub fn into_url_dist(self, url: VerbatimUrl) -> CachedDirectUrlDist {
         CachedDirectUrlDist {
             filename: self.filename,
             url,

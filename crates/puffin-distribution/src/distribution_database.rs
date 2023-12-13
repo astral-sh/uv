@@ -261,6 +261,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Insert the `precise` URL, if it exists.
                 let precise = self.precise(source_dist).await?;
+
                 let source_dist = match precise.as_ref() {
                     Some(url) => Cow::Owned(source_dist.clone().with_url(url.clone())),
                     None => Cow::Borrowed(source_dist),
@@ -280,17 +281,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub async fn precise(
-        &self,
-        dist: &SourceDist,
-    ) -> Result<Option<Url>, DistributionDatabaseError> {
+    async fn precise(&self, dist: &SourceDist) -> Result<Option<Url>, DistributionDatabaseError> {
         let SourceDist::Git(source_dist) = dist else {
             return Ok(None);
         };
         let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
 
-        let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(&source_dist.url).map_err(DistributionDatabaseError::Git)?;
+        let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(source_dist.url.raw())
+            .map_err(DistributionDatabaseError::Git)?;
 
         // If the commit already contains a complete SHA, short-circuit.
         if url.precise().is_some() {
@@ -310,6 +308,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let url = precise.into_git();
 
         // Re-encode as a URL.
-        Ok(Some(DirectGitUrl { url, subdirectory }.into()))
+        Ok(Some(Url::from(DirectGitUrl { url, subdirectory })))
     }
 }

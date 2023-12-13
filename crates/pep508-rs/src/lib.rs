@@ -35,7 +35,6 @@ use pyo3::{
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
-use url::Url;
 
 pub use marker::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
@@ -43,8 +42,10 @@ pub use marker::{
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use puffin_normalize::{ExtraName, PackageName};
+pub use verbatim_url::VerbatimUrl;
 
 mod marker;
+mod verbatim_url;
 
 /// Error with a span attached. Not that those aren't `String` but `Vec<char>` indices.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -62,12 +63,12 @@ pub struct Pep508Error {
 /// Either we have an error string from our parser or an upstream error from `url`
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum Pep508ErrorSource {
-    /// An error from our parser
+    /// An error from our parser.
     #[error("{0}")]
     String(String),
-    /// A url parsing error
+    /// A URL parsing error.
     #[error(transparent)]
-    UrlError(#[from] url::ParseError),
+    UrlError(#[from] verbatim_url::Error),
 }
 
 impl Display for Pep508Error {
@@ -397,7 +398,7 @@ pub enum VersionOrUrl {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
     /// A installable URL
-    Url(Url),
+    Url(VerbatimUrl),
 }
 
 /// A `Vec<char>` and an index inside of it. Like [String], but with utf-8 aware indexing
@@ -678,7 +679,7 @@ fn parse_url(chars: &mut CharIter) -> Result<VersionOrUrl, Pep508Error> {
             input: chars.copy_chars(),
         });
     }
-    let url = Url::parse(&url).map_err(|err| Pep508Error {
+    let url = VerbatimUrl::parse(url).map_err(|err| Pep508Error {
         message: Pep508ErrorSource::UrlError(err),
         start,
         len,
@@ -888,7 +889,6 @@ mod tests {
     use std::str::FromStr;
 
     use indoc::indoc;
-    use url::Url;
 
     use pep440_rs::{Operator, Version, VersionSpecifier};
     use puffin_normalize::{ExtraName, PackageName};
@@ -897,7 +897,7 @@ mod tests {
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{CharIter, Requirement, VersionOrUrl};
+    use crate::{CharIter, Requirement, VerbatimUrl, VersionOrUrl};
 
     fn assert_err(input: &str, error: &str) {
         assert_eq!(Requirement::from_str(input).unwrap_err().to_string(), error);
@@ -1151,7 +1151,7 @@ mod tests {
             name: PackageName::from_str("pip").unwrap(),
             extras: None,
             marker: None,
-            version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
+            version_or_url: Some(VersionOrUrl::Url(VerbatimUrl::from_str(url).unwrap())),
         };
         assert_eq!(pip_url, expected);
     }

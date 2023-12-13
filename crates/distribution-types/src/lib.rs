@@ -45,6 +45,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl};
 
@@ -68,7 +69,7 @@ pub enum VersionOrUrl<'a> {
     /// A PEP 440 version specifier, used to identify a distribution in a registry.
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
-    Url(&'a Url),
+    Url(&'a VerbatimUrl),
 }
 
 impl std::fmt::Display for VersionOrUrl<'_> {
@@ -123,14 +124,14 @@ pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
-    pub url: Url,
+    pub url: VerbatimUrl,
 }
 
 /// A built distribution (wheel) that exists in a local directory.
 #[derive(Debug, Clone)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    pub url: Url,
+    pub url: VerbatimUrl,
     pub path: PathBuf,
 }
 
@@ -149,21 +150,21 @@ pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
-    pub url: Url,
+    pub url: VerbatimUrl,
 }
 
 /// A source distribution that exists in a Git repository.
 #[derive(Debug, Clone)]
 pub struct GitSourceDist {
     pub name: PackageName,
-    pub url: Url,
+    pub url: VerbatimUrl,
 }
 
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    pub url: Url,
+    pub url: VerbatimUrl,
     pub path: PathBuf,
 }
 
@@ -191,7 +192,7 @@ impl Dist {
     }
 
     /// Create a [`Dist`] for a URL-based distribution.
-    pub fn from_url(name: PackageName, url: Url) -> Result<Self, Error> {
+    pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
         if url.scheme().starts_with("git+") {
             return Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })));
         }
@@ -200,9 +201,9 @@ impl Dist {
             // Store the canonicalized path.
             let path = url
                 .to_file_path()
-                .map_err(|()| Error::UrlFilename(url.clone()))?
+                .map_err(|()| Error::UrlFilename(url.to_url()))?
                 .canonicalize()
-                .map_err(|err| Error::NotFound(url.clone(), err))?;
+                .map_err(|err| Error::NotFound(url.to_url(), err))?;
             return if path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
@@ -268,11 +269,18 @@ impl SourceDist {
     #[must_use]
     pub fn with_url(self, url: Url) -> Self {
         match self {
-            SourceDist::DirectUrl(dist) => {
-                SourceDist::DirectUrl(DirectUrlSourceDist { url, ..dist })
-            }
-            SourceDist::Git(dist) => SourceDist::Git(GitSourceDist { url, ..dist }),
-            SourceDist::Path(dist) => SourceDist::Path(PathSourceDist { url, ..dist }),
+            SourceDist::DirectUrl(dist) => SourceDist::DirectUrl(DirectUrlSourceDist {
+                url: VerbatimUrl::unknown(url),
+                ..dist
+            }),
+            SourceDist::Git(dist) => SourceDist::Git(GitSourceDist {
+                url: VerbatimUrl::unknown(url),
+                ..dist
+            }),
+            SourceDist::Path(dist) => SourceDist::Path(PathSourceDist {
+                url: VerbatimUrl::unknown(url),
+                ..dist
+            }),
             dist @ SourceDist::Registry(_) => dist,
         }
     }
