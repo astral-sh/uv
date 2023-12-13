@@ -583,7 +583,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.
-                let constraints = PubGrubDependencies::try_from_requirements(
+                let constraints = PubGrubDependencies::from_requirements(
                     &self.requirements,
                     &self.constraints,
                     None,
@@ -618,7 +618,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let entry = self.index.distributions.wait(&dist.package_id()).await;
                 let metadata = entry.value();
 
-                let mut constraints = PubGrubDependencies::try_from_requirements(
+                let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
                     &self.constraints,
                     extra.as_ref(),

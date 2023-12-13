@@ -20,7 +20,7 @@ pub(crate) fn freeze(cache: &Cache, _printer: Printer) -> Result<ExitStatus> {
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::try_from_executable(&python)?;
+    let site_packages = SitePackages::from_executable(&python)?;
     for dist in site_packages.distributions() {
         #[allow(clippy::print_stdout)]
         {

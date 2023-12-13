@@ -16,12 +16,12 @@ pub struct PubGrubDependencies(DependencyConstraints<PubGrubPackage, Range<PubGr
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
-    pub(crate) fn try_from_requirements<'a>(
+    pub(crate) fn from_requirements(
         requirements: &[Requirement],
         constraints: &[Requirement],
-        extra: Option<&'a ExtraName>,
-        source: Option<&'a PackageName>,
-        env: &'a MarkerEnvironment,
+        extra: Option<&ExtraName>,
+        source: Option<&PackageName>,
+        env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
         let mut dependencies =
             DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();

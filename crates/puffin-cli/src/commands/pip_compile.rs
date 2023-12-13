@@ -77,7 +77,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         extras: used_extras,
-    } = RequirementsSpecification::try_from_sources(requirements, constraints, &extras)?;
+    } = RequirementsSpecification::from_sources(requirements, constraints, &extras)?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -102,7 +102,7 @@ pub(crate) async fn pip_compile(
         .map(Path::to_path_buf)
         .map(RequirementsSource::from)
         .as_ref()
-        .map(|source| RequirementsSpecification::try_from_source(source, &extras))
+        .map(|source| RequirementsSpecification::from_source(source, &extras))
         .transpose()?
         .map(|spec| spec.requirements)
         .unwrap_or_default();
