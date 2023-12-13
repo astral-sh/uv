@@ -117,13 +117,7 @@ async fn resolve(
 async fn black() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("black<=23.9.1").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::default(),
@@ -141,13 +135,9 @@ async fn black() -> Result<()> {
 async fn black_colorama() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black[colorama]<=23.9.1").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![
+        Requirement::from_str("black[colorama]<=23.9.1").unwrap()
+    ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::default(),
@@ -166,13 +156,9 @@ async fn black_colorama() -> Result<()> {
 async fn black_tensorboard() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black[tensorboard]<=23.9.1").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![
+        Requirement::from_str("black[tensorboard]<=23.9.1").unwrap()
+    ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::default(),
@@ -190,13 +176,7 @@ async fn black_tensorboard() -> Result<()> {
 async fn black_python_310() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("black<=23.9.1").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::default(),
@@ -292,13 +272,7 @@ async fn black_flake8() -> Result<()> {
 async fn black_lowest() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black>21").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("black>21").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::Lowest,
         PreReleaseMode::default(),
@@ -316,13 +290,7 @@ async fn black_lowest() -> Result<()> {
 async fn black_lowest_direct() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black>21").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("black>21").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::LowestDirect,
         PreReleaseMode::default(),
@@ -388,13 +356,7 @@ async fn black_ignore_preference() -> Result<()> {
 async fn black_disallow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=20.0").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("black<=20.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::Disallow,
@@ -414,13 +376,7 @@ async fn black_disallow_prerelease() -> Result<()> {
 async fn black_allow_prerelease_if_necessary() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=20.0").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("black<=20.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::IfNecessary,
@@ -440,13 +396,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
 async fn pylint_disallow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("pylint==2.3.0").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("pylint==2.3.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::Disallow,
@@ -464,13 +414,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 async fn pylint_allow_prerelease() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![Requirement::from_str("pylint==2.3.0").unwrap()],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![Requirement::from_str("pylint==2.3.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::Allow,
@@ -488,16 +432,10 @@ async fn pylint_allow_prerelease() -> Result<()> {
 async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![
-            Requirement::from_str("pylint==2.3.0").unwrap(),
-            Requirement::from_str("isort>=5.0.0").unwrap(),
-        ],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![
+        Requirement::from_str("pylint==2.3.0").unwrap(),
+        Requirement::from_str("isort>=5.0.0").unwrap(),
+    ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::Explicit,
@@ -515,16 +453,10 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     colored::control::set_override(false);
 
-    let manifest = Manifest::new(
-        vec![
-            Requirement::from_str("pylint==2.3.0").unwrap(),
-            Requirement::from_str("isort>=5.0.0b").unwrap(),
-        ],
-        vec![],
-        vec![],
-        vec![],
-        None,
-    );
+    let manifest = Manifest::simple(vec![
+        Requirement::from_str("pylint==2.3.0").unwrap(),
+        Requirement::from_str("isort>=5.0.0b").unwrap(),
+    ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
         PreReleaseMode::Explicit,
