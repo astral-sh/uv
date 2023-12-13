@@ -68,5 +68,5 @@ RequirementsTxt {
             marker: None,
         },
     ],
-    editable: [],
+    editables: [],
 }
