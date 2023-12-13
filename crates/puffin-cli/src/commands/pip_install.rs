@@ -18,7 +18,8 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{
-    Graph, Manifest, PreReleaseMode, Resolution, ResolutionMode, ResolutionOptions, Resolver,
+    Manifest, PreReleaseMode, ResolutionGraph, ResolutionManifest, ResolutionMode,
+    ResolutionOptions, Resolver,
 };
 use puffin_traits::OnceMap;
 use pypi_types::IndexUrls;
@@ -180,7 +181,7 @@ async fn resolve(
     cache: &Cache,
     venv: &Virtualenv,
     mut printer: Printer,
-) -> Result<Graph> {
+) -> Result<ResolutionGraph> {
     let start = std::time::Instant::now();
 
     // Create a manifest of the requirements.
@@ -271,7 +272,7 @@ async fn resolve(
 /// Install a set of requirements into the current environment.
 #[allow(clippy::too_many_arguments)]
 async fn install(
-    resolution: &Resolution,
+    resolution: &ResolutionManifest,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
@@ -455,7 +456,11 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<()> {
+fn validate(
+    resolution: &ResolutionManifest,
+    venv: &Virtualenv,
+    mut printer: Printer,
+) -> Result<()> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
     for diagnostic in diagnostics {

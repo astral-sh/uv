@@ -18,7 +18,7 @@ use puffin_normalize::PackageName;
 use pypi_types::IndexUrl;
 
 use crate::error::ResolveError;
-use crate::resolution::Resolution;
+use crate::resolution::ResolutionManifest;
 
 pub struct DistFinder<'a> {
     tags: &'a Tags,
@@ -48,9 +48,12 @@ impl<'a> DistFinder<'a> {
     }
 
     /// Resolve a set of pinned packages into a set of wheels.
-    pub async fn resolve(&self, requirements: &[Requirement]) -> Result<Resolution, ResolveError> {
+    pub async fn resolve(
+        &self,
+        requirements: &[Requirement],
+    ) -> Result<ResolutionManifest, ResolveError> {
         if requirements.is_empty() {
-            return Ok(Resolution::default());
+            return Ok(ResolutionManifest::default());
         }
 
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions).
@@ -96,7 +99,7 @@ impl<'a> DistFinder<'a> {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_complete();
             }
-            return Ok(Resolution::new(resolution));
+            return Ok(ResolutionManifest::new(resolution));
         }
 
         // Otherwise, wait for the package stream to complete.
@@ -130,7 +133,7 @@ impl<'a> DistFinder<'a> {
             reporter.on_complete();
         }
 
-        Ok(Resolution::new(resolution))
+        Ok(ResolutionManifest::new(resolution))
     }
 
     /// select a version that satisfies the requirement, preferring wheels to source distributions.
