@@ -33,6 +33,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -57,7 +58,7 @@ pub(crate) async fn pip_install(
     let start = std::time::Instant::now();
 
     // Determine the requirements.
-    let spec = specification(requirements, constraints, extras)?;
+    let spec = specification(requirements, constraints, overrides, extras)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -123,6 +124,7 @@ pub(crate) async fn pip_install(
 fn specification(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
 ) -> Result<RequirementsSpecification> {
     // If the user requests `extras` but does not provide a pyproject toml source
@@ -137,7 +139,8 @@ fn specification(
     }
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_sources(requirements, constraints, extras)?;
+    let spec =
+        RequirementsSpecification::from_sources(requirements, constraints, overrides, extras)?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -185,6 +188,7 @@ async fn resolve(
         project,
         requirements,
         constraints,
+        overrides,
         extras: _,
     } = spec;
 
@@ -200,7 +204,7 @@ async fn resolve(
             .collect(),
     };
 
-    let manifest = Manifest::new(requirements, constraints, preferences, project);
+    let manifest = Manifest::new(requirements, constraints, overrides, preferences, project);
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     debug!(

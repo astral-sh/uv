@@ -92,7 +92,7 @@ impl BuildContext for BuildDispatch {
         Box::pin(async {
             let tags = Tags::from_interpreter(&self.interpreter)?;
             let resolver = Resolver::new(
-                Manifest::new(requirements.to_vec(), Vec::default(), Vec::default(), None),
+                Manifest::simple(requirements.to_vec()),
                 self.options,
                 self.interpreter.markers(),
                 &tags,

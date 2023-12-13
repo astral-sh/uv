@@ -31,6 +31,7 @@ use pypi_types::{IndexUrl, Metadata21};
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
+use crate::overrides::Overrides;
 use crate::pins::FilePins;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubPackage, PubGrubPriorities, PubGrubVersion, MIN_VERSION,
@@ -147,6 +148,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
+    overrides: Overrides,
     allowed_urls: AllowedUrls,
     markers: &'a MarkerEnvironment,
     selector: CandidateSelector,
@@ -197,6 +199,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 .requirements
                 .iter()
                 .chain(manifest.constraints.iter())
+                .chain(manifest.overrides.iter())
                 .filter_map(|req| {
                     if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
                         Some(url)
@@ -208,6 +211,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
+            overrides: Overrides::from_requirements(manifest.overrides),
             markers,
             reporter: None,
             provider,
@@ -586,6 +590,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let constraints = PubGrubDependencies::from_requirements(
                     &self.requirements,
                     &self.constraints,
+                    &self.overrides,
                     None,
                     None,
                     self.markers,
@@ -621,6 +626,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
                     &self.constraints,
+                    &self.overrides,
                     extra.as_ref(),
                     Some(package_name),
                     self.markers,
