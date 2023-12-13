@@ -82,10 +82,10 @@ pub(crate) fn read_scripts_from_section(
 /// Extras are supposed to be ignored, which happens if you pass None for extras
 fn parse_scripts<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
-    dist_info_prefix: &str,
+    dist_info_dir: &str,
     extras: Option<&[String]>,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_path = format!("{dist_info_prefix}.dist-info/entry_points.txt");
+    let entry_points_path = format!("{dist_info_dir}/entry_points.txt");
     let entry_points_mapping = match archive.by_name(&entry_points_path) {
         Ok(mut file) => {
             let mut ini_text = String::new();
@@ -1043,7 +1043,7 @@ fn dist_info_metadata(
     archive: &mut ZipArchive<impl Read + Seek + Sized>,
 ) -> Result<Vec<u8>, Error> {
     let mut content = Vec::new();
-    let dist_info_file = format!("{dist_info_prefix}.dist-info/DIST-INFO");
+    let dist_info_file = format!("{dist_info_prefix}.dist-info/METADATA");
     archive
         .by_name(&dist_info_file)
         .map_err(|err| Error::Zip(dist_info_file.clone(), err))?

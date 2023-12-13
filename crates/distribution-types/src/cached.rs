@@ -6,7 +6,7 @@ use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 
-use crate::direct_url::DirectUrl;
+use crate::direct_url::{DirectUrl, LocalFileUrl};
 use crate::traits::Metadata;
 use crate::{BuiltDist, Dist, SourceDist, VersionOrUrl};
 
@@ -30,6 +30,7 @@ pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
     pub url: VerbatimUrl,
     pub path: PathBuf,
+    pub editable: bool,
 }
 
 impl Metadata for CachedRegistryDist {
@@ -79,11 +80,13 @@ impl CachedDist {
                 filename,
                 url: dist.url,
                 path,
+                editable: false,
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 path,
+                editable: false,
             }),
             Dist::Source(SourceDist::Registry(_dist)) => {
                 Self::Registry(CachedRegistryDist { filename, path })
@@ -92,16 +95,19 @@ impl CachedDist {
                 filename,
                 url: dist.url,
                 path,
+                editable: false,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 path,
+                editable: false,
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 path,
+                editable: dist.editable,
             }),
         }
     }
@@ -118,7 +124,25 @@ impl CachedDist {
     pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
         match self {
             CachedDist::Registry(_) => Ok(None),
-            CachedDist::Url(dist) => DirectUrl::try_from(dist.url.raw()).map(Some),
+            CachedDist::Url(dist) => {
+                if dist.editable {
+                    // TODO(konstin): Do this in the type system
+                    assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
+                    Ok(Some(DirectUrl::LocalFile(LocalFileUrl {
+                        url: dist.url.raw().clone(),
+                        editable: dist.editable,
+                    })))
+                } else {
+                    DirectUrl::try_from(dist.url.raw()).map(Some)
+                }
+            }
+        }
+    }
+
+    pub fn editable(&self) -> bool {
+        match self {
+            CachedDist::Registry(_) => false,
+            CachedDist::Url(dist) => dist.editable,
         }
     }
 }
@@ -130,6 +154,7 @@ impl CachedDirectUrlDist {
             filename,
             url,
             path,
+            editable: false,
         }
     }
 }
@@ -177,6 +202,7 @@ impl CachedWheel {
             filename: self.filename,
             url,
             path: self.path,
+            editable: false,
         }
     }
 }

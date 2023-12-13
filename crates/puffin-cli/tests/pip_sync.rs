@@ -6,6 +6,8 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use assert_fs::TempDir;
+use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
@@ -15,6 +17,8 @@ mod common;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
     Command::new(venv.join("bin").join("python"))
+        // https://github.com/python/cpython/issues/75953
+        .arg("-B")
         .arg("-c")
         .arg(command)
         .current_dir(temp_dir)
@@ -2082,6 +2086,123 @@ fn reinstall_package() -> Result<()> {
 
     check_command(&venv, "import markupsafe", &temp_dir);
     check_command(&venv, "import tomli", &temp_dir);
+
+    Ok(())
+}
+
+#[test]
+fn install_editable() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        boltons==23.1.1
+        -e ../../scripts/editable-installs/maturin_editable
+        numpy==1.26.2
+            # via poetry-editable
+        -e ../../scripts/editable-installs/poetry_editable
+        "
+    })?;
+
+    let filter_path = requirements_txt.display().to_string();
+    let filters = INSTA_FILTERS
+        .iter()
+        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .copied()
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Built 2 editables in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 4 packages in [TIME]
+         + boltons==23.1.1
+         + maturin-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/maturin_editable/
+         + numpy==1.26.2
+         + poetry-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/poetry_editable/
+        "###);
+    });
+
+    // Make sure we have the right base case
+    let python_source_file =
+        "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
+    let python_version_1 = indoc! {r"
+        from .maturin_editable import *
+        version = 1
+   "};
+    fs_err::write(python_source_file, python_version_1)?;
+
+    let command = indoc! {r#"
+        from maturin_editable import sum_as_string, version
+                
+        assert version == 1, version
+        assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
+   "#};
+    check_command(&venv, command, &temp_dir);
+
+    // Edit the sources
+    let python_version_2 = indoc! {r"
+        from .maturin_editable import *
+        version = 2
+   "};
+    fs_err::write(python_source_file, python_version_2)?;
+
+    let command = indoc! {r#"
+        from maturin_editable import sum_as_string, version
+        from pathlib import Path
+        
+        assert version == 2, version
+        assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
+   "#};
+    check_command(&venv, command, &temp_dir);
+
+    // Don't create a git diff
+    fs_err::write(python_source_file, python_version_1)?;
+
+    let filters = INSTA_FILTERS
+        .iter()
+        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .copied()
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 2 editables in [TIME]
+        Uninstalled 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         - maturin-editable==0.1.0
+         + maturin-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/maturin_editable/
+         - poetry-editable==0.1.0
+         + poetry-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/poetry_editable/
+        "###);
+    });
 
     Ok(())
 }

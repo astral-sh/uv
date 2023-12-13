@@ -1,12 +1,13 @@
 use std::fmt::Write;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use colored::Colorize;
 use fs_err as fs;
 use itertools::Itertools;
+use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{AnyDist, Metadata};
+use distribution_types::{AnyDist, CachedDist, LocalEditable, Metadata};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
@@ -18,6 +19,7 @@ use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
+use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -35,9 +37,9 @@ pub(crate) async fn pip_sync(
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Read all requirements from the provided sources.
-    let requirements = RequirementsSpecification::requirements(sources)?;
+    let (requirements, editables) = RequirementsSpecification::requirements_and_editables(sources)?;
 
-    if requirements.is_empty() {
+    if requirements.is_empty() && editables.is_empty() {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
@@ -45,6 +47,7 @@ pub(crate) async fn pip_sync(
     sync_requirements(
         &requirements,
         reinstall,
+        &editables,
         link_mode,
         index_urls,
         no_build,
@@ -55,9 +58,11 @@ pub(crate) async fn pip_sync(
 }
 
 /// Install a set of locked requirements into the current Python environment.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     reinstall: &Reinstall,
+    editables: &[EditableRequirement],
     link_mode: LinkMode,
     index_urls: IndexUrls,
     no_build: bool,
@@ -75,29 +80,34 @@ pub(crate) async fn sync_requirements(
     );
 
     // Determine the current environment markers.
-    let markers = venv.interpreter().markers();
     let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let InstallPlan {
         local,
+        editables,
         remote,
         reinstalls,
         extraneous,
     } = InstallPlan::from_requirements(
         requirements,
         reinstall,
+        editables,
         &index_urls,
         cache,
         &venv,
-        markers,
         &tags,
     )
     .context("Failed to determine installation plan")?;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
+    if remote.is_empty()
+        && local.is_empty()
+        && reinstalls.is_empty()
+        && extraneous.is_empty()
+        && editables.is_empty()
+    {
         let s = if requirements.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -170,23 +180,68 @@ pub(crate) async fn sync_requirements(
         }
     }
 
-    // Download, build, and unzip any missing distributions.
-    let wheels = if remote.is_empty() {
-        vec![]
+    let build_dispatch = BuildDispatch::new(
+        client.clone(),
+        cache.clone(),
+        venv.interpreter().clone(),
+        fs::canonicalize(venv.python_executable())?,
+        no_build,
+        index_urls.clone(),
+    );
+    let downloader = Downloader::new(cache, &tags, &client, &build_dispatch).with_reporter(
+        DownloadReporter::from(printer).with_length((editables.len() + remote.len()) as u64),
+    );
+
+    // We must not cache editable wheels, so we put them in a temp dir.
+    let editable_wheel_dir = tempdir_in(venv.root())?;
+    let built_editables = if editables.is_empty() {
+        Vec::new()
     } else {
         let start = std::time::Instant::now();
 
-        let build_dispatch = BuildDispatch::new(
-            client.clone(),
-            cache.clone(),
-            venv.interpreter().clone(),
-            fs::canonicalize(venv.python_executable())?,
-            no_build,
-            index_urls.clone(),
-        );
+        let editables: Vec<LocalEditable> = editables
+            .into_iter()
+            .map(|editable| match editable.clone() {
+                EditableRequirement::Path {
+                    resolved,
+                    original: _,
+                } => Ok(LocalEditable {
+                    requirement: editable,
+                    path: resolved,
+                }),
+                EditableRequirement::Url(_) => {
+                    bail!("url editables are not supported yet");
+                }
+            })
+            .collect::<Result<_>>()?;
 
-        let downloader = Downloader::new(cache, &tags, &client, &build_dispatch)
-            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
+        let built_editables: Vec<CachedDist> = downloader
+            .build_editables(editables, editable_wheel_dir.path())
+            .await
+            .context("Failed to build editables")?
+            .into_iter()
+            .map(|(_editable, wheel, _metadata)| wheel)
+            .collect();
+        let s = if built_editables.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Built {} in {}",
+                format!("{} editable{}", built_editables.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+
+        built_editables
+    };
+
+    // Download, build, and unzip any missing distributions.
+    let wheels = if remote.is_empty() {
+        Vec::new()
+    } else {
+        let start = std::time::Instant::now();
 
         let wheels = downloader
             .download(remote, &OnceMap::default())
@@ -242,7 +297,11 @@ pub(crate) async fn sync_requirements(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+    let wheels = wheels
+        .into_iter()
+        .chain(local)
+        .chain(built_editables)
+        .collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         puffin_installer::Installer::new(&venv)

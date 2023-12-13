@@ -5,7 +5,7 @@ use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use distribution_types::{CachedDist, Metadata, SourceDist, VersionOrUrl};
+use distribution_types::{CachedDist, LocalEditable, Metadata, SourceDist, VersionOrUrl};
 use puffin_normalize::PackageName;
 
 use crate::printer::Printer;
@@ -80,6 +80,28 @@ impl DownloadReporter {
     }
 }
 
+impl DownloadReporter {
+    fn on_any_build_start(&self, color_string: &str) -> usize {
+        let progress = self.multi_progress.insert_before(
+            &self.progress,
+            ProgressBar::with_draw_target(None, self.printer.target()),
+        );
+
+        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        progress.set_message(format!("{} {}", "Building".bold().cyan(), color_string));
+
+        let mut bars = self.bars.lock().unwrap();
+        bars.push(progress);
+        bars.len() - 1
+    }
+
+    fn on_any_build_complete(&self, color_string: &str, id: usize) {
+        let bars = self.bars.lock().unwrap();
+        let progress = &bars[id];
+        progress.finish_with_message(format!("   {} {}", "Built".bold().green(), color_string));
+    }
+}
+
 impl puffin_installer::DownloadReporter for DownloadReporter {
     fn on_progress(&self, dist: &dyn Metadata) {
         self.progress.set_message(format!("{dist}"));
@@ -91,31 +113,19 @@ impl puffin_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_build_start(&self, dist: &dyn Metadata) -> usize {
-        let progress = self.multi_progress.insert_before(
-            &self.progress,
-            ProgressBar::with_draw_target(None, self.printer.target()),
-        );
-
-        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{} {}",
-            "Building".bold().cyan(),
-            dist.to_color_string()
-        ));
-
-        let mut bars = self.bars.lock().unwrap();
-        bars.push(progress);
-        bars.len() - 1
+        self.on_any_build_start(&dist.to_color_string())
     }
 
     fn on_build_complete(&self, dist: &dyn Metadata, index: usize) {
-        let bars = self.bars.lock().unwrap();
-        let progress = &bars[index];
-        progress.finish_with_message(format!(
-            "   {} {}",
-            "Built".bold().green(),
-            dist.to_color_string()
-        ));
+        self.on_any_build_complete(&dist.to_color_string(), index);
+    }
+
+    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
+        self.on_any_build_start(&dist.to_string().dimmed())
+    }
+
+    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
+        self.on_any_build_complete(&dist.to_string().dimmed(), id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -241,7 +251,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.set_message(format!(
             "{} {}",
             "Building".bold().cyan(),
-            dist.to_color_string()
+            dist.to_string().dimmed()
         ));
 
         let mut bars = self.bars.lock().unwrap();
@@ -255,7 +265,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.finish_with_message(format!(
             "   {} {}",
             "Built".bold().green(),
-            dist.to_color_string()
+            dist.to_string().dimmed()
         ));
     }
 

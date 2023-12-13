@@ -6,12 +6,12 @@ use clap::Parser;
 use fs_err as fs;
 
 use platform_host::Platform;
-use puffin_build::{BuildKind, SourceBuild, SourceBuildContext};
+use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, BuildKind};
 use pypi_types::IndexUrls;
 
 #[derive(Parser)]

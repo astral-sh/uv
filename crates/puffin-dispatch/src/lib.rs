@@ -13,13 +13,13 @@ use tracing::{debug, instrument};
 use distribution_types::{CachedDist, Metadata};
 use pep508_rs::Requirement;
 use platform_tags::Tags;
-use puffin_build::{BuildKind, SourceBuild, SourceBuildContext};
+use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
-use puffin_traits::{BuildContext, OnceMap};
+use puffin_traits::{BuildContext, BuildKind, OnceMap};
 use pypi_types::IndexUrls;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -128,7 +128,6 @@ impl BuildContext for BuildDispatch {
                 venv.root().display(),
             );
 
-            let markers = self.interpreter.markers();
             let tags = Tags::from_interpreter(&self.interpreter)?;
 
             let InstallPlan {
@@ -136,13 +135,14 @@ impl BuildContext for BuildDispatch {
                 remote,
                 reinstalls,
                 extraneous,
+                editables: _,
             } = InstallPlan::from_requirements(
                 requirements,
                 &Reinstall::None,
+                &[],
                 &self.index_urls,
                 self.cache(),
                 venv,
-                markers,
                 &tags,
             )?;
 
@@ -214,12 +214,13 @@ impl BuildContext for BuildDispatch {
         })
     }
 
-    #[instrument(skip_all, fields(source_dist = source_dist, subdirectory = ?subdirectory))]
+    #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
     fn setup_build<'a>(
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
-        source_dist: &'a str,
+        package_id: &'a str,
+        build_kind: BuildKind,
     ) -> Pin<Box<dyn Future<Output = Result<SourceBuild>> + Send + 'a>> {
         Box::pin(async move {
             if self.no_build {
@@ -231,8 +232,8 @@ impl BuildContext for BuildDispatch {
                 &self.interpreter,
                 self,
                 self.source_build_context.clone(),
-                source_dist.to_string(),
-                BuildKind::Wheel,
+                package_id.to_string(),
+                build_kind,
             )
             .await?;
             Ok(builder)

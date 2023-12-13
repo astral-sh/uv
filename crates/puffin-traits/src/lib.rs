@@ -1,5 +1,6 @@
 //! Avoid cyclic crate dependencies between resolver, installer and builder.
 
+use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -96,6 +97,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         package_id: &'a str,
+        build_kind: BuildKind,
     ) -> Pin<Box<dyn Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a>>;
 }
 
@@ -123,4 +125,22 @@ pub trait SourceBuildTrait {
         &'a self,
         wheel_dir: &'a Path,
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>;
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum BuildKind {
+    /// A regular PEP 517 wheel build
+    #[default]
+    Wheel,
+    /// A PEP 660 editable installation wheel build
+    Editable,
+}
+
+impl Display for BuildKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuildKind::Wheel => f.write_str("wheel"),
+            BuildKind::Editable => f.write_str("editable"),
+        }
+    }
 }

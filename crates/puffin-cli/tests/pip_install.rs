@@ -161,7 +161,7 @@ fn install_requirements_txt() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Audited 1 packages in [TIME]
+        Audited 1 package in [TIME]
         "###);
     });
 
@@ -238,7 +238,7 @@ fn respect_installed() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Audited 1 packages in [TIME]
+        Audited 1 package in [TIME]
         "###);
     });
 

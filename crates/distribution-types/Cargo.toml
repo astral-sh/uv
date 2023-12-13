@@ -20,6 +20,7 @@ puffin-cache = { path = "../puffin-cache" }
 puffin-git = { path = "../puffin-git" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }

@@ -21,8 +21,11 @@ use zip::ZipArchive;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
-use distribution_types::{GitSourceDist, Metadata, PathSourceDist, RemoteSource, SourceDist};
+use distribution_types::{
+    Dist, GitSourceDist, LocalEditable, Metadata, PathSourceDist, RemoteSource, SourceDist,
+};
 use install_wheel_rs::read_dist_info;
+use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use puffin_cache::{
     digest, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, CanonicalUrl, WheelCache,
@@ -31,7 +34,7 @@ use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::write_atomic;
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
-use puffin_traits::{BuildContext, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 use pypi_types::Metadata21;
 
 use crate::locks::LockedFile;
@@ -61,7 +64,7 @@ pub enum SourceDistError {
 
     // Build error
     #[error("Failed to build: {0}")]
-    Build(Box<SourceDist>, #[source] anyhow::Error),
+    Build(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
@@ -637,12 +640,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         fs::create_dir_all(&cache_entry.dir).await?;
         let disk_filename = self
             .build_context
-            .setup_build(source_dist, subdirectory, &dist.to_string())
+            .setup_build(
+                source_dist,
+                subdirectory,
+                &dist.to_string(),
+                BuildKind::Wheel,
+            )
             .await
-            .map_err(|err| SourceDistError::Build(Box::new(dist.clone()), err))?
+            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?
             .wheel(&cache_entry.dir)
             .await
-            .map_err(|err| SourceDistError::Build(Box::new(dist.clone()), err))?;
+            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?;
 
         if let Some(temp_dir) = temp_dir {
             temp_dir.close()?;
@@ -654,6 +662,40 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         debug!("Finished building: {dist}");
         Ok((disk_filename, filename, metadata))
+    }
+
+    /// Build a single directory into an editable wheel
+    pub async fn build_editable(
+        &self,
+        editable: &LocalEditable,
+        editable_wheel_dir: &Path,
+    ) -> Result<(Dist, String, WheelFilename, Metadata21), SourceDistError> {
+        debug!("Building (editable) {editable}");
+        let disk_filename = self
+            .build_context
+            .setup_build(
+                &editable.path,
+                None,
+                &editable.to_string(),
+                BuildKind::Editable,
+            )
+            .await
+            .map_err(|err| SourceDistError::Build(editable.to_string(), err))?
+            .wheel(editable_wheel_dir)
+            .await
+            .map_err(|err| SourceDistError::Build(editable.to_string(), err))?;
+        let filename = WheelFilename::from_str(&disk_filename)?;
+        // We finally have the name of the package and can construct the dist
+        let dist = Dist::Source(SourceDist::Path(PathSourceDist {
+            name: filename.name.clone(),
+            url: VerbatimUrl::unknown(editable.url()),
+            path: editable.path.clone(),
+            editable: true,
+        }));
+        let metadata = read_metadata(&filename, editable_wheel_dir.join(&disk_filename))?;
+
+        debug!("Finished building (editable): {dist}");
+        Ok((dist, disk_filename, filename, metadata))
     }
 }
 

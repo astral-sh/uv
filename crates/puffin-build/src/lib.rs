@@ -30,7 +30,7 @@ use tracing::{debug, info_span, instrument};
 use pep508_rs::Requirement;
 use puffin_extract::extract_source;
 use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_traits::{BuildContext, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -188,24 +188,6 @@ impl Pep517Backend {
     }
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum BuildKind {
-    /// A regular PEP 517 wheel build
-    #[default]
-    Wheel,
-    /// A PEP 660 editable installation wheel build
-    Editable,
-}
-
-impl Display for BuildKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BuildKind::Wheel => f.write_str("wheel"),
-            BuildKind::Editable => f.write_str("editable"),
-        }
-    }
-}
-
 /// Uses an [`Arc`] internally, clone freely
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
@@ -252,7 +234,7 @@ impl SourceBuild {
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        source_dist: String,
+        package_id: String,
         build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
@@ -352,7 +334,7 @@ impl SourceBuild {
                 &venv,
                 pep517_backend,
                 build_context,
-                &source_dist,
+                &package_id,
                 build_kind,
             )
             .await?;
@@ -370,7 +352,7 @@ impl SourceBuild {
             venv,
             build_kind,
             metadata_directory: None,
-            package_id: source_dist,
+            package_id,
         })
     }
 

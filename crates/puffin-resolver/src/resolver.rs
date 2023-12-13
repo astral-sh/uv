@@ -18,7 +18,9 @@ use tracing::{debug, trace};
 use url::Url;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, Dist, Metadata, PackageId, SourceDist, VersionOrUrl};
+use distribution_types::{
+    BuiltDist, Dist, LocalEditable, Metadata, PackageId, SourceDist, VersionOrUrl,
+};
 use pep508_rs::{MarkerEnvironment, Requirement, VerbatimUrl};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
@@ -154,6 +156,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     markers: &'a MarkerEnvironment,
     selector: CandidateSelector,
     index: Arc<Index>,
+    editables: FxHashMap<String, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
 }
@@ -193,9 +196,30 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         markers: &'a MarkerEnvironment,
         provider: Provider,
     ) -> Self {
+        let selector = CandidateSelector::for_resolution(&manifest, options);
+
+        let index = Index::default();
+        let mut editables = FxHashMap::default();
+        for (editable_requirement, metadata) in &manifest.editables {
+            let dist = Dist::from_url(
+                metadata.name.clone(),
+                VerbatimUrl::unknown(editable_requirement.url()),
+            )
+            .expect("This is a valid distribution");
+            // Mock editable responses
+            index.distributions.register(&dist.package_id());
+            index
+                .distributions
+                .done(dist.package_id(), metadata.clone());
+            editables.insert(
+                dist.to_string(),
+                (editable_requirement.clone(), metadata.clone()),
+            );
+        }
+
         Self {
-            index: Arc::new(Index::default()),
-            selector: CandidateSelector::for_resolution(&manifest, options),
+            index: Arc::new(index),
+            selector,
             allowed_urls: manifest
                 .requirements
                 .iter()
@@ -203,18 +227,24 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 .chain(manifest.overrides.iter())
                 .filter_map(|req| {
                     if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
-                        Some(url)
+                        Some(url.raw().clone())
                     } else {
                         None
                     }
                 })
-                .map(VerbatimUrl::raw)
+                .chain(
+                    manifest
+                        .editables
+                        .iter()
+                        .map(|(editable, _)| editable.url()),
+                )
                 .collect(),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: Overrides::from_requirements(manifest.overrides),
             markers,
+            editables,
             reporter: None,
             provider,
         }
@@ -309,6 +339,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &self.index.distributions,
                     &self.index.redirects,
                     &state,
+                    self.editables.clone(),
                 );
             };
             next = highest_priority_pkg;
@@ -595,13 +626,24 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 {
                     return Ok(Dependencies::Unusable(Some(err.to_string())));
                 }
-                let constraints = constraints?;
+                let mut constraints = constraints?;
 
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
                     Self::visit_package(package, priorities, index, request_sink)?;
+                }
+
+                for (editable, metadata) in self.editables.values() {
+                    constraints.insert(
+                        PubGrubPackage::Package(
+                            metadata.name.clone(),
+                            None,
+                            Some(VerbatimUrl::unknown(editable.url())),
+                        ),
+                        Range::singleton(PubGrubVersion::from(metadata.version.clone())),
+                    );
                 }
 
                 Ok(Dependencies::Known(constraints.into()))
@@ -771,11 +813,11 @@ struct Facade {
 }
 
 impl puffin_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
+    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
         self.reporter.on_build_start(dist)
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
+    fn on_build_complete(&self, dist: &dyn Metadata, id: usize) {
         self.reporter.on_build_complete(dist, id);
     }
 
@@ -830,9 +872,13 @@ impl AllowedUrls {
     }
 }
 
-impl<'a> FromIterator<&'a Url> for AllowedUrls {
-    fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
-        Self(iter.into_iter().map(CanonicalUrl::new).collect())
+impl FromIterator<Url> for AllowedUrls {
+    fn from_iter<T: IntoIterator<Item = Url>>(iter: T) -> Self {
+        Self(
+            iter.into_iter()
+                .map(|url| CanonicalUrl::new(&url))
+                .collect(),
+        )
     }
 }
 

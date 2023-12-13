@@ -5,16 +5,16 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use distribution_types::direct_url::{git_reference, DirectUrl};
-use distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Metadata, SourceDist,
-};
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use distribution_types::{BuiltDist, Dist, SourceDist};
+use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist, Metadata};
+use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use pypi_types::IndexUrls;
+use requirements_txt::EditableRequirement;
 
 use crate::SitePackages;
 
@@ -35,6 +35,12 @@ pub struct InstallPlan {
     /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
     pub extraneous: Vec<InstalledDist>,
+
+    /// Editable installs that are missing in the current environment.
+    ///
+    /// Since editable installs happen from a path through a non-cacheable wheel, we don't have to
+    /// divide those into cached and non-cached.
+    pub editables: Vec<EditableRequirement>,
 }
 
 impl InstallPlan {
@@ -43,10 +49,10 @@ impl InstallPlan {
     pub fn from_requirements(
         requirements: &[Requirement],
         reinstall: &Reinstall,
+        editable_requirements: &[EditableRequirement],
         index_urls: &IndexUrls,
         cache: &Cache,
         venv: &Virtualenv,
-        env: &MarkerEnvironment,
         tags: &Tags,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
@@ -60,12 +66,26 @@ impl InstallPlan {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
+        let mut editables = vec![];
         let mut seen =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
+        for editable in editable_requirements {
+            let editable_dist = site_packages
+                .editables()
+                .find(|(_dist, url, _dir_info)| *url == &editable.url())
+                .map(|(dist, _url, _dir_info)| dist.clone());
+            if let Some(dist) = editable_dist {
+                debug!("Treating editable requirement as immutable: {editable}");
+                site_packages.remove(dist.name());
+            } else {
+                editables.push(editable.clone());
+            }
+        }
+
         for requirement in requirements {
             // Filter out incompatible requirements.
-            if !requirement.evaluate_markers(env, &[]) {
+            if !requirement.evaluate_markers(venv.interpreter().markers(), &[]) {
                 continue;
             }
 
@@ -280,6 +300,7 @@ impl InstallPlan {
             remote,
             reinstalls,
             extraneous,
+            editables,
         })
     }
 }

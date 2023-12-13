@@ -64,13 +64,90 @@ enum RequirementsTxtStatement {
     /// PEP 508 requirement plus metadata
     RequirementEntry(RequirementEntry),
     /// `-e`
-    EditableRequirement(EditableRequirement),
+    EditableRequirement(ParsedEditableRequirement),
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
 pub enum EditableRequirement {
+    Path {
+        /// The absolute path, resolved from the current dir if the path in the requirements file was relative
+        resolved: PathBuf,
+        /// The relative path as it is written in the requirements file
+        original: PathBuf,
+    },
+    Url(Url),
+}
+
+impl EditableRequirement {
+    pub fn url(&self) -> Url {
+        match self {
+            EditableRequirement::Path {
+                resolved,
+                original: _,
+            } => Url::from_directory_path(resolved).expect("Path valid for url"),
+            EditableRequirement::Url(url) => url.clone(),
+        }
+    }
+}
+
+/// Relative paths aren't resolved with the current dir yet
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
+pub enum ParsedEditableRequirement {
     Path(PathBuf),
     Url(Url),
+}
+
+impl ParsedEditableRequirement {
+    pub fn unwrap_path(&self) -> &Path {
+        match self {
+            ParsedEditableRequirement::Path(path) => path,
+            ParsedEditableRequirement::Url(_) => {
+                todo!("url editables")
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn with_working_dir(self, working_dir: impl AsRef<Path>) -> EditableRequirement {
+        match self {
+            ParsedEditableRequirement::Path(path) => {
+                if path.is_absolute() {
+                    EditableRequirement::Path {
+                        resolved: path.clone(),
+                        original: path,
+                    }
+                } else {
+                    EditableRequirement::Path {
+                        resolved: working_dir.as_ref().join(&path),
+                        original: path,
+                    }
+                }
+            }
+            // TODO(konstin): File urls
+            ParsedEditableRequirement::Url(url) => EditableRequirement::Url(url),
+        }
+    }
+}
+
+impl Display for ParsedEditableRequirement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParsedEditableRequirement::Path(path) => path.display().fmt(f),
+            ParsedEditableRequirement::Url(url) => url.fmt(f),
+        }
+    }
+}
+
+impl Display for EditableRequirement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EditableRequirement::Path {
+                original,
+                resolved: _,
+            } => original.display().fmt(f),
+            EditableRequirement::Url(url) => url.fmt(f),
+        }
+    }
 }
 
 /// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
@@ -193,7 +270,7 @@ impl RequirementsTxt {
                     data.requirements.push(requirement_entry);
                 }
                 RequirementsTxtStatement::EditableRequirement(editable) => {
-                    data.editables.push(editable);
+                    data.editables.push(editable.with_working_dir(&working_dir));
                 }
             }
         }
@@ -245,9 +322,9 @@ fn parse_entry(
     } else if s.eat_if("-e") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
         let editable_requirement = if let Ok(url) = Url::from_str(path_or_url) {
-            EditableRequirement::Url(url)
+            ParsedEditableRequirement::Url(url)
         } else {
-            EditableRequirement::Path(PathBuf::from(path_or_url))
+            ParsedEditableRequirement::Path(PathBuf::from(path_or_url))
         };
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {

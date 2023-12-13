@@ -6,25 +6,28 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anstream::AutoStream;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
-use fs_err as fs;
 use itertools::Itertools;
+use tempfile::tempdir_in;
 use tracing::debug;
 
+use distribution_types::LocalEditable;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
+use puffin_installer::Downloader;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver};
 use pypi_types::IndexUrls;
+use requirements_txt::EditableRequirement;
 
-use crate::commands::reporters::ResolverReporter;
+use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 use crate::python_version::PythonVersion;
@@ -79,6 +82,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        editables,
         extras: used_extras,
     } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)?;
 
@@ -111,7 +115,6 @@ pub(crate) async fn pip_compile(
         .unwrap_or_default();
 
     // Create a manifest of the requirements.
-    let manifest = Manifest::new(requirements, constraints, overrides, preferences, project);
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     // Detect the current Python interpreter.
@@ -145,11 +148,72 @@ pub(crate) async fn pip_compile(
         client.clone(),
         cache.clone(),
         interpreter,
-        fs::canonicalize(venv.python_executable())?,
+        fs_err::canonicalize(venv.python_executable())?,
         no_build,
         index_urls,
     )
     .with_options(options);
+
+    // Build the editables and add their requirements
+    let editable_metadata = if editables.is_empty() {
+        Vec::new()
+    } else {
+        let start = std::time::Instant::now();
+
+        let editables: Vec<LocalEditable> = editables
+            .into_iter()
+            .map(|editable| match editable.clone() {
+                EditableRequirement::Path {
+                    resolved,
+                    original: _,
+                } => Ok(LocalEditable {
+                    requirement: editable,
+                    path: resolved,
+                }),
+                EditableRequirement::Url(_) => {
+                    bail!("url editables are not supported yet");
+                }
+            })
+            .collect::<Result<_>>()?;
+
+        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
+            .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
+
+        let editable_wheel_dir = tempdir_in(venv.root())?;
+        let editable_metadata: Vec<_> = downloader
+            .build_editables(editables, editable_wheel_dir.path())
+            .await
+            .context("Failed to build editables")?
+            .into_iter()
+            .map(|(editable, _wheel, metadata)| (editable, metadata))
+            .collect();
+
+        let s = if editable_metadata.len() == 1 {
+            ""
+        } else {
+            "s"
+        };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Built {} in {}",
+                format!("{} editable{}", editable_metadata.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+        editable_metadata
+    };
+
+    let manifest = Manifest::new(
+        requirements,
+        constraints,
+        overrides,
+        preferences,
+        project,
+        editable_metadata,
+    );
 
     // Resolve the dependencies.
     let resolver = Resolver::new(manifest, options, &markers, &tags, &client, &build_dispatch)
@@ -193,7 +257,7 @@ pub(crate) async fn pip_compile(
     // Write the resolved dependencies to the output channel.
     let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
         Box::new(AutoStream::<std::fs::File>::auto(
-            fs::File::create(output_file)?.into(),
+            fs_err::File::create(output_file)?.into(),
         ))
     } else {
         Box::new(AutoStream::auto(stdout()))

@@ -22,7 +22,9 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let requirements = RequirementsSpecification::requirements(sources)?;
+    // TODO(konstin): Also uninstall editables
+    let (requirements, _editables) =
+        RequirementsSpecification::requirements_and_editables(sources)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
