@@ -1,11 +1,11 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
+use rustc_hash::FxHashSet;
 
 use pep508_rs::Requirement;
 use puffin_normalize::{ExtraName, PackageName};
@@ -65,7 +65,7 @@ pub(crate) struct RequirementsSpecification {
     /// The constraints for the project.
     pub(crate) constraints: Vec<Requirement>,
     /// The extras used to collect requirements.
-    pub(crate) extras: HashSet<ExtraName>,
+    pub(crate) extras: FxHashSet<ExtraName>,
 }
 
 impl RequirementsSpecification {
@@ -82,7 +82,7 @@ impl RequirementsSpecification {
                     project: None,
                     requirements: vec![requirement],
                     constraints: vec![],
-                    extras: HashSet::new(),
+                    extras: FxHashSet::default(),
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
@@ -95,14 +95,14 @@ impl RequirementsSpecification {
                         .map(|entry| entry.requirement)
                         .collect(),
                     constraints: requirements_txt.constraints.into_iter().collect(),
-                    extras: HashSet::new(),
+                    extras: FxHashSet::default(),
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
                 let contents = fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to read `{}`", path.display()))?;
-                let mut used_extras = HashSet::new();
+                let mut used_extras = FxHashSet::default();
                 let mut requirements = Vec::new();
                 let mut project_name = None;
                 if let Some(project) = pyproject_toml.project {
