@@ -51,7 +51,7 @@ impl InstallPlan {
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
         let mut site_packages =
-            SitePackages::try_from_executable(venv).context("Failed to list installed packages")?;
+            SitePackages::from_executable(venv).context("Failed to list installed packages")?;
 
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_urls);

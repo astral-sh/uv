@@ -19,7 +19,7 @@ pub struct SitePackages<'a> {
 
 impl<'a> SitePackages<'a> {
     /// Build an index of installed packages from the given Python executable.
-    pub fn try_from_executable(venv: &'a Virtualenv) -> Result<SitePackages<'a>> {
+    pub fn from_executable(venv: &'a Virtualenv) -> Result<SitePackages<'a>> {
         let mut index = BTreeMap::new();
 
         for entry in fs::read_dir(venv.site_packages())? {

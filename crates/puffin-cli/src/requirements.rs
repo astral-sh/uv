@@ -70,7 +70,7 @@ pub(crate) struct RequirementsSpecification {
 
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
-    pub(crate) fn try_from_source(
+    pub(crate) fn from_source(
         source: &RequirementsSource,
         extras: &ExtrasSpecification,
     ) -> Result<Self> {
@@ -138,7 +138,7 @@ impl RequirementsSpecification {
     }
 
     /// Read the combined requirements and constraints from a set of sources.
-    pub(crate) fn try_from_sources(
+    pub(crate) fn from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         extras: &ExtrasSpecification,
@@ -149,7 +149,7 @@ impl RequirementsSpecification {
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
         for source in requirements {
-            let source = Self::try_from_source(source, extras)?;
+            let source = Self::from_source(source, extras)?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.extras.extend(source.extras);
@@ -162,11 +162,16 @@ impl RequirementsSpecification {
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.
         for source in constraints {
-            let source = Self::try_from_source(source, extras)?;
+            let source = Self::from_source(source, extras)?;
             spec.constraints.extend(source.requirements);
             spec.constraints.extend(source.constraints);
         }
 
         Ok(spec)
+    }
+
+    /// Read the requirements from a set of sources.
+    pub(crate) fn requirements(requirements: &[RequirementsSource]) -> Result<Vec<Requirement>> {
+        Ok(Self::from_sources(requirements, &[], &ExtrasSpecification::None)?.requirements)
     }
 }

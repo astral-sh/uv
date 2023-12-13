@@ -137,7 +137,7 @@ fn specification(
     }
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::try_from_sources(requirements, constraints, extras)?;
+    let spec = RequirementsSpecification::from_sources(requirements, constraints, extras)?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -161,7 +161,7 @@ fn specification(
 
 /// Returns `true` if the requirements are already satisfied.
 fn satisfied(spec: &RequirementsSpecification, venv: &Virtualenv) -> Result<bool> {
-    SitePackages::try_from_executable(venv)?.satisfies(&spec.requirements, &spec.constraints)
+    SitePackages::from_executable(venv)?.satisfies(&spec.requirements, &spec.constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip-compile`.
@@ -191,10 +191,10 @@ async fn resolve(
     // Respect preferences from the existing environments.
     let preferences: Vec<Requirement> = match reinstall {
         Reinstall::All => vec![],
-        Reinstall::None => SitePackages::try_from_executable(venv)?
+        Reinstall::None => SitePackages::from_executable(venv)?
             .requirements()
             .collect(),
-        Reinstall::Packages(packages) => SitePackages::try_from_executable(venv)?
+        Reinstall::Packages(packages) => SitePackages::from_executable(venv)?
             .requirements()
             .filter(|requirement| !packages.contains(&requirement.name))
             .collect(),
@@ -452,7 +452,7 @@ async fn install(
 
 /// Validate the installed packages in the virtual environment.
 fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<()> {
-    let site_packages = SitePackages::try_from_executable(venv)?;
+    let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
     for diagnostic in diagnostics {
         // Only surface diagnostics that are "relevant" to the current resolution.

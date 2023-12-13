@@ -11,7 +11,7 @@ use puffin_interpreter::Virtualenv;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
@@ -22,12 +22,7 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let RequirementsSpecification {
-        project: _,
-        requirements,
-        constraints: _,
-        extras: _,
-    } = RequirementsSpecification::try_from_sources(sources, &[], &ExtrasSpecification::None)?;
+    let requirements = RequirementsSpecification::requirements(sources)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -38,7 +33,7 @@ pub(crate) async fn pip_uninstall(
     );
 
     // Index the current `site-packages` directory.
-    let site_packages = puffin_installer::SitePackages::try_from_executable(&venv)?;
+    let site_packages = puffin_installer::SitePackages::from_executable(&venv)?;
 
     // Sort and deduplicate the requirements.
     let packages = {
