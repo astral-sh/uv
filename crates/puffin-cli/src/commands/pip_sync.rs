@@ -305,7 +305,7 @@ pub(crate) async fn sync_requirements(
     }
 
     // Validate that the environment is consistent.
-    let site_packages = SitePackages::try_from_executable(&venv)?;
+    let site_packages = SitePackages::from_executable(&venv)?;
     for diagnostic in site_packages.diagnostics()? {
         writeln!(
             printer,
