@@ -106,7 +106,7 @@ pub struct RequirementsTxt {
     /// Constraints included with `-c`
     pub constraints: Vec<Requirement>,
     /// Editables with `-e`
-    pub editable: Vec<EditableRequirement>,
+    pub editables: Vec<EditableRequirement>,
 }
 
 impl RequirementsTxt {
@@ -193,7 +193,7 @@ impl RequirementsTxt {
                     data.requirements.push(requirement_entry);
                 }
                 RequirementsTxtStatement::EditableRequirement(editable) => {
-                    data.editable.push(editable);
+                    data.editables.push(editable);
                 }
             }
         }

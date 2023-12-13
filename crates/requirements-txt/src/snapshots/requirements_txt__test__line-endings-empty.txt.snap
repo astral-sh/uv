@@ -5,5 +5,5 @@ expression: actual
 RequirementsTxt {
     requirements: [],
     constraints: [],
-    editable: [],
+    editables: [],
 }

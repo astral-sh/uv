@@ -97,5 +97,5 @@ RequirementsTxt {
         },
     ],
     constraints: [],
-    editable: [],
+    editables: [],
 }
