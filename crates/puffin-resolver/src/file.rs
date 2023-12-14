@@ -62,13 +62,6 @@ impl DistFile {
             Self::Sdist(sdist) => sdist.filename.as_str(),
         }
     }
-
-    pub(crate) fn sha256(&self) -> &str {
-        match self {
-            Self::Wheel(wheel) => &wheel.hashes.sha256,
-            Self::Sdist(sdist) => &sdist.hashes.sha256,
-        }
-    }
 }
 
 impl From<DistFile> for File {

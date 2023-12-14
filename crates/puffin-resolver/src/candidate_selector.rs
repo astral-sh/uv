@@ -1,7 +1,7 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
-use distribution_types::Dist;
+use distribution_types::{Dist, Metadata};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 use pypi_types::IndexUrl;
@@ -250,5 +250,15 @@ impl<'a> Candidate<'a> {
             self.resolve().clone().into(),
             index,
         )
+    }
+}
+
+impl Metadata for Candidate<'_> {
+    fn name(&self) -> &PackageName {
+        self.name
+    }
+
+    fn version_or_url(&self) -> distribution_types::VersionOrUrl {
+        distribution_types::VersionOrUrl::Version(self.version.into())
     }
 }

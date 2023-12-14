@@ -36,6 +36,7 @@
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 //!
 //! TODO(konstin): Track all kinds from [`Dist`]
+//! TODO(konstin): Track all kinds from [`Dist`]
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -50,6 +51,7 @@ use pypi_types::{File, IndexUrl};
 pub use crate::any::*;
 pub use crate::cached::*;
 pub use crate::error::*;
+pub use crate::id::*;
 pub use crate::installed::*;
 pub use crate::traits::*;
 
@@ -57,6 +59,7 @@ mod any;
 mod cached;
 pub mod direct_url;
 mod error;
+mod id;
 mod installed;
 mod traits;
 
@@ -550,107 +553,109 @@ impl RemoteSource for Dist {
 }
 
 impl Identifier for Url {
-    fn distribution_id(&self) -> String {
-        puffin_cache::digest(&puffin_cache::CanonicalUrl::new(self))
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(puffin_cache::digest(&puffin_cache::CanonicalUrl::new(self)))
     }
 
-    fn resource_id(&self) -> String {
-        puffin_cache::digest(&puffin_cache::RepositoryUrl::new(self))
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(puffin_cache::digest(&puffin_cache::RepositoryUrl::new(
+            self,
+        )))
     }
 }
 
 impl Identifier for File {
-    fn distribution_id(&self) -> String {
-        self.hashes.sha256.clone()
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(self.hashes.sha256.clone())
     }
 
-    fn resource_id(&self) -> String {
-        self.hashes.sha256.clone()
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(self.hashes.sha256.clone())
     }
 }
 
 impl Identifier for Path {
-    fn distribution_id(&self) -> String {
-        puffin_cache::digest(&self)
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(puffin_cache::digest(&self))
     }
 
-    fn resource_id(&self) -> String {
-        puffin_cache::digest(&self)
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(puffin_cache::digest(&self))
     }
 }
 
 impl Identifier for RegistryBuiltDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.file.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.file.resource_id()
     }
 }
 
 impl Identifier for RegistrySourceDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.file.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.file.resource_id()
     }
 }
 
 impl Identifier for DirectUrlBuiltDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.url.resource_id()
     }
 }
 
 impl Identifier for DirectUrlSourceDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.url.resource_id()
     }
 }
 
 impl Identifier for PathBuiltDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.url.resource_id()
     }
 }
 
 impl Identifier for PathSourceDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.url.resource_id()
     }
 }
 
 impl Identifier for GitSourceDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         self.url.resource_id()
     }
 }
 
 impl Identifier for SourceDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Registry(dist) => dist.distribution_id(),
             Self::DirectUrl(dist) => dist.distribution_id(),
@@ -659,7 +664,7 @@ impl Identifier for SourceDist {
         }
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         match self {
             Self::Registry(dist) => dist.resource_id(),
             Self::DirectUrl(dist) => dist.resource_id(),
@@ -670,7 +675,7 @@ impl Identifier for SourceDist {
 }
 
 impl Identifier for BuiltDist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Registry(dist) => dist.distribution_id(),
             Self::DirectUrl(dist) => dist.distribution_id(),
@@ -678,7 +683,7 @@ impl Identifier for BuiltDist {
         }
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         match self {
             Self::Registry(dist) => dist.resource_id(),
             Self::DirectUrl(dist) => dist.resource_id(),
@@ -688,14 +693,14 @@ impl Identifier for BuiltDist {
 }
 
 impl Identifier for Dist {
-    fn distribution_id(&self) -> String {
+    fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Built(dist) => dist.distribution_id(),
             Self::Source(dist) => dist.distribution_id(),
         }
     }
 
-    fn resource_id(&self) -> String {
+    fn resource_id(&self) -> ResourceId {
         match self {
             Self::Built(dist) => dist.resource_id(),
             Self::Source(dist) => dist.resource_id(),

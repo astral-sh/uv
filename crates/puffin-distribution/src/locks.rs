@@ -8,11 +8,11 @@ use rustc_hash::FxHashMap;
 use tokio::sync::Mutex;
 use tracing::error;
 
-use distribution_types::Identifier;
+use distribution_types::{Identifier, ResourceId};
 
 /// A set of locks used to prevent concurrent access to the same resource.
 #[derive(Debug, Default)]
-pub(crate) struct Locks(Mutex<FxHashMap<String, Arc<Mutex<()>>>>);
+pub(crate) struct Locks(Mutex<FxHashMap<ResourceId, Arc<Mutex<()>>>>);
 
 impl Locks {
     /// Acquire a lock on the given resource.

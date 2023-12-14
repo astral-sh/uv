@@ -5,9 +5,9 @@ use puffin_normalize::PackageName;
 use crate::error::Error;
 use crate::{
     AnyDist, BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
-    DirectUrlSourceDist, Dist, GitSourceDist, InstalledDirectUrlDist, InstalledDist,
-    InstalledRegistryDist, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistrySourceDist,
-    SourceDist, VersionOrUrl,
+    DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
+    InstalledDist, InstalledRegistryDist, PackageId, PathBuiltDist, PathSourceDist,
+    RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionOrUrl,
 };
 
 pub trait Metadata {
@@ -23,15 +23,15 @@ pub trait Metadata {
     /// Note that this is not equivalent to a unique identifier for the _distribution_, as multiple
     /// registry-based distributions (e.g., different wheels for the same package and version)
     /// will return the same package ID, but different distribution IDs.
-    fn package_id(&self) -> String {
-        match self.version_or_url() {
+    fn package_id(&self) -> PackageId {
+        PackageId::new(match self.version_or_url() {
             VersionOrUrl::Version(version) => {
                 // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
                 // `version` is normalized by its `ToString` impl
                 format!("{}-{}", self.name().as_dist_info_name(), version)
             }
             VersionOrUrl::Url(url) => puffin_cache::digest(&CanonicalUrl::new(url)),
-        }
+        })
     }
 }
 
@@ -46,7 +46,7 @@ pub trait RemoteSource {
 pub trait Identifier {
     /// Return a unique resource identifier for the distribution, like a SHA-256 hash of the
     /// distribution's contents.
-    fn distribution_id(&self) -> String;
+    fn distribution_id(&self) -> DistributionId;
 
     /// Return a unique resource identifier for the underlying resource backing the distribution.
     ///
@@ -54,7 +54,7 @@ pub trait Identifier {
     /// if the same Git repository is used for two different distributions, at two different
     /// subdirectories or two different commits, then those distributions would share a resource ID,
     /// but have different distribution IDs.
-    fn resource_id(&self) -> String;
+    fn resource_id(&self) -> ResourceId;
 }
 
 // Implement `Display` for all known types that implement `DistributionIdentifier`.
