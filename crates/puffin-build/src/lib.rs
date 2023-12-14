@@ -13,22 +13,19 @@ use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use flate2::read::GzDecoder;
 use fs_err as fs;
-use fs_err::{DirEntry, File};
+use fs_err::DirEntry;
 use indoc::formatdoc;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use pyproject_toml::{BuildSystem, Project};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tar::Archive;
 use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument};
-use zip::ZipArchive;
 
 use pep508_rs::Requirement;
 use puffin_interpreter::{Interpreter, Virtualenv};
@@ -46,8 +43,8 @@ static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to read zip file")]
-    Zip(#[from] zip::result::ZipError),
+    #[error("Failed to extract archive: {0}")]
+    Extraction(PathBuf, #[source] puffin_extract::Error),
     #[error("Unsupported archive format (extension not recognized): {0}")]
     UnsupportedArchiveType(String),
     #[error("Invalid source distribution: {0}")]
@@ -671,40 +668,12 @@ async fn create_pep517_build_environment(
 /// Returns the directory with the `pyproject.toml`/`setup.py`
 #[instrument(skip_all, fields(sdist = ? sdist.file_name().unwrap_or(sdist.as_os_str())))]
 fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {
-    if sdist
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-    {
-        // .zip
-        let mut archive = ZipArchive::new(File::open(sdist)?)?;
-        archive.extract(extracted)?;
-    } else if sdist
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
-        && sdist.file_stem().is_some_and(|stem| {
-            Path::new(stem)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        })
-    {
-        // .tar.gz
-        let mut archive = Archive::new(GzDecoder::new(File::open(sdist)?));
-        // https://github.com/alexcrichton/tar-rs/issues/349
-        archive.set_preserve_mtime(false);
-        archive.unpack(extracted)?;
-    } else {
-        return Err(Error::UnsupportedArchiveType(
-            sdist
-                .file_name()
-                .unwrap_or(sdist.as_os_str())
-                .to_string_lossy()
-                .to_string(),
-        ));
-    }
+    puffin_extract::extract_archive(sdist, extracted)
+        .map_err(|err| Error::Extraction(sdist.to_path_buf(), err))?;
 
     // > A .tar.gz source distribution (sdist) contains a single top-level directory called
     // > `{name}-{version}` (e.g. foo-1.0), containing the source files of the package.
-    // TODO(konstin): Verify the name of the directory
+    // TODO(konstin): Verify the name of the directory.
     let top_level = fs::read_dir(extracted)?.collect::<io::Result<Vec<DirEntry>>>()?;
     let [root] = top_level.as_slice() else {
         return Err(Error::InvalidSourceDist(format!(

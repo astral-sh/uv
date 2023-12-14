@@ -3,7 +3,7 @@ pub use download::{DiskWheel, InMemoryWheel, LocalWheel};
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use reporter::Reporter;
 pub use source_dist::{SourceDistCachedBuilder, SourceDistError};
-pub use unzip::{Unzip, UnzipError};
+pub use unzip::Unzip;
 
 mod distribution_database;
 mod download;
@@ -13,4 +13,3 @@ mod locks;
 mod reporter;
 mod source_dist;
 mod unzip;
-mod vendor;

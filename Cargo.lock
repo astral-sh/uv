@@ -2243,7 +2243,6 @@ name = "puffin-build"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "flate2",
  "fs-err",
  "gourgeist",
  "indoc",
@@ -2252,6 +2251,7 @@ dependencies = [
  "once_cell",
  "pep508_rs",
  "platform-host",
+ "puffin-extract",
  "puffin-fs",
  "puffin-interpreter",
  "puffin-traits",
@@ -2260,14 +2260,11 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "tar",
  "tempfile",
  "thiserror",
  "tokio",
  "toml 0.8.8",
  "tracing",
- "which",
- "zip",
 ]
 
 [[package]]
@@ -2463,23 +2460,35 @@ dependencies = [
  "platform-tags",
  "puffin-cache",
  "puffin-client",
+ "puffin-extract",
  "puffin-fs",
  "puffin-git",
  "puffin-normalize",
  "puffin-traits",
  "pypi-types",
- "rayon",
  "reqwest",
  "rustc-hash",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
  "url",
+ "zip",
+]
+
+[[package]]
+name = "puffin-extract"
+version = "0.0.1"
+dependencies = [
+ "flate2",
+ "fs-err",
+ "rayon",
+ "tar",
+ "thiserror",
+ "tokio",
  "zip",
 ]
 
@@ -2527,6 +2536,7 @@ dependencies = [
  "puffin-cache",
  "puffin-client",
  "puffin-distribution",
+ "puffin-extract",
  "puffin-fs",
  "puffin-git",
  "puffin-interpreter",
