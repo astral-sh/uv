@@ -28,6 +28,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument};
 
 use pep508_rs::Requirement;
+use puffin_extract::extract_source;
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_traits::{BuildContext, SourceBuildTrait};
 
@@ -261,7 +262,8 @@ impl SourceBuild {
         } else {
             debug!("Unpacking for build: {}", source.display());
             let extracted = temp_dir.path().join("extracted");
-            extract_archive(source, &extracted)?
+            extract_source(source, &extracted)
+                .map_err(|err| Error::Extraction(extracted.clone(), err))?
         };
         let source_tree = if let Some(subdir) = subdirectory {
             source_root.join(subdir)
@@ -663,24 +665,6 @@ async fn create_pep517_build_environment(
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
     }
     Ok(())
-}
-
-/// Returns the directory with the `pyproject.toml`/`setup.py`
-#[instrument(skip_all, fields(sdist = ? sdist.file_name().unwrap_or(sdist.as_os_str())))]
-fn extract_archive(sdist: &Path, extracted: &PathBuf) -> Result<PathBuf, Error> {
-    puffin_extract::extract_archive(sdist, extracted)
-        .map_err(|err| Error::Extraction(sdist.to_path_buf(), err))?;
-
-    // > A .tar.gz source distribution (sdist) contains a single top-level directory called
-    // > `{name}-{version}` (e.g. foo-1.0), containing the source files of the package.
-    // TODO(konstin): Verify the name of the directory.
-    let top_level = fs::read_dir(extracted)?.collect::<io::Result<Vec<DirEntry>>>()?;
-    let [root] = top_level.as_slice() else {
-        return Err(Error::InvalidSourceDist(format!(
-            "The top level of the archive must only contain a list directory, but it contains {top_level:?}"
-        )));
-    };
-    Ok(root.path())
 }
 
 /// It is the caller's responsibility to create an informative span.
