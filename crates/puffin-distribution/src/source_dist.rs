@@ -35,7 +35,7 @@ use puffin_traits::{BuildContext, SourceBuildTrait};
 use pypi_types::Metadata21;
 
 use crate::locks::LockedFile;
-use crate::{Reporter, SourceDistDownload};
+use crate::Reporter;
 
 /// The caller is responsible for adding the source dist information to the error chain
 #[derive(Debug, Error)]
@@ -237,18 +237,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
             drop(span);
 
-            let download = SourceDistDownload {
-                dist: source_dist.clone(),
-                sdist_file: sdist_file.clone(),
-                subdirectory: subdirectory.map(Path::to_path_buf),
-            };
-
             let (disk_filename, wheel_filename, metadata) = self
                 .build_source_dist(
-                    &download.dist,
+                    source_dist,
                     temp_dir,
-                    &download.sdist_file,
-                    download.subdirectory.as_deref(),
+                    &sdist_file,
+                    subdirectory,
                     &cache_entry,
                 )
                 .await?;
