@@ -68,6 +68,10 @@ Implements the traits defined in `puffin-traits`.
 Client for interacting with built distributions (wheels) and source distributions (sdists).
 Capable of fetching metadata, distribution contents, etc.
 
+## [puffin-extract](./puffin-extract)
+
+Utilities for extracting files from archives.
+
 ## [puffin-fs](./puffin-fs)
 
 Utilities for interacting with the filesystem.

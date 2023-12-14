@@ -17,13 +17,13 @@ workspace = true
 gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
+puffin-extract = { path = "../puffin-extract" }
 puffin-fs = { path = "../puffin-fs" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
-flate2 = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
@@ -32,14 +32,11 @@ pyproject-toml = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync", "process"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-which = { workspace = true}
-zip = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.34.0" }

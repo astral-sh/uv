@@ -16,7 +16,8 @@ use std::{
 /// A trait to represent some reader which has a total length known in
 /// advance. This is roughly equivalent to the nightly
 /// [`Seek::stream_len`] API.
-pub(crate) trait HasLength {
+#[allow(clippy::len_without_is_empty)]
+pub trait HasLength {
     /// Return the current total length of this stream.
     fn len(&self) -> u64;
 }
@@ -25,7 +26,7 @@ pub(crate) trait HasLength {
 /// and thus can be cloned cheaply. It supports seeking; each cloned instance
 /// maintains its own pointer into the file, and the underlying instance
 /// is seeked prior to each read.
-pub(crate) struct CloneableSeekableReader<R: Read + Seek + HasLength> {
+pub struct CloneableSeekableReader<R: Read + Seek + HasLength> {
     file: Arc<Mutex<R>>,
     pos: u64,
     // TODO determine and store this once instead of per cloneable file

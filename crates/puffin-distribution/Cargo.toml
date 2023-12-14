@@ -20,6 +20,7 @@ pep440_rs = { path = "../pep440-rs" }
 platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
+puffin-extract = { path = "../puffin-extract" }
 puffin-fs = { path = "../puffin-fs" }
 puffin-git = { path = "../puffin-git" }
 puffin-normalize = { path = "../puffin-normalize" }
@@ -31,12 +32,10 @@ bytesize = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
 futures = { workspace = true }
-rayon = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true , features = ["derive"] }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
