@@ -130,7 +130,7 @@ impl TryFrom<&LocalFileUrl> for pypi_types::DirectUrl {
 
     fn try_from(value: &LocalFileUrl) -> Result<Self, Self::Error> {
         Ok(pypi_types::DirectUrl::LocalDirectory {
-            url: value.url.to_string(),
+            url: value.url.clone(),
             dir_info: pypi_types::DirInfo { editable: None },
         })
     }
@@ -141,7 +141,7 @@ impl TryFrom<&DirectArchiveUrl> for pypi_types::DirectUrl {
 
     fn try_from(value: &DirectArchiveUrl) -> Result<Self, Self::Error> {
         Ok(pypi_types::DirectUrl::ArchiveUrl {
-            url: value.url.to_string(),
+            url: value.url.clone(),
             archive_info: pypi_types::ArchiveInfo {
                 hash: None,
                 hashes: None,
@@ -156,7 +156,7 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
 
     fn try_from(value: &DirectGitUrl) -> Result<Self, Self::Error> {
         Ok(pypi_types::DirectUrl::VcsUrl {
-            url: value.url.repository().to_string(),
+            url: value.url.repository().clone(),
             vcs_info: pypi_types::VcsInfo {
                 vcs: pypi_types::VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
