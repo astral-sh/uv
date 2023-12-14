@@ -9,7 +9,6 @@
 #![allow(clippy::cast_sign_loss)]
 
 use std::{
-    fs::File,
     io::{BufReader, Cursor, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
 };
@@ -117,7 +116,7 @@ impl<R: HasLength> HasLength for BufReader<R> {
     }
 }
 
-impl HasLength for File {
+impl HasLength for std::fs::File {
     fn len(&self) -> u64 {
         self.metadata().unwrap().len()
     }

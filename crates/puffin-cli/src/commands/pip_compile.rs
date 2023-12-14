@@ -1,14 +1,15 @@
 use std::borrow::Cow;
+use std::env;
 use std::fmt::Write;
 use std::io::stdout;
 use std::path::Path;
 use std::str::FromStr;
-use std::{env, fs};
 
 use anstream::AutoStream;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
+use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -191,7 +192,7 @@ pub(crate) async fn pip_compile(
 
     // Write the resolved dependencies to the output channel.
     let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
-        Box::new(AutoStream::auto(fs::File::create(output_file)?))
+        Box::new(AutoStream::auto(std::fs::File::create(output_file)?))
     } else {
         Box::new(AutoStream::auto(stdout()))
     };

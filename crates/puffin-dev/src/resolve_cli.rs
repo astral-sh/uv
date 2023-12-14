@@ -1,10 +1,10 @@
-use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use anstream::println;
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
+use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
