@@ -2132,9 +2132,9 @@ fn install_editable() -> Result<()> {
         Downloaded 2 packages in [TIME]
         Installed 4 packages in [TIME]
          + boltons==23.1.1
-         + maturin-editable @ file:///home/konsti/projects/puffin/scripts/editable-installs/maturin_editable/
+         + maturin-editable @ ../../scripts/editable-installs/maturin_editable
          + numpy==1.26.2
-         + poetry-editable @ file:///home/konsti/projects/puffin/scripts/editable-installs/poetry_editable/
+         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
         "###);
     });
 
