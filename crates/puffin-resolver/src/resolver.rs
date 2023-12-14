@@ -22,7 +22,7 @@ use distribution_types::{
     BuiltDist, Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId, SourceDist,
     VersionOrUrl,
 };
-use pep508_rs::{MarkerEnvironment, Requirement, VerbatimUrl};
+use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
@@ -202,11 +202,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let index = Index::default();
         let mut editables = FxHashMap::default();
         for (editable_requirement, metadata) in &manifest.editables {
-            let dist = Dist::from_url(
-                metadata.name.clone(),
-                VerbatimUrl::unknown(editable_requirement.url()),
-            )
-            .expect("This is a valid distribution");
+            let dist = Dist::from_url(metadata.name.clone(), editable_requirement.url())
+                .expect("This is a valid distribution");
             // Mock editable responses
             index.distributions.register(&dist.package_id());
             index
@@ -237,7 +234,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     manifest
                         .editables
                         .iter()
-                        .map(|(editable, _)| editable.url()),
+                        .map(|(editable, _)| editable.url().raw().clone()),
                 )
                 .collect(),
             project: manifest.project,
@@ -638,11 +635,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 for (editable, metadata) in self.editables.values() {
                     constraints.insert(
-                        PubGrubPackage::Package(
-                            metadata.name.clone(),
-                            None,
-                            Some(VerbatimUrl::unknown(editable.url())),
-                        ),
+                        PubGrubPackage::Package(metadata.name.clone(), None, Some(editable.url())),
                         Range::singleton(PubGrubVersion::from(metadata.version.clone())),
                     );
                 }

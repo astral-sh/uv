@@ -44,9 +44,8 @@ use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use unscanny::{Pattern, Scanner};
-use url::Url;
 
-use pep508_rs::{Pep508Error, Requirement};
+use pep508_rs::{Pep508Error, Requirement, VerbatimUrl};
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -68,61 +67,53 @@ enum RequirementsTxtStatement {
     EditableRequirement(ParsedEditableRequirement),
 }
 
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum EditableRequirement {
     Path {
         /// The absolute path, resolved from the current dir if the path in the requirements file was relative
         resolved: PathBuf,
         /// The relative path as it is written in the requirements file
-        original: PathBuf,
+        original: String,
     },
-    Url(Url),
+    Url(VerbatimUrl),
 }
 
 impl EditableRequirement {
-    pub fn url(&self) -> Url {
+    pub fn url(&self) -> VerbatimUrl {
         match self {
-            EditableRequirement::Path {
-                resolved,
-                original: _,
-            } => Url::from_directory_path(resolved).expect("Path valid for url"),
+            EditableRequirement::Path { resolved, original } => {
+                VerbatimUrl::from_path(resolved, original.clone())
+                    .expect("A valid path makes a valid url")
+            }
             EditableRequirement::Url(url) => url.clone(),
         }
     }
 }
 
 /// Relative paths aren't resolved with the current dir yet
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParsedEditableRequirement {
-    Path(PathBuf),
-    Url(Url),
+    Path(String),
+    Url(VerbatimUrl),
 }
 
 impl ParsedEditableRequirement {
-    pub fn unwrap_path(&self) -> &Path {
-        match self {
-            ParsedEditableRequirement::Path(path) => path,
-            ParsedEditableRequirement::Url(_) => {
-                todo!("url editables")
-            }
-        }
-    }
-
     pub fn with_working_dir(
         self,
         working_dir: impl AsRef<Path>,
     ) -> io::Result<EditableRequirement> {
         Ok(match self {
             ParsedEditableRequirement::Path(path) => {
-                if path.is_absolute() {
+                let path_buf = PathBuf::from(&path);
+                if path_buf.is_absolute() {
                     EditableRequirement::Path {
-                        resolved: path.clone(),
+                        resolved: path_buf,
                         original: path,
                     }
                 } else {
                     EditableRequirement::Path {
                         // Avoid paths like `/home/ferris/project/scripts/../editable/`
-                        resolved: fs::canonicalize(working_dir.as_ref().join(&path))?,
+                        resolved: fs::canonicalize(working_dir.as_ref().join(&path_buf))?,
                         original: path,
                     }
                 }
@@ -136,7 +127,7 @@ impl ParsedEditableRequirement {
 impl Display for ParsedEditableRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParsedEditableRequirement::Path(path) => path.display().fmt(f),
+            ParsedEditableRequirement::Path(path) => path.fmt(f),
             ParsedEditableRequirement::Url(url) => url.fmt(f),
         }
     }
@@ -148,7 +139,7 @@ impl Display for EditableRequirement {
             EditableRequirement::Path {
                 original,
                 resolved: _,
-            } => original.display().fmt(f),
+            } => original.fmt(f),
             EditableRequirement::Url(url) => url.fmt(f),
         }
     }
@@ -180,7 +171,7 @@ impl Display for RequirementEntry {
 }
 
 /// Parsed and flattened requirements.txt with requirements and constraints
-#[derive(Debug, Deserialize, Clone, Default, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct RequirementsTxt {
     /// The actual requirements with the hashes
     pub requirements: Vec<RequirementEntry>,
@@ -326,10 +317,10 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let editable_requirement = if let Ok(url) = Url::from_str(path_or_url) {
+        let editable_requirement = if let Ok(url) = VerbatimUrl::from_str(path_or_url) {
             ParsedEditableRequirement::Url(url)
         } else {
-            ParsedEditableRequirement::Path(PathBuf::from(path_or_url))
+            ParsedEditableRequirement::Path(path_or_url.to_string())
         };
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {

@@ -25,7 +25,6 @@ use distribution_types::{
     Dist, GitSourceDist, LocalEditable, Metadata, PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
-use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use puffin_cache::{
     digest, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, CanonicalUrl, WheelCache,
@@ -688,7 +687,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // We finally have the name of the package and can construct the dist
         let dist = Dist::Source(SourceDist::Path(PathSourceDist {
             name: filename.name.clone(),
-            url: VerbatimUrl::unknown(editable.url()),
+            url: editable.url(),
             path: editable.path.clone(),
             editable: true,
         }));

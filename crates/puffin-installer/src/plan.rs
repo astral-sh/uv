@@ -73,7 +73,7 @@ impl InstallPlan {
         for editable in editable_requirements {
             let editable_dist = site_packages
                 .editables()
-                .find(|(_dist, url, _dir_info)| *url == &editable.url())
+                .find(|(_dist, url, _dir_info)| url == &editable.url().raw())
                 .map(|(dist, _url, _dir_info)| dist.clone());
             if let Some(dist) = editable_dist {
                 debug!("Treating editable requirement as immutable: {editable}");

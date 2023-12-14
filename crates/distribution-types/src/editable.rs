@@ -1,7 +1,8 @@
-use requirements_txt::EditableRequirement;
 use std::fmt::{Display, Formatter};
-use std::path::PathBuf;
-use url::Url;
+use std::path::{Path, PathBuf};
+
+use pep508_rs::VerbatimUrl;
+use requirements_txt::EditableRequirement;
 
 #[derive(Debug, Clone)]
 pub struct LocalEditable {
@@ -11,8 +12,12 @@ pub struct LocalEditable {
 }
 
 impl LocalEditable {
-    pub fn url(&self) -> Url {
-        Url::from_directory_path(&self.path).expect("A valid path makes a valid url")
+    pub fn url(&self) -> VerbatimUrl {
+        self.requirement.url()
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
