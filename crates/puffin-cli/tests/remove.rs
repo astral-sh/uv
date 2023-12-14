@@ -16,7 +16,17 @@ fn missing_pyproject_toml() -> Result<()> {
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    puffin::remove::workspace_not_found
+
+      × Could not find a `pyproject.toml` file in the current directory or any of
+      │ its parents
+    "###);
 
     pyproject_toml.assert(predicates::path::missing());
 
@@ -32,7 +42,17 @@ fn missing_project_table() -> Result<()> {
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    puffin::remove::parse
+
+      × Failed to remove `flask` from `pyproject.toml`
+      ╰─▶ no `[project]` table found in `pyproject.toml`
+    "###);
 
     pyproject_toml.assert(predicates::str::is_empty());
 
@@ -53,7 +73,17 @@ name = "project"
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    puffin::remove::parse
+
+      × Failed to remove `flask` from `pyproject.toml`
+      ╰─▶ no `[project.dependencies]` array found in `pyproject.toml`
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -81,7 +111,17 @@ dependencies = [
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("requests")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    puffin::remove::parse
+
+      × Failed to remove `requests` from `pyproject.toml`
+      ╰─▶ unable to find package: `requests`
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -113,7 +153,13 @@ dependencies = [
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -144,7 +190,13 @@ dependencies = [
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("requests")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -174,7 +226,13 @@ dependencies = [
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("Flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -203,7 +261,13 @@ dependencies = ["flask==1.0.0", "requests"]
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("requests")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]

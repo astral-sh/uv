@@ -126,7 +126,19 @@ async fn black() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -146,7 +158,20 @@ async fn black_colorama() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    colorama==0.4.6
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -167,7 +192,19 @@ async fn black_tensorboard() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -185,7 +222,23 @@ async fn black_python_310() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_310, &TAGS_310).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    tomli==2.0.1
+        # via black
+    typing-extensions==4.8.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -211,7 +264,19 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==0.4.3
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -237,7 +302,19 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==0.4.3
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -263,7 +340,19 @@ async fn black_flake8() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -281,7 +370,19 @@ async fn black_lowest() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==22.1.0
+    click==8.0.0
+        # via black
+    mypy-extensions==0.4.3
+        # via black
+    pathspec==0.9.0
+        # via black
+    platformdirs==2.0.0
+        # via black
+    tomli==1.1.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -299,7 +400,19 @@ async fn black_lowest_direct() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==22.1.0
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    tomli==2.0.1
+        # via black
+    "###);
 
     Ok(())
 }
@@ -323,7 +436,19 @@ async fn black_respect_preference() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.0
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -347,7 +472,19 @@ async fn black_ignore_preference() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    black==23.9.1
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.2
+        # via black
+    platformdirs==4.0.0
+        # via black
+    "###);
 
     Ok(())
 }
@@ -405,7 +542,15 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    astroid==3.0.1
+        # via pylint
+    isort==5.12.0
+        # via pylint
+    mccabe==0.7.0
+        # via pylint
+    pylint==2.3.0
+    "###);
 
     Ok(())
 }
@@ -423,7 +568,15 @@ async fn pylint_allow_prerelease() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    astroid==3.0.1
+        # via pylint
+    isort==6.0.0b2
+        # via pylint
+    mccabe==0.7.0
+        # via pylint
+    pylint==2.3.0
+    "###);
 
     Ok(())
 }
@@ -444,7 +597,15 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    astroid==3.0.1
+        # via pylint
+    isort==5.12.0
+        # via pylint
+    mccabe==0.7.0
+        # via pylint
+    pylint==2.3.0
+    "###);
 
     Ok(())
 }
@@ -465,7 +626,15 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution);
+    insta::assert_display_snapshot!(resolution, @r###"
+    astroid==3.0.1
+        # via pylint
+    isort==6.0.0b2
+        # via pylint
+    mccabe==0.7.0
+        # via pylint
+    pylint==2.3.0
+    "###);
 
     Ok(())
 }

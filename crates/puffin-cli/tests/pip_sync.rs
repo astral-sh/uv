@@ -33,7 +33,15 @@ fn missing_requirements_txt() -> Result<()> {
         .arg("requirements.txt")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to open file `requirements.txt`
+      Caused by: No such file or directory (os error 2)
+    "###);
 
     requirements_txt.assert(predicates::path::missing());
 
@@ -52,7 +60,15 @@ fn missing_venv() -> Result<()> {
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to open file `requirements.txt`
+      Caused by: No such file or directory (os error 2)
+    "###);
 
     venv.assert(predicates::path::missing());
 
@@ -80,7 +96,17 @@ fn install() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + markupsafe==2.1.3
+        "###);
     });
 
     check_command(&venv, "import markupsafe", &temp_dir);
@@ -110,7 +136,17 @@ fn install_copy() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + markupsafe==2.1.3
+        "###);
     });
 
     check_command(&venv, "import markupsafe", &temp_dir);
@@ -140,7 +176,17 @@ fn install_hardlink() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + markupsafe==2.1.3
+        "###);
     });
 
     check_command(&venv, "import markupsafe", &temp_dir);
@@ -168,7 +214,18 @@ fn install_many() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + markupsafe==2.1.3
+         + tomli==2.0.1
+        "###);
     });
 
     check_command(&venv, "import markupsafe; import tomli", &cache_dir);
@@ -206,7 +263,14 @@ fn noop() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
     });
 
     check_command(&venv, "import markupsafe", &temp_dir);
@@ -258,7 +322,15 @@ fn link() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv2.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Installed 1 package in [TIME]
+         + markupsafe==2.1.3
+        "###);
     });
 
     check_command(&venv2, "import markupsafe", &temp_dir);
@@ -301,7 +373,19 @@ fn add_remove() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - markupsafe==2.1.3
+         + tomli==2.0.1
+        "###);
     });
 
     check_command(&venv, "import tomli", &temp_dir);
@@ -351,7 +435,17 @@ fn install_sequential() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + tomli==2.0.1
+        "###);
     });
 
     check_command(&venv, "import markupsafe; import tomli", &cache_dir);
@@ -394,7 +488,19 @@ fn upgrade() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - tomli==2.0.0
+         + tomli==2.0.1
+        "###);
     });
 
     check_command(&venv, "import tomli", &temp_dir);
@@ -424,7 +530,17 @@ fn install_url() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -455,7 +571,17 @@ fn install_git_commit() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -486,7 +612,17 @@ fn install_git_tag() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -517,7 +653,18 @@ fn install_git_subdirectories() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a
+         + example-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b
+        "###);
     });
 
     check_command(&venv, "import example_pkg", &temp_dir);
@@ -549,7 +696,17 @@ fn install_sdist() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug==0.9.6
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -579,7 +736,17 @@ fn install_sdist_url() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -620,7 +787,14 @@ fn install_url_then_install_url() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -665,7 +839,14 @@ fn install_url_then_install_version() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -710,7 +891,19 @@ fn install_version_then_install_url() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - werkzeug==2.0.0
+         + werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+        "###);
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
@@ -752,7 +945,17 @@ fn install_numpy_py38() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + numpy==1.24.4
+        "###);
     });
 
     check_command(&venv, "import numpy", &temp_dir);
@@ -781,7 +984,18 @@ fn warn_on_yanked_version() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + colorama==0.4.2
+        "###);
     });
 
     Ok(())
@@ -816,7 +1030,17 @@ fn install_local_wheel() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+        "###);
     });
 
     check_command(&venv, "import tomli", &temp_dir);
@@ -853,7 +1077,17 @@ fn install_local_source_distribution() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+        "###);
     });
 
     check_command(&venv, "import wheel", &temp_dir);
@@ -889,7 +1123,17 @@ fn install_ujson() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz
+        "###);
     });
 
     check_command(&venv, "import ujson", &temp_dir);
@@ -925,7 +1169,18 @@ fn install_dtls_socket() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + dtlssocket @ https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz
+        warning: The package `dtlssocket` requires `cython <3`, but it's not installed.
+        "###);
     });
 
     check_command(&venv, "import DTLSSocket", &temp_dir);

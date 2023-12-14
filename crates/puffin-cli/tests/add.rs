@@ -16,7 +16,17 @@ fn missing_pyproject_toml() -> Result<()> {
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    puffin::add::workspace_not_found
+
+      × Could not find a `pyproject.toml` file in the current directory or any of
+      │ its parents
+    "###);
 
     pyproject_toml.assert(predicates::path::missing());
 
@@ -32,7 +42,13 @@ fn missing_project_table() -> Result<()> {
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -59,7 +75,13 @@ name = "project"
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -90,7 +112,13 @@ dependencies = [
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("flask==2.0.0")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
@@ -119,7 +147,13 @@ dependencies = ["flask==1.0.0"]
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("add")
         .arg("requests")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
 
     pyproject_toml.assert(
         r#"[project]
