@@ -15,7 +15,19 @@ fn no_arguments() -> Result<()> {
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip-uninstall")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <PACKAGE|--requirement <REQUIREMENT>>
+
+    Usage: puffin pip-uninstall <PACKAGE|--requirement <REQUIREMENT>>
+
+    For more information, try '--help'.
+    "###);
 
     Ok(())
 }
@@ -27,7 +39,17 @@ fn invalid_requirement() -> Result<()> {
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip-uninstall")
         .arg("flask==1.0.x")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `flask==1.0.x`
+      Caused by: Version specifier `==1.0.x` doesn't match PEP 440 rules
+    flask==1.0.x
+         ^^^^^^^
+    "###);
 
     Ok(())
 }
@@ -40,7 +62,15 @@ fn missing_requirements_txt() -> Result<()> {
         .arg("pip-uninstall")
         .arg("-r")
         .arg("requirements.txt")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to open file `requirements.txt`
+      Caused by: No such file or directory (os error 2)
+    "###);
 
     Ok(())
 }
@@ -56,7 +86,17 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
         .arg("pip-uninstall")
         .arg("-r")
         .arg("requirements.txt")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Couldn't parse requirement in requirements.txt position 0 to 12
+      Caused by: Version specifier `==1.0.x` doesn't match PEP 440 rules
+    flask==1.0.x
+         ^^^^^^^
+    "###);
 
     Ok(())
 }
@@ -69,7 +109,15 @@ fn missing_pyproject_toml() -> Result<()> {
         .arg("pip-uninstall")
         .arg("-r")
         .arg("pyproject.toml")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to open file `pyproject.toml`
+      Caused by: No such file or directory (os error 2)
+    "###);
 
     Ok(())
 }
@@ -85,7 +133,20 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
         .arg("pip-uninstall")
         .arg("-r")
         .arg("pyproject.toml")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 5
+      |
+    1 | 123 - 456
+      |     ^
+    expected `.`, `=`
+
+    "###);
 
     Ok(())
 }
@@ -101,7 +162,20 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
         .arg("pip-uninstall")
         .arg("-r")
         .arg("pyproject.toml")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 1
+      |
+    1 | [project]
+      | ^^^^^^^^^
+    missing field `name`
+
+    "###);
 
     Ok(())
 }
@@ -122,7 +196,22 @@ dependencies = ["flask==1.0.x"]
         .arg("pip-uninstall")
         .arg("-r")
         .arg("pyproject.toml")
-        .current_dir(&temp_dir));
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `pyproject.toml`
+      Caused by: TOML parse error at line 3, column 16
+      |
+    3 | dependencies = ["flask==1.0.x"]
+      |                ^^^^^^^^^^^^^^^^
+    Version specifier `==1.0.x` doesn't match PEP 440 rules
+    flask==1.0.x
+         ^^^^^^^
+
+    "###);
 
     Ok(())
 }
@@ -173,7 +262,15 @@ fn uninstall() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir));
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Uninstalled 1 package in [TIME]
+         - markupsafe==2.1.3
+        "###);
     });
 
     Command::new(venv.join("bin").join("python"))
