@@ -1,5 +1,5 @@
 pub use distribution_database::{DistributionDatabase, DistributionDatabaseError};
-pub use download::{DiskWheel, Download, InMemoryWheel, LocalWheel, SourceDistDownload};
+pub use download::{DiskWheel, InMemoryWheel, LocalWheel};
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use reporter::Reporter;
 pub use source_dist::{SourceDistCachedBuilder, SourceDistError};
