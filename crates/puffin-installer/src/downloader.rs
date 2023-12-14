@@ -8,7 +8,7 @@ use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, RemoteSource, SourceDist};
+use distribution_types::{CachedDist, Dist, Metadata, RemoteSource, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
@@ -194,16 +194,16 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is unzipped. This implies that the wheel was downloaded and,
     /// if necessary, built.
-    fn on_progress(&self, wheel: &CachedDist);
+    fn on_progress(&self, dist: &dyn Metadata);
 
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &SourceDist) -> usize;
+    fn on_build_start(&self, dist: &dyn Metadata) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &SourceDist, id: usize);
+    fn on_build_complete(&self, dist: &dyn Metadata, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
