@@ -357,22 +357,26 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
 
         let file_metadata = fs_err::metadata(&path_source_dist.path)?;
-        // `modified()` is infallible on windows and unix (i.e., all platforms we support).
+        // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
         let modified = if file_metadata.is_file() {
             file_metadata.modified()?
         } else {
-            if path_source_dist.path.join("pyproject.toml").is_file() {
-                path_source_dist
-                    .path
-                    .join("pyproject.toml")
-                    .metadata()?
-                    .modified()?
-            } else if path_source_dist.path.join("setup.py").is_file() {
-                path_source_dist
-                    .path
-                    .join("setup.py")
-                    .metadata()?
-                    .modified()?
+            if let Some(metadata) = path_source_dist
+                .path
+                .join("pyproject.toml")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                metadata.modified()?
+            } else if let Some(metadata) = path_source_dist
+                .path
+                .join("setup.py")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                metadata.modified()?
             } else {
                 return Err(SourceDistError::DirWithoutEntrypoint);
             }
