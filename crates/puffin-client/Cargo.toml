@@ -35,3 +35,6 @@ url = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["fs", "macros"] }
+
+[features]
+puffin-test-custom-ca-cert = []

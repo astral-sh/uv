@@ -74,10 +74,21 @@ impl RegistryClientBuilder {
 
     pub fn build(self) -> RegistryClient {
         let client_raw = {
-            let client_core = ClientBuilder::new()
+            let mut client_core = ClientBuilder::new()
                 .user_agent("puffin")
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(60 * 5));
+
+            if cfg!(feature = "puffin-test-custom-ca-cert") {
+                if let Some(cert) = std::env::var_os("PUFFIN_TEST_CA_CERT_PEM") {
+                    client_core = client_core.add_root_certificate(
+                        reqwest::Certificate::from_pem(
+                            &fs_err::read(cert).expect("No PUFFIN_TEST_CA_CERT_PEM"),
+                        )
+                        .expect("Invalid certificate"),
+                    )
+                }
+            }
 
             client_core.build().expect("Fail to build HTTP client.")
         };

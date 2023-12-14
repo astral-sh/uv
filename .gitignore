@@ -16,3 +16,6 @@ cache-*
 
 # python tmp files
 __pycache__
+
+scripts/offlinepi/mitmproxy-ca-cert.pem
+scripts/offlinepi/responses.dat
