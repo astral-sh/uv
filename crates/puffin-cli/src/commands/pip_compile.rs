@@ -257,6 +257,7 @@ pub(crate) async fn pip_compile(
     // Write the resolved dependencies to the output channel.
     let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
         Box::new(AutoStream::<std::fs::File>::auto(
+            fs::File>::auto(
             fs_err::File::create(output_file)?.into(),
         ))
     } else {
