@@ -159,3 +159,9 @@ impl std::fmt::Display for SourceDist {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }
 }
+
+impl std::fmt::Display for &dyn Metadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}

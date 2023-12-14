@@ -5,7 +5,7 @@ use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, Metadata, SourceDist, VersionOrUrl};
+use distribution_types::{CachedDist, Metadata, SourceDist, VersionOrUrl};
 use puffin_normalize::PackageName;
 
 use crate::printer::Printer;
@@ -35,8 +35,8 @@ impl FinderReporter {
 }
 
 impl puffin_resolver::FinderReporter for FinderReporter {
-    fn on_progress(&self, wheel: &Dist) {
-        self.progress.set_message(format!("{wheel}"));
+    fn on_progress(&self, dist: &dyn Metadata) {
+        self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
     }
 
@@ -81,8 +81,8 @@ impl DownloadReporter {
 }
 
 impl puffin_installer::DownloadReporter for DownloadReporter {
-    fn on_progress(&self, wheel: &CachedDist) {
-        self.progress.set_message(format!("{wheel}"));
+    fn on_progress(&self, dist: &dyn Metadata) {
+        self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
     }
 
@@ -90,7 +90,7 @@ impl puffin_installer::DownloadReporter for DownloadReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
+    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -108,7 +108,7 @@ impl puffin_installer::DownloadReporter for DownloadReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
+    fn on_build_complete(&self, dist: &dyn Metadata, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
@@ -231,7 +231,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
+    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -249,7 +249,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
+    fn on_build_complete(&self, dist: &dyn Metadata, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
@@ -296,7 +296,7 @@ trait ColorDisplay {
     fn to_color_string(&self) -> String;
 }
 
-impl ColorDisplay for &Dist {
+impl ColorDisplay for &dyn Metadata {
     fn to_color_string(&self) -> String {
         let name = self.name();
         let version_or_url = self.version_or_url();

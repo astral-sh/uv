@@ -8,7 +8,7 @@ use anyhow::Result;
 use futures::StreamExt;
 use rustc_hash::FxHashMap;
 
-use distribution_types::Dist;
+use distribution_types::{Dist, Metadata};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagPriority, Tags};
@@ -239,7 +239,7 @@ enum Response {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a package is resolved to a specific distribution.
-    fn on_progress(&self, wheel: &Dist);
+    fn on_progress(&self, dist: &dyn Metadata);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);
