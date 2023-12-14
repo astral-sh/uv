@@ -18,7 +18,7 @@ use tracing::{debug, trace};
 use url::Url;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, Dist, Metadata, SourceDist, VersionOrUrl};
+use distribution_types::{BuiltDist, Dist, Metadata, PackageId, SourceDist, VersionOrUrl};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
@@ -453,11 +453,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             };
 
             // Emit a request to fetch the metadata for this version.
-            if self
-                .index
-                .distributions
-                .register(candidate.resolve().sha256())
-            {
+            if self.index.distributions.register(&candidate.package_id()) {
                 let distribution = candidate.into_distribution(index.clone());
                 request_sink.unbounded_send(Request::Dist(distribution))?;
             }
@@ -561,11 +557,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self
-                    .index
-                    .distributions
-                    .register(candidate.resolve().sha256())
-                {
+                if self.index.distributions.register(&candidate.package_id()) {
                     let distribution = candidate.into_distribution(index.clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
@@ -822,7 +814,7 @@ pub(crate) struct Index {
     pub(crate) packages: OnceMap<PackageName, (IndexUrl, VersionMap)>,
 
     /// A map from distribution SHA to metadata for that distribution.
-    pub(crate) distributions: OnceMap<String, Metadata21>,
+    pub(crate) distributions: OnceMap<PackageId, Metadata21>,
 
     /// A map from source URL to precise URL.
     pub(crate) redirects: OnceMap<Url, Url>,

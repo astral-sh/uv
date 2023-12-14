@@ -11,7 +11,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
+use distribution_types::{BuiltDist, Dist, Metadata, PackageId, SourceDist};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -82,7 +82,7 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FilePins,
-        distributions: &OnceMap<String, Metadata21>,
+        distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
     ) -> Result<Self, ResolveError> {
