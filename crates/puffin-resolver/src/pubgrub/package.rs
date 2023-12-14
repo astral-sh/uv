@@ -1,6 +1,6 @@
 use derivative::Derivative;
-use url::Url;
 
+use pep508_rs::VerbatimUrl;
 use puffin_normalize::{ExtraName, PackageName};
 
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
@@ -66,7 +66,7 @@ pub enum PubGrubPackage {
         #[derivative(PartialEq = "ignore")]
         #[derivative(PartialOrd = "ignore")]
         #[derivative(Hash = "ignore")]
-        Option<Url>,
+        Option<VerbatimUrl>,
     ),
 }
 

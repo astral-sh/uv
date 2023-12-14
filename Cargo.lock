@@ -850,6 +850,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "pep440_rs 0.3.12",
+ "pep508_rs",
  "puffin-cache",
  "puffin-git",
  "puffin-normalize",
@@ -1998,6 +1999,7 @@ dependencies = [
 name = "pep508_rs"
 version = "0.2.3"
 dependencies = [
+ "derivative",
  "indoc",
  "log",
  "once_cell",
@@ -2360,6 +2362,7 @@ dependencies = [
  "http-cache-semantics",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
+ "pep508_rs",
  "puffin-cache",
  "puffin-fs",
  "puffin-normalize",
@@ -2457,6 +2460,7 @@ dependencies = [
  "futures",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
+ "pep508_rs",
  "platform-tags",
  "puffin-cache",
  "puffin-client",

@@ -33,5 +33,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+pep508_rs = { path = "../pep508-rs" }
+
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["fs", "macros"] }

@@ -13,7 +13,7 @@ use url::Url;
 
 use distribution_types::{BuiltDist, Dist, Metadata, PackageId, SourceDist};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::OnceMap;
 use pypi_types::Metadata21;
@@ -109,9 +109,10 @@ impl ResolutionGraph {
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
-                    let url = redirects
-                        .get(url)
-                        .map_or_else(|| url.clone(), |url| url.value().clone());
+                    let url = redirects.get(url).map_or_else(
+                        || url.clone(),
+                        |url| VerbatimUrl::unknown(url.value().clone()),
+                    );
                     let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
                     let index = petgraph.add_node(pinned_package);
@@ -149,9 +150,10 @@ impl ResolutionGraph {
                     let metadata = entry.value();
 
                     if !metadata.provides_extras.contains(extra) {
-                        let url = redirects
-                            .get(url)
-                            .map_or_else(|| url.clone(), |url| url.value().clone());
+                        let url = redirects.get(url).map_or_else(
+                            || url.clone(),
+                            |url| VerbatimUrl::unknown(url.value().clone()),
+                        );
                         let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
                         diagnostics.push(Diagnostic::MissingExtra {

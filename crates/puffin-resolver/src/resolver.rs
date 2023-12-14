@@ -19,7 +19,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, Dist, Metadata, PackageId, SourceDist, VersionOrUrl};
-use pep508_rs::{MarkerEnvironment, Requirement};
+use pep508_rs::{MarkerEnvironment, Requirement, VerbatimUrl};
 use platform_tags::Tags;
 use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
@@ -208,6 +208,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         None
                     }
                 })
+                .map(VerbatimUrl::raw)
                 .collect(),
             project: manifest.project,
             requirements: manifest.requirements,
@@ -488,11 +489,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if !self.allowed_urls.contains(url) {
                     return Err(ResolveError::DisallowedUrl(
                         package_name.clone(),
-                        url.clone(),
+                        url.to_url(),
                     ));
                 }
 
-                if let Ok(wheel_filename) = WheelFilename::try_from(url) {
+                if let Ok(wheel_filename) = WheelFilename::try_from(url.raw()) {
                     // If the URL is that of a wheel, extract the version.
                     let version = PubGrubVersion::from(wheel_filename.version);
                     if range.contains(&version) {
@@ -669,13 +670,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     if let Some(precise) = precise {
                         match distribution {
                             SourceDist::DirectUrl(sdist) => {
-                                self.index.redirects.done(sdist.url.clone(), precise);
+                                self.index.redirects.done(sdist.url.to_url(), precise);
                             }
                             SourceDist::Git(sdist) => {
-                                self.index.redirects.done(sdist.url.clone(), precise);
+                                self.index.redirects.done(sdist.url.to_url(), precise);
                             }
                             SourceDist::Path(sdist) => {
-                                self.index.redirects.done(sdist.url.clone(), precise);
+                                self.index.redirects.done(sdist.url.to_url(), precise);
                             }
                             SourceDist::Registry(_) => {}
                         }

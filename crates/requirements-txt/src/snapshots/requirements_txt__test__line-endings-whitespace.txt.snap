@@ -30,20 +30,25 @@ RequirementsTxt {
                 ),
                 version_or_url: Some(
                     Url(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "github.com",
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "github.com",
+                                    ),
                                 ),
+                                port: None,
+                                path: "/pandas-dev/pandas",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://github.com/pandas-dev/pandas",
                             ),
-                            port: None,
-                            path: "/pandas-dev/pandas",
-                            query: None,
-                            fragment: None,
                         },
                     ),
                 ),
