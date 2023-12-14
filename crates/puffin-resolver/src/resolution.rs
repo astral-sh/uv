@@ -11,7 +11,9 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{BuiltDist, Dist, LocalEditable, Metadata, PackageId, SourceDist};
+use distribution_types::{
+    BuiltDist, Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId, SourceDist,
+};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -73,9 +75,10 @@ impl ResolutionManifest {
 pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>,
+    /// The set of editable requirements in this resolution.
+    editables: FxHashMap<DistributionId, (LocalEditable, Metadata21)>,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
-    editables: FxHashMap<String, (LocalEditable, Metadata21)>,
 }
 
 impl ResolutionGraph {
@@ -86,7 +89,7 @@ impl ResolutionGraph {
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
-        editables: FxHashMap<String, (LocalEditable, Metadata21)>,
+        editables: FxHashMap<DistributionId, (LocalEditable, Metadata21)>,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
@@ -201,8 +204,8 @@ impl ResolutionGraph {
 
         Ok(Self {
             petgraph,
-            diagnostics,
             editables,
+            diagnostics,
         })
     }
 
@@ -247,7 +250,7 @@ impl ResolutionGraph {
     ///
     /// The editable requirements themselves are unchanged, but their dependencies were added to the general
     /// list of dependencies.
-    pub fn editables(&self) -> &FxHashMap<String, (LocalEditable, Metadata21)> {
+    pub fn editables(&self) -> &FxHashMap<DistributionId, (LocalEditable, Metadata21)> {
         &self.editables
     }
 }
@@ -265,7 +268,8 @@ impl std::fmt::Display for ResolutionGraph {
 
         // Print out the dependency graph.
         for (index, package) in nodes {
-            if let Some((editable_requirement, _)) = self.editables.get(&package.to_string()) {
+            if let Some((editable_requirement, _)) = self.editables.get(&package.distribution_id())
+            {
                 writeln!(f, "-e {editable_requirement}")?;
             } else {
                 writeln!(f, "{package}")?;

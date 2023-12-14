@@ -2132,9 +2132,9 @@ fn install_editable() -> Result<()> {
         Downloaded 2 packages in [TIME]
         Installed 4 packages in [TIME]
          + boltons==23.1.1
-         + maturin-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/maturin_editable/
+         + maturin-editable @ file:///home/konsti/projects/puffin/scripts/editable-installs/maturin_editable/
          + numpy==1.26.2
-         + poetry-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/poetry_editable/
+         + poetry-editable @ file:///home/konsti/projects/puffin/scripts/editable-installs/poetry_editable/
         "###);
     });
 
@@ -2194,13 +2194,7 @@ fn install_editable() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Built 2 editables in [TIME]
-        Uninstalled 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         - maturin-editable==0.1.0
-         + maturin-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/maturin_editable/
-         - poetry-editable==0.1.0
-         + poetry-editable @ file:///home/konsti/projects/puffin/crates/puffin-cli/../../scripts/editable-installs/poetry_editable/
+        Audited 2 packages in [TIME]
         "###);
     });
 

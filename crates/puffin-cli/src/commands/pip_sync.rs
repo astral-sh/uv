@@ -220,7 +220,7 @@ pub(crate) async fn sync_requirements(
             .await
             .context("Failed to build editables")?
             .into_iter()
-            .map(|(_editable, wheel, _metadata)| wheel)
+            .map(|built_editable| built_editable.wheel)
             .collect();
         let s = if built_editables.len() == 1 { "" } else { "s" };
         writeln!(

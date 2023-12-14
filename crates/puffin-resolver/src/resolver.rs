@@ -19,7 +19,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, LocalEditable, Metadata, PackageId, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId, SourceDist,
+    VersionOrUrl,
 };
 use pep508_rs::{MarkerEnvironment, Requirement, VerbatimUrl};
 use platform_tags::Tags;
@@ -156,7 +157,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     markers: &'a MarkerEnvironment,
     selector: CandidateSelector,
     index: Arc<Index>,
-    editables: FxHashMap<String, (LocalEditable, Metadata21)>,
+    editables: FxHashMap<DistributionId, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
 }
@@ -212,7 +213,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 .distributions
                 .done(dist.package_id(), metadata.clone());
             editables.insert(
-                dist.to_string(),
+                dist.distribution_id(),
                 (editable_requirement.clone(), metadata.clone()),
             );
         }

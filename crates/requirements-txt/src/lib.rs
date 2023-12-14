@@ -36,6 +36,7 @@
 
 use std::fmt::{Display, Formatter};
 use std::io;
+use std::io::Error;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -107,9 +108,11 @@ impl ParsedEditableRequirement {
         }
     }
 
-    #[must_use]
-    pub fn with_working_dir(self, working_dir: impl AsRef<Path>) -> EditableRequirement {
-        match self {
+    pub fn with_working_dir(
+        self,
+        working_dir: impl AsRef<Path>,
+    ) -> io::Result<EditableRequirement> {
+        Ok(match self {
             ParsedEditableRequirement::Path(path) => {
                 if path.is_absolute() {
                     EditableRequirement::Path {
@@ -118,14 +121,15 @@ impl ParsedEditableRequirement {
                     }
                 } else {
                     EditableRequirement::Path {
-                        resolved: working_dir.as_ref().join(&path),
+                        // Avoid paths like `/home/ferris/project/scripts/../editable/`
+                        resolved: fs::canonicalize(working_dir.as_ref().join(&path))?,
                         original: path,
                     }
                 }
             }
             // TODO(konstin): File urls
             ParsedEditableRequirement::Url(url) => EditableRequirement::Url(url),
-        }
+        })
     }
 }
 
@@ -270,7 +274,8 @@ impl RequirementsTxt {
                     data.requirements.push(requirement_entry);
                 }
                 RequirementsTxtStatement::EditableRequirement(editable) => {
-                    data.editables.push(editable.with_working_dir(&working_dir));
+                    data.editables
+                        .push(editable.with_working_dir(&working_dir)?);
                 }
             }
         }
@@ -552,6 +557,12 @@ impl std::error::Error for RequirementsTxtFileError {
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
             RequirementsTxtParserError::Parser { .. } => None,
         }
+    }
+}
+
+impl From<io::Error> for RequirementsTxtParserError {
+    fn from(err: Error) -> Self {
+        Self::IO(err)
     }
 }
 

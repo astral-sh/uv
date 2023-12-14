@@ -15,6 +15,13 @@ use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, Local
 use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::Metadata21;
 
+#[derive(Debug, Clone)]
+pub struct BuiltEditable {
+    pub editable: LocalEditable,
+    pub wheel: CachedDist,
+    pub metadata: Metadata21,
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Failed to unzip wheel: {0}")]
@@ -99,7 +106,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         &self,
         editables: Vec<LocalEditable>,
         editable_wheel_dir: &Path,
-    ) -> Result<Vec<(LocalEditable, CachedDist, Metadata21)>, Error> {
+    ) -> Result<Vec<BuiltEditable>, Error> {
         // Build editables in parallel
         let mut results = Vec::with_capacity(editables.len());
         let mut fetches = futures::stream::iter(editables)
@@ -127,7 +134,11 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_progress(&wheel);
             }
-            results.push((editable, wheel, metadata));
+            results.push(BuiltEditable {
+                editable,
+                wheel,
+                metadata,
+            });
         }
 
         if let Some(reporter) = self.reporter.as_ref() {
