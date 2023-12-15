@@ -52,6 +52,38 @@ fn missing_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn no_solution() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-install")
+        .arg("flask>=3.0.0")
+        .arg("WerkZeug<1.0.0")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there is no
+          version of flask available matching >3.0.0, flask>=3.0.0 depends on
+          werkzeug>=3.0.0.
+          And because root depends on werkzeug<1.0.0 and root depends on
+          flask>=3.0.0, version solving failed.
+    "###);
+
+    Ok(())
+}
+
 /// Install a package from the command line into a virtual environment.
 #[test]
 fn install_package() -> Result<()> {
