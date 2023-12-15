@@ -93,7 +93,7 @@ struct DiskFilenameAndMetadata {
     metadata: Metadata21,
 }
 
-/// The information about the wheel we either just built or got from the cache
+/// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
 pub struct BuiltWheelMetadata {
     /// The path to the built wheel.
@@ -107,16 +107,35 @@ pub struct BuiltWheelMetadata {
 }
 
 impl BuiltWheelMetadata {
+    /// Find a compatible wheel in the cache based on the given manifest.
+    fn find_in_cache(tags: &Tags, manifest: &Manifest, cache_entry: &CacheEntry) -> Option<Self> {
+        // Find a compatible cache entry in the manifest.
+        let (filename, cached_dist) = manifest.find_compatible(tags)?;
+        let metadata = Self::from_cached(filename.clone(), cached_dist.clone(), cache_entry);
+
+        // Validate that the wheel exists on disk.
+        if !metadata.path.is_file() {
+            warn!(
+                "Wheel `{}` is present in the manifest, but not on disk",
+                metadata.path.display()
+            );
+            return None;
+        }
+
+        Some(metadata)
+    }
+
+    /// Create a [`BuiltWheelMetadata`] from a cached entry.
     fn from_cached(
-        filename: &WheelFilename,
-        cached_data: &DiskFilenameAndMetadata,
+        filename: WheelFilename,
+        cached_dist: DiskFilenameAndMetadata,
         cache_entry: &CacheEntry,
     ) -> Self {
         Self {
-            path: cache_entry.dir.join(&cached_data.disk_filename),
+            path: cache_entry.dir.join(&cached_dist.disk_filename),
             target: cache_entry.dir.join(filename.stem()),
-            filename: filename.clone(),
-            metadata: cached_data.metadata.clone(),
+            filename,
+            metadata: cached_dist.metadata,
         }
     }
 }
@@ -300,12 +319,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 CachedClientError::Client(err) => SourceDistError::Client(err),
             })?;
 
-        if let Some((filename, cached_data)) = manifest.find_compatible(self.tags) {
-            return Ok(BuiltWheelMetadata::from_cached(
-                filename,
-                cached_data,
-                &cache_entry,
-            ));
+        // If the cache contains a compatible wheel, return it.
+        if let Some(metadata) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
+        {
+            return Ok(metadata);
         }
 
         // At this point, we're seeing cached metadata (as in, we have an up-to-date source
@@ -359,8 +377,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         Ok(BuiltWheelMetadata::from_cached(
-            &wheel_filename,
-            &cached_data,
+            wheel_filename,
+            cached_data,
             &cache_entry,
         ))
     }
@@ -411,12 +429,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .unwrap_or_default();
 
         // If the cache contains a compatible wheel, return it.
-        if let Some((filename, cached_data)) = manifest.find_compatible(self.tags) {
-            return Ok(BuiltWheelMetadata::from_cached(
-                filename,
-                cached_data,
-                &cache_entry,
-            ));
+        if let Some(metadata) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
+        {
+            return Ok(metadata);
         }
 
         // Otherwise, we need to build a wheel.
@@ -489,12 +505,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();
 
         // If the cache contains a compatible wheel, return it.
-        if let Some((filename, cached_data)) = manifest.find_compatible(self.tags) {
-            return Ok(BuiltWheelMetadata::from_cached(
-                filename,
-                cached_data,
-                &cache_entry,
-            ));
+        if let Some(metadata) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
+        {
+            return Ok(metadata);
         }
 
         let task = self
