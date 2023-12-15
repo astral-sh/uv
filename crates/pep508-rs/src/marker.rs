@@ -885,7 +885,7 @@ impl FromStr for MarkerExpression {
                 )),
                 start: pos,
                 len: chars.chars.clone().count(),
-                input: chars.copy_chars(),
+                input: chars.to_string(),
             });
         }
         Ok(expression)
@@ -1112,8 +1112,9 @@ impl Display for MarkerTree {
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
 /// ```
 fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Error> {
-    let (operator, start, len) =
+    let (start, len) =
         cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"');
+    let operator = cursor.slice(start, len);
     if operator == "not" {
         // 'not' wsp+ 'in'
         match cursor.next() {
@@ -1122,9 +1123,9 @@ fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Er
                     message: Pep508ErrorSource::String(
                         "Expected whitespace after 'not', found end of input".to_string(),
                     ),
-                    start: cursor.get_pos(),
+                    start: cursor.pos(),
                     len: 1,
-                    input: cursor.copy_chars(),
+                    input: cursor.to_string(),
                 })
             }
             Some((_, whitespace)) if whitespace.is_whitespace() => {}
@@ -1134,23 +1135,23 @@ fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Er
                         "Expected whitespace after 'not', found '{other}'"
                     )),
                     start: pos,
-                    len: 1,
-                    input: cursor.copy_chars(),
+                    len: other.len_utf8(),
+                    input: cursor.to_string(),
                 })
             }
         };
         cursor.eat_whitespace();
-        cursor.next_expect_char('i', cursor.get_pos())?;
-        cursor.next_expect_char('n', cursor.get_pos())?;
+        cursor.next_expect_char('i', cursor.pos())?;
+        cursor.next_expect_char('n', cursor.pos())?;
         return Ok(MarkerOperator::NotIn);
     }
-    MarkerOperator::from_str(&operator).map_err(|_| Pep508Error {
+    MarkerOperator::from_str(operator).map_err(|_| Pep508Error {
         message: Pep508ErrorSource::String(format!(
             "Expected a valid marker operator (such as '>=' or 'not in'), found '{operator}'"
         )),
         start,
         len,
-        input: cursor.copy_chars(),
+        input: cursor.to_string(),
     })
 }
 
@@ -1169,29 +1170,31 @@ fn parse_marker_value(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error> {
             message: Pep508ErrorSource::String(
                 "Expected marker value, found end of dependency specification".to_string(),
             ),
-            start: cursor.get_pos(),
+            start: cursor.pos(),
             len: 1,
-            input: cursor.copy_chars(),
+            input: cursor.to_string(),
         }),
         // It can be a string ...
         Some((start_pos, quotation_mark @ ('"' | '\''))) => {
             cursor.next();
-            let (value, _, _) = cursor.take_while(|c| c != quotation_mark);
+            let (start, len) = cursor.take_while(|c| c != quotation_mark);
+            let value = cursor.slice(start, len).to_string();
             cursor.next_expect_char(quotation_mark, start_pos)?;
             Ok(MarkerValue::string_value(value))
         }
         // ... or it can be a keyword
         Some(_) => {
-            let (key, start, len) = cursor.take_while(|char| {
+            let (start, len) = cursor.take_while(|char| {
                 !char.is_whitespace() && !['>', '=', '<', '!', '~', ')'].contains(&char)
             });
-            MarkerValue::from_str(&key).map_err(|_| Pep508Error {
+            let key = cursor.slice(start, len);
+            MarkerValue::from_str(key).map_err(|_| Pep508Error {
                 message: Pep508ErrorSource::String(format!(
                     "Expected a valid marker name, found '{key}'"
                 )),
                 start,
                 len,
-                input: cursor.copy_chars(),
+                input: cursor.to_string(),
             })
         }
     }
@@ -1223,7 +1226,7 @@ fn parse_marker_key_op_value(cursor: &mut Cursor) -> Result<MarkerExpression, Pe
 /// ```
 fn parse_marker_expr(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
     cursor.eat_whitespace();
-    if let Some(start_pos) = cursor.eat('(') {
+    if let Some(start_pos) = cursor.eat_char('(') {
         let marker = parse_marker_or(cursor)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
@@ -1270,8 +1273,8 @@ fn parse_marker_op(
         // wsp*
         cursor.eat_whitespace();
         // ('or' marker_and) or ('and' marker_or)
-        let (maybe_op, _start, _len) = cursor.peek_while(|c| !c.is_whitespace());
-        match maybe_op {
+        let (start, len) = cursor.peek_while(|c| !c.is_whitespace());
+        match cursor.slice(start, len) {
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
                 let expression = parse_inner(cursor)?;
@@ -1304,7 +1307,7 @@ pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep5
             )),
             start: pos,
             len: cursor.chars.clone().count(),
-            input: cursor.copy_chars(),
+            input: cursor.to_string(),
         });
     };
     Ok(marker)
