@@ -1981,6 +1981,7 @@ dependencies = [
  "serde",
  "tracing",
  "unicode-width",
+ "unscanny",
 ]
 
 [[package]]

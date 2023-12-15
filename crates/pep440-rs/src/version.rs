@@ -694,6 +694,17 @@ impl FromStr for Version {
     /// Note that this variant doesn't allow the version to end with a star, see
     /// [`Self::from_str_star`] if you want to parse versions for specifiers
     fn from_str(version: &str) -> Result<Self, Self::Err> {
+        if let Ok(release) = version.split('.').map(|number| number.parse()).collect() {
+            return Ok(Self {
+                epoch: 0,
+                release,
+                pre: None,
+                post: None,
+                dev: None,
+                local: None,
+            });
+        }
+
         let captures = VERSION_RE
             .captures(version)
             .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
@@ -713,6 +724,20 @@ impl Version {
     ///  * `1.2.*.4` -> err
     ///  * `1.0-dev1.*` -> err
     pub fn from_str_star(version: &str) -> Result<(Self, bool), String> {
+        if let Ok(release) = version.split('.').map(|number| number.parse()).collect() {
+            return Ok((
+                Self {
+                    epoch: 0,
+                    release,
+                    pre: None,
+                    post: None,
+                    dev: None,
+                    local: None,
+                },
+                false,
+            ));
+        }
+
         let captures = VERSION_RE
             .captures(version)
             .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
