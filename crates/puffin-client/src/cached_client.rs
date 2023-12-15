@@ -101,7 +101,7 @@ impl CachedClient {
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let cached = if let Ok(cached) = fs_err::tokio::read(cache_entry.path()).await {
-            match serde_json::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
+            match rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
                 Ok(data) => Some(data),
                 Err(err) => {
                     warn!(
@@ -123,7 +123,7 @@ impl CachedClient {
             CachedResponse::NotModified(data_with_cache_policy) => {
                 write_atomic(
                     cache_entry.path(),
-                    serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
+                    rmp_serde::to_vec(&data_with_cache_policy).unwrap(),
                 )
                 .await
                 .map_err(crate::Error::CacheWrite)?;
@@ -138,8 +138,7 @@ impl CachedClient {
                     fs_err::tokio::create_dir_all(&cache_entry.dir)
                         .await
                         .map_err(crate::Error::CacheWrite)?;
-                    let data =
-                        serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
+                    let data = rmp_serde::to_vec(&data_with_cache_policy).unwrap();
                     write_atomic(cache_entry.path(), data)
                         .await
                         .map_err(crate::Error::CacheWrite)?;
