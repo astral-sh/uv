@@ -946,7 +946,7 @@ mod test {
         }
         // Nonsensical versions should be invalid (different error message)
         Version::from_str("french toast").unwrap_err();
-        VersionSpecifier::from_str(&format!("==french toast")).unwrap_err();
+        VersionSpecifier::from_str("==french toast").unwrap_err();
     }
 
     #[test]
