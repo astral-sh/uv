@@ -7,7 +7,7 @@ use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
 
-use distribution_types::{AnyDist, Metadata};
+use distribution_types::{AnyDist, Metadata, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
@@ -18,8 +18,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{
-    Manifest, PreReleaseMode, ResolutionGraph, ResolutionManifest, ResolutionMode,
-    ResolutionOptions, Resolver,
+    Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::OnceMap;
 use pypi_types::IndexUrls;
@@ -272,7 +271,7 @@ async fn resolve(
 /// Install a set of requirements into the current environment.
 #[allow(clippy::too_many_arguments)]
 async fn install(
-    resolution: &ResolutionManifest,
+    resolution: &Resolution,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
@@ -456,11 +455,7 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-fn validate(
-    resolution: &ResolutionManifest,
-    venv: &Virtualenv,
-    mut printer: Printer,
-) -> Result<()> {
+fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<()> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
     for diagnostic in diagnostics {

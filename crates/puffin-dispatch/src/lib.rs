@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, Metadata};
+use distribution_types::{CachedDist, Metadata, Resolution};
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{BuildKind, SourceBuild, SourceBuildContext};
@@ -18,7 +18,7 @@ use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall};
 use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
+use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::IndexUrls;
 
@@ -88,7 +88,7 @@ impl BuildContext for BuildDispatch {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'a>> {
         Box::pin(async {
             let tags = Tags::from_interpreter(&self.interpreter)?;
             let resolver = Resolver::new(
@@ -99,32 +99,35 @@ impl BuildContext for BuildDispatch {
                 &self.client,
                 self,
             );
-            let resolution_graph = resolver.resolve().await.with_context(|| {
+            let graph = resolver.resolve().await.with_context(|| {
                 format!(
                     "No solution found when resolving: {}",
                     requirements.iter().map(ToString::to_string).join(", "),
                 )
             })?;
-            Ok(resolution_graph.requirements())
+            Ok(Resolution::from(graph))
         })
     }
 
     #[instrument(
-        skip(self, requirements, venv),
+        skip(self, resolution, venv),
         fields(
-            requirements = requirements.iter().map(ToString::to_string).join(", "),
+            resolution = resolution.distributions().map(ToString::to_string).join(", "),
             venv = ?venv.root()
         )
     )]
     fn install<'a>(
         &'a self,
-        requirements: &'a [Requirement],
+        resolution: &'a Resolution,
         venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             debug!(
                 "Installing in {} in {}",
-                requirements.iter().map(ToString::to_string).join(", "),
+                resolution
+                    .distributions()
+                    .map(ToString::to_string)
+                    .join(", "),
                 venv.root().display(),
             );
 
@@ -137,7 +140,7 @@ impl BuildContext for BuildDispatch {
                 reinstalls,
                 extraneous,
             } = InstallPlan::from_requirements(
-                requirements,
+                &resolution.requirements(),
                 &Reinstall::None,
                 &self.index_urls,
                 self.cache(),
@@ -146,21 +149,16 @@ impl BuildContext for BuildDispatch {
                 &tags,
             )?;
 
-            // Resolve the dependencies.
-            let remote = if remote.is_empty() {
-                Vec::new()
-            } else {
-                debug!(
-                    "Fetching build requirement{}: {}",
-                    if remote.len() == 1 { "" } else { "s" },
-                    remote.iter().map(ToString::to_string).join(", ")
-                );
-                let resolution = DistFinder::new(&tags, &self.client, self.interpreter())
-                    .resolve(&remote)
-                    .await
-                    .context("Failed to resolve build dependencies")?;
-                resolution.into_distributions().collect::<Vec<_>>()
-            };
+            // Resolve any registry-based requirements.
+            let remote = remote
+                .iter()
+                .map(|dist| {
+                    resolution
+                        .get(&dist.name)
+                        .cloned()
+                        .expect("Resolution should contain all packages")
+                })
+                .collect::<Vec<_>>();
 
             // Download any missing distributions.
             let wheels = if remote.is_empty() {

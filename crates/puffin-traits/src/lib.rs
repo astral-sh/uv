@@ -6,6 +6,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 
+use distribution_types::Resolution;
 pub use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
@@ -75,13 +76,13 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'a>>;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base python as [`BuildContext::base_python`]
     fn install<'a>(
         &'a self,
-        requirements: &'a [Requirement],
+        resolution: &'a Resolution,
         venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
