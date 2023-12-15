@@ -9,7 +9,7 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
-use crate::{CharIter, Pep508Error, Pep508ErrorSource};
+use crate::{Cursor, Pep508Error, Pep508ErrorSource};
 use pep440_rs::{Version, VersionSpecifier};
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -875,7 +875,7 @@ impl FromStr for MarkerExpression {
     type Err = Pep508Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut chars = CharIter::new(s);
+        let mut chars = Cursor::new(s);
         let expression = parse_marker_key_op_value(&mut chars)?;
         chars.eat_whitespace();
         if let Some((pos, unexpected)) = chars.next() {
@@ -1111,20 +1111,20 @@ impl Display for MarkerTree {
 /// version_cmp   = wsp* <'<=' | '<' | '!=' | '==' | '>=' | '>' | '~=' | '==='>
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
 /// ```
-fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508Error> {
+fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Error> {
     let (operator, start, len) =
-        chars.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"');
+        cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"');
     if operator == "not" {
         // 'not' wsp+ 'in'
-        match chars.next() {
+        match cursor.next() {
             None => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
                         "Expected whitespace after 'not', found end of input".to_string(),
                     ),
-                    start: chars.get_pos(),
+                    start: cursor.get_pos(),
                     len: 1,
-                    input: chars.copy_chars(),
+                    input: cursor.copy_chars(),
                 })
             }
             Some((_, whitespace)) if whitespace.is_whitespace() => {}
@@ -1135,13 +1135,13 @@ fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508E
                     )),
                     start: pos,
                     len: 1,
-                    input: chars.copy_chars(),
+                    input: cursor.copy_chars(),
                 })
             }
         };
-        chars.eat_whitespace();
-        chars.next_expect_char('i', chars.get_pos())?;
-        chars.next_expect_char('n', chars.get_pos())?;
+        cursor.eat_whitespace();
+        cursor.next_expect_char('i', cursor.get_pos())?;
+        cursor.next_expect_char('n', cursor.get_pos())?;
         return Ok(MarkerOperator::NotIn);
     }
     MarkerOperator::from_str(&operator).map_err(|_| Pep508Error {
@@ -1150,7 +1150,7 @@ fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508E
         )),
         start,
         len,
-        input: chars.copy_chars(),
+        input: cursor.copy_chars(),
     })
 }
 
@@ -1158,31 +1158,31 @@ fn parse_marker_operator(chars: &mut CharIter) -> Result<MarkerOperator, Pep508E
 /// '`os_name`', '`sys_platform`', '`platform_release`', '`platform_system`', '`platform_version`',
 /// '`platform_machine`', '`platform_python_implementation`', '`implementation_name`',
 /// '`implementation_version`', 'extra'
-fn parse_marker_value(chars: &mut CharIter) -> Result<MarkerValue, Pep508Error> {
+fn parse_marker_value(cursor: &mut Cursor) -> Result<MarkerValue, Pep508Error> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
     // > that backslash escapes are not defined, but existing implementations do support them. They
     // > are not included in this specification because they add complexity and there is no observable
     // > need for them today. Similarly we do not define non-ASCII character support: all the runtime
     // > variables we are referencing are expected to be ASCII-only.
-    match chars.peek() {
+    match cursor.peek() {
         None => Err(Pep508Error {
             message: Pep508ErrorSource::String(
                 "Expected marker value, found end of dependency specification".to_string(),
             ),
-            start: chars.get_pos(),
+            start: cursor.get_pos(),
             len: 1,
-            input: chars.copy_chars(),
+            input: cursor.copy_chars(),
         }),
         // It can be a string ...
         Some((start_pos, quotation_mark @ ('"' | '\''))) => {
-            chars.next();
-            let (value, _, _) = chars.take_while(|c| c != quotation_mark);
-            chars.next_expect_char(quotation_mark, start_pos)?;
+            cursor.next();
+            let (value, _, _) = cursor.take_while(|c| c != quotation_mark);
+            cursor.next_expect_char(quotation_mark, start_pos)?;
             Ok(MarkerValue::string_value(value))
         }
         // ... or it can be a keyword
         Some(_) => {
-            let (key, start, len) = chars.take_while(|char| {
+            let (key, start, len) = cursor.take_while(|char| {
                 !char.is_whitespace() && !['>', '=', '<', '!', '~', ')'].contains(&char)
             });
             MarkerValue::from_str(&key).map_err(|_| Pep508Error {
@@ -1191,7 +1191,7 @@ fn parse_marker_value(chars: &mut CharIter) -> Result<MarkerValue, Pep508Error> 
                 )),
                 start,
                 len,
-                input: chars.copy_chars(),
+                input: cursor.copy_chars(),
             })
         }
     }
@@ -1200,16 +1200,16 @@ fn parse_marker_value(chars: &mut CharIter) -> Result<MarkerValue, Pep508Error> 
 /// ```text
 /// marker_var:l marker_op:o marker_var:r
 /// ```
-fn parse_marker_key_op_value(chars: &mut CharIter) -> Result<MarkerExpression, Pep508Error> {
-    chars.eat_whitespace();
-    let lvalue = parse_marker_value(chars)?;
-    chars.eat_whitespace();
+fn parse_marker_key_op_value(cursor: &mut Cursor) -> Result<MarkerExpression, Pep508Error> {
+    cursor.eat_whitespace();
+    let lvalue = parse_marker_value(cursor)?;
+    cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
     // when we're here because other `parse_marker_key` would have pulled the characters in and
     // errored
-    let operator = parse_marker_operator(chars)?;
-    chars.eat_whitespace();
-    let rvalue = parse_marker_value(chars)?;
+    let operator = parse_marker_operator(cursor)?;
+    cursor.eat_whitespace();
+    let rvalue = parse_marker_value(cursor)?;
     Ok(MarkerExpression {
         l_value: lvalue,
         operator,
@@ -1221,14 +1221,14 @@ fn parse_marker_key_op_value(chars: &mut CharIter) -> Result<MarkerExpression, P
 /// marker_expr   = marker_var:l marker_op:o marker_var:r -> (o, l, r)
 ///               | wsp* '(' marker:m wsp* ')' -> m
 /// ```
-fn parse_marker_expr(chars: &mut CharIter) -> Result<MarkerTree, Pep508Error> {
-    chars.eat_whitespace();
-    if let Some(start_pos) = chars.eat('(') {
-        let marker = parse_marker_or(chars)?;
-        chars.next_expect_char(')', start_pos)?;
+fn parse_marker_expr(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+    cursor.eat_whitespace();
+    if let Some(start_pos) = cursor.eat('(') {
+        let marker = parse_marker_or(cursor)?;
+        cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(MarkerTree::Expression(parse_marker_key_op_value(chars)?))
+        Ok(MarkerTree::Expression(parse_marker_key_op_value(cursor)?))
     }
 }
 
@@ -1236,31 +1236,31 @@ fn parse_marker_expr(chars: &mut CharIter) -> Result<MarkerTree, Pep508Error> {
 /// marker_and    = marker_expr:l wsp* 'and' marker_expr:r -> ('and', l, r)
 ///               | marker_expr:m -> m
 /// ```
-fn parse_marker_and(chars: &mut CharIter) -> Result<MarkerTree, Pep508Error> {
-    parse_marker_op(chars, "and", MarkerTree::And, parse_marker_expr)
+fn parse_marker_and(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+    parse_marker_op(cursor, "and", MarkerTree::And, parse_marker_expr)
 }
 
 /// ```text
 /// marker_or     = marker_and:l wsp* 'or' marker_and:r -> ('or', l, r)
 ///                   | marker_and:m -> m
 /// ```
-fn parse_marker_or(chars: &mut CharIter) -> Result<MarkerTree, Pep508Error> {
-    parse_marker_op(chars, "or", MarkerTree::Or, parse_marker_and)
+fn parse_marker_or(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+    parse_marker_op(cursor, "or", MarkerTree::Or, parse_marker_and)
 }
 
 /// Parses both `marker_and` and `marker_or`
 fn parse_marker_op(
-    chars: &mut CharIter,
+    cursor: &mut Cursor,
     op: &str,
     op_constructor: fn(Vec<MarkerTree>) -> MarkerTree,
-    parse_inner: fn(&mut CharIter) -> Result<MarkerTree, Pep508Error>,
+    parse_inner: fn(&mut Cursor) -> Result<MarkerTree, Pep508Error>,
 ) -> Result<MarkerTree, Pep508Error> {
     // marker_and or marker_expr
-    let first_element = parse_inner(chars)?;
+    let first_element = parse_inner(cursor)?;
     // wsp*
-    chars.eat_whitespace();
+    cursor.eat_whitespace();
     // Check if we're done here instead of invoking the whole vec allocating loop
-    if matches!(chars.peek_char(), None | Some(')')) {
+    if matches!(cursor.peek_char(), None | Some(')')) {
         return Ok(first_element);
     }
 
@@ -1268,13 +1268,13 @@ fn parse_marker_op(
     expressions.push(first_element);
     loop {
         // wsp*
-        chars.eat_whitespace();
+        cursor.eat_whitespace();
         // ('or' marker_and) or ('and' marker_or)
-        let (maybe_op, _start, _len) = chars.peek_while(|c| !c.is_whitespace());
+        let (maybe_op, _start, _len) = cursor.peek_while(|c| !c.is_whitespace());
         match maybe_op {
             value if value == op => {
-                chars.take_while(|c| !c.is_whitespace());
-                let expression = parse_inner(chars)?;
+                cursor.take_while(|c| !c.is_whitespace());
+                let expression = parse_inner(cursor)?;
                 expressions.push(expression);
             }
             _ => {
@@ -1292,10 +1292,10 @@ fn parse_marker_op(
 /// ```text
 /// marker        = marker_or
 /// ```
-pub(crate) fn parse_markers_impl(chars: &mut CharIter) -> Result<MarkerTree, Pep508Error> {
-    let marker = parse_marker_or(chars)?;
-    chars.eat_whitespace();
-    if let Some((pos, unexpected)) = chars.next() {
+pub(crate) fn parse_markers_impl(cursor: &mut Cursor) -> Result<MarkerTree, Pep508Error> {
+    let marker = parse_marker_or(cursor)?;
+    cursor.eat_whitespace();
+    if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
         // character was neither "and" nor "or"
         return Err(Pep508Error {
@@ -1303,8 +1303,8 @@ pub(crate) fn parse_markers_impl(chars: &mut CharIter) -> Result<MarkerTree, Pep
                 "Unexpected character '{unexpected}', expected 'and', 'or' or end of input"
             )),
             start: pos,
-            len: chars.chars.clone().count(),
-            input: chars.copy_chars(),
+            len: cursor.chars.clone().count(),
+            input: cursor.copy_chars(),
         });
     };
     Ok(marker)
@@ -1313,7 +1313,7 @@ pub(crate) fn parse_markers_impl(chars: &mut CharIter) -> Result<MarkerTree, Pep
 /// Parses markers such as `python_version < '3.8'` or
 /// `python_version == "3.10" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))`
 fn parse_markers(markers: &str) -> Result<MarkerTree, Pep508Error> {
-    let mut chars = CharIter::new(markers);
+    let mut chars = Cursor::new(markers);
     parse_markers_impl(&mut chars)
 }
 

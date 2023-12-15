@@ -381,13 +381,13 @@ impl FromStr for Requirement {
 
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse(&mut CharIter::new(input))
+        parse(&mut Cursor::new(input))
     }
 }
 
 impl Requirement {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-    pub fn parse(input: &mut CharIter) -> Result<Self, Pep508Error> {
+    pub fn parse(input: &mut Cursor) -> Result<Self, Pep508Error> {
         parse(input)
     }
 }
@@ -401,15 +401,16 @@ pub enum VersionOrUrl {
     Url(VerbatimUrl),
 }
 
-/// A `Vec<char>` and an index inside of it. Like [String], but with utf-8 aware indexing
-pub struct CharIter<'a> {
+/// A [`Cursor`] over a string.
+#[derive(Debug, Clone)]
+pub struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,
     /// char-based (not byte-based) position
     pos: usize,
 }
 
-impl<'a> CharIter<'a> {
+impl<'a> Cursor<'a> {
     /// Convert from `&str`
     pub fn new(input: &'a str) -> Self {
         Self {
@@ -518,11 +519,11 @@ impl<'a> CharIter<'a> {
     }
 }
 
-fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
+fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
     // https://peps.python.org/pep-0508/#names
     // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
     let mut name = String::new();
-    if let Some((index, char)) = chars.next() {
+    if let Some((index, char)) = cursor.next() {
         if matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9') {
             name.push(char);
         } else {
@@ -532,7 +533,7 @@ fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
                 )),
                 start: index,
                 len: 1,
-                input: chars.copy_chars(),
+                input: cursor.copy_chars(),
             });
         }
     } else {
@@ -540,24 +541,24 @@ fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
             message: Pep508ErrorSource::String("Empty field is not allowed for PEP508".to_string()),
             start: 0,
             len: 1,
-            input: chars.copy_chars(),
+            input: cursor.copy_chars(),
         });
     }
 
     loop {
-        match chars.peek() {
+        match cursor.peek() {
             Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) => {
                 name.push(char);
-                chars.next();
+                cursor.next();
                 // [.-_] can't be the final character
-                if chars.peek().is_none() && matches!(char, '.' | '-' | '_') {
+                if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
                     return Err(Pep508Error {
                         message: Pep508ErrorSource::String(format!(
                             "Package name must end with an alphanumeric character, not '{char}'"
                         )),
                         start: index,
                         len: 1,
-                        input: chars.copy_chars(),
+                        input: cursor.copy_chars(),
                     });
                 }
             }
@@ -570,15 +571,15 @@ fn parse_name(chars: &mut CharIter) -> Result<PackageName, Pep508Error> {
 }
 
 /// parses extras in the `[extra1,extra2] format`
-fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Error> {
-    let Some(bracket_pos) = chars.eat('[') else {
+fn parse_extras(cursor: &mut Cursor) -> Result<Option<Vec<ExtraName>>, Pep508Error> {
+    let Some(bracket_pos) = cursor.eat('[') else {
         return Ok(None);
     };
     let mut extras = Vec::new();
 
     loop {
         // wsp* before the identifier
-        chars.eat_whitespace();
+        cursor.eat_whitespace();
         let mut buffer = String::new();
         let early_eof_error = Pep508Error {
             message: Pep508ErrorSource::String(
@@ -587,11 +588,11 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
             ),
             start: bracket_pos,
             len: 1,
-            input: chars.copy_chars(),
+            input: cursor.copy_chars(),
         };
 
         // First char of the identifier
-        match chars.next() {
+        match cursor.next() {
             // letterOrDigit
             Some((_, alphanumeric @ ('a'..='z' | 'A'..='Z' | '0'..='9'))) => {
                 buffer.push(alphanumeric);
@@ -603,7 +604,7 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
                     )),
                     start: pos,
                     len: 1,
-                    input: chars.copy_chars(),
+                    input: cursor.copy_chars(),
                 });
             }
             None => return Err(early_eof_error),
@@ -613,13 +614,13 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
         // identifier_end = letterOrDigit | (('-' | '_' | '.' )* letterOrDigit)
         // identifier_end*
         buffer.push_str(
-            &chars
+            &cursor
                 .take_while(
                     |char| matches!(char, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.'),
                 )
                 .0,
         );
-        match chars.peek() {
+        match cursor.peek() {
             Some((pos, char)) if char != ',' && char != ']' && !char.is_whitespace() => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
@@ -627,15 +628,15 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
                     )),
                     start: pos,
                     len: 1,
-                    input: chars.copy_chars(),
+                    input: cursor.copy_chars(),
                 });
             }
             _ => {}
         };
         // wsp* after the identifier
-        chars.eat_whitespace();
+        cursor.eat_whitespace();
         // end or next identifier?
-        match chars.next() {
+        match cursor.next() {
             Some((_, ',')) => {
                 extras.push(
                     ExtraName::new(buffer)
@@ -656,7 +657,7 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
                     )),
                     start: pos,
                     len: 1,
-                    input: chars.copy_chars(),
+                    input: cursor.copy_chars(),
                 });
             }
             None => return Err(early_eof_error),
@@ -666,31 +667,31 @@ fn parse_extras(chars: &mut CharIter) -> Result<Option<Vec<ExtraName>>, Pep508Er
     Ok(Some(extras))
 }
 
-fn parse_url(chars: &mut CharIter) -> Result<VersionOrUrl, Pep508Error> {
+fn parse_url(cursor: &mut Cursor) -> Result<VersionOrUrl, Pep508Error> {
     // wsp*
-    chars.eat_whitespace();
+    cursor.eat_whitespace();
     // <URI_reference>
-    let (url, start, len) = chars.take_while(|char| !char.is_whitespace());
+    let (url, start, len) = cursor.take_while(|char| !char.is_whitespace());
     if url.is_empty() {
         return Err(Pep508Error {
             message: Pep508ErrorSource::String("Expected URL".to_string()),
             start,
             len,
-            input: chars.copy_chars(),
+            input: cursor.copy_chars(),
         });
     }
     let url = VerbatimUrl::parse(url).map_err(|err| Pep508Error {
         message: Pep508ErrorSource::UrlError(err),
         start,
         len,
-        input: chars.copy_chars(),
+        input: cursor.copy_chars(),
     })?;
     Ok(VersionOrUrl::Url(url))
 }
 
 /// PEP 440 wrapper
 fn parse_specifier(
-    chars: &mut CharIter,
+    cursor: &mut Cursor,
     buffer: &str,
     start: usize,
     end: usize,
@@ -699,7 +700,7 @@ fn parse_specifier(
         message: Pep508ErrorSource::String(err),
         start,
         len: end - start,
-        input: chars.copy_chars(),
+        input: cursor.copy_chars(),
     })
 }
 
@@ -708,22 +709,22 @@ fn parse_specifier(
 /// ```text
 /// version_one (wsp* ',' version_one)*
 /// ```
-fn parse_version_specifier(chars: &mut CharIter) -> Result<Option<VersionOrUrl>, Pep508Error> {
-    let mut start = chars.get_pos();
+fn parse_version_specifier(cursor: &mut Cursor) -> Result<Option<VersionOrUrl>, Pep508Error> {
+    let mut start = cursor.get_pos();
     let mut specifiers = Vec::new();
     let mut buffer = String::new();
     let requirement_kind = loop {
-        match chars.peek() {
+        match cursor.peek() {
             Some((end, ',')) => {
-                let specifier = parse_specifier(chars, &buffer, start, end)?;
+                let specifier = parse_specifier(cursor, &buffer, start, end)?;
                 specifiers.push(specifier);
                 buffer.clear();
-                chars.next();
+                cursor.next();
                 start = end + 1;
             }
             Some((_, ';')) | None => {
-                let end = chars.get_pos();
-                let specifier = parse_specifier(chars, &buffer, start, end)?;
+                let end = cursor.get_pos();
+                let specifier = parse_specifier(cursor, &buffer, start, end)?;
                 specifiers.push(specifier);
                 break Some(VersionOrUrl::VersionSpecifier(
                     specifiers.into_iter().collect(),
@@ -731,7 +732,7 @@ fn parse_version_specifier(chars: &mut CharIter) -> Result<Option<VersionOrUrl>,
             }
             Some((_, char)) => {
                 buffer.push(char);
-                chars.next();
+                cursor.next();
             }
         }
     };
@@ -744,26 +745,26 @@ fn parse_version_specifier(chars: &mut CharIter) -> Result<Option<VersionOrUrl>,
 /// '(' version_one (wsp* ',' version_one)* ')'
 /// ```
 fn parse_version_specifier_parentheses(
-    chars: &mut CharIter,
+    cursor: &mut Cursor,
 ) -> Result<Option<VersionOrUrl>, Pep508Error> {
-    let brace_pos = chars.get_pos();
-    chars.next();
+    let brace_pos = cursor.get_pos();
+    cursor.next();
     // Makes for slightly better error underline
-    chars.eat_whitespace();
-    let mut start = chars.get_pos();
+    cursor.eat_whitespace();
+    let mut start = cursor.get_pos();
     let mut specifiers = Vec::new();
     let mut buffer = String::new();
     let requirement_kind = loop {
-        match chars.next() {
+        match cursor.next() {
             Some((end, ',')) => {
                 let specifier =
-                    parse_specifier(chars, &buffer, start, end)?;
+                    parse_specifier(cursor, &buffer, start, end)?;
                 specifiers.push(specifier);
                 buffer.clear();
                 start = end + 1;
             }
             Some((end, ')')) => {
-                let specifier = parse_specifier(chars, &buffer, start, end)?;
+                let specifier = parse_specifier(cursor, &buffer, start, end)?;
                 specifiers.push(specifier);
                 break Some(VersionOrUrl::VersionSpecifier(specifiers.into_iter().collect()));
             }
@@ -772,7 +773,7 @@ fn parse_version_specifier_parentheses(
                 message: Pep508ErrorSource::String("Missing closing parenthesis (expected ')', found end of dependency specification)".to_string()),
                 start: brace_pos,
                 len: 1,
-                input: chars.copy_chars(),
+                input: cursor.copy_chars(),
             }),
         }
     };
@@ -780,7 +781,7 @@ fn parse_version_specifier_parentheses(
 }
 
 /// Parse a [dependency specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers)
-fn parse(chars: &mut CharIter) -> Result<Requirement, Pep508Error> {
+fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
     // Technically, the grammar is:
     // ```text
     // name_req      = name wsp* extras? wsp* versionspec? wsp* quoted_marker?
@@ -794,50 +795,50 @@ fn parse(chars: &mut CharIter) -> Result<Requirement, Pep508Error> {
     // Where the extras start with '[' if any, then we have '@', '(' or one of the version comparison
     // operators. Markers start with ';' if any
     // wsp*
-    chars.eat_whitespace();
+    cursor.eat_whitespace();
     // name
-    let name = parse_name(chars)?;
+    let name = parse_name(cursor)?;
     // wsp*
-    chars.eat_whitespace();
+    cursor.eat_whitespace();
     // extras?
-    let extras = parse_extras(chars)?;
+    let extras = parse_extras(cursor)?;
     // wsp*
-    chars.eat_whitespace();
+    cursor.eat_whitespace();
 
     // ( url_req | name_req )?
-    let requirement_kind = match chars.peek_char() {
+    let requirement_kind = match cursor.peek_char() {
         Some('@') => {
-            chars.next();
-            Some(parse_url(chars)?)
+            cursor.next();
+            Some(parse_url(cursor)?)
         }
-        Some('(') => parse_version_specifier_parentheses(chars)?,
-        Some('<' | '=' | '>' | '~' | '!') => parse_version_specifier(chars)?,
+        Some('(') => parse_version_specifier_parentheses(cursor)?,
+        Some('<' | '=' | '>' | '~' | '!') => parse_version_specifier(cursor)?,
         Some(';') | None => None,
         Some(other) => {
             return Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
                     "Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `{other}`"
                 )),
-                start: chars.get_pos(),
+                start: cursor.get_pos(),
                 len: 1,
-                input: chars.copy_chars(),
+                input: cursor.copy_chars(),
             });
         }
     };
 
     // wsp*
-    chars.eat_whitespace();
+    cursor.eat_whitespace();
     // quoted_marker?
-    let marker = if chars.peek_char() == Some(';') {
+    let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
-        chars.next();
-        Some(marker::parse_markers_impl(chars)?)
+        cursor.next();
+        Some(marker::parse_markers_impl(cursor)?)
     } else {
         None
     };
     // wsp*
-    chars.eat_whitespace();
-    if let Some((pos, char)) = chars.next() {
+    cursor.eat_whitespace();
+    if let Some((pos, char)) = cursor.next() {
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(if marker.is_none() {
                 format!(r#"Expected end of input or ';', found '{char}'"#)
@@ -846,7 +847,7 @@ fn parse(chars: &mut CharIter) -> Result<Requirement, Pep508Error> {
             }),
             start: pos,
             len: 1,
-            input: chars.copy_chars(),
+            input: cursor.copy_chars(),
         });
     }
 
@@ -897,7 +898,7 @@ mod tests {
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{CharIter, Requirement, VerbatimUrl, VersionOrUrl};
+    use crate::{Cursor, Requirement, VerbatimUrl, VersionOrUrl};
 
     fn assert_err(input: &str, error: &str) {
         assert_eq!(Requirement::from_str(input).unwrap_err().to_string(), error);
@@ -1159,7 +1160,7 @@ mod tests {
     #[test]
     fn test_marker_parsing() {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
-        let actual = parse_markers_impl(&mut CharIter::new(marker)).unwrap();
+        let actual = parse_markers_impl(&mut Cursor::new(marker)).unwrap();
         let expected = MarkerTree::And(vec![
             MarkerTree::Expression(MarkerExpression {
                 l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
