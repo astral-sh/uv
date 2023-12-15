@@ -3,7 +3,7 @@ pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use prerelease_mode::PreReleaseMode;
 pub use pubgrub::PubGrubReportFormatter;
-pub use resolution::{ResolutionGraph, ResolutionManifest};
+pub use resolution::ResolutionGraph;
 pub use resolution_mode::ResolutionMode;
 pub use resolution_options::ResolutionOptions;
 pub use resolver::{

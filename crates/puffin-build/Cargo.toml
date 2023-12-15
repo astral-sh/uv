@@ -14,6 +14,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+distribution-types = { path = "../distribution-types" }
 gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }

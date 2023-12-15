@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+distribution-types = { path = "../distribution-types" }
 pep508_rs = { path = "../pep508-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-interpreter = { path = "../puffin-interpreter" }

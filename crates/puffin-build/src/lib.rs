@@ -13,6 +13,7 @@ use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use distribution_types::Resolution;
 use fs_err as fs;
 use fs_err::DirEntry;
 use indoc::formatdoc;
@@ -211,7 +212,7 @@ impl Display for BuildKind {
 pub struct SourceBuildContext {
     /// Cache the first resolution of `pip`, `setuptools` and `wheel` we made for setup.py (and
     /// some PEP 517) builds so we can reuse it
-    setup_py_resolution: Arc<Mutex<Option<Vec<Requirement>>>>,
+    setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
@@ -654,13 +655,13 @@ async fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
-        let resolved_requirements = build_context
+        let resolution = build_context
             .resolve(&requirements)
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (resolve)", err))?;
 
         build_context
-            .install(&resolved_requirements, venv)
+            .install(&resolution, venv)
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
     }
