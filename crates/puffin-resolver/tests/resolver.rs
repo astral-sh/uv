@@ -511,19 +511,19 @@ async fn black_disallow_prerelease() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err);
+    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
 
     Ok(())
 }
 
 #[tokio::test]
-async fn black_allow_prerelease_if_necessary() -> Result<()> {
+async fn black_allow_prerelease_if_requested() -> Result<()> {
     colored::control::set_override(false);
 
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=20.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
-        PreReleaseMode::IfNecessary,
+        PreReleaseMode::IfRequested,
         Some(*EXCLUDE_NEWER),
     );
 
@@ -531,7 +531,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err);
+    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
 
     Ok(())
 }
@@ -594,25 +594,19 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 
     let manifest = Manifest::simple(vec![
         Requirement::from_str("pylint==2.3.0").unwrap(),
-        Requirement::from_str("isort>=5.0.0").unwrap(),
+        Requirement::from_str("isort>=6.0.0").unwrap(),
     ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
-        PreReleaseMode::Explicit,
+        PreReleaseMode::IfRequested,
         Some(*EXCLUDE_NEWER),
     );
 
-    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
+    let err = resolve(manifest, options, &MARKERS_311, &TAGS_311)
+        .await
+        .unwrap_err();
 
-    insta::assert_display_snapshot!(resolution, @r###"
-    astroid==3.0.1
-        # via pylint
-    isort==5.12.0
-        # via pylint
-    mccabe==0.7.0
-        # via pylint
-    pylint==2.3.0
-    "###);
+    insta::assert_display_snapshot!(err, @"Because there is no version of isort available matching >=6.0.0 and root depends on isort>=6.0.0, version solving failed.");
 
     Ok(())
 }
@@ -623,11 +617,11 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
 
     let manifest = Manifest::simple(vec![
         Requirement::from_str("pylint==2.3.0").unwrap(),
-        Requirement::from_str("isort>=5.0.0b").unwrap(),
+        Requirement::from_str("isort>=6.0.0b").unwrap(),
     ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
-        PreReleaseMode::Explicit,
+        PreReleaseMode::IfRequested,
         Some(*EXCLUDE_NEWER),
     );
 
@@ -641,6 +635,188 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     mccabe==0.7.0
         # via pylint
     pylint==2.3.0
+    "###);
+
+    Ok(())
+}
+
+/// Resolve `msgraph-sdk==1.0.0`, which depends on `msgraph-core>=1.0.0a2`. The resolver should
+/// select the most recent pre-release version, since there's no newer stable release for
+/// `msgraph-core`.
+#[tokio::test]
+async fn msgraph_sdk() -> Result<()> {
+    colored::control::set_override(false);
+
+    let manifest = Manifest::simple(vec![Requirement::from_str("msgraph-sdk==1.0.0").unwrap()]);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
+
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
+
+    insta::assert_display_snapshot!(resolution, @r###"
+    aiohttp==3.9.0
+        # via microsoft-kiota-authentication-azure
+    aiosignal==1.3.1
+        # via aiohttp
+    anyio==4.0.0
+        # via httpx
+    attrs==23.1.0
+        # via aiohttp
+    azure-core==1.29.5
+        # via
+        #   azure-identity
+        #   microsoft-kiota-authentication-azure
+    azure-identity==1.15.0
+        # via msgraph-sdk
+    certifi==2023.11.17
+        # via
+        #   httpcore
+        #   httpx
+        #   requests
+    cffi==1.16.0
+        # via cryptography
+    charset-normalizer==3.3.2
+        # via requests
+    cryptography==41.0.5
+        # via
+        #   azure-identity
+        #   msal
+    deprecated==1.2.14
+        # via opentelemetry-api
+    frozenlist==1.4.0
+        # via
+        #   aiohttp
+        #   aiosignal
+    h11==0.14.0
+        # via httpcore
+    h2==4.1.0
+    hpack==4.0.0
+        # via h2
+    httpcore==1.0.2
+        # via httpx
+    httpx==0.25.1
+        # via
+        #   microsoft-kiota-http
+        #   msgraph-core
+    hyperframe==6.0.1
+        # via h2
+    idna==3.4
+        # via
+        #   anyio
+        #   httpx
+        #   requests
+        #   yarl
+    importlib-metadata==6.8.0
+        # via opentelemetry-api
+    microsoft-kiota-abstractions==1.0.0
+        # via
+        #   microsoft-kiota-authentication-azure
+        #   microsoft-kiota-http
+        #   microsoft-kiota-serialization-json
+        #   microsoft-kiota-serialization-text
+        #   msgraph-core
+        #   msgraph-sdk
+    microsoft-kiota-authentication-azure==1.0.0
+        # via msgraph-sdk
+    microsoft-kiota-http==1.0.0
+        # via
+        #   msgraph-core
+        #   msgraph-sdk
+    microsoft-kiota-serialization-json==1.0.0
+        # via msgraph-sdk
+    microsoft-kiota-serialization-text==1.0.0
+        # via msgraph-sdk
+    msal==1.25.0
+        # via
+        #   azure-identity
+        #   msal-extensions
+    msal-extensions==1.0.0
+        # via azure-identity
+    msgraph-core==1.0.0a4
+        # via msgraph-sdk
+    msgraph-sdk==1.0.0
+    multidict==6.0.4
+        # via
+        #   aiohttp
+        #   yarl
+    opentelemetry-api==1.21.0
+        # via
+        #   microsoft-kiota-abstractions
+        #   microsoft-kiota-authentication-azure
+        #   microsoft-kiota-http
+        #   opentelemetry-sdk
+    opentelemetry-sdk==1.21.0
+        # via
+        #   microsoft-kiota-abstractions
+        #   microsoft-kiota-authentication-azure
+        #   microsoft-kiota-http
+    opentelemetry-semantic-conventions==0.42b0
+        # via opentelemetry-sdk
+    pendulum==2.1.2
+        # via microsoft-kiota-serialization-json
+    portalocker==2.8.2
+        # via msal-extensions
+    pycparser==2.21
+        # via cffi
+    pyjwt==2.8.0
+        # via msal
+    python-dateutil==2.8.2
+        # via
+        #   microsoft-kiota-serialization-text
+        #   pendulum
+    pytzdata==2020.1
+        # via pendulum
+    requests==2.31.0
+        # via
+        #   azure-core
+        #   msal
+    six==1.16.0
+        # via
+        #   azure-core
+        #   python-dateutil
+    sniffio==1.3.0
+        # via
+        #   anyio
+        #   httpx
+    std-uritemplate==0.0.46
+        # via microsoft-kiota-abstractions
+    typing-extensions==4.8.0
+        # via
+        #   azure-core
+        #   opentelemetry-sdk
+    urllib3==2.1.0
+        # via requests
+    wrapt==1.16.0
+        # via deprecated
+    yarl==1.9.2
+        # via aiohttp
+    zipp==3.17.0
+        # via importlib-metadata
+    "###);
+
+    Ok(())
+}
+
+/// Resolve `msgraph-core>=0.2.2`. All later releases are pre-releases, so the resolver should
+/// select the latest non-pre-release version.
+#[tokio::test]
+async fn msgraph_core() -> Result<()> {
+    colored::control::set_override(false);
+
+    let manifest = Manifest::simple(vec![Requirement::from_str("msgraph-core>=0.2.2").unwrap()]);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
+
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
+
+    insta::assert_display_snapshot!(resolution, @r###"
+    msgraph-core==0.2.2
     "###);
 
     Ok(())

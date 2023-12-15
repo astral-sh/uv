@@ -7,16 +7,15 @@ use puffin_normalize::PackageName;
 use pypi_types::IndexUrl;
 
 use crate::file::DistFile;
-use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{ResolvableFile, VersionMap};
-use crate::{Manifest, ResolutionOptions};
+use crate::{Manifest, PreReleaseMode, ResolutionOptions};
 
 #[derive(Debug)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
-    prerelease_strategy: PreReleaseStrategy,
+    prerelease_strategy: PreReleaseMode,
     preferences: Preferences,
 }
 
@@ -28,10 +27,7 @@ impl CandidateSelector {
                 options.resolution_mode,
                 manifest.requirements.as_slice(),
             ),
-            prerelease_strategy: PreReleaseStrategy::from_mode(
-                options.prerelease_mode,
-                manifest.requirements.as_slice(),
-            ),
+            prerelease_strategy: options.prerelease_mode,
             preferences: Preferences::from(manifest.preferences.as_slice()),
         }
     }
@@ -71,9 +67,14 @@ impl From<&[Requirement]> for Preferences {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum AllowPreRelease {
+    /// Allow all pre-release versions for the package.
     Yes,
+    /// Disallow all pre-release versions for the package.
     No,
+    /// Allow pre-release versions for the package if there are no matching stable versions.
     IfNecessary,
+    /// Allow pre-release versions for the package if _all_ versions of the package are pre-release.
+    IfExclusive,
 }
 
 impl CandidateSelector {
@@ -96,21 +97,13 @@ impl CandidateSelector {
 
         // Determine the appropriate prerelease strategy for the current package.
         let allow_prerelease = match &self.prerelease_strategy {
-            PreReleaseStrategy::Disallow => AllowPreRelease::No,
-            PreReleaseStrategy::Allow => AllowPreRelease::Yes,
-            PreReleaseStrategy::IfNecessary => AllowPreRelease::IfNecessary,
-            PreReleaseStrategy::Explicit(packages) => {
-                if packages.contains(package_name) {
-                    AllowPreRelease::Yes
-                } else {
-                    AllowPreRelease::No
-                }
-            }
-            PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                if packages.contains(package_name) {
-                    AllowPreRelease::Yes
-                } else {
+            PreReleaseMode::Disallow => AllowPreRelease::No,
+            PreReleaseMode::Allow => AllowPreRelease::Yes,
+            PreReleaseMode::IfRequested => {
+                if range.bounds().any(PubGrubVersion::any_prerelease) {
                     AllowPreRelease::IfNecessary
+                } else {
+                    AllowPreRelease::IfExclusive
                 }
             }
         };
@@ -169,7 +162,7 @@ impl CandidateSelector {
                             // to stable distributions.
                             return Some(Candidate::new(package_name, version, file));
                         }
-                        AllowPreRelease::IfNecessary => {
+                        AllowPreRelease::IfNecessary | AllowPreRelease::IfExclusive => {
                             // If pre-releases are allowed as a fallback, store the
                             // first-matching prerelease.
                             if prerelease.is_none() {
@@ -182,10 +175,12 @@ impl CandidateSelector {
                     }
                 }
             } else {
-                // If we have at least one stable release, we shouldn't allow the "if-necessary"
+                // If we have at least one stable release, we shouldn't allow the "if-exclusive"
                 // pre-release strategy, regardless of whether that stable release satisfies the
                 // current range.
-                prerelease = Some(PreReleaseCandidate::NotNecessary);
+                if allow_prerelease == AllowPreRelease::IfExclusive {
+                    prerelease = Some(PreReleaseCandidate::NotNecessary);
+                }
 
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
