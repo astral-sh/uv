@@ -395,9 +395,9 @@ async fn install(
     let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        puffin_installer::Installer::new(venv)
+        let reporter = InstallReporter::from(printer).with_length(wheels.len() as u64);
+        puffin_installer::Installer::new(venv, reporter)
             .with_link_mode(link_mode)
-            .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;
 
         let s = if wheels.len() == 1 { "" } else { "s" };

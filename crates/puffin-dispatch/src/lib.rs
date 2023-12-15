@@ -16,6 +16,7 @@ use platform_tags::Tags;
 use puffin_build::{BuildKind, SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
+use puffin_installer::InstallDummyReporter;
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{DistFinder, Manifest, ResolutionOptions, Resolver};
@@ -205,7 +206,7 @@ impl BuildContext for BuildDispatch {
                     if wheels.len() == 1 { "" } else { "s" },
                     wheels.iter().map(ToString::to_string).join(", ")
                 );
-                Installer::new(venv)
+                Installer::new(venv, InstallDummyReporter)
                     .install(&wheels)
                     .context("Failed to install build dependencies")?;
             }
@@ -214,7 +215,7 @@ impl BuildContext for BuildDispatch {
         })
     }
 
-    #[instrument(skip_all, fields(source_dist = source_dist, subdirectory = ?subdirectory))]
+    #[instrument(skip_all, fields(source_dist = source_dist, subdirectory = ? subdirectory))]
     fn setup_build<'a>(
         &'a self,
         source: &'a Path,

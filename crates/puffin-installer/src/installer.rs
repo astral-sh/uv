@@ -7,16 +7,16 @@ use puffin_interpreter::Virtualenv;
 pub struct Installer<'a> {
     venv: &'a Virtualenv,
     link_mode: install_wheel_rs::linker::LinkMode,
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Box<dyn Reporter>,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(venv: &'a Virtualenv) -> Self {
+    pub fn new(venv: &'a Virtualenv, reporter: impl Reporter + 'static) -> Self {
         Self {
             venv,
             link_mode: install_wheel_rs::linker::LinkMode::default(),
-            reporter: None,
+            reporter: Box::new(reporter),
         }
     }
 
@@ -24,15 +24,6 @@ impl<'a> Installer<'a> {
     #[must_use]
     pub fn with_link_mode(self, link_mode: install_wheel_rs::linker::LinkMode) -> Self {
         Self { link_mode, ..self }
-    }
-
-    /// Set the [`Reporter`] to use for this installer.
-    #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        Self {
-            reporter: Some(Box::new(reporter)),
-            ..self
-        }
     }
 
     /// Install a set of wheels into a Python virtual environment.
@@ -57,9 +48,7 @@ impl<'a> Installer<'a> {
                 )
                 .with_context(|| format!("Failed to install: {wheel}"))?;
 
-                if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_install_progress(wheel);
-                }
+                self.reporter.on_install_progress(wheel);
 
                 Ok::<(), Error>(())
             })
@@ -73,4 +62,11 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when the resolution is complete.
     fn on_install_complete(&self);
+}
+
+pub struct DummyReporter;
+
+impl Reporter for DummyReporter {
+    fn on_install_progress(&self, _wheel: &CachedDist) {}
+    fn on_install_complete(&self) {}
 }
