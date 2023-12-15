@@ -415,6 +415,15 @@ impl<'a> Cursor<'a> {
         }
     }
 
+    /// Returns a new cursor starting at the given position.
+    pub fn at(self, pos: usize) -> Self {
+        Self {
+            input: self.input,
+            chars: self.input[pos..].chars(),
+            pos,
+        }
+    }
+
     /// Returns the current byte position of the cursor.
     fn pos(&self) -> usize {
         self.pos
@@ -778,6 +787,8 @@ fn parse_version_specifier_parentheses(
 
 /// Parse a [dependency specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers)
 fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
+    let start = cursor.pos();
+
     // Technically, the grammar is:
     // ```text
     // name_req      = name wsp* extras? wsp* versionspec? wsp* quoted_marker?
@@ -810,27 +821,30 @@ fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
         Some('(') => parse_version_specifier_parentheses(cursor)?,
         Some('<' | '=' | '>' | '~' | '!') => parse_version_specifier(cursor)?,
         Some(';') | None => None,
-        // Ex) `https://...` or `git+https://...`
-        Some(':') | Some('+') => {
-            return Err(Pep508Error {
-                message: Pep508ErrorSource::String(
-                    "URL requirement is missing a package name; expected: `package_name @`"
-                        .to_string(),
-                ),
-                start: cursor.pos(),
-                len: 1,
-                input: cursor.to_string(),
-            });
-        }
         Some(other) => {
-            return Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `{other}`"
-                )),
-                start: cursor.pos(),
-                len: other.len_utf8(),
-                input: cursor.to_string(),
-            })
+            // Rewind to the start of the version specifier, to see if the user added a URL without
+            // a package name. pip supports this in `requirements.txt`, but it doesn't adhere to
+            // the PEP 508 grammar.
+            let mut clone = cursor.clone().at(start);
+            return if let Ok(url) = parse_url(&mut clone) {
+                Err(Pep508Error {
+                    message: Pep508ErrorSource::String(format!(
+                        "URL requirement is missing a package name; expected: `package_name @ {url}`",
+                    )),
+                    start,
+                    len: clone.pos() - start,
+                    input: clone.to_string(),
+                })
+            } else {
+                Err(Pep508Error {
+                    message: Pep508ErrorSource::String(format!(
+                        "Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `{other}`"
+                    )),
+                    start: cursor.pos(),
+                    len: other.len_utf8(),
+                    input: cursor.to_string(),
+                })
+            };
         }
     };
 
@@ -1282,6 +1296,18 @@ mod tests {
                 Expected package name starting with an alphanumeric character, found '='
                 ==0.0
                 ^"
+            },
+        );
+    }
+
+    #[test]
+    fn error_bare_url() {
+        assert_err(
+            r#"git+https://github.com/pallets/flask.git"#,
+            indoc! {"
+                URL requirement is missing a package name; expected: `package_name @ git+https://github.com/pallets/flask.git`
+                git+https://github.com/pallets/flask.git
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
             },
         );
     }
