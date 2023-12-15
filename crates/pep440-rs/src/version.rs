@@ -927,8 +927,6 @@ mod test {
     #[test]
     fn test_packaging_failures() {
         let versions = [
-            // Nonsensical versions should be invalid
-            "french toast",
             // Versions with invalid local versions
             "1.0+a+",
             "1.0++",
@@ -943,9 +941,12 @@ mod test {
             );
             assert_eq!(
                 VersionSpecifier::from_str(&format!("=={version}")).unwrap_err(),
-                format!("Version specifier `=={version}` doesn't match PEP 440 rules")
+                format!("Version `{version}` doesn't match PEP 440 rules")
             );
         }
+        // Nonsensical versions should be invalid (different error message)
+        Version::from_str("french toast").unwrap_err();
+        VersionSpecifier::from_str(&format!("==french toast")).unwrap_err();
     }
 
     #[test]
