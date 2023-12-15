@@ -86,7 +86,7 @@ pub(crate) async fn pip_install(
     }
 
     // Resolve the requirements.
-    let resolution = resolve(
+    let resolution = match resolve(
         spec,
         reinstall,
         resolution_mode,
@@ -98,8 +98,20 @@ pub(crate) async fn pip_install(
         &venv,
         printer,
     )
-    .await?
-    .into();
+    .await
+    {
+        Ok(resolution) => Resolution::from(resolution),
+        Err(Error::Resolve(puffin_resolver::ResolveError::NoSolution(err))) => {
+            #[allow(clippy::print_stderr)]
+            {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                eprint!("{report:?}");
+            }
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     // Sync the environment.
     install(
@@ -126,16 +138,14 @@ fn specification(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
-) -> Result<RequirementsSpecification> {
+) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
         && !requirements
             .iter()
             .any(|source| matches!(source, RequirementsSource::PyprojectToml(_)))
     {
-        return Err(anyhow!(
-            "Requesting extras requires a pyproject.toml input file."
-        ));
+        return Err(anyhow!("Requesting extras requires a pyproject.toml input file.").into());
     }
 
     // Read all requirements from the provided sources.
@@ -155,7 +165,8 @@ fn specification(
             return Err(anyhow!(
                 "Requested extra{s} not found: {}",
                 unused_extras.iter().join(", ")
-            ));
+            )
+            .into());
         }
     }
 
@@ -163,8 +174,8 @@ fn specification(
 }
 
 /// Returns `true` if the requirements are already satisfied.
-fn satisfied(spec: &RequirementsSpecification, venv: &Virtualenv) -> Result<bool> {
-    SitePackages::from_executable(venv)?.satisfies(&spec.requirements, &spec.constraints)
+fn satisfied(spec: &RequirementsSpecification, venv: &Virtualenv) -> Result<bool, Error> {
+    Ok(SitePackages::from_executable(venv)?.satisfies(&spec.requirements, &spec.constraints)?)
 }
 
 /// Resolve a set of requirements, similar to running `pip-compile`.
@@ -180,7 +191,7 @@ async fn resolve(
     cache: &Cache,
     venv: &Virtualenv,
     mut printer: Printer,
-) -> Result<ResolutionGraph> {
+) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
     // Create a manifest of the requirements.
@@ -206,12 +217,6 @@ async fn resolve(
 
     let manifest = Manifest::new(requirements, constraints, overrides, preferences, project);
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
-
-    debug!(
-        "Using Python {} at {}",
-        venv.interpreter().markers().python_version,
-        venv.python_executable().display()
-    );
 
     // Determine the compatible platform tags.
     let tags = Tags::from_interpreter(venv.interpreter())?;
@@ -240,18 +245,7 @@ async fn resolve(
     // Resolve the dependencies.
     let resolver = Resolver::new(manifest, options, markers, &tags, &client, &build_dispatch)
         .with_reporter(ResolverReporter::from(printer));
-    let resolution = match resolver.resolve().await {
-        Err(puffin_resolver::ResolveError::NoSolution(err)) => {
-            #[allow(clippy::print_stderr)]
-            {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
-                eprint!("{report:?}");
-            }
-            return Err(puffin_resolver::ResolveError::NoSolution(err).into());
-        }
-        result => result,
-    }?;
+    let resolution = resolver.resolve().await?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
@@ -279,7 +273,7 @@ async fn install(
     cache: &Cache,
     venv: &Virtualenv,
     mut printer: Printer,
-) -> Result<()> {
+) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
     // Determine the current environment markers.
@@ -455,7 +449,7 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<()> {
+fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<(), Error> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
     for diagnostic in diagnostics {
@@ -474,4 +468,22 @@ fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) ->
         }
     }
     Ok(())
+}
+
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #[error(transparent)]
+    Resolve(#[from] puffin_resolver::ResolveError),
+
+    #[error(transparent)]
+    Platform(#[from] platform_host::PlatformError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Fmt(#[from] std::fmt::Error),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
