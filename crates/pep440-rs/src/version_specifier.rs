@@ -1268,7 +1268,7 @@ mod test {
             if let Some(error) = error {
                 assert_eq!(VersionSpecifier::from_str(specifier).unwrap_err(), error);
             } else {
-                panic!()
+                unreachable!("expected an error, but got valid version specifier")
             }
         }
     }
