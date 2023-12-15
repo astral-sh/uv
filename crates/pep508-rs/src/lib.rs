@@ -1110,7 +1110,7 @@ mod tests {
         assert_err(
             "numpy ( ><1.19 )",
             indoc! {"
-                Version specifier `><1.19 ` doesn't match PEP 440 rules
+                No such comparison operator '><', must be one of ~= == != <= >= < > ===
                 numpy ( ><1.19 )
                         ^^^^^^^"
             },
@@ -1414,7 +1414,7 @@ mod tests {
         assert_err(
             "name==1.0.org1",
             indoc! {"
-                Version specifier `==1.0.org1` doesn't match PEP 440 rules
+                Version `1.0.org1` doesn't match PEP 440 rules
                 name==1.0.org1
                     ^^^^^^^^^^"
             },
@@ -1426,7 +1426,7 @@ mod tests {
         assert_err(
             "name==",
             indoc! {"
-                Version specifier `==` doesn't match PEP 440 rules
+                Missing version
                 name==
                     ^^"
             },
@@ -1450,7 +1450,7 @@ mod tests {
         assert_err(
             "name >= 1.0 #",
             indoc! {"
-                Version specifier `>= 1.0 #` doesn't match PEP 440 rules
+                Trailing `#` not allowed
                 name >= 1.0 #
                      ^^^^^^^^"
             },

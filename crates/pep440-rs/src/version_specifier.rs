@@ -1,8 +1,6 @@
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::version::VERSION_RE_INNER;
 use crate::{version, Operator, Pep440Error, Version};
-use once_cell::sync::Lazy;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     exceptions::{PyIndexError, PyNotImplementedError, PyValueError},
@@ -10,7 +8,6 @@ use pyo3::{
     pyclass::CompareOp,
     pymethods, Py, PyRef, PyRefMut, PyResult,
 };
-use regex::Regex;
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
@@ -26,15 +23,7 @@ use unicode_width::UnicodeWidthStr;
 
 #[cfg(feature = "tracing")]
 use tracing::warn;
-
-/// Matches a python version specifier, such as `>=1.19.a1` or `4.1.*`. Extends the PEP 440
-/// version regex to version specifiers
-static VERSION_SPECIFIER_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&format!(
-        r#"(?xi)^(?:\s*)(?P<operator>(~=|==|!=|<=|>=|<|>|===))(?:\s*){VERSION_RE_INNER}(?:\s*)$"#,
-    ))
-    .unwrap()
-});
+use unscanny::Scanner;
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -506,13 +495,25 @@ impl FromStr for VersionSpecifier {
 
     /// Parses a version such as `>= 1.19`, `== 1.1.*`,`~=1.0+abc.5` or `<=1!2012.2`
     fn from_str(spec: &str) -> Result<Self, Self::Err> {
-        let captures = VERSION_SPECIFIER_RE
-            .captures(spec)
-            .ok_or_else(|| format!("Version specifier `{spec}` doesn't match PEP 440 rules"))?;
-        let (version, star) = Version::parse_impl(&captures)?;
+        let mut s = Scanner::new(spec);
+        s.eat_while(|c: char| c.is_whitespace());
         // operator but we don't know yet if it has a star
-        let operator = Operator::from_str(&captures["operator"])?;
+        let operator = s.eat_while(['=', '!', '~', '<', '>']);
+        if operator.is_empty() {
+            return Err("Missing comparison operator".to_string());
+        }
+        let operator = Operator::from_str(operator)?;
+        s.eat_while(|c: char| c.is_whitespace());
+        let version = s.eat_while(|c: char| !c.is_whitespace());
+        if version.is_empty() {
+            return Err("Missing version".to_string());
+        }
+        let (version, star) = Version::from_str_star(version)?;
         let version_specifier = VersionSpecifier::new(operator, version, star)?;
+        s.eat_while(|c: char| c.is_whitespace());
+        if !s.done() {
+            return Err(format!("Trailing `{}` not allowed", s.after()));
+        }
         Ok(version_specifier)
     }
 }
@@ -1125,7 +1126,7 @@ mod test {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
             result.unwrap_err().message,
-            "Version specifier `== 0.9.*.1` doesn't match PEP 440 rules"
+            "Version `0.9.*.1` doesn't match PEP 440 rules"
         );
     }
 
@@ -1141,10 +1142,7 @@ mod test {
     #[test]
     fn test_regex_mismatch() {
         let result = VersionSpecifiers::from_str("blergh");
-        assert_eq!(
-            result.unwrap_err().message,
-            "Version specifier `blergh` doesn't match PEP 440 rules"
-        );
+        assert_eq!(result.unwrap_err().message, "Missing comparison operator");
     }
 
     /// <https://github.com/pypa/packaging/blob/e184feef1a28a5c574ec41f5c263a3a573861f5a/tests/test_specifiers.py#L44-L84>
@@ -1152,11 +1150,14 @@ mod test {
     fn test_invalid_specifier() {
         let specifiers = [
             // Operator-less specifier
-            ("2.0", None),
+            ("2.0", Some("Missing comparison operator")),
             // Invalid operator
-            ("=>2.0", None),
+            (
+                "=>2.0",
+                Some("No such comparison operator '=>', must be one of ~= == != <= >= < > ==="),
+            ),
             // Version-less specifier
-            ("==", None),
+            ("==", Some("Missing version")),
             // Local segment on operators which don't support them
             (
                 "~=1.0+5",
@@ -1203,11 +1204,11 @@ mod test {
             // support one or the other
             (
                 "==1.0.*+5",
-                Some("Version specifier `==1.0.*+5` doesn't match PEP 440 rules"),
+                Some("Version `1.0.*+5` doesn't match PEP 440 rules"),
             ),
             (
                 "!=1.0.*+deadbeef",
-                Some("Version specifier `!=1.0.*+deadbeef` doesn't match PEP 440 rules"),
+                Some("Version `1.0.*+deadbeef` doesn't match PEP 440 rules"),
             ),
             // Prefix matching cannot be used with a pre-release, post-release,
             // dev or local version
@@ -1246,7 +1247,7 @@ mod test {
             // Prefix matching must appear at the end
             (
                 "==1.0.*.5",
-                Some("Version specifier `==1.0.*.5` doesn't match PEP 440 rules"),
+                Some("Version `1.0.*.5` doesn't match PEP 440 rules"),
             ),
             // Compatible operator requires 2 digits in the release operator
             (
@@ -1267,10 +1268,7 @@ mod test {
             if let Some(error) = error {
                 assert_eq!(VersionSpecifier::from_str(specifier).unwrap_err(), error);
             } else {
-                assert_eq!(
-                    VersionSpecifier::from_str(specifier).unwrap_err(),
-                    format!("Version specifier `{specifier}` doesn't match PEP 440 rules",)
-                );
+                unreachable!("expected an error, but got valid version specifier")
             }
         }
     }

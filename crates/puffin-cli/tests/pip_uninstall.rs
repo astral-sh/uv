@@ -46,7 +46,7 @@ fn invalid_requirement() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `flask==1.0.x`
-      Caused by: Version specifier `==1.0.x` doesn't match PEP 440 rules
+      Caused by: Version `1.0.x` doesn't match PEP 440 rules
     flask==1.0.x
          ^^^^^^^
     "###);
@@ -93,7 +93,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 
     ----- stderr -----
     error: Couldn't parse requirement in requirements.txt position 0 to 12
-      Caused by: Version specifier `==1.0.x` doesn't match PEP 440 rules
+      Caused by: Version `1.0.x` doesn't match PEP 440 rules
     flask==1.0.x
          ^^^^^^^
     "###);
@@ -207,7 +207,7 @@ dependencies = ["flask==1.0.x"]
       |
     3 | dependencies = ["flask==1.0.x"]
       |                ^^^^^^^^^^^^^^^^
-    Version specifier `==1.0.x` doesn't match PEP 440 rules
+    Version `1.0.x` doesn't match PEP 440 rules
     flask==1.0.x
          ^^^^^^^
 
