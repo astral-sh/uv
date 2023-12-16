@@ -123,7 +123,7 @@ impl CachedClient {
             CachedResponse::NotModified(data_with_cache_policy) => {
                 write_atomic(
                     cache_entry.path(),
-                    rmp_serde::to_vec(&data_with_cache_policy).unwrap(),
+                    rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
                 )
                 .await
                 .map_err(crate::Error::CacheWrite)?;
@@ -138,7 +138,8 @@ impl CachedClient {
                     fs_err::tokio::create_dir_all(&cache_entry.dir)
                         .await
                         .map_err(crate::Error::CacheWrite)?;
-                    let data = rmp_serde::to_vec(&data_with_cache_policy).unwrap();
+                    let data =
+                        rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
                     write_atomic(cache_entry.path(), data)
                         .await
                         .map_err(crate::Error::CacheWrite)?;
