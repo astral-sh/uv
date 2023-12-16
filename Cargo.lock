@@ -1972,6 +1972,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
 name = "pep440_rs"
 version = "0.3.12"
 dependencies = [
@@ -2373,6 +2379,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
+ "rmp-serde",
  "serde",
  "serde_json",
  "sha2",
@@ -2474,9 +2481,9 @@ dependencies = [
  "puffin-traits",
  "pypi-types",
  "reqwest",
+ "rmp-serde",
  "rustc-hash",
  "serde",
- "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -2571,6 +2578,7 @@ dependencies = [
  "platform-host",
  "puffin-cache",
  "puffin-fs",
+ "rmp-serde",
  "serde",
  "serde_json",
  "tempfile",
@@ -3089,6 +3097,28 @@ dependencies = [
  "spin",
  "untrusted",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "rmp"
+version = "0.8.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f9860a6cc38ed1da53456442089b4dfa35e7cedaa326df63017af88385e6b20"
+dependencies = [
+ "byteorder",
+ "num-traits",
+ "paste",
+]
+
+[[package]]
+name = "rmp-serde"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bffea85eea980d8a74453e5d02a8d93028f3c34725de143085a844ebe953258a"
+dependencies = [
+ "byteorder",
+ "rmp",
+ "serde",
 ]
 
 [[package]]

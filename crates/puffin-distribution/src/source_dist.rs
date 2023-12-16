@@ -56,8 +56,10 @@ pub enum SourceDistError {
     // Cache writing error
     #[error("Failed to write to source dist cache")]
     Io(#[from] std::io::Error),
-    #[error("Cache (de)serialization failed")]
-    Serde(#[from] serde_json::Error),
+    #[error("Cache deserialization failed")]
+    Decode(#[from] rmp_serde::decode::Error),
+    #[error("Cache serialization failed")]
+    Encode(#[from] rmp_serde::encode::Error),
 
     // Build error
     #[error("Failed to build: {0}")]
@@ -179,7 +181,8 @@ pub struct SourceDistCachedBuilder<'a, T: BuildContext> {
     tags: &'a Tags,
 }
 
-const METADATA_JSON: &str = "metadata.json";
+/// The name of the file that contains the cached metadata, encoded via `MsgPack`.
+const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Initialize a [`SourceDistCachedBuilder`] from a [`BuildContext`].
@@ -268,7 +271,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let cache_entry = cache_shard.entry(METADATA_JSON.to_string());
+        let cache_entry = cache_shard.entry(METADATA.to_string());
 
         let response_callback = |response| async {
             // At this point, we're seeing a new or updated source distribution; delete all
@@ -368,12 +371,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         if let Ok(cached) = fs::read(cache_entry.path()).await {
             // If the file exists and it was just read or written by `CachedClient`, we assume it must
             // be correct.
-            let mut cached = serde_json::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
+            let mut cached = rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
 
             cached
                 .data
                 .insert(wheel_filename.clone(), cached_data.clone());
-            write_atomic(cache_entry.path(), serde_json::to_vec(&cached)?).await?;
+            write_atomic(cache_entry.path(), rmp_serde::to_vec(&cached)?).await?;
         };
 
         Ok(BuiltWheelMetadata::from_cached(
@@ -393,7 +396,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             CacheBucket::BuiltWheels,
             WheelCache::Path(&path_source_dist.url)
                 .remote_wheel_dir(path_source_dist.name().as_ref()),
-            METADATA_JSON.to_string(),
+            METADATA.to_string(),
         );
 
         // Determine the last-modified time of the source distribution.
@@ -464,7 +467,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             timestamp: modified,
             data: manifest,
         };
-        let data = serde_json::to_vec(&cached)?;
+        let data = rmp_serde::to_vec(&cached)?;
         write_atomic(cache_entry.path(), data).await?;
 
         if let Some(task) = task {
@@ -498,7 +501,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             CacheBucket::BuiltWheels,
             WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
                 .remote_wheel_dir(git_source_dist.name().as_ref()),
-            METADATA_JSON.to_string(),
+            METADATA.to_string(),
         );
 
         // Read the existing metadata from the cache.
@@ -540,7 +543,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 metadata: metadata.clone(),
             },
         );
-        let data = serde_json::to_vec(&manifest)?;
+        let data = rmp_serde::to_vec(&manifest)?;
         write_atomic(cache_entry.path(), data).await?;
 
         if let Some(task) = task {
@@ -707,7 +710,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<Option<Manifest>, SourceDistError> {
         match fs::read(&cache_entry.path()).await {
             Ok(cached) => {
-                let cached = serde_json::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
+                let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
                 if cached.timestamp == modified {
                     Ok(Some(cached.data))
                 } else {
@@ -729,7 +732,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Read an existing cache entry, if it exists.
     async fn read_metadata(cache_entry: &CacheEntry) -> Result<Option<Manifest>, SourceDistError> {
         match fs::read(&cache_entry.path()).await {
-            Ok(cached) => Ok(Some(serde_json::from_slice::<Manifest>(&cached)?)),
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Manifest>(&cached)?)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }

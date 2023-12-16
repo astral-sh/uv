@@ -3,7 +3,7 @@ use std::process::Command;
 
 use fs_err as fs;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -133,9 +133,8 @@ impl InterpreterQueryResult {
         let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err| {
             Error::PythonSubcommandOutput {
                 message: format!(
-                    "Querying python at {} did not return the expected data: {}",
+                    "Querying python at {} did not return the expected data: {err}",
                     interpreter.display(),
-                    err,
                 ),
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
@@ -155,7 +154,7 @@ impl InterpreterQueryResult {
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
-            format!("{}.json", digest(&executable_bytes)),
+            format!("{}.msgpack", digest(&executable_bytes)),
         );
 
         // `modified()` is infallible on windows and unix (i.e., all platforms we support).
@@ -163,16 +162,25 @@ impl InterpreterQueryResult {
 
         // Read from the cache.
         if let Ok(data) = fs::read(cache_entry.path()) {
-            if let Ok(cached) = serde_json::from_slice::<CachedByTimestamp<Self>>(&data) {
-                if cached.timestamp == modified {
-                    debug!("Using cached markers for: {}", executable.display());
-                    return Ok(cached.data);
-                }
+            match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
+                Ok(cached) => {
+                    if cached.timestamp == modified {
+                        debug!("Using cached markers for: {}", executable.display());
+                        return Ok(cached.data);
+                    }
 
-                debug!(
-                    "Ignoring stale cached markers for: {}",
-                    executable.display()
-                );
+                    debug!(
+                        "Ignoring stale cached markers for: {}",
+                        executable.display()
+                    );
+                }
+                Err(err) => {
+                    warn!(
+                        "Broken cache entry at {}, removing: {err}",
+                        cache_entry.path().display()
+                    );
+                    let _ = fs_err::remove_file(cache_entry.path());
+                }
             }
         }
 
@@ -187,7 +195,7 @@ impl InterpreterQueryResult {
             // Write to the cache.
             write_atomic_sync(
                 cache_entry.path(),
-                serde_json::to_vec(&CachedByTimestamp {
+                rmp_serde::to_vec(&CachedByTimestamp {
                     timestamp: modified,
                     data: info.clone(),
                 })?,

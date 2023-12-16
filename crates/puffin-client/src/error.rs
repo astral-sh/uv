@@ -73,12 +73,15 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
 
+    #[error("Cache deserialization failed")]
+    Decode(#[from] rmp_serde::decode::Error),
+
+    #[error("Cache serialization failed")]
+    Encode(#[from] rmp_serde::encode::Error),
+
     /// An [`io::Error`] with a filename attached
     #[error(transparent)]
     Persist(#[from] tempfile::PersistError),
-
-    #[error("Failed to serialize response to cache")]
-    SerdeJson(#[from] serde_json::Error),
 }
 
 impl Error {

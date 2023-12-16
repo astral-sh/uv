@@ -145,7 +145,7 @@ impl RegistryClient {
                     IndexUrl::Pypi => "pypi".to_string(),
                     IndexUrl::Url(url) => digest(&CanonicalUrl::new(url)),
                 }),
-                format!("{}.json", package_name.as_ref()),
+                format!("{}.msgpack", package_name.as_ref()),
             );
 
             let simple_request = self
@@ -246,7 +246,7 @@ impl RegistryClient {
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(&index).remote_wheel_dir(filename.name.as_ref()),
-                format!("{}.json", filename.stem()),
+                format!("{}.msgpack", filename.stem()),
             );
 
             let response_callback = |response: Response| async {
@@ -281,7 +281,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
-            format!("{}.json", filename.stem()),
+            format!("{}.msgpack", filename.stem()),
         );
 
         // This response callback is special, we actually make a number of subsequent requests to

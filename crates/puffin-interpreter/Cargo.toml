@@ -20,11 +20,12 @@ puffin-cache = { path = "../puffin-cache" }
 puffin-fs = { path = "../puffin-fs" }
 
 fs-err = { workspace = true, features = ["tokio"] }
+rmp-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 indoc = { version = "2.0.4" }
