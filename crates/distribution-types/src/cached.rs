@@ -126,7 +126,6 @@ impl CachedDist {
             CachedDist::Registry(_) => Ok(None),
             CachedDist::Url(dist) => {
                 if dist.editable {
-                    // TODO(konstin): Do this in the type system
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
                     Ok(Some(DirectUrl::LocalFile(LocalFileUrl {
                         url: dist.url.raw().clone(),

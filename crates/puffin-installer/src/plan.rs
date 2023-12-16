@@ -70,6 +70,7 @@ impl InstallPlan {
         let mut seen =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
+        // TODO(charlie): This is quadratic. We should index the editable requirements by URL.
         for editable in editable_requirements {
             let editable_dist = site_packages
                 .editables()
