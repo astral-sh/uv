@@ -22,7 +22,7 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    // TODO(konstin): Also uninstall editables
+    // TODO(konstin): Uninstall editable packages.
     let (requirements, _editables) =
         RequirementsSpecification::requirements_and_editables(sources)?;
 

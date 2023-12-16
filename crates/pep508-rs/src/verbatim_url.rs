@@ -28,8 +28,8 @@ impl VerbatimUrl {
         })
     }
 
-    /// Helper method `LocalEditable`
-    #[allow(clippy::result_unit_err)] // This comes from the `url` crate
+    /// Parse a URL from a path.
+    #[allow(clippy::result_unit_err)]
     pub fn from_path(path: impl AsRef<Path>, given: String) -> Result<Self, ()> {
         Ok(Self {
             url: Url::from_directory_path(path)?,

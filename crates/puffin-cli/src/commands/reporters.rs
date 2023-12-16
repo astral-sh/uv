@@ -121,11 +121,11 @@ impl puffin_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
-        self.on_any_build_start(&dist.to_string().dimmed())
+        self.on_any_build_start(&dist.to_color_string())
     }
 
     fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
-        self.on_any_build_complete(&dist.to_string().dimmed(), id);
+        self.on_any_build_complete(&dist.to_color_string(), id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -251,7 +251,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.set_message(format!(
             "{} {}",
             "Building".bold().cyan(),
-            dist.to_string().dimmed()
+            dist.to_color_string(),
         ));
 
         let mut bars = self.bars.lock().unwrap();
@@ -265,7 +265,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         progress.finish_with_message(format!(
             "   {} {}",
             "Built".bold().green(),
-            dist.to_string().dimmed()
+            dist.to_color_string(),
         ));
     }
 
@@ -319,5 +319,11 @@ impl ColorDisplay for SourceDist {
         let name = self.name();
         let version_or_url = self.version_or_url();
         format!("{}{}", name, version_or_url.to_string().dimmed())
+    }
+}
+
+impl ColorDisplay for LocalEditable {
+    fn to_color_string(&self) -> String {
+        format!("{}", self.to_string().dimmed())
     }
 }
