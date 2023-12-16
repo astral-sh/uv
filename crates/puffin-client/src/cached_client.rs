@@ -157,7 +157,7 @@ impl CachedClient {
         cached: Option<DataWithCachePolicy<T>>,
     ) -> Result<CachedResponse<T>, crate::Error> {
         // The converted types are from the specific `reqwest` types to the more generic `http`
-        // types
+        // types.
         let mut converted_req = http::Request::try_from(
             req.try_clone()
                 .expect("You can't use streaming request bodies with this function"),

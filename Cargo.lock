@@ -855,6 +855,7 @@ dependencies = [
  "puffin-git",
  "puffin-normalize",
  "pypi-types",
+ "rustc-hash",
  "serde",
  "serde_json",
  "thiserror",
@@ -2252,6 +2253,7 @@ name = "puffin-build"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "distribution-types",
  "fs-err",
  "gourgeist",
  "indoc",
@@ -2645,6 +2647,7 @@ name = "puffin-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "distribution-types",
  "pep508_rs",
  "puffin-cache",
  "puffin-interpreter",

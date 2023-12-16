@@ -77,6 +77,8 @@ pub enum SourceDistError {
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
     DirWithoutEntrypoint,
+    #[error("Failed to extract source distribution: {0}")]
+    Extract(#[from] puffin_extract::Error),
 
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
@@ -91,9 +93,7 @@ struct DiskFilenameAndMetadata {
     metadata: Metadata21,
 }
 
-type Metadata21s = FxHashMap<WheelFilename, DiskFilenameAndMetadata>;
-
-/// The information about the wheel we either just built or got from the cache
+/// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
 pub struct BuiltWheelMetadata {
     /// The path to the built wheel.
@@ -107,17 +107,67 @@ pub struct BuiltWheelMetadata {
 }
 
 impl BuiltWheelMetadata {
+    /// Find a compatible wheel in the cache based on the given manifest.
+    fn find_in_cache(tags: &Tags, manifest: &Manifest, cache_entry: &CacheEntry) -> Option<Self> {
+        // Find a compatible cache entry in the manifest.
+        let (filename, cached_dist) = manifest.find_compatible(tags)?;
+        let metadata = Self::from_cached(filename.clone(), cached_dist.clone(), cache_entry);
+
+        // Validate that the wheel exists on disk.
+        if !metadata.path.is_file() {
+            warn!(
+                "Wheel `{}` is present in the manifest, but not on disk",
+                metadata.path.display()
+            );
+            return None;
+        }
+
+        Some(metadata)
+    }
+
+    /// Create a [`BuiltWheelMetadata`] from a cached entry.
     fn from_cached(
-        filename: &WheelFilename,
-        cached_data: &DiskFilenameAndMetadata,
+        filename: WheelFilename,
+        cached_dist: DiskFilenameAndMetadata,
         cache_entry: &CacheEntry,
     ) -> Self {
         Self {
-            path: cache_entry.dir.join(&cached_data.disk_filename),
+            path: cache_entry.dir.join(&cached_dist.disk_filename),
             target: cache_entry.dir.join(filename.stem()),
-            filename: filename.clone(),
-            metadata: cached_data.metadata.clone(),
+            filename,
+            metadata: cached_dist.metadata,
         }
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+struct Manifest(FxHashMap<WheelFilename, DiskFilenameAndMetadata>);
+
+impl Manifest {
+    /// Initialize a [`Manifest`] from an iterator over entries.
+    fn from_iter(iter: impl IntoIterator<Item = (WheelFilename, DiskFilenameAndMetadata)>) -> Self {
+        Self(iter.into_iter().collect())
+    }
+
+    /// Find a compatible wheel in the cache.
+    fn find_compatible(&self, tags: &Tags) -> Option<(&WheelFilename, &DiskFilenameAndMetadata)> {
+        self.0
+            .iter()
+            .find(|(filename, _metadata)| filename.is_compatible(tags))
+    }
+}
+
+impl std::ops::Deref for Manifest {
+    type Target = FxHashMap<WheelFilename, DiskFilenameAndMetadata>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Manifest {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -159,7 +209,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
                     .filename()
-                    .unwrap_or(direct_url_source_dist.url.path());
+                    .expect("Distribution must have a filename");
                 let DirectArchiveUrl { url, subdirectory } =
                     DirectArchiveUrl::from(direct_url_source_dist.url.raw());
 
@@ -173,7 +223,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     source_dist,
                     filename,
                     &url,
-                    cache_shard,
+                    &cache_shard,
                     subdirectory.as_deref(),
                 )
                 .await?
@@ -183,20 +233,20 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
                 })?;
 
-                // For registry source distributions, shard by distribution, then by filename.
-                // Ex) `pypi/requests/requests-2.25.1.tar.gz`
+                // For registry source distributions, shard by package, then by SHA.
+                // Ex) `pypi/requests/a673187abc19fe6c`
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
                         .remote_wheel_dir(registry_source_dist.name.as_ref())
-                        .join(&registry_source_dist.file.filename),
+                        .join(&registry_source_dist.file.hashes.sha256[..16]),
                 );
 
                 self.url(
                     source_dist,
                     &registry_source_dist.file.filename,
                     &url,
-                    cache_shard,
+                    &cache_shard,
                     None,
                 )
                 .await?
@@ -215,36 +265,34 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &'data SourceDist,
         filename: &'data str,
         url: &'data Url,
-        cache_shard: CacheShard,
+        cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_entry = cache_shard.entry(METADATA_JSON.to_string());
 
         let response_callback = |response| async {
-            // New or changed source distribution, delete all built wheels
-            if cache_entry.dir.exists() {
-                debug!("Clearing built wheels and metadata for {source_dist}");
-                fs::remove_dir_all(&cache_entry.dir).await?;
+            // At this point, we're seeing a new or updated source distribution; delete all
+            // wheels, and rebuild.
+            match fs::remove_dir_all(&cache_entry.dir).await {
+                Ok(()) => debug!("Cleared built wheels and metadata for {source_dist}"),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+                Err(err) => return Err(err.into()),
             }
-            debug!("Downloading and building source distribution: {source_dist}");
 
+            debug!("Downloading and building source distribution: {source_dist}");
             let task = self
                 .reporter
                 .as_ref()
                 .map(|reporter| reporter.on_build_start(source_dist));
-            let span =
-                info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
-            let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
-            drop(span);
 
+            // Download the source distribution.
+            let cache_dir = self
+                .persist_source_dist_url(response, source_dist, filename, cache_shard)
+                .await?;
+
+            // Build the source distribution.
             let (disk_filename, wheel_filename, metadata) = self
-                .build_source_dist(
-                    source_dist,
-                    temp_dir,
-                    &sdist_file,
-                    subdirectory,
-                    &cache_entry,
-                )
+                .build_source_dist(source_dist, &cache_dir, subdirectory, &cache_entry)
                 .await?;
 
             if let Some(task) = task {
@@ -253,18 +301,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 }
             }
 
-            let mut metadatas = Metadata21s::default();
-            metadatas.insert(
+            Ok(Manifest::from_iter([(
                 wheel_filename,
                 DiskFilenameAndMetadata {
                     disk_filename,
                     metadata,
                 },
-            );
-            Ok(metadatas)
+            )]))
         };
         let req = self.cached_client.uncached().get(url.clone()).build()?;
-        let metadatas = self
+        let manifest = self
             .cached_client
             .get_cached_with_callback(req, &cache_entry, response_callback)
             .await
@@ -273,23 +319,21 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 CachedClientError::Client(err) => SourceDistError::Client(err),
             })?;
 
-        if let Some((filename, cached_data)) = metadatas
-            .iter()
-            .find(|(filename, _metadata)| filename.is_compatible(self.tags))
+        // If the cache contains a compatible wheel, return it.
+        if let Some(metadata) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
         {
-            return Ok(BuiltWheelMetadata::from_cached(
-                filename,
-                cached_data,
-                &cache_entry,
-            ));
+            return Ok(metadata);
         }
 
-        // At this point, we're seeing cached metadata (fresh source dist) but the
-        // wheel(s) we built previously are incompatible
+        // At this point, we're seeing cached metadata (as in, we have an up-to-date source
+        // distribution), but the wheel(s) we built previously are incompatible.
         let task = self
             .reporter
             .as_ref()
             .map(|reporter| reporter.on_build_start(source_dist));
+
+        // Start by downloading the source distribution.
         let response = self
             .cached_client
             .uncached()
@@ -297,19 +341,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .send()
             .await
             .map_err(puffin_client::Error::RequestMiddlewareError)?;
-        let span =
-            info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
-        let (temp_dir, sdist_file) = self.download_source_dist_url(response, filename).await?;
-        drop(span);
-        let (disk_filename, wheel_filename, metadata) = self
-            .build_source_dist(
-                source_dist,
-                temp_dir,
-                &sdist_file,
-                subdirectory,
-                &cache_entry,
-            )
+        let cache_dir = self
+            .persist_source_dist_url(response, source_dist, filename, cache_shard)
             .await?;
+
+        // Build the source distribution.
+        let (disk_filename, wheel_filename, metadata) = self
+            .build_source_dist(source_dist, &cache_dir, subdirectory, &cache_entry)
+            .await?;
+
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_build_complete(source_dist, task);
@@ -328,7 +368,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         if let Ok(cached) = fs::read(cache_entry.path()).await {
             // If the file exists and it was just read or written by `CachedClient`, we assume it must
             // be correct.
-            let mut cached = serde_json::from_slice::<DataWithCachePolicy<Metadata21s>>(&cached)?;
+            let mut cached = serde_json::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
 
             cached
                 .data
@@ -337,8 +377,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         Ok(BuiltWheelMetadata::from_cached(
-            &wheel_filename,
-            &cached_data,
+            wheel_filename,
+            cached_data,
             &cache_entry,
         ))
     }
@@ -356,9 +396,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             METADATA_JSON.to_string(),
         );
 
+        // Determine the last-modified time of the source distribution.
         let file_metadata = fs_err::metadata(&path_source_dist.path)?;
-        // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
         let modified = if file_metadata.is_file() {
+            // `modified()` is infallible on windows and unix (i.e., all platforms we support).
             file_metadata.modified()?
         } else {
             if let Some(metadata) = path_source_dist
@@ -382,55 +423,26 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
         };
 
-        let mut metadatas = if cache_entry.path().is_file() {
-            let cached = fs::read(&cache_entry.path()).await.ok().and_then(|cached| {
-                serde_json::from_slice::<CachedByTimestamp<Metadata21s>>(&cached).ok()
-            });
-            if let Some(cached) = cached {
-                if cached.timestamp == modified {
-                    // Do we have previous compatible build of this source dist?
-                    if let Some((filename, cached_data)) = cached
-                        .data
-                        .iter()
-                        .find(|(filename, _metadata)| filename.is_compatible(self.tags))
-                    {
-                        return Ok(BuiltWheelMetadata::from_cached(
-                            filename,
-                            cached_data,
-                            &cache_entry,
-                        ));
-                    }
-                    cached.data
-                } else {
-                    debug!(
-                        "Removing stale built wheels for: {}",
-                        cache_entry.path().display()
-                    );
-                    if let Err(err) = fs::remove_dir_all(&cache_entry.dir).await {
-                        warn!("Failed to remove stale built wheel cache directory: {err}");
-                    }
-                    Metadata21s::default()
-                }
-            } else {
-                Metadata21s::default()
-            }
-        } else {
-            Metadata21s::default()
-        };
+        // Read the existing metadata from the cache.
+        let mut manifest = Self::read_fresh_metadata(&cache_entry, modified)
+            .await?
+            .unwrap_or_default();
 
+        // If the cache contains a compatible wheel, return it.
+        if let Some(metadata) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
+        {
+            return Ok(metadata);
+        }
+
+        // Otherwise, we need to build a wheel.
         let task = self
             .reporter
             .as_ref()
             .map(|reporter| reporter.on_build_start(source_dist));
 
         let (disk_filename, filename, metadata) = self
-            .build_source_dist(
-                source_dist,
-                None,
-                &path_source_dist.path,
-                None,
-                &cache_entry,
-            )
+            .build_source_dist(source_dist, &path_source_dist.path, None, &cache_entry)
             .await?;
 
         if metadata.name != path_source_dist.name {
@@ -441,7 +453,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Store the metadata for this build along with all the other builds.
-        metadatas.insert(
+        manifest.insert(
             filename.clone(),
             DiskFilenameAndMetadata {
                 disk_filename: disk_filename.clone(),
@@ -450,9 +462,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
         let cached = CachedByTimestamp {
             timestamp: modified,
-            data: metadatas,
+            data: manifest,
         };
-        fs::create_dir_all(&cache_entry.dir).await?;
         let data = serde_json::to_vec(&cached)?;
         write_atomic(cache_entry.path(), data).await?;
 
@@ -490,24 +501,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             METADATA_JSON.to_string(),
         );
 
-        let mut metadatas = if cache_entry.path().is_file() {
-            let cached = fs::read(&cache_entry.path()).await?;
-            let metadatas = serde_json::from_slice::<Metadata21s>(&cached)?;
-            // Do we have previous compatible build of this source dist?
-            if let Some((filename, cached_data)) = metadatas
-                .iter()
-                .find(|(filename, _metadata)| filename.is_compatible(self.tags))
-            {
-                return Ok(BuiltWheelMetadata::from_cached(
-                    filename,
-                    cached_data,
-                    &cache_entry,
-                ));
-            }
-            metadatas
-        } else {
-            Metadata21s::default()
-        };
+        // Read the existing metadata from the cache.
+        let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();
+
+        // If the cache contains a compatible wheel, return it.
+        if let Some(metadata) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
+        {
+            return Ok(metadata);
+        }
 
         let task = self
             .reporter
@@ -517,7 +519,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_source_dist(
                 source_dist,
-                None,
                 fetch.path(),
                 subdirectory.as_deref(),
                 &cache_entry,
@@ -532,15 +533,14 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Store the metadata for this build along with all the other builds.
-        metadatas.insert(
+        manifest.insert(
             filename.clone(),
             DiskFilenameAndMetadata {
                 disk_filename: disk_filename.clone(),
                 metadata: metadata.clone(),
             },
         );
-        fs::create_dir_all(&cache_entry.dir).await?;
-        let data = serde_json::to_vec(&metadatas)?;
+        let data = serde_json::to_vec(&manifest)?;
         write_atomic(cache_entry.path(), data).await?;
 
         if let Some(task) = task {
@@ -560,12 +560,57 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         })
     }
 
+    /// Download and unzip a source distribution into the cache from an HTTP response.
+    async fn persist_source_dist_url(
+        &self,
+        response: Response,
+        source_dist: &SourceDist,
+        filename: &str,
+        cache_shard: &CacheShard,
+    ) -> Result<PathBuf, SourceDistError> {
+        let cache_entry = cache_shard.entry(filename);
+        let cache_path = cache_entry.path();
+        if cache_path.is_dir() {
+            debug!("Distribution is already cached: {source_dist}");
+            return Ok(cache_path);
+        }
+
+        // Download the source distribution to a temporary file.
+        let span =
+            info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
+        let (temp_dir, source_dist_archive) =
+            self.download_source_dist_url(response, filename).await?;
+        drop(span);
+
+        // Unzip the source distribution to a temporary directory.
+        let span =
+            info_span!("extract_source_dist", filename = filename, source_dist = %source_dist);
+        let source_dist_dir = puffin_extract::extract_source(
+            &source_dist_archive,
+            temp_dir.path().join("extracted"),
+        )?;
+        drop(span);
+
+        // Persist the unzipped distribution to the cache.
+        fs::create_dir_all(&cache_entry.dir).await?;
+        if let Err(err) = fs_err::rename(&source_dist_dir, &cache_path) {
+            // If another thread already cached the distribution, we can ignore the error.
+            if cache_path.is_dir() {
+                warn!("Downloaded already-cached distribution: {source_dist}");
+            } else {
+                return Err(err.into());
+            };
+        }
+
+        Ok(cache_path)
+    }
+
     /// Download a source distribution from a URL to a temporary file.
     async fn download_source_dist_url(
         &self,
         response: Response,
         source_dist_filename: &str,
-    ) -> Result<(Option<TempDir>, PathBuf), puffin_client::Error> {
+    ) -> Result<(TempDir, PathBuf), puffin_client::Error> {
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
@@ -590,7 +635,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .await
             .map_err(puffin_client::Error::CacheWrite)?;
 
-        Ok((Some(temp_dir), sdist_file))
+        Ok((temp_dir, sdist_file))
     }
 
     /// Download a source distribution from a Git repository.
@@ -626,7 +671,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     async fn build_source_dist(
         &self,
         dist: &SourceDist,
-        temp_dir: Option<TempDir>,
         source_dist: &Path,
         subdirectory: Option<&Path>,
         cache_entry: &CacheEntry,
@@ -648,16 +692,47 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .await
             .map_err(|err| SourceDistError::Build(Box::new(dist.clone()), err))?;
 
-        if let Some(temp_dir) = temp_dir {
-            temp_dir.close()?;
-        }
-
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
         let metadata = read_metadata(&filename, cache_entry.dir.join(&disk_filename))?;
 
         debug!("Finished building: {dist}");
         Ok((disk_filename, filename, metadata))
+    }
+
+    /// Read an existing cache entry, if it exists and is up-to-date.
+    async fn read_fresh_metadata(
+        cache_entry: &CacheEntry,
+        modified: std::time::SystemTime,
+    ) -> Result<Option<Manifest>, SourceDistError> {
+        match fs::read(&cache_entry.path()).await {
+            Ok(cached) => {
+                let cached = serde_json::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
+                if cached.timestamp == modified {
+                    Ok(Some(cached.data))
+                } else {
+                    debug!(
+                        "Removing stale built wheels for: {}",
+                        cache_entry.path().display()
+                    );
+                    if let Err(err) = fs::remove_dir_all(&cache_entry.dir).await {
+                        warn!("Failed to remove stale built wheel cache directory: {err}");
+                    }
+                    Ok(None)
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Read an existing cache entry, if it exists.
+    async fn read_metadata(cache_entry: &CacheEntry) -> Result<Option<Manifest>, SourceDistError> {
+        match fs::read(&cache_entry.path()).await {
+            Ok(cached) => Ok(Some(serde_json::from_slice::<Manifest>(&cached)?)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 }
 

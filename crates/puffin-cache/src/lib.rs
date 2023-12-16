@@ -287,7 +287,7 @@ pub enum CacheBucket {
     /// directories in the cache.
     ///
     /// Cache structure:
-    ///  * `built-wheels-v0/pypi/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/pypi/foo/34a17436ed1e9669/{metadata.json, foo-1.0.0.zip, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`

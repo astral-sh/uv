@@ -20,7 +20,7 @@ static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.(\d|\*))+,$").unwrap());
 /// Ex) `>= '2.7'`
 static INVALID_QUOTES: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"((?:~=|==|!=|<=|>=|<|>|===) )*'(\d(?:\.\d)*)'").unwrap());
+    Lazy::new(|| Regex::new(r#"((?:~=|==|!=|<=|>=|<|>|===) )*['"](\d(?:\.\d)*)['"]"#).unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -239,11 +239,21 @@ mod tests {
 
     /// <https://pypi.org/simple/shellingham/?format=application/vnd.pypi.simple.v1+json>
     #[test]
-    fn specifier_invalid_quotes() {
+    fn specifier_invalid_single_quotes() {
         let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">= '2.7'")
             .unwrap()
             .into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">= 2.7").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://pypi.org/simple/tensorflowonspark/?format=application/vnd.pypi.simple.v1+json>
+    #[test]
+    fn specifier_invalid_double_quotes() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=\"3.6\"")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.6").unwrap();
         assert_eq!(actual, expected);
     }
 

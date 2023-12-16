@@ -25,7 +25,7 @@
 //! * [`CachedRegistryDist`]
 //! * [`CachedDirectUrlDist`]
 //!
-//! TODO(konstin): Track all kinds from [`Dist`]
+//! TODO(konstin): Track all kinds from [`Dist`].
 //!
 //! ## `InstalledDist`
 //! An [`InstalledDist`] is built distribution (wheel) that is installed in a virtual environment,
@@ -35,8 +35,7 @@
 //!
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 //!
-//! TODO(konstin): Track all kinds from [`Dist`]
-//! TODO(konstin): Track all kinds from [`Dist`]
+//! TODO(konstin): Track all kinds from [`Dist`].
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -54,6 +53,7 @@ pub use crate::cached::*;
 pub use crate::error::*;
 pub use crate::id::*;
 pub use crate::installed::*;
+pub use crate::resolution::*;
 pub use crate::traits::*;
 
 mod any;
@@ -62,6 +62,7 @@ pub mod direct_url;
 mod error;
 mod id;
 mod installed;
+mod resolution;
 mod traits;
 
 #[derive(Debug, Clone)]
