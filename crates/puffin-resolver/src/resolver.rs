@@ -200,11 +200,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let selector = CandidateSelector::for_resolution(&manifest, options);
 
         let index = Index::default();
+
+        // Determine all the editable requirements.
         let mut editables = FxHashMap::default();
         for (editable_requirement, metadata) in &manifest.editables {
-            let dist = Dist::from_url(metadata.name.clone(), editable_requirement.url())
+            let dist = Dist::from_url(metadata.name.clone(), editable_requirement.url().clone())
                 .expect("This is a valid distribution");
-            // Mock editable responses
+            // Mock editable responses.
             index.distributions.register(&dist.package_id());
             index
                 .distributions
@@ -215,28 +217,31 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             );
         }
 
+        // Determine the list of allowed URLs.
+        let allowed_urls: AllowedUrls = manifest
+            .requirements
+            .iter()
+            .chain(manifest.constraints.iter())
+            .chain(manifest.overrides.iter())
+            .filter_map(|req| {
+                if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
+                    Some(url.raw())
+                } else {
+                    None
+                }
+            })
+            .chain(
+                manifest
+                    .editables
+                    .iter()
+                    .map(|(editable, _)| editable.raw()),
+            )
+            .collect();
+
         Self {
             index: Arc::new(index),
             selector,
-            allowed_urls: manifest
-                .requirements
-                .iter()
-                .chain(manifest.constraints.iter())
-                .chain(manifest.overrides.iter())
-                .filter_map(|req| {
-                    if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
-                        Some(url.raw().clone())
-                    } else {
-                        None
-                    }
-                })
-                .chain(
-                    manifest
-                        .editables
-                        .iter()
-                        .map(|(editable, _)| editable.url().raw().clone()),
-                )
-                .collect(),
+            allowed_urls,
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -635,7 +640,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 for (editable, metadata) in self.editables.values() {
                     constraints.insert(
-                        PubGrubPackage::Package(metadata.name.clone(), None, Some(editable.url())),
+                        PubGrubPackage::Package(
+                            metadata.name.clone(),
+                            None,
+                            Some(editable.url().clone()),
+                        ),
                         Range::singleton(PubGrubVersion::from(metadata.version.clone())),
                     );
                 }
@@ -866,13 +875,9 @@ impl AllowedUrls {
     }
 }
 
-impl FromIterator<Url> for AllowedUrls {
-    fn from_iter<T: IntoIterator<Item = Url>>(iter: T) -> Self {
-        Self(
-            iter.into_iter()
-                .map(|url| CanonicalUrl::new(&url))
-                .collect(),
-        )
+impl<'a> FromIterator<&'a Url> for AllowedUrls {
+    fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
+        Self(iter.into_iter().map(CanonicalUrl::new).collect())
     }
 }
 

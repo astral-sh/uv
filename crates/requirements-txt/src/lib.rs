@@ -44,6 +44,7 @@ use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use unscanny::{Pattern, Scanner};
+use url::Url;
 
 use pep508_rs::{Pep508Error, Requirement, VerbatimUrl};
 
@@ -69,23 +70,24 @@ enum RequirementsTxtStatement {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum EditableRequirement {
-    Path {
-        /// The absolute path, resolved from the current dir if the path in the requirements file was relative
-        resolved: PathBuf,
-        /// The relative path as it is written in the requirements file
-        original: String,
-    },
+    Path { path: PathBuf, url: VerbatimUrl },
     Url(VerbatimUrl),
 }
 
 impl EditableRequirement {
-    pub fn url(&self) -> VerbatimUrl {
+    /// Return the [`VerbatimUrl`] of the editable.
+    pub fn url(&self) -> &VerbatimUrl {
         match self {
-            EditableRequirement::Path { resolved, original } => {
-                VerbatimUrl::from_path(resolved, original.clone())
-                    .expect("A valid path makes a valid url")
-            }
-            EditableRequirement::Url(url) => url.clone(),
+            EditableRequirement::Path { url, .. } => url,
+            EditableRequirement::Url(url) => url,
+        }
+    }
+
+    /// Return the underlying [`Url`].
+    pub fn raw(&self) -> &Url {
+        match self {
+            EditableRequirement::Path { url, .. } => url.raw(),
+            EditableRequirement::Url(url) => url.raw(),
         }
     }
 }
@@ -101,24 +103,27 @@ impl ParsedEditableRequirement {
     pub fn with_working_dir(
         self,
         working_dir: impl AsRef<Path>,
-    ) -> io::Result<EditableRequirement> {
+    ) -> Result<EditableRequirement, RequirementsTxtParserError> {
         Ok(match self {
-            ParsedEditableRequirement::Path(path) => {
-                let path_buf = PathBuf::from(&path);
-                if path_buf.is_absolute() {
+            ParsedEditableRequirement::Path(given) => {
+                let path = PathBuf::from(&given);
+                if path.is_absolute() {
                     EditableRequirement::Path {
-                        resolved: path_buf,
-                        original: path,
+                        url: VerbatimUrl::from_path(&path, given)
+                            .map_err(|()| RequirementsTxtParserError::InvalidPath(path.clone()))?,
+                        path,
                     }
                 } else {
+                    // Avoid paths like `/home/ferris/project/scripts/../editable/`
+                    let path = fs::canonicalize(working_dir.as_ref().join(&path))?;
                     EditableRequirement::Path {
-                        // Avoid paths like `/home/ferris/project/scripts/../editable/`
-                        resolved: fs::canonicalize(working_dir.as_ref().join(&path_buf))?,
-                        original: path,
+                        url: VerbatimUrl::from_path(&path, given)
+                            .map_err(|()| RequirementsTxtParserError::InvalidPath(path.clone()))?,
+                        path,
                     }
                 }
             }
-            // TODO(konstin): File urls
+            // TODO(konstin): Add support for file URLs.
             ParsedEditableRequirement::Url(url) => EditableRequirement::Url(url),
         })
     }
@@ -136,10 +141,7 @@ impl Display for ParsedEditableRequirement {
 impl Display for EditableRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            EditableRequirement::Path {
-                original,
-                resolved: _,
-            } => original.fmt(f),
+            EditableRequirement::Path { url, .. } => url.fmt(f),
             EditableRequirement::Url(url) => url.fmt(f),
         }
     }
@@ -489,6 +491,7 @@ pub struct RequirementsTxtFileError {
 #[derive(Debug)]
 pub enum RequirementsTxtParserError {
     IO(io::Error),
+    InvalidPath(PathBuf),
     Parser {
         message: String,
         location: usize,
@@ -509,6 +512,14 @@ impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.error {
             RequirementsTxtParserError::IO(err) => err.fmt(f),
+            RequirementsTxtParserError::InvalidPath(path) => {
+                write!(
+                    f,
+                    "Invalid path in {}: {}",
+                    self.file.display(),
+                    path.display()
+                )
+            }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(
                     f,
@@ -544,6 +555,7 @@ impl std::error::Error for RequirementsTxtFileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self.error {
             RequirementsTxtParserError::IO(err) => err.source(),
+            RequirementsTxtParserError::InvalidPath(_) => None,
             RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
             RequirementsTxtParserError::Parser { .. } => None,

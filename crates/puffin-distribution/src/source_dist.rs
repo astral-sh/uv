@@ -734,7 +734,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // We finally have the name of the package and can construct the dist
         let dist = Dist::Source(SourceDist::Path(PathSourceDist {
             name: filename.name.clone(),
-            url: editable.url(),
+            url: editable.url().clone(),
             path: editable.path.clone(),
             editable: true,
         }));

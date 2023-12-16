@@ -163,15 +163,12 @@ pub(crate) async fn pip_compile(
         let editables: Vec<LocalEditable> = editables
             .into_iter()
             .map(|editable| match editable.clone() {
-                EditableRequirement::Path {
-                    resolved,
-                    original: _,
-                } => Ok(LocalEditable {
+                EditableRequirement::Path { path, .. } => Ok(LocalEditable {
                     requirement: editable,
-                    path: resolved,
+                    path,
                 }),
                 EditableRequirement::Url(_) => {
-                    bail!("url editables are not supported yet");
+                    bail!("Editable installs for URLs are not yet supported");
                 }
             })
             .collect::<Result<_>>()?;

@@ -30,7 +30,7 @@ impl VerbatimUrl {
 
     /// Helper method `LocalEditable`
     #[allow(clippy::result_unit_err)] // This comes from the `url` crate
-    pub fn from_path(path: &Path, given: String) -> Result<Self, ()> {
+    pub fn from_path(path: impl AsRef<Path>, given: String) -> Result<Self, ()> {
         Ok(Self {
             url: Url::from_directory_path(path)?,
             given: Some(given),
