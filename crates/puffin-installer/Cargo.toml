@@ -29,6 +29,7 @@ puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }

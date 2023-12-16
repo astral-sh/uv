@@ -4,12 +4,14 @@ use std::hash::BuildHasherDefault;
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::FxHashSet;
+use url::Url;
 
-use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
+use distribution_types::{InstalledDirectUrlDist, InstalledDist, Metadata, VersionOrUrl};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
+use pypi_types::{DirInfo, DirectUrl};
 
 #[derive(Debug)]
 pub struct SitePackages<'a> {
@@ -64,6 +66,20 @@ impl<'a> SitePackages<'a> {
                 VersionOrUrl::Url(url) => pep508_rs::VersionOrUrl::Url(url.clone()),
             }),
             marker: None,
+        })
+    }
+
+    /// Returns an iterator over the installed editables.
+    pub fn editables(&self) -> impl Iterator<Item = (&InstalledDist, &Url, &DirInfo)> {
+        self.distributions().filter_map(|dist| {
+            // Editable installs are recorded through this type only
+            match dist {
+                InstalledDist::Url(InstalledDirectUrlDist {
+                    url: DirectUrl::LocalDirectory { url, dir_info },
+                    ..
+                }) if dir_info.editable == Some(true) => Some((dist, url, dir_info)),
+                _ => None,
+            }
         })
     }
 

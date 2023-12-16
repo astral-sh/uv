@@ -22,6 +22,7 @@ use puffin_resolver::{
 };
 use puffin_traits::OnceMap;
 use pypi_types::IndexUrls;
+use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -72,18 +73,25 @@ pub(crate) async fn pip_install(
     // enough to let us remove this check. But right now, for large environments, it's an order of
     // magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none() && satisfied(&spec, &venv)? {
+        let s = if spec.requirements.len() == 1 {
+            ""
+        } else {
+            "s"
+        };
         writeln!(
             printer,
             "{}",
             format!(
                 "Audited {} in {}",
-                format!("{} package{}", spec.requirements.len(), "s").bold(),
+                format!("{} package{}", spec.requirements.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
         )?;
         return Ok(ExitStatus::Success);
     }
+
+    let editable_requirements = spec.editables.clone();
 
     // Resolve the requirements.
     let resolution = match resolve(
@@ -117,6 +125,7 @@ pub(crate) async fn pip_install(
     install(
         &resolution,
         reinstall,
+        &editable_requirements,
         link_mode,
         index_urls,
         no_build,
@@ -200,6 +209,7 @@ async fn resolve(
         requirements,
         constraints,
         overrides,
+        editables: _,
         extras: _,
     } = spec;
 
@@ -215,7 +225,15 @@ async fn resolve(
             .collect(),
     };
 
-    let manifest = Manifest::new(requirements, constraints, overrides, preferences, project);
+    // TODO(charlie): Support editable installs.
+    let manifest = Manifest::new(
+        requirements,
+        constraints,
+        overrides,
+        preferences,
+        project,
+        Vec::new(),
+    );
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     // Determine the compatible platform tags.
@@ -267,6 +285,7 @@ async fn resolve(
 async fn install(
     resolution: &Resolution,
     reinstall: &Reinstall,
+    editables: &[EditableRequirement],
     link_mode: LinkMode,
     index_urls: IndexUrls,
     no_build: bool,
@@ -277,7 +296,6 @@ async fn install(
     let start = std::time::Instant::now();
 
     // Determine the current environment markers.
-    let markers = venv.interpreter().markers();
     let tags = Tags::from_interpreter(venv.interpreter())?;
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
@@ -286,14 +304,15 @@ async fn install(
         local,
         remote,
         reinstalls,
+        editables: _,
         extraneous: _,
     } = InstallPlan::from_requirements(
         &resolution.requirements(),
         reinstall,
+        editables,
         &index_urls,
         cache,
         venv,
-        markers,
         &tags,
     )
     .context("Failed to determine installation plan")?;

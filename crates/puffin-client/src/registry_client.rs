@@ -208,8 +208,7 @@ impl RegistryClient {
             }
             BuiltDist::Path(wheel) => {
                 let reader = fs_err::tokio::File::open(&wheel.path).await?;
-                Self::metadata_from_async_read(&wheel.filename, built_dist.to_string(), reader)
-                    .await?
+                read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
             }
         };
 
@@ -329,41 +328,7 @@ impl RegistryClient {
             .map_err(Error::CacheWrite)?;
         let reader = writer.into_inner();
 
-        Self::metadata_from_async_read(filename, url.to_string(), reader).await
-    }
-
-    async fn metadata_from_async_read(
-        filename: &WheelFilename,
-        debug_source: String,
-        reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
-    ) -> Result<Metadata21, Error> {
-        let mut zip_reader = ZipFileReader::with_tokio(reader)
-            .await
-            .map_err(|err| Error::Zip(filename.clone(), err))?;
-
-        let (metadata_idx, _dist_info_dir) = find_dist_info(
-            filename,
-            zip_reader
-                .file()
-                .entries()
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, e)| Some((idx, e.entry().filename().as_str().ok()?))),
-        )?;
-
-        // Read the contents of the METADATA file
-        let mut contents = Vec::new();
-        zip_reader
-            .reader_with_entry(metadata_idx)
-            .await
-            .map_err(|err| Error::Zip(filename.clone(), err))?
-            .read_to_end_checked(&mut contents)
-            .await
-            .map_err(|err| Error::Zip(filename.clone(), err))?;
-
-        let metadata = Metadata21::parse(&contents)
-            .map_err(|err| Error::MetadataParseError(filename.clone(), debug_source, err))?;
-        Ok(metadata)
+        read_metadata_async(filename, url.to_string(), reader).await
     }
 
     /// Stream a file from an external URL.
@@ -387,6 +352,41 @@ impl RegistryClient {
                 .into_async_read(),
         ))
     }
+}
+
+/// It doesn't really fit into `puffin_client`, but it avoids cyclical crate dependencies.
+pub async fn read_metadata_async(
+    filename: &WheelFilename,
+    debug_source: String,
+    reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+) -> Result<Metadata21, Error> {
+    let mut zip_reader = ZipFileReader::with_tokio(reader)
+        .await
+        .map_err(|err| Error::Zip(filename.clone(), err))?;
+
+    let (metadata_idx, _dist_info_prefix) = find_dist_info(
+        filename,
+        zip_reader
+            .file()
+            .entries()
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, e)| Some((idx, e.entry().filename().as_str().ok()?))),
+    )?;
+
+    // Read the contents of the METADATA file
+    let mut contents = Vec::new();
+    zip_reader
+        .reader_with_entry(metadata_idx)
+        .await
+        .map_err(|err| Error::Zip(filename.clone(), err))?
+        .read_to_end_checked(&mut contents)
+        .await
+        .map_err(|err| Error::Zip(filename.clone(), err))?;
+
+    let metadata = Metadata21::parse(&contents)
+        .map_err(|err| Error::MetadataParseError(filename.clone(), debug_source, err))?;
+    Ok(metadata)
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]

@@ -1,5 +1,7 @@
+use distribution_types::LocalEditable;
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
+use pypi_types::Metadata21;
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Debug)]
@@ -9,6 +11,7 @@ pub struct Manifest {
     pub(crate) overrides: Vec<Requirement>,
     pub(crate) preferences: Vec<Requirement>,
     pub(crate) project: Option<PackageName>,
+    pub(crate) editables: Vec<(LocalEditable, Metadata21)>,
 }
 
 impl Manifest {
@@ -18,6 +21,7 @@ impl Manifest {
         overrides: Vec<Requirement>,
         preferences: Vec<Requirement>,
         project: Option<PackageName>,
+        editables: Vec<(LocalEditable, Metadata21)>,
     ) -> Self {
         Self {
             requirements,
@@ -25,6 +29,7 @@ impl Manifest {
             overrides,
             preferences,
             project,
+            editables,
         }
     }
 
@@ -35,6 +40,7 @@ impl Manifest {
             overrides: Vec::new(),
             preferences: Vec::new(),
             project: None,
+            editables: Vec::new(),
         }
     }
 }

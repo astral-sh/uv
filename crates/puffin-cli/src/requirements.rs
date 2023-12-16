@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 
 use pep508_rs::Requirement;
 use puffin_normalize::{ExtraName, PackageName};
-use requirements_txt::RequirementsTxt;
+use requirements_txt::{EditableRequirement, RequirementsTxt};
 
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {
@@ -66,6 +66,8 @@ pub(crate) struct RequirementsSpecification {
     pub(crate) constraints: Vec<Requirement>,
     /// The overrides for the project.
     pub(crate) overrides: Vec<Requirement>,
+    /// Package to install as editable installs
+    pub(crate) editables: Vec<EditableRequirement>,
     /// The extras used to collect requirements.
     pub(crate) extras: FxHashSet<ExtraName>,
 }
@@ -85,6 +87,7 @@ impl RequirementsSpecification {
                     requirements: vec![requirement],
                     constraints: vec![],
                     overrides: vec![],
+                    editables: vec![],
                     extras: FxHashSet::default(),
                 }
             }
@@ -97,7 +100,8 @@ impl RequirementsSpecification {
                         .into_iter()
                         .map(|entry| entry.requirement)
                         .collect(),
-                    constraints: requirements_txt.constraints.into_iter().collect(),
+                    constraints: requirements_txt.constraints,
+                    editables: requirements_txt.editables,
                     overrides: vec![],
                     extras: FxHashSet::default(),
                 }
@@ -136,6 +140,7 @@ impl RequirementsSpecification {
                     requirements,
                     constraints: vec![],
                     overrides: vec![],
+                    editables: vec![],
                     extras: used_extras,
                 }
             }
@@ -160,6 +165,7 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
+            spec.editables.extend(source.editables);
 
             // Use the first project name discovered
             if spec.project.is_none() {
@@ -187,7 +193,10 @@ impl RequirementsSpecification {
     }
 
     /// Read the requirements from a set of sources.
-    pub(crate) fn requirements(requirements: &[RequirementsSource]) -> Result<Vec<Requirement>> {
-        Ok(Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)?.requirements)
+    pub(crate) fn requirements_and_editables(
+        requirements: &[RequirementsSource],
+    ) -> Result<(Vec<Requirement>, Vec<EditableRequirement>)> {
+        let specification = Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)?;
+        Ok((specification.requirements, specification.editables))
     }
 }

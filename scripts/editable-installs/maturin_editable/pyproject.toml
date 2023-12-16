@@ -8,5 +8,5 @@ python-source = "python"
 features = ["pyo3/extension-module"]
 
 [build-system]
-requires = ["maturin>=1.4,<2.0"]
+requires = ["maturin>=1,<2"]
 build-backend = "maturin"

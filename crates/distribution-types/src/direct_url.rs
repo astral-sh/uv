@@ -15,16 +15,21 @@ pub enum DirectUrl {
     Archive(DirectArchiveUrl),
 }
 
+/// A local path url
+///
+/// Examples:
+/// * `file:///home/ferris/my_project`
+#[derive(Debug)]
+pub struct LocalFileUrl {
+    pub url: Url,
+    pub editable: bool,
+}
+
 /// A git repository url
 ///
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-#[derive(Debug)]
-pub struct LocalFileUrl {
-    pub url: Url,
-}
-
 #[derive(Debug)]
 pub struct DirectGitUrl {
     pub url: GitUrl,
@@ -41,12 +46,6 @@ pub struct DirectGitUrl {
 pub struct DirectArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
-}
-
-impl From<&Url> for LocalFileUrl {
-    fn from(url: &Url) -> Self {
-        Self { url: url.clone() }
-    }
 }
 
 impl TryFrom<&Url> for DirectGitUrl {
@@ -106,7 +105,10 @@ impl TryFrom<&Url> for DirectUrl {
                 ))),
             }
         } else if url.scheme().eq_ignore_ascii_case("file") {
-            Ok(Self::LocalFile(LocalFileUrl::from(url)))
+            Ok(Self::LocalFile(LocalFileUrl {
+                url: url.clone(),
+                editable: false,
+            }))
         } else {
             Ok(Self::Archive(DirectArchiveUrl::from(url)))
         }
@@ -131,7 +133,9 @@ impl TryFrom<&LocalFileUrl> for pypi_types::DirectUrl {
     fn try_from(value: &LocalFileUrl) -> Result<Self, Self::Error> {
         Ok(pypi_types::DirectUrl::LocalDirectory {
             url: value.url.clone(),
-            dir_info: pypi_types::DirInfo { editable: None },
+            dir_info: pypi_types::DirInfo {
+                editable: value.editable.then_some(true),
+            },
         })
     }
 }

@@ -17,6 +17,7 @@ name = "puffin"
 path = "src/main.rs"
 
 [dependencies]
+distribution-filename = { path = "../distribution-filename" }
 distribution-types = { path = "../distribution-types" }
 gourgeist = { path = "../gourgeist" }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
@@ -24,6 +25,7 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+puffin-build = { path = "../puffin-build" }
 puffin-cache = { path = "../puffin-cache", features = ["clap"] }
 puffin-client = { path = "../puffin-client" }
 puffin-dispatch = { path = "../puffin-dispatch" }
@@ -73,6 +75,7 @@ tikv-jemallocator = "0.5.0"
 [dev-dependencies]
 assert_cmd = { version = "2.0.12" }
 assert_fs = { version = "1.0.13" }
+indoc = { version = "2.0.4" }
 insta-cmd = { version = "0.4.0" }
 insta = { version = "1.34.0", features = ["filters"] }
 predicates = { version = "3.0.4" }

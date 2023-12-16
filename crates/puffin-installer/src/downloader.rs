@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::{StreamExt, TryFutureExt};
@@ -7,12 +7,20 @@ use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, Metadata, RemoteSource, SourceDist};
+use distribution_types::{CachedDist, Dist, LocalEditable, Metadata, RemoteSource};
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, LocalWheel, Unzip};
 use puffin_traits::{BuildContext, OnceMap};
+use pypi_types::Metadata21;
+
+#[derive(Debug, Clone)]
+pub struct BuiltEditable {
+    pub editable: LocalEditable,
+    pub wheel: CachedDist,
+    pub metadata: Metadata21,
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -23,16 +31,15 @@ pub enum Error {
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
+    #[error("Failed to build editable: {0}")]
+    Editable(LocalEditable, #[source] DistributionDatabaseError),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
 
 /// Download, build, and unzip a set of distributions.
 pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
-    cache: &'a Cache,
-    tags: &'a Tags,
-    client: &'a RegistryClient,
-    build_context: &'a Context,
+    database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -44,10 +51,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         build_context: &'a Context,
     ) -> Self {
         Self {
-            cache,
-            tags,
-            client,
-            build_context,
+            database: DistributionDatabase::new(cache, tags, client, build_context),
             reporter: None,
         }
     }
@@ -55,28 +59,21 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     /// Set the [`Reporter`] to use for this unzipper.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
         Self {
-            reporter: Some(Arc::new(reporter)),
-            ..self
+            reporter: Some(reporter.clone()),
+            database: self.database.with_reporter(Facade::from(reporter.clone())),
         }
     }
 
-    /// Unzip a set of downloaded wheels.
+    /// Download, build, and unzip a set of downloaded wheels.
     #[instrument(skip_all)]
     pub async fn download(
         &self,
-        distributions: Vec<Dist>,
+        mut distributions: Vec<Dist>,
         in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
     ) -> Result<Vec<CachedDist>, Error> {
-        let database = if let Some(reporter) = self.reporter.as_ref() {
-            DistributionDatabase::new(self.cache, self.tags, self.client, self.build_context)
-                .with_reporter(Facade::from(reporter.clone()))
-        } else {
-            DistributionDatabase::new(self.cache, self.tags, self.client, self.build_context)
-        };
-
         // Sort the distributions by size.
-        let mut distributions = distributions;
         distributions.sort_unstable_by_key(|distribution| {
             Reverse(distribution.size().unwrap_or(usize::MAX))
         });
@@ -86,7 +83,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         // concurrent builds to the number of cores, while allowing more concurrent downloads.
         let mut wheels = Vec::with_capacity(distributions.len());
         let mut fetches = futures::stream::iter(distributions)
-            .map(|dist| Self::get_wheel(dist, &database, in_flight))
+            .map(|dist| self.get_wheel(dist, in_flight))
             .buffer_unordered(50);
 
         while let Some(wheel) = fetches.next().await.transpose()? {
@@ -103,14 +100,63 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Ok(wheels)
     }
 
+    /// Build a set of editables
+    #[instrument(skip_all)]
+    pub async fn build_editables(
+        &self,
+        editables: Vec<LocalEditable>,
+        editable_wheel_dir: &Path,
+    ) -> Result<Vec<BuiltEditable>, Error> {
+        // Build editables in parallel
+        let mut results = Vec::with_capacity(editables.len());
+        let mut fetches = futures::stream::iter(editables)
+            .map(|editable| async move {
+                let task_id = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_editable_build_start(&editable));
+                let (local_wheel, metadata) = self
+                    .database
+                    .build_wheel_editable(&editable, editable_wheel_dir)
+                    .await
+                    .map_err(|err| Error::Editable(editable.clone(), err))?;
+                let cached_dist = Self::unzip_wheel(local_wheel).await?;
+                if let Some(task_id) = task_id {
+                    if let Some(reporter) = &self.reporter {
+                        reporter.on_editable_build_complete(&editable, task_id);
+                    }
+                }
+                Ok::<_, Error>((editable, cached_dist, metadata))
+            })
+            .buffer_unordered(50);
+
+        while let Some((editable, wheel, metadata)) = fetches.next().await.transpose()? {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_progress(&wheel);
+            }
+            results.push(BuiltEditable {
+                editable,
+                wheel,
+                metadata,
+            });
+        }
+
+        if let Some(reporter) = self.reporter.as_ref() {
+            reporter.on_complete();
+        }
+
+        Ok(results)
+    }
+
     /// Download, build, and unzip a single wheel.
     async fn get_wheel(
+        &self,
         dist: Dist,
-        database: &DistributionDatabase<'a, Context>,
         in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
     ) -> Result<CachedDist, Error> {
         // TODO(charlie): Add in-flight tracking around `get_or_build_wheel`.
-        let download: LocalWheel = database
+        let download: LocalWheel = self
+            .database
             .get_or_build_wheel(dist.clone())
             .map_err(|err| Error::Fetch(dist.clone(), err))
             .await?;
@@ -202,6 +248,12 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is complete.
     fn on_build_complete(&self, dist: &dyn Metadata, id: usize);
 
+    /// Callback to invoke when a editable build is kicked off.
+    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize;
+
+    /// Callback to invoke when a editable build is complete.
+    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize);
+
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
 
@@ -221,11 +273,11 @@ impl From<Arc<dyn Reporter>> for Facade {
 }
 
 impl puffin_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
+    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
         self.reporter.on_build_start(dist)
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
+    fn on_build_complete(&self, dist: &dyn Metadata, id: usize) {
         self.reporter.on_build_complete(dist, id);
     }
 

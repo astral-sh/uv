@@ -92,6 +92,8 @@ pub enum Error {
 /// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
 /// Either way, we just search the wheel for the name.
 ///
+/// Returns the dist info dir prefix without the `.dist-info` extension.
+///
 /// Reference implementation: <https://github.com/pypa/packaging/blob/2f83540272e79e3fe1f5d42abae8df0c14ddf4c2/src/packaging/utils.py#L146-L172>
 pub fn find_dist_info<'a, T: Copy>(
     filename: &WheelFilename,
@@ -106,13 +108,13 @@ pub fn find_dist_info<'a, T: Copy>(
                 && Version::from_str(version).ok()? == filename.version
                 && file == "METADATA"
             {
-                Some((payload, dist_info_dir))
+                Some((payload, dir_stem))
             } else {
                 None
             }
         })
         .collect();
-    let (payload, dist_info_dir) = match metadatas[..] {
+    let (payload, dist_info_prefix) = match metadatas[..] {
         [] => {
             return Err(Error::MissingDistInfo);
         }
@@ -127,7 +129,7 @@ pub fn find_dist_info<'a, T: Copy>(
             ));
         }
     };
-    Ok((payload, dist_info_dir))
+    Ok((payload, dist_info_prefix))
 }
 
 /// Given an archive, read the `dist-info` metadata into a buffer.
@@ -135,10 +137,11 @@ pub fn read_dist_info(
     filename: &WheelFilename,
     archive: &mut ZipArchive<impl Read + Seek + Sized>,
 ) -> Result<Vec<u8>, Error> {
-    let dist_info_dir = find_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
+    let dist_info_prefix =
+        find_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
 
     let mut file = archive
-        .by_name(&format!("{dist_info_dir}/METADATA"))
+        .by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))
         .map_err(|err| Error::Zip(filename.to_string(), err))?;
 
     #[allow(clippy::cast_possible_truncation)]
@@ -170,8 +173,8 @@ mod test {
             "Mastodon.py-1.5.1.dist-info/RECORD",
         ];
         let filename = WheelFilename::from_str("Mastodon.py-1.5.1-py2.py3-none-any.whl").unwrap();
-        let (_, dist_info_dir) =
+        let (_, dist_info_prefix) =
             find_dist_info(&filename, files.into_iter().map(|file| (file, file))).unwrap();
-        assert_eq!(dist_info_dir, "Mastodon.py-1.5.1.dist-info");
+        assert_eq!(dist_info_prefix, "Mastodon.py-1.5.1");
     }
 }

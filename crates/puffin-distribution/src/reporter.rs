@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use url::Url;
 
-use distribution_types::SourceDist;
+use distribution_types::Metadata;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &SourceDist) -> usize;
+    fn on_build_start(&self, dist: &dyn Metadata) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &SourceDist, id: usize);
+    fn on_build_complete(&self, dist: &dyn Metadata, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;

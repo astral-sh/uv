@@ -50,6 +50,7 @@ use pypi_types::{File, IndexUrl};
 
 pub use crate::any::*;
 pub use crate::cached::*;
+pub use crate::editable::LocalEditable;
 pub use crate::error::*;
 pub use crate::id::*;
 pub use crate::installed::*;
@@ -59,6 +60,7 @@ pub use crate::traits::*;
 mod any;
 mod cached;
 pub mod direct_url;
+mod editable;
 mod error;
 mod id;
 mod installed;
@@ -167,6 +169,7 @@ pub struct PathSourceDist {
     pub name: PackageName,
     pub url: VerbatimUrl,
     pub path: PathBuf,
+    pub editable: bool,
 }
 
 impl Dist {
@@ -219,6 +222,7 @@ impl Dist {
                     name,
                     url,
                     path,
+                    editable: false,
                 })))
             };
         }

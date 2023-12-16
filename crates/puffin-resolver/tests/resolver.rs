@@ -22,7 +22,7 @@ use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::{BuildContext, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -71,6 +71,7 @@ impl BuildContext for DummyContext {
         _source: &'a Path,
         _subdirectory: Option<&'a Path>,
         _package_id: &'a str,
+        _build_kind: BuildKind,
     ) -> Pin<Box<dyn Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a>> {
         Box::pin(async { Ok(DummyBuilder) })
     }
@@ -256,6 +257,7 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         vec![],
         None,
+        vec![],
     );
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -294,6 +296,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         vec![],
         None,
+        vec![],
     );
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -332,6 +335,7 @@ async fn black_flake8() -> Result<()> {
         vec![],
         vec![],
         None,
+        vec![],
     );
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -428,6 +432,7 @@ async fn black_respect_preference() -> Result<()> {
         vec![],
         vec![Requirement::from_str("black==23.9.0").unwrap()],
         None,
+        vec![],
     );
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -464,6 +469,7 @@ async fn black_ignore_preference() -> Result<()> {
         vec![],
         vec![Requirement::from_str("black==23.9.2").unwrap()],
         None,
+        vec![],
     );
     let options = ResolutionOptions::new(
         ResolutionMode::default(),

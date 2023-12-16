@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::ops::Deref;
+use std::path::Path;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -24,6 +25,15 @@ impl VerbatimUrl {
         Ok(Self {
             given: Some(given),
             url,
+        })
+    }
+
+    /// Parse a URL from a path.
+    #[allow(clippy::result_unit_err)]
+    pub fn from_path(path: impl AsRef<Path>, given: String) -> Result<Self, ()> {
+        Ok(Self {
+            url: Url::from_directory_path(path)?,
+            given: Some(given),
         })
     }
 

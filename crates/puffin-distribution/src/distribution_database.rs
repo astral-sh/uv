@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::io;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -13,9 +14,9 @@ use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
-use distribution_types::{BuiltDist, Dist, Metadata, SourceDist};
+use distribution_types::{BuiltDist, Dist, LocalEditable, Metadata, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
+use puffin_cache::{digest, Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
@@ -271,6 +272,26 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 Ok((built_wheel.metadata, precise))
             }
         }
+    }
+
+    /// Build a directory into an editable wheel.
+    pub async fn build_wheel_editable(
+        &self,
+        editable: &LocalEditable,
+        editable_wheel_dir: &Path,
+    ) -> Result<(LocalWheel, Metadata21), DistributionDatabaseError> {
+        let (dist, disk_filename, filename, metadata) = self
+            .builder
+            .build_editable(editable, editable_wheel_dir)
+            .await?;
+
+        let built_wheel = BuiltWheel {
+            dist,
+            filename,
+            path: editable_wheel_dir.join(disk_filename),
+            target: editable_wheel_dir.join(digest(&editable.path)),
+        };
+        Ok((LocalWheel::Built(built_wheel), metadata))
     }
 
     /// Given a remote source distribution, return a precise variant, if possible.
