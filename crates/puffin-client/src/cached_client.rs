@@ -101,7 +101,7 @@ impl CachedClient {
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let cached = if let Ok(cached) = fs_err::tokio::read(cache_entry.path()).await {
-            match serde_json::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
+            match rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
                 Ok(data) => Some(data),
                 Err(err) => {
                     warn!(
@@ -123,7 +123,7 @@ impl CachedClient {
             CachedResponse::NotModified(data_with_cache_policy) => {
                 write_atomic(
                     cache_entry.path(),
-                    serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
+                    rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
                 )
                 .await
                 .map_err(crate::Error::CacheWrite)?;
@@ -139,7 +139,7 @@ impl CachedClient {
                         .await
                         .map_err(crate::Error::CacheWrite)?;
                     let data =
-                        serde_json::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
+                        rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
                     write_atomic(cache_entry.path(), data)
                         .await
                         .map_err(crate::Error::CacheWrite)?;
@@ -158,7 +158,7 @@ impl CachedClient {
         cached: Option<DataWithCachePolicy<T>>,
     ) -> Result<CachedResponse<T>, crate::Error> {
         // The converted types are from the specific `reqwest` types to the more generic `http`
-        // types
+        // types.
         let mut converted_req = http::Request::try_from(
             req.try_clone()
                 .expect("You can't use streaming request bodies with this function"),

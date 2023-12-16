@@ -173,15 +173,15 @@ impl Cache {
 pub enum CacheBucket {
     /// Wheels (excluding built wheels), alongside their metadata and cache policy.
     ///
-    /// There are three kinds from cache entries: Wheel metadata and policy as JSON files, the
+    /// There are three kinds from cache entries: Wheel metadata and policy as MsgPack files, the
     /// wheels themselves, and the unzipped wheel archives. If a wheel file is over an in-memory
     /// size threshold, we first download the zip file into the cache, then unzip it into a
     /// directory with the same name (exclusive of the `.whl` extension).
     ///
     /// Cache structure:
-    ///  * `wheel-metadata-v0/pypi/foo/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
-    ///  * `wheel-metadata-v0/<digest(index-url)>/foo/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
-    ///  * `wheel-metadata-v0/url/<digest(url)>/foo/{foo-1.0.0-py3-none-any.json, foo-1.0.0-py3-none-any.whl}`
+    ///  * `wheel-metadata-v0/pypi/foo/{foo-1.0.0-py3-none-any.msgpack, foo-1.0.0-py3-none-any.whl}`
+    ///  * `wheel-metadata-v0/<digest(index-url)>/foo/{foo-1.0.0-py3-none-any.msgpack, foo-1.0.0-py3-none-any.whl}`
+    ///  * `wheel-metadata-v0/url/<digest(url)>/foo/{foo-1.0.0-py3-none-any.msgpack, foo-1.0.0-py3-none-any.whl}`
     ///
     /// See `puffin_client::RegistryClient::wheel_metadata` for information on how wheel metadata
     /// is fetched.
@@ -203,12 +203,12 @@ pub enum CacheBucket {
     /// ├── pypi
     /// │   ...
     /// │   ├── pandas
-    /// │   │   └── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.json
+    /// │   │   └── pandas-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.msgpack
     /// │   ...
     /// └── url
     ///     └── 4b8be67c801a7ecb
     ///         └── flask
-    ///             └── flask-3.0.0-py3-none-any.json
+    ///             └── flask-3.0.0-py3-none-any.msgpack
     /// ```
     ///
     /// We get the following `requirement.txt` from `pip-compile`:
@@ -250,7 +250,7 @@ pub enum CacheBucket {
     /// ├── pypi
     /// │   ├── ...
     /// │   ├── pandas
-    /// │   │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.json
+    /// │   │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.msgpack
     /// │   │   ├── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     /// │   │   └── pandas-2.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64
     /// │   │       ├── pandas
@@ -262,8 +262,8 @@ pub enum CacheBucket {
     /// └── url
     ///     └── 4b8be67c801a7ecb
     ///         └── flask
-    ///             ├── flask-3.0.0-py3-none-any.json
-    ///             ├── flask-3.0.0-py3-none-any.json
+    ///             ├── flask-3.0.0-py3-none-any.msgpack
+    ///             ├── flask-3.0.0-py3-none-any.msgpack
     ///             └── flask-3.0.0-py3-none-any
     ///                 ├── flask
     ///                 │   └── ...
@@ -287,15 +287,15 @@ pub enum CacheBucket {
     /// directories in the cache.
     ///
     /// Cache structure:
-    ///  * `built-wheels-v0/pypi/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo/foo-1.0.0.zip/{metadata.json, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/pypi/foo/34a17436ed1e9669/{metadata.msgpack, foo-1.0.0.zip, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo/foo-1.0.0.zip/{metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///
     /// But the url filename does not need to be a valid source dist filename
     /// (<https://github.com/search?q=path%3A**%2Frequirements.txt+master.zip&type=code>),
     /// so it could also be the following and we have to take any string as filename:
-    ///  * `built-wheels-v0/url/<sha256(url)>/master.zip/metadata.json`
+    ///  * `built-wheels-v0/url/<sha256(url)>/master.zip/metadata.msgpack`
     ///
     /// # Example
     ///
@@ -315,22 +315,22 @@ pub enum CacheBucket {
     /// ├── git
     /// │   └── a67db8ed076e3814
     /// │       └── 843b753e9e8cb74e83cac55598719b39a4d5ef1f
-    /// │           ├── metadata.json
+    /// │           ├── metadata.msgpack
     /// │           └── pydantic_extra_types-2.1.0-py3-none-any.whl
     /// ├── pypi
     /// │   └── django
     /// │       └── django-allauth-0.51.0.tar.gz
     /// │           ├── django_allauth-0.51.0-py3-none-any.whl
-    /// │           └── metadata.json
+    /// │           └── metadata.msgpack
     /// └── url
     ///     └── 6781bd6440ae72c2
     ///         └── werkzeug
     ///             └── werkzeug-3.0.1.tar.gz
-    ///                 ├── metadata.json
+    ///                 ├── metadata.msgpack
     ///                 └── werkzeug-3.0.1-py3-none-any.whl
     /// ```
     ///
-    /// The inside of a `metadata.json`:
+    /// Structurally, the inside of a `metadata.msgpack` looks like:
     /// ```json
     /// {
     ///   "data": {
@@ -352,11 +352,11 @@ pub enum CacheBucket {
     /// without the shim itself changing, we only cache when the path equals `sys.executable`, i.e.
     /// the path we're running is the python executable itself and not a shim.
     ///
-    /// Cache structure: `interpreter-v0/<digest(path)>.json`
+    /// Cache structure: `interpreter-v0/<digest(path)>.msgpack`
     ///
     /// # Example
     ///
-    /// The contents of each of the json files has a timestamp field in unix time, the [PEP 508]
+    /// The contents of each of the MsgPack files has a timestamp field in unix time, the [PEP 508]
     /// markers and some information from the `sys`/`sysconfig` modules.
     ///
     /// ```json
@@ -388,8 +388,8 @@ pub enum CacheBucket {
     /// Index responses through the simple metadata API.
     ///
     /// Cache structure:
-    ///  * `simple-v0/pypi/<package_name>.json`
-    ///  * `simple-v0/<digest(index_url)>/<package_name>.json`
+    ///  * `simple-v0/pypi/<package_name>.msgpack`
+    ///  * `simple-v0/<digest(index_url)>/<package_name>.msgpack`
     ///
     /// The response is parsed into [`puffin_client::SimpleMetadata`] before storage.
     Simple,
@@ -492,17 +492,17 @@ impl CacheBucket {
                 }
             }
             CacheBucket::Simple => {
-                // For `pypi` wheels, we expect a JSON file per package, indexed by name.
+                // For `pypi` wheels, we expect a MsgPack file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                if remove(root.join(format!("{name}.json")))? {
+                if remove(root.join(format!("{name}.msgpack")))? {
                     count += 1;
                 }
 
                 // For alternate indices, we expect a directory for every index, followed by a
-                // JSON file per package, indexed by name.
+                // MsgPack file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root) {
-                    if remove(directory.join(format!("{name}.json")))? {
+                    if remove(directory.join(format!("{name}.msgpack")))? {
                         count += 1;
                     }
                 }

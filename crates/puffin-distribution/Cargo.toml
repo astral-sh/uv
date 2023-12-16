@@ -34,9 +34,9 @@ fs-err = { workspace = true }
 fs2 = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }
+rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true , features = ["derive"] }
-serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

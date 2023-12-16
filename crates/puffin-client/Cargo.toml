@@ -15,18 +15,19 @@ pypi-types = { path = "../pypi-types" }
 
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
-futures = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
 http = { workspace = true }
 http-cache-semantics = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-thiserror = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

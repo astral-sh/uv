@@ -694,6 +694,10 @@ impl FromStr for Version {
     /// Note that this variant doesn't allow the version to end with a star, see
     /// [`Self::from_str_star`] if you want to parse versions for specifiers
     fn from_str(version: &str) -> Result<Self, Self::Err> {
+        if let Some(v) = version_fast_parse(version) {
+            return Ok(v);
+        }
+
         let captures = VERSION_RE
             .captures(version)
             .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
@@ -713,6 +717,10 @@ impl Version {
     ///  * `1.2.*.4` -> err
     ///  * `1.0-dev1.*` -> err
     pub fn from_str_star(version: &str) -> Result<(Self, bool), String> {
+        if let Some(v) = version_fast_parse(version) {
+            return Ok((v, false));
+        }
+
         let captures = VERSION_RE
             .captures(version)
             .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
@@ -823,6 +831,29 @@ impl Version {
     }
 }
 
+/// Attempt to parse the given version string very quickly.
+///
+/// This looks for a version string that is of the form `n(.n)*` (i.e., release
+/// only) and returns the corresponding `Version` of it. If the version string
+/// has any other form, then this returns `None`.
+fn version_fast_parse(version: &str) -> Option<Version> {
+    let mut parts = vec![];
+    for part in version.split('.') {
+        if !part.as_bytes().iter().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        parts.push(part.parse().ok()?);
+    }
+    Some(Version {
+        epoch: 0,
+        release: parts,
+        pre: None,
+        post: None,
+        dev: None,
+        local: None,
+    })
+}
+
 #[cfg(test)]
 mod test {
     #[cfg(feature = "pyo3")]
@@ -902,8 +933,6 @@ mod test {
     #[test]
     fn test_packaging_failures() {
         let versions = [
-            // Nonsensical versions should be invalid
-            "french toast",
             // Versions with invalid local versions
             "1.0+a+",
             "1.0++",
@@ -918,9 +947,12 @@ mod test {
             );
             assert_eq!(
                 VersionSpecifier::from_str(&format!("=={version}")).unwrap_err(),
-                format!("Version specifier `=={version}` doesn't match PEP 440 rules")
+                format!("Version `{version}` doesn't match PEP 440 rules")
             );
         }
+        // Nonsensical versions should be invalid (different error message)
+        Version::from_str("french toast").unwrap_err();
+        VersionSpecifier::from_str("==french toast").unwrap_err();
     }
 
     #[test]

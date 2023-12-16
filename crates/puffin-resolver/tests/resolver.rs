@@ -12,6 +12,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
+use distribution_types::Resolution;
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
@@ -53,13 +54,13 @@ impl BuildContext for DummyContext {
     fn resolve<'a>(
         &'a self,
         _requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Requirement>>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")
     }
 
     fn install<'a>(
         &'a self,
-        _requirements: &'a [Requirement],
+        _resolution: &'a Resolution,
         _venv: &'a Virtualenv,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         panic!("The test should not need to build source distributions")

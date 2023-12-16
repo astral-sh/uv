@@ -24,6 +24,7 @@ requirements-txt = { path = "../requirements-txt" }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
+rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

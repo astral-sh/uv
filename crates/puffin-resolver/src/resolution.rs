@@ -2,7 +2,6 @@ use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
 use colored::Colorize;
-use itertools::Itertools;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;
@@ -11,11 +10,9 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{
-    BuiltDist, Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId, SourceDist,
-};
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrl};
+use distribution_types::{Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId};
+use pep440_rs::Version;
+use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::OnceMap;
 use pypi_types::Metadata21;
@@ -23,51 +20,6 @@ use pypi_types::Metadata21;
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority, PubGrubVersion};
 use crate::ResolveError;
-
-/// A set of packages pinned at specific versions.
-#[derive(Debug, Default)]
-pub struct ResolutionManifest(FxHashMap<PackageName, Dist>);
-
-impl ResolutionManifest {
-    /// Create a new resolution from the given pinned packages.
-    pub(crate) fn new(packages: FxHashMap<PackageName, Dist>) -> Self {
-        Self(packages)
-    }
-
-    /// Return the distribution for the given package name, if it exists.
-    pub fn get(&self, package_name: &PackageName) -> Option<&Dist> {
-        self.0.get(package_name)
-    }
-
-    /// Iterate over the [`PackageName`] entities in this resolution.
-    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        self.0.keys()
-    }
-
-    /// Iterate over the [`Dist`] entities in this resolution.
-    pub fn into_distributions(self) -> impl Iterator<Item = Dist> {
-        self.0.into_values()
-    }
-
-    /// Return the number of distributions in this resolution.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Return `true` if there are no pinned packages in this resolution.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    /// Return the set of [`Requirement`]s that this resolution represents.
-    pub fn requirements(&self) -> Vec<Requirement> {
-        self.0
-            .values()
-            .sorted_by_key(|package| package.name())
-            .map(as_requirement)
-            .collect()
-    }
-}
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -230,7 +182,9 @@ impl ResolutionGraph {
         nodes.sort_unstable_by_key(|(_, package)| package.name());
         self.petgraph
             .node_indices()
-            .map(|node| as_requirement(&self.petgraph[node]))
+            .map(|node| &self.petgraph[node])
+            .cloned()
+            .map(Requirement::from)
             .collect()
     }
 
@@ -302,9 +256,9 @@ impl std::fmt::Display for ResolutionGraph {
     }
 }
 
-impl From<ResolutionGraph> for ResolutionManifest {
+impl From<ResolutionGraph> for distribution_types::Resolution {
     fn from(graph: ResolutionGraph) -> Self {
-        Self(
+        Self::new(
             graph
                 .petgraph
                 .node_indices()
@@ -316,58 +270,6 @@ impl From<ResolutionGraph> for ResolutionManifest {
                 })
                 .collect(),
         )
-    }
-}
-
-/// Create a [`Requirement`] from a [`Dist`].
-fn as_requirement(dist: &Dist) -> Requirement {
-    match dist {
-        Dist::Built(BuiltDist::Registry(wheel)) => Requirement {
-            name: wheel.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-                VersionSpecifier::equals_version(wheel.version.clone()),
-            ))),
-            marker: None,
-        },
-        Dist::Built(BuiltDist::DirectUrl(wheel)) => Requirement {
-            name: wheel.filename.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
-            marker: None,
-        },
-        Dist::Built(BuiltDist::Path(wheel)) => Requirement {
-            name: wheel.filename.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::Url(wheel.url.clone())),
-            marker: None,
-        },
-        Dist::Source(SourceDist::Registry(sdist)) => Requirement {
-            name: sdist.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-                VersionSpecifier::equals_version(sdist.version.clone()),
-            ))),
-            marker: None,
-        },
-        Dist::Source(SourceDist::DirectUrl(sdist)) => Requirement {
-            name: sdist.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
-            marker: None,
-        },
-        Dist::Source(SourceDist::Git(sdist)) => Requirement {
-            name: sdist.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
-            marker: None,
-        },
-        Dist::Source(SourceDist::Path(sdist)) => Requirement {
-            name: sdist.name.clone(),
-            extras: None,
-            version_or_url: Some(VersionOrUrl::Url(sdist.url.clone())),
-            marker: None,
-        },
     }
 }
 

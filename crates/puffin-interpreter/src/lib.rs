@@ -40,6 +40,10 @@ pub enum Error {
     },
     #[error("Failed to write to cache")]
     Serde(#[from] serde_json::Error),
+    #[error("Cache deserialization failed")]
+    Decode(#[from] rmp_serde::decode::Error),
+    #[error("Cache serialization failed")]
+    Encode(#[from] rmp_serde::encode::Error),
     #[error("Failed to parse pyvenv.cfg")]
     Cfg(#[from] cfg::Error),
 }

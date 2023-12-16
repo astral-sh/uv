@@ -23,6 +23,7 @@ regex = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
+unscanny = { workspace = true }
 
 [dev-dependencies]
 indoc = "2.0.4"
