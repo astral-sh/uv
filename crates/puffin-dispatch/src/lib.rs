@@ -16,7 +16,7 @@ use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
-use puffin_installer::{Downloader, EditableMode, InstallPlan, Installer, Reinstall};
+use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, BuildKind, OnceMap};
@@ -131,23 +131,27 @@ impl BuildContext for BuildDispatch {
                 venv.root().display(),
             );
 
+            // Determine the current environment markers.
             let tags = Tags::from_interpreter(&self.interpreter)?;
+
+            // Determine the set of installed packages.
+            let site_packages =
+                SitePackages::from_executable(venv).context("Failed to list installed packages")?;
 
             let InstallPlan {
                 local,
                 remote,
                 reinstalls,
                 extraneous,
-                editables: _,
             } = InstallPlan::from_requirements(
                 &resolution.requirements(),
-                &[],
+                Vec::new(),
+                site_packages,
                 &Reinstall::None,
                 &self.index_urls,
                 self.cache(),
                 venv,
                 &tags,
-                EditableMode::default(),
             )?;
 
             // Resolve any registry-based requirements.

@@ -4,18 +4,16 @@ use anyhow::{bail, Context, Result};
 use colored::Colorize;
 use fs_err as fs;
 use itertools::Itertools;
-use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{AnyDist, CachedDist, LocalEditable, Metadata};
+use distribution_types::{AnyDist, LocalEditable, Metadata};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Downloader, EditableMode, InstallPlan, Reinstall, SitePackages};
+use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
@@ -27,6 +25,7 @@ use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     reinstall: &Reinstall,
@@ -36,44 +35,19 @@ pub(crate) async fn pip_sync(
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
+    let start = std::time::Instant::now();
+
     // Read all requirements from the provided sources.
     let (requirements, editables) = RequirementsSpecification::requirements_and_editables(sources)?;
-
-    if requirements.is_empty() && editables.is_empty() {
+    let num_requirements = requirements.len() + editables.len();
+    if num_requirements == 0 {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
 
-    sync_requirements(
-        &requirements,
-        reinstall,
-        &editables,
-        link_mode,
-        index_urls,
-        no_build,
-        &cache,
-        printer,
-    )
-    .await
-}
-
-/// Install a set of locked requirements into the current Python environment.
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn sync_requirements(
-    requirements: &[Requirement],
-    reinstall: &Reinstall,
-    editable_requirements: &[EditableRequirement],
-    link_mode: LinkMode,
-    index_urls: IndexUrls,
-    no_build: bool,
-    cache: &Cache,
-    mut printer: Printer,
-) -> Result<ExitStatus> {
-    let start = std::time::Instant::now();
-
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, &cache)?;
     debug!(
         "Using Python interpreter: {}",
         venv.python_executable().display()
@@ -82,34 +56,60 @@ pub(crate) async fn sync_requirements(
     // Determine the current environment markers.
     let tags = Tags::from_interpreter(venv.interpreter())?;
 
+    // Prep the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_urls.clone())
+        .build();
+
+    // Prep the build context.
+    let build_dispatch = BuildDispatch::new(
+        client.clone(),
+        cache.clone(),
+        venv.interpreter().clone(),
+        fs::canonicalize(venv.python_executable())?,
+        no_build,
+        index_urls.clone(),
+    );
+
+    // Determine the set of installed packages.
+    let site_packages =
+        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+
+    // Resolve any editables.
+    let resolved_editables = resolve_editables(
+        editables,
+        &site_packages,
+        reinstall,
+        &venv,
+        &tags,
+        &cache,
+        &client,
+        &build_dispatch,
+        printer,
+    )
+    .await?;
+
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let InstallPlan {
         local,
-        editables,
         remote,
         reinstalls,
         extraneous,
     } = InstallPlan::from_requirements(
-        requirements,
-        editable_requirements,
+        &requirements,
+        resolved_editables.editables,
+        site_packages,
         reinstall,
         &index_urls,
-        cache,
+        &cache,
         &venv,
         &tags,
-        EditableMode::Immutable,
     )
     .context("Failed to determine installation plan")?;
 
     // Nothing to do.
-    if remote.is_empty()
-        && local.is_empty()
-        && reinstalls.is_empty()
-        && extraneous.is_empty()
-        && editables.is_empty()
-    {
-        let num_requirements = requirements.len() + editable_requirements.len();
+    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -182,65 +182,14 @@ pub(crate) async fn sync_requirements(
         }
     }
 
-    let build_dispatch = BuildDispatch::new(
-        client.clone(),
-        cache.clone(),
-        venv.interpreter().clone(),
-        fs::canonicalize(venv.python_executable())?,
-        no_build,
-        index_urls.clone(),
-    );
-    let downloader = Downloader::new(cache, &tags, &client, &build_dispatch).with_reporter(
-        DownloadReporter::from(printer).with_length((editables.len() + remote.len()) as u64),
-    );
-
-    // Build any editable requirements.
-    let editable_wheel_dir = tempdir_in(venv.root())?;
-    let built_editables = if editables.is_empty() {
-        Vec::new()
-    } else {
-        let start = std::time::Instant::now();
-
-        let editables: Vec<LocalEditable> = editables
-            .into_iter()
-            .map(|editable| match editable.clone() {
-                EditableRequirement::Path { path, .. } => Ok(LocalEditable {
-                    requirement: editable,
-                    path,
-                }),
-                EditableRequirement::Url(_) => {
-                    bail!("url editables are not supported yet");
-                }
-            })
-            .collect::<Result<_>>()?;
-
-        let built_editables: Vec<CachedDist> = downloader
-            .build_editables(editables, editable_wheel_dir.path())
-            .await
-            .context("Failed to build editables")?
-            .into_iter()
-            .map(|built_editable| built_editable.wheel)
-            .collect();
-        let s = if built_editables.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer,
-            "{}",
-            format!(
-                "Built {} in {}",
-                format!("{} editable{}", built_editables.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
-
-        built_editables
-    };
-
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         Vec::new()
     } else {
         let start = std::time::Instant::now();
+
+        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
+            .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
             .download(remote, &OnceMap::default())
@@ -296,11 +245,7 @@ pub(crate) async fn sync_requirements(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels
-        .into_iter()
-        .chain(local)
-        .chain(built_editables)
-        .collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         puffin_installer::Installer::new(&venv)
@@ -375,4 +320,112 @@ pub(crate) async fn sync_requirements(
     }
 
     Ok(ExitStatus::Success)
+}
+
+#[derive(Debug)]
+struct ResolvedEditables {
+    /// The set of resolved editables, including both those that were already installed and those
+    /// that were built.
+    editables: Vec<ResolvedEditable>,
+    /// The temporary directory in which the built editables were stored.
+    #[allow(dead_code)]
+    temp_dir: Option<tempfile::TempDir>,
+}
+
+/// Resolve the set of editables that need to be installed.
+#[allow(clippy::too_many_arguments)]
+async fn resolve_editables(
+    editables: Vec<EditableRequirement>,
+    site_packages: &SitePackages<'_>,
+    reinstall: &Reinstall,
+    venv: &Virtualenv,
+    tags: &Tags,
+    cache: &Cache,
+    client: &RegistryClient,
+    build_dispatch: &BuildDispatch,
+    mut printer: Printer,
+) -> Result<ResolvedEditables> {
+    // Partition the editables into those that are already installed, and those that must be built.
+    let mut installed = Vec::with_capacity(editables.len());
+    let mut uninstalled = Vec::with_capacity(editables.len());
+    for editable in editables {
+        match reinstall {
+            Reinstall::None => {
+                if let Some(dist) = site_packages.get_editable(editable.raw()) {
+                    installed.push(dist.clone());
+                } else {
+                    uninstalled.push(editable);
+                }
+            }
+            Reinstall::All => {
+                uninstalled.push(editable);
+            }
+            Reinstall::Packages(packages) => {
+                if let Some(dist) = site_packages.get_editable(editable.raw()) {
+                    if packages.contains(dist.name()) {
+                        uninstalled.push(editable);
+                    } else {
+                        installed.push(dist.clone());
+                    }
+                } else {
+                    uninstalled.push(editable);
+                }
+            }
+        }
+    }
+
+    // Build any editable installs.
+    let (built_editables, temp_dir) = if uninstalled.is_empty() {
+        (Vec::new(), None)
+    } else {
+        let start = std::time::Instant::now();
+
+        let temp_dir = tempfile::tempdir_in(venv.root())?;
+
+        let downloader = Downloader::new(cache, tags, client, build_dispatch)
+            .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
+
+        let local_editables: Vec<LocalEditable> = uninstalled
+            .iter()
+            .map(|editable| match editable {
+                EditableRequirement::Path { path, .. } => Ok(LocalEditable {
+                    requirement: editable.clone(),
+                    path: path.clone(),
+                }),
+                EditableRequirement::Url(_) => {
+                    bail!("Editable installs for URLs are not yet supported");
+                }
+            })
+            .collect::<Result<_>>()?;
+
+        let built_editables: Vec<_> = downloader
+            .build_editables(local_editables, temp_dir.path())
+            .await
+            .context("Failed to build editables")?
+            .into_iter()
+            .collect();
+
+        let s = if built_editables.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Built {} in {}",
+                format!("{} editable{}", built_editables.len(), s).bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
+
+        (built_editables, Some(temp_dir))
+    };
+
+    Ok(ResolvedEditables {
+        editables: installed
+            .into_iter()
+            .map(ResolvedEditable::Installed)
+            .chain(built_editables.into_iter().map(ResolvedEditable::Built))
+            .collect::<Vec<_>>(),
+        temp_dir,
+    })
 }
