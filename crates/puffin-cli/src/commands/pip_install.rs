@@ -308,8 +308,8 @@ async fn install(
         extraneous: _,
     } = InstallPlan::from_requirements(
         &resolution.requirements(),
-        reinstall,
         editables,
+        reinstall,
         &index_urls,
         cache,
         venv,

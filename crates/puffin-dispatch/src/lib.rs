@@ -141,8 +141,8 @@ impl BuildContext for BuildDispatch {
                 editables: _,
             } = InstallPlan::from_requirements(
                 &resolution.requirements(),
-                &Reinstall::None,
                 &[],
+                &Reinstall::None,
                 &self.index_urls,
                 self.cache(),
                 venv,

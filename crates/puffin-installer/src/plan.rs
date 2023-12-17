@@ -48,8 +48,8 @@ impl InstallPlan {
     /// need to be downloaded, and those that should be removed.
     pub fn from_requirements(
         requirements: &[Requirement],
-        reinstall: &Reinstall,
         editable_requirements: &[EditableRequirement],
+        reinstall: &Reinstall,
         index_urls: &IndexUrls,
         cache: &Cache,
         venv: &Virtualenv,
@@ -72,10 +72,29 @@ impl InstallPlan {
 
         // Remove any editable requirements.
         for editable in editable_requirements {
-            if site_packages.remove_editable(editable.raw()).is_some() {
-                debug!("Treating editable requirement as immutable: {editable}");
-            } else {
+            // Check if the package should be reinstalled. A reinstall involves (1) purging any
+            // cached distributions, and (2) marking any installed distributions as extraneous.
+            // For editables, we don't cache installations, so there's nothing to purge; and since
+            // editable installs lack a package name, we first lookup by URL, and then by name.
+            let reinstall = match reinstall {
+                Reinstall::None => false,
+                Reinstall::All => true,
+                Reinstall::Packages(packages) => site_packages
+                    .get_editable(editable.raw())
+                    .is_some_and(|distribution| packages.contains(distribution.name())),
+            };
+
+            if reinstall {
+                if let Some(distribution) = site_packages.remove_editable(editable.raw()) {
+                    reinstalls.push(distribution);
+                }
                 editables.push(editable.clone());
+            } else {
+                if site_packages.remove_editable(editable.raw()).is_some() {
+                    debug!("Treating editable requirement as immutable: {editable}");
+                } else {
+                    editables.push(editable.clone());
+                }
             }
         }
 

@@ -62,7 +62,7 @@ pub(crate) async fn pip_sync(
 pub(crate) async fn sync_requirements(
     requirements: &[Requirement],
     reinstall: &Reinstall,
-    editables: &[EditableRequirement],
+    editable_requirements: &[EditableRequirement],
     link_mode: LinkMode,
     index_urls: IndexUrls,
     no_build: bool,
@@ -92,8 +92,8 @@ pub(crate) async fn sync_requirements(
         extraneous,
     } = InstallPlan::from_requirements(
         requirements,
+        editable_requirements,
         reinstall,
-        editables,
         &index_urls,
         cache,
         &venv,
@@ -108,13 +108,14 @@ pub(crate) async fn sync_requirements(
         && extraneous.is_empty()
         && editables.is_empty()
     {
-        let s = if requirements.len() == 1 { "" } else { "s" };
+        let num_requirements = requirements.len() + editable_requirements.len();
+        let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Audited {} in {}",
-                format!("{} package{}", requirements.len(), s).bold(),
+                format!("{num_requirements} package{s}").bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
