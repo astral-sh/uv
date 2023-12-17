@@ -523,15 +523,29 @@ async fn black_allow_prerelease_if_requested() -> Result<()> {
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=20.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
-        PreReleaseMode::IfRequested,
+        PreReleaseMode::IfNecessary,
         Some(*EXCLUDE_NEWER),
     );
 
-    let err = resolve(manifest, options, &MARKERS_311, &TAGS_311)
-        .await
-        .unwrap_err();
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
+    insta::assert_display_snapshot!(resolution, @r###"
+    appdirs==1.4.4
+        # via black
+    attrs==23.1.0
+        # via black
+    black==19.10b0
+    click==8.1.7
+        # via black
+    pathspec==0.11.2
+        # via black
+    regex==2023.10.3
+        # via black
+    toml==0.10.2
+        # via black
+    typed-ast==1.5.5
+        # via black
+    "###);
 
     Ok(())
 }
@@ -594,19 +608,25 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 
     let manifest = Manifest::simple(vec![
         Requirement::from_str("pylint==2.3.0").unwrap(),
-        Requirement::from_str("isort>=6.0.0").unwrap(),
+        Requirement::from_str("isort>5.13.2").unwrap(),
     ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
-        PreReleaseMode::IfRequested,
+        PreReleaseMode::IfNecessary,
         Some(*EXCLUDE_NEWER),
     );
 
-    let err = resolve(manifest, options, &MARKERS_311, &TAGS_311)
-        .await
-        .unwrap_err();
+    let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(err, @"Because there is no version of isort available matching >=6.0.0 and root depends on isort>=6.0.0, version solving failed.");
+    insta::assert_display_snapshot!(resolution, @r###"
+    astroid==3.0.1
+        # via pylint
+    isort==6.0.0b2
+        # via pylint
+    mccabe==0.7.0
+        # via pylint
+    pylint==2.3.0
+    "###);
 
     Ok(())
 }
@@ -621,7 +641,7 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     ]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
-        PreReleaseMode::IfRequested,
+        PreReleaseMode::IfNecessary,
         Some(*EXCLUDE_NEWER),
     );
 

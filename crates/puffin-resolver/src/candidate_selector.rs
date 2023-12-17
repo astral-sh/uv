@@ -65,18 +65,6 @@ impl From<&[Requirement]> for Preferences {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum AllowPreRelease {
-    /// Allow all pre-release versions for the package.
-    Yes,
-    /// Disallow all pre-release versions for the package.
-    No,
-    /// Allow pre-release versions for the package if there are no matching stable versions.
-    IfNecessary,
-    /// Allow pre-release versions for the package if _all_ versions of the package are pre-release.
-    IfExclusive,
-}
-
 impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
     pub(crate) fn select<'a>(
@@ -95,43 +83,33 @@ impl CandidateSelector {
             }
         }
 
-        // Determine the appropriate prerelease strategy for the current package.
-        let allow_prerelease = match &self.prerelease_strategy {
-            PreReleaseMode::Disallow => AllowPreRelease::No,
-            PreReleaseMode::Allow => AllowPreRelease::Yes,
-            PreReleaseMode::IfRequested => {
-                if range.bounds().any(PubGrubVersion::any_prerelease) {
-                    AllowPreRelease::IfNecessary
-                } else {
-                    AllowPreRelease::IfExclusive
-                }
-            }
-        };
-
         match &self.resolution_strategy {
             ResolutionStrategy::Highest => Self::select_candidate(
                 version_map.iter().rev(),
                 package_name,
                 range,
-                allow_prerelease,
+                self.prerelease_strategy,
             ),
-            ResolutionStrategy::Lowest => {
-                Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
-            }
+            ResolutionStrategy::Lowest => Self::select_candidate(
+                version_map.iter(),
+                package_name,
+                range,
+                self.prerelease_strategy,
+            ),
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
                 if direct_dependencies.contains(package_name) {
                     Self::select_candidate(
                         version_map.iter(),
                         package_name,
                         range,
-                        allow_prerelease,
+                        self.prerelease_strategy,
                     )
                 } else {
                     Self::select_candidate(
                         version_map.iter().rev(),
                         package_name,
                         range,
-                        allow_prerelease,
+                        self.prerelease_strategy,
                     )
                 }
             }
@@ -144,57 +122,42 @@ impl CandidateSelector {
         versions: impl Iterator<Item = (&'a PubGrubVersion, ResolvableFile<'a>)>,
         package_name: &'a PackageName,
         range: &Range<PubGrubVersion>,
-        allow_prerelease: AllowPreRelease,
+        allow_prerelease: PreReleaseMode,
     ) -> Option<Candidate<'a>> {
-        #[derive(Debug)]
-        enum PreReleaseCandidate<'a> {
-            NotNecessary,
-            IfNecessary(&'a PubGrubVersion, ResolvableFile<'a>),
-        }
-
         let mut prerelease = None;
         for (version, file) in versions {
             if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
-                        AllowPreRelease::Yes => {
+                        PreReleaseMode::Allow => {
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
                             return Some(Candidate::new(package_name, version, file));
                         }
-                        AllowPreRelease::IfNecessary | AllowPreRelease::IfExclusive => {
+                        PreReleaseMode::IfNecessary => {
                             // If pre-releases are allowed as a fallback, store the
-                            // first-matching prerelease.
+                            // first-matching prerelease. We'll return it if there are
+                            // no matching stable releases.
                             if prerelease.is_none() {
-                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, file));
+                                prerelease = Some((version, file));
                             }
                         }
-                        AllowPreRelease::No => {
+                        PreReleaseMode::Disallow => {
                             continue;
                         }
                     }
                 }
             } else {
-                // If we have at least one stable release, we shouldn't allow the "if-exclusive"
-                // pre-release strategy, regardless of whether that stable release satisfies the
-                // current range.
-                if allow_prerelease == AllowPreRelease::IfExclusive {
-                    prerelease = Some(PreReleaseCandidate::NotNecessary);
-                }
-
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
                     return Some(Candidate::new(package_name, version, file));
                 }
             }
         }
-        match prerelease {
-            None => None,
-            Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, file)) => {
-                Some(Candidate::new(package_name, version, file))
-            }
-        }
+
+        // If we didn't find a matching stable distribution, return the first-matching prerelease.
+        let (version, file) = prerelease?;
+        Some(Candidate::new(package_name, version, file))
     }
 }
 

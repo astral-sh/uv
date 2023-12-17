@@ -7,8 +7,8 @@ pub enum PreReleaseMode {
     /// Allow all pre-release versions.
     Allow,
 
-    /// Allow pre-release versions for packages with explicit pre-release markers in their version
-    /// requirements, and packages without _any_ stable versions.
+    /// Allow pre-release versions only if no stable version is available given the current
+    /// constraints.
     #[default]
-    IfRequested,
+    IfNecessary,
 }
