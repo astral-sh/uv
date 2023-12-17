@@ -1,4 +1,6 @@
 use anyhow::Result;
+use distribution_types::Metadata;
+use itertools::Itertools;
 use tracing::debug;
 
 use platform_host::Platform;
@@ -21,7 +23,10 @@ pub(crate) fn freeze(cache: &Cache, _printer: Printer) -> Result<ExitStatus> {
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&python)?;
-    for dist in site_packages.distributions() {
+    for dist in site_packages
+        .iter()
+        .sorted_unstable_by(|a, b| a.name().cmp(b.name()))
+    {
         #[allow(clippy::print_stdout)]
         {
             println!("{dist}");

@@ -70,15 +70,10 @@ impl InstallPlan {
         let mut seen =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
-        // TODO(charlie): This is quadratic. We should index the editable requirements by URL.
+        // Remove any editable requirements.
         for editable in editable_requirements {
-            let editable_dist = site_packages
-                .editables()
-                .find(|(_dist, url, _dir_info)| url == &editable.url().raw())
-                .map(|(dist, _url, _dir_info)| dist.clone());
-            if let Some(dist) = editable_dist {
+            if site_packages.remove_editable(editable.raw()).is_some() {
                 debug!("Treating editable requirement as immutable: {editable}");
-                site_packages.remove(dist.name());
             } else {
                 editables.push(editable.clone());
             }
@@ -285,8 +280,10 @@ impl InstallPlan {
             // If Puffin created the virtual environment, then remove all packages, regardless of
             // whether they're considered "seed" packages.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_gourgeist());
-            for (package, dist_info) in site_packages {
-                if seed_packages && matches!(package.as_ref(), "pip" | "setuptools" | "wheel") {
+            for dist_info in site_packages {
+                if seed_packages
+                    && matches!(dist_info.name().as_ref(), "pip" | "setuptools" | "wheel")
+                {
                     debug!("Preserving seed package: {dist_info}");
                     continue;
                 }

@@ -1,60 +1,96 @@
-use std::collections::BTreeMap;
 use std::hash::BuildHasherDefault;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_types::{InstalledDirectUrlDist, InstalledDist, Metadata, VersionOrUrl};
+use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
-use pypi_types::{DirInfo, DirectUrl};
 
+/// An index over the packages installed in an environment.
+///
+/// Packages are indexed by both name and (for editable installs) URL.
 #[derive(Debug)]
 pub struct SitePackages<'a> {
     venv: &'a Virtualenv,
-    index: BTreeMap<PackageName, InstalledDist>,
+    /// The vector of all installed distributions.
+    distributions: Vec<InstalledDist>,
+    /// The installed distributions, keyed by name.
+    by_name: FxHashMap<PackageName, usize>,
+    /// The installed editable distributions, keyed by URL.
+    by_url: FxHashMap<Url, usize>,
 }
 
 impl<'a> SitePackages<'a> {
     /// Build an index of installed packages from the given Python executable.
     pub fn from_executable(venv: &'a Virtualenv) -> Result<SitePackages<'a>> {
-        let mut index = BTreeMap::new();
+        let mut distributions: Vec<InstalledDist> = Vec::new();
+        let mut by_name = FxHashMap::default();
+        let mut by_url = FxHashMap::default();
 
+        // Index all installed packages by name.
         for entry in fs::read_dir(venv.site_packages())? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
-                if let Some(dist_info) =
+                let Some(dist_info) =
                     InstalledDist::try_from_path(&entry.path()).with_context(|| {
                         format!("Failed to read metadata: from {}", entry.path().display())
                     })?
-                {
-                    if let Some(existing) = index.insert(dist_info.name().clone(), dist_info) {
+                else {
+                    continue;
+                };
+
+                let idx = distributions.len();
+
+                // Index the distribution by name.
+                if let Some(existing) = by_name.insert(dist_info.name().clone(), idx) {
+                    let existing = &distributions[existing];
+                    anyhow::bail!(
+                        "Found duplicate package in environment: {} ({} vs. {})",
+                        existing.name(),
+                        existing.path().display(),
+                        entry.path().display()
+                    );
+                }
+
+                // Index the distribution by URL.
+                if let Some(url) = dist_info.editable() {
+                    if let Some(existing) = by_url.insert(url.clone(), idx) {
+                        let existing = &distributions[existing];
                         anyhow::bail!(
-                            "Found duplicate package in environment: {} ({} vs. {})",
+                            "Found duplicate editable in environment: {} ({} vs. {})",
                             existing.name(),
                             existing.path().display(),
                             entry.path().display()
                         );
                     }
                 }
+
+                // Add the distribution to the database.
+                distributions.push(dist_info);
             }
         }
 
-        Ok(Self { venv, index })
+        Ok(Self {
+            venv,
+            distributions,
+            by_name,
+            by_url,
+        })
     }
 
     /// Returns an iterator over the installed distributions.
-    pub fn distributions(&self) -> impl Iterator<Item = &InstalledDist> {
-        self.index.values()
+    pub fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        self.distributions.iter()
     }
 
     /// Returns an iterator over the the installed distributions, represented as requirements.
-    pub fn requirements(&self) -> impl Iterator<Item = pep508_rs::Requirement> + '_ {
-        self.distributions().map(|dist| pep508_rs::Requirement {
+    pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.iter().map(|dist| Requirement {
             name: dist.name().clone(),
             extras: None,
             version_or_url: Some(match dist.version_or_url() {
@@ -69,45 +105,66 @@ impl<'a> SitePackages<'a> {
         })
     }
 
-    /// Returns an iterator over the installed editables.
-    pub fn editables(&self) -> impl Iterator<Item = (&InstalledDist, &Url, &DirInfo)> {
-        self.distributions().filter_map(|dist| {
-            // Editable installs are recorded through this type only
-            match dist {
-                InstalledDist::Url(InstalledDirectUrlDist {
-                    url: DirectUrl::LocalDirectory { url, dir_info },
-                    ..
-                }) if dir_info.editable == Some(true) => Some((dist, url, dir_info)),
-                _ => None,
-            }
-        })
-    }
-
     /// Returns the version of the given package, if it is installed.
     pub fn get(&self, name: &PackageName) -> Option<&InstalledDist> {
-        self.index.get(name)
+        self.by_name.get(name).map(|idx| &self.distributions[*idx])
     }
 
     /// Remove the given package from the index, returning its version if it was installed.
     pub fn remove(&mut self, name: &PackageName) -> Option<InstalledDist> {
-        self.index.remove(name)
+        let idx = self.by_name.get(name)?;
+        Some(self.swap_remove(*idx))
+    }
+
+    /// Returns the editable distribution installed from the given URL, if any.
+    pub fn get_editable(&self, url: &Url) -> Option<&InstalledDist> {
+        self.by_url.get(url).map(|idx| &self.distributions[*idx])
+    }
+
+    /// Remove the editable distribution installed from the given URL, if any.
+    pub fn remove_editable(&mut self, url: &Url) -> Option<InstalledDist> {
+        let idx = self.by_url.get(url)?;
+        Some(self.swap_remove(*idx))
+    }
+
+    /// Remove the distribution at the given index.
+    fn swap_remove(&mut self, idx: usize) -> InstalledDist {
+        // Remove from the existing index.
+        let dist = self.distributions.swap_remove(idx);
+
+        // If the distribution wasn't at the end, rewrite the entries for the moved distribution.
+        if idx < self.distributions.len() {
+            let moved = &self.distributions[idx];
+            if let Some(prev) = self.by_name.get_mut(moved.name()) {
+                *prev = idx;
+            }
+            if let Some(url) = moved.editable() {
+                if let Some(prev) = self.by_url.get_mut(url) {
+                    *prev = idx;
+                }
+            }
+        }
+
+        dist
     }
 
     /// Returns `true` if there are no installed packages.
     pub fn is_empty(&self) -> bool {
-        self.index.is_empty()
+        self.distributions.is_empty()
     }
 
     /// Returns the number of installed packages.
     pub fn len(&self) -> usize {
-        self.index.len()
+        self.distributions.len()
     }
 
     /// Validate the installed packages in the virtual environment.
     pub fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
 
-        for (package, distribution) in &self.index {
+        for (package, index) in &self.by_name {
+            let distribution = &self.distributions[*index];
+
             // Determine the dependencies for the given package.
             let metadata = distribution.metadata()?;
 
@@ -128,7 +185,11 @@ impl<'a> SitePackages<'a> {
                     continue;
                 }
 
-                let Some(installed) = self.index.get(&requirement.name) else {
+                let Some(installed) = self
+                    .by_name
+                    .get(&requirement.name)
+                    .map(|idx| &self.distributions[*idx])
+                else {
                     diagnostics.push(Diagnostic::MissingDependency {
                         package: package.clone(),
                         requirement: requirement.clone(),
@@ -171,7 +232,11 @@ impl<'a> SitePackages<'a> {
                 continue;
             }
 
-            let Some(distribution) = self.index.get(&requirement.name) else {
+            let Some(distribution) = self
+                .by_name
+                .get(&requirement.name)
+                .map(|idx| &self.distributions[*idx])
+            else {
                 // The package isn't installed.
                 return Ok(false);
             };
@@ -215,11 +280,11 @@ impl<'a> SitePackages<'a> {
 }
 
 impl IntoIterator for SitePackages<'_> {
-    type Item = (PackageName, InstalledDist);
-    type IntoIter = std::collections::btree_map::IntoIter<PackageName, InstalledDist>;
+    type Item = InstalledDist;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.index.into_iter()
+        self.distributions.into_iter()
     }
 }
 

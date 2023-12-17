@@ -78,11 +78,7 @@ pub(crate) async fn pip_uninstall(
 
         // Identify all editables that are installed.
         for editable in &editables {
-            if let Some(distribution) = site_packages
-                .editables()
-                .find(|(_dist, url, _dir_info)| url == editable)
-                .map(|(dist, _url, _dir_info)| dist)
-            {
+            if let Some(distribution) = site_packages.get_editable(editable) {
                 distributions.push(distribution);
             } else {
                 writeln!(
