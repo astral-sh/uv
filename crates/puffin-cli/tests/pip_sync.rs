@@ -1903,9 +1903,7 @@ fn duplicate_package_overlap() -> Result<()> {
 
         ----- stderr -----
         error: Failed to determine installation plan
-          Caused by: Detected duplicate package in requirements:
-            markupsafe ==2.1.2
-            markupsafe ==2.1.3
+          Caused by: Detected duplicate package in requirements: markupsafe
         "###);
     });
 
@@ -2127,8 +2125,8 @@ fn sync_editable() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 2 packages in [TIME]
         Built 2 editables in [TIME]
+        Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
         Installed 4 packages in [TIME]
          + boltons==23.1.1
@@ -2221,6 +2219,167 @@ fn sync_editable() -> Result<()> {
 
         ----- stderr -----
         Audited 4 packages in [TIME]
+        "###);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn sync_editable_and_registry() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Install the registry-based version of Black.
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        black
+        "
+    })?;
+
+    let filter_path = requirements_txt.display().to_string();
+    let filters = INSTA_FILTERS
+        .iter()
+        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .copied()
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + black==24.1a1
+        warning: The package `black` requires `click >=8.0.0`, but it's not installed.
+        warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
+        warning: The package `black` requires `packaging >=22.0`, but it's not installed.
+        warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
+        warning: The package `black` requires `platformdirs >=2`, but it's not installed.
+        warning: The package `black` requires `aiohttp >=3.7.4 ; sys_platform != 'win32' or (implementation_name != 'pypy' and extra == 'd')`, but it's not installed.
+        "###);
+    });
+
+    // Install the editable version of Black. This should remove the registry-based version.
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        -e ../../scripts/editable-installs/black_editable
+        "
+    })?;
+
+    let filter_path = requirements_txt.display().to_string();
+    let filters = INSTA_FILTERS
+        .iter()
+        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .copied()
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 1 editable in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - black==24.1a1
+         + black @ ../../scripts/editable-installs/black_editable
+        "###);
+    });
+
+    // Re-install the registry-based version of Black. This should be a no-op, since we have a
+    // version of Black installed (the editable version) that satisfies the requirements.
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        black
+        "
+    })?;
+
+    let filter_path = requirements_txt.display().to_string();
+    let filters = INSTA_FILTERS
+        .iter()
+        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .copied()
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
+    });
+
+    // Re-install Black at a specific version. This should replace the editable version.
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        black==23.10.0
+        "
+    })?;
+
+    let filter_path = requirements_txt.display().to_string();
+    let filters = INSTA_FILTERS
+        .iter()
+        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .copied()
+        .collect::<Vec<_>>();
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - black==0.1.0
+         + black==23.10.0
+        warning: The package `black` requires `click >=8.0.0`, but it's not installed.
+        warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
+        warning: The package `black` requires `packaging >=22.0`, but it's not installed.
+        warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
+        warning: The package `black` requires `platformdirs >=2`, but it's not installed.
         "###);
     });
 

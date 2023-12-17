@@ -550,3 +550,117 @@ fn install_editable() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_editable_and_registry() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Install the registry-based version of Black.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("black")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 13 packages in [TIME]
+        Downloaded 13 packages in [TIME]
+        Installed 13 packages in [TIME]
+         + aiohttp==3.9.1
+         + aiosignal==1.3.1
+         + attrs==23.1.0
+         + black==23.12.0
+         + click==8.1.7
+         + frozenlist==1.4.1
+         + idna==3.6
+         + multidict==6.0.4
+         + mypy-extensions==1.0.0
+         + packaging==23.2
+         + pathspec==0.12.1
+         + platformdirs==4.1.0
+         + yarl==1.9.4
+        "###);
+    });
+
+    // Install the editable version of Black. This should remove the registry-based version.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/black_editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 1 editable in [TIME]
+        Resolved 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - black==23.12.0
+         + black @ ../../scripts/editable-installs/black_editable
+        "###);
+    });
+
+    // Re-install the registry-based version of Black. This should be a no-op, since we have a
+    // version of Black installed (the editable version) that satisfies the requirements.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("black")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
+    });
+
+    // Re-install Black at a specific version. This should replace the editable version.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("black==23.10.0")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 6 packages in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - black==0.1.0
+         + black==23.10.0
+        "###);
+    });
+
+    Ok(())
+}
