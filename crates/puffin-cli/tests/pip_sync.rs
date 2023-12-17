@@ -6,7 +6,6 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use assert_fs::TempDir;
 use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
@@ -2092,8 +2091,8 @@ fn reinstall_package() -> Result<()> {
 
 #[test]
 fn install_editable() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let cache_dir = TempDir::new()?;
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
@@ -2106,6 +2105,7 @@ fn install_editable() -> Result<()> {
         "
     })?;
 
+    // Install the editable packages.
     let filter_path = requirements_txt.display().to_string();
     let filters = INSTA_FILTERS
         .iter()
@@ -2113,7 +2113,7 @@ fn install_editable() -> Result<()> {
         .copied()
         .collect::<Vec<_>>();
     insta::with_settings!({
-        filters => filters
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")
@@ -2138,7 +2138,33 @@ fn install_editable() -> Result<()> {
         "###);
     });
 
-    // Make sure we have the right base case
+    // Reinstall the editable packages.
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg(requirements_txt.path())
+            .arg("--reinstall-package")
+            .arg("poetry-editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 1 editable in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - poetry-editable==0.1.0
+         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+        "###);
+    });
+
+    // Make sure we have the right base case.
     let python_source_file =
         "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
     let python_version_1 = indoc! {r"
@@ -2155,7 +2181,7 @@ fn install_editable() -> Result<()> {
    "#};
     check_command(&venv, command, &temp_dir);
 
-    // Edit the sources
+    // Edit the sources.
     let python_version_2 = indoc! {r"
         from .maturin_editable import *
         version = 2
@@ -2171,7 +2197,7 @@ fn install_editable() -> Result<()> {
    "#};
     check_command(&venv, command, &temp_dir);
 
-    // Don't create a git diff
+    // Don't create a git diff.
     fs_err::write(python_source_file, python_version_1)?;
 
     let filters = INSTA_FILTERS
@@ -2194,7 +2220,7 @@ fn install_editable() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Audited 2 packages in [TIME]
+        Audited 4 packages in [TIME]
         "###);
     });
 
