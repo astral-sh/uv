@@ -16,7 +16,7 @@ use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
-use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall};
+use puffin_installer::{Downloader, EditableMode, InstallPlan, Installer, Reinstall};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, BuildKind, OnceMap};
@@ -147,6 +147,7 @@ impl BuildContext for BuildDispatch {
                 self.cache(),
                 venv,
                 &tags,
+                EditableMode::default(),
             )?;
 
             // Resolve any registry-based requirements.

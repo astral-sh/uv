@@ -246,6 +246,10 @@ struct PipInstallArgs {
     #[clap(short, long, group = "sources")]
     requirement: Vec<PathBuf>,
 
+    /// Install the editable package based on the provided local file path.
+    #[clap(short, long, group = "sources")]
+    editable: Vec<String>,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -480,6 +484,7 @@ async fn inner() -> Result<ExitStatus> {
                 .package
                 .into_iter()
                 .map(RequirementsSource::Package)
+                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
             let constraints = args

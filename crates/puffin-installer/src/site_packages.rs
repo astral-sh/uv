@@ -10,6 +10,7 @@ use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
+use requirements_txt::EditableRequirement;
 
 /// An index over the packages installed in an environment.
 ///
@@ -221,12 +222,29 @@ impl<'a> SitePackages<'a> {
     pub fn satisfies(
         &self,
         requirements: &[Requirement],
+        editables: &[EditableRequirement],
         constraints: &[Requirement],
     ) -> Result<bool> {
         let mut requirements = requirements.to_vec();
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
+        // Verify that all editable requirements are met.
+        for requirement in editables {
+            let Some(distribution) = self
+                .by_url
+                .get(requirement.raw())
+                .map(|idx| &self.distributions[*idx])
+            else {
+                // The package isn't installed.
+                return Ok(false);
+            };
+
+            // Recurse into the dependencies.
+            requirements.extend(distribution.metadata()?.requires_dist);
+        }
+
+        // Verify that all non-editable requirements are met.
         while let Some(requirement) = requirements.pop() {
             if !requirement.evaluate_markers(self.venv.interpreter().markers(), &[]) {
                 continue;

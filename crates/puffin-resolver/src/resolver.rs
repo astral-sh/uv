@@ -19,8 +19,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, LocalEditable, Metadata, PackageId, SourceDist, VersionOrUrl,
 };
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
@@ -157,7 +156,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     markers: &'a MarkerEnvironment,
     selector: CandidateSelector,
     index: Arc<Index>,
-    editables: FxHashMap<DistributionId, (LocalEditable, Metadata21)>,
+    editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
 }
@@ -204,15 +203,17 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         // Determine all the editable requirements.
         let mut editables = FxHashMap::default();
         for (editable_requirement, metadata) in &manifest.editables {
-            let dist = Dist::from_url(metadata.name.clone(), editable_requirement.url().clone())
+            // Convert the editable requirement into a distribution.
+            let dist = Dist::from_editable(metadata.name.clone(), editable_requirement.clone())
                 .expect("This is a valid distribution");
+
             // Mock editable responses.
             index.distributions.register(&dist.package_id());
             index
                 .distributions
                 .done(dist.package_id(), metadata.clone());
             editables.insert(
-                dist.distribution_id(),
+                dist.name().clone(),
                 (editable_requirement.clone(), metadata.clone()),
             );
         }

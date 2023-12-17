@@ -47,6 +47,7 @@ use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl};
+use requirements_txt::EditableRequirement;
 
 pub use crate::any::*;
 pub use crate::cached::*;
@@ -240,6 +241,28 @@ impl Dist {
                 name,
                 url,
             })))
+        }
+    }
+
+    /// Create a [`Dist`] for a local editable distribution.
+    pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
+        match editable.requirement {
+            EditableRequirement::Path { url, path } => {
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    url,
+                    path,
+                    editable: true,
+                })))
+            }
+            EditableRequirement::Url(url) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                name,
+                path: url
+                    .to_file_path()
+                    .map_err(|()| Error::UrlFilename(url.to_url()))?,
+                url,
+                editable: true,
+            }))),
         }
     }
 

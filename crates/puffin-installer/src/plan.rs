@@ -46,6 +46,7 @@ pub struct InstallPlan {
 impl InstallPlan {
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_requirements(
         requirements: &[Requirement],
         editable_requirements: &[EditableRequirement],
@@ -54,6 +55,7 @@ impl InstallPlan {
         cache: &Cache,
         venv: &Virtualenv,
         tags: &Tags,
+        editable_mode: EditableMode,
     ) -> Result<Self> {
         // Index all the already-installed packages in site-packages.
         let mut site_packages =
@@ -90,8 +92,17 @@ impl InstallPlan {
                 }
                 editables.push(editable.clone());
             } else {
-                if site_packages.remove_editable(editable.raw()).is_some() {
-                    debug!("Treating editable requirement as immutable: {editable}");
+                if let Some(dist) = site_packages.remove_editable(editable.raw()) {
+                    match editable_mode {
+                        EditableMode::Immutable => {
+                            debug!("Treating editable requirement as immutable: {editable}");
+                        }
+                        EditableMode::Mutable => {
+                            debug!("Treating editable requirement as mutable: {editable}");
+                            reinstalls.push(dist);
+                            editables.push(editable.clone());
+                        }
+                    }
                 } else {
                     editables.push(editable.clone());
                 }
@@ -350,4 +361,14 @@ impl Reinstall {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub enum EditableMode {
+    /// Assume that editables are immutable, such that they're left untouched if already present
+    /// in the environment.
+    #[default]
+    Immutable,
+    /// Assume that editables are mutable, such that they're always reinstalled.
+    Mutable,
 }
