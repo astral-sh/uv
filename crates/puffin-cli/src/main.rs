@@ -236,7 +236,7 @@ struct PipSyncArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-#[command(group = clap::ArgGroup::new("sources").required(true))]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 struct PipInstallArgs {
     /// Install all listed packages.
     #[clap(group = "sources")]
@@ -335,7 +335,7 @@ struct PipInstallArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-#[command(group = clap::ArgGroup::new("sources").required(true))]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 struct PipUninstallArgs {
     /// Uninstall all listed packages.
     #[clap(group = "sources")]
@@ -344,6 +344,10 @@ struct PipUninstallArgs {
     /// Uninstall all packages listed in the given requirements files.
     #[clap(short, long, group = "sources")]
     requirement: Vec<PathBuf>,
+
+    /// Uninstall the editable package based on the provided local file path.
+    #[clap(short, long, group = "sources")]
+    editable: Vec<String>,
 }
 
 #[derive(Args)]
@@ -475,7 +479,7 @@ async fn inner() -> Result<ExitStatus> {
             let requirements = args
                 .package
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::Package)
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
             let constraints = args
@@ -519,7 +523,8 @@ async fn inner() -> Result<ExitStatus> {
             let sources = args
                 .package
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::Package)
+                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
                 .chain(args.requirement.into_iter().map(RequirementsSource::from))
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await

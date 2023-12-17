@@ -22,9 +22,7 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    // TODO(konstin): Uninstall editable packages.
-    let (requirements, _editables) =
-        RequirementsSpecification::requirements_and_editables(sources)?;
+    let (requirements, editables) = RequirementsSpecification::requirements_and_editables(sources)?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -37,7 +35,7 @@ pub(crate) async fn pip_uninstall(
     // Index the current `site-packages` directory.
     let site_packages = puffin_installer::SitePackages::from_executable(&venv)?;
 
-    // Sort and deduplicate the requirements.
+    // Sort and deduplicate the packages, which are keyed by name.
     let packages = {
         let mut packages = requirements
             .into_iter()
@@ -48,24 +46,60 @@ pub(crate) async fn pip_uninstall(
         packages
     };
 
+    // Sort and deduplicate the editable packages, which are keyed by URL rather than package name.
+    let editables = {
+        let mut editables = editables
+            .iter()
+            .map(requirements_txt::EditableRequirement::raw)
+            .collect::<Vec<_>>();
+        editables.sort_unstable();
+        editables.dedup();
+        editables
+    };
+
     // Map to the local distributions.
-    let distributions = packages
-        .iter()
-        .filter_map(|package| {
+    let distributions = {
+        let mut distributions = Vec::with_capacity(packages.len() + editables.len());
+
+        // Identify all packages that are installed.
+        for package in &packages {
             if let Some(distribution) = site_packages.get(package) {
-                Some(distribution)
+                distributions.push(distribution);
             } else {
-                let _ = writeln!(
+                writeln!(
                     printer,
                     "{}{} Skipping {} as it is not installed.",
                     "warning".yellow().bold(),
                     ":".bold(),
                     package.as_ref().bold()
-                );
-                None
-            }
-        })
-        .collect::<Vec<_>>();
+                )?;
+            };
+        }
+
+        // Identify all editables that are installed.
+        for editable in &editables {
+            if let Some(distribution) = site_packages
+                .editables()
+                .find(|(_dist, url, _dir_info)| url == editable)
+                .map(|(dist, _url, _dir_info)| dist)
+            {
+                distributions.push(distribution);
+            } else {
+                writeln!(
+                    printer,
+                    "{}{} Skipping {} as it is not installed.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                    editable.as_ref().bold()
+                )?;
+            };
+        }
+
+        // Deduplicate, since a package could be listed both by name and editable URL.
+        distributions.sort_unstable_by_key(|dist| dist.path());
+        distributions.dedup_by_key(|dist| dist.path());
+        distributions
+    };
 
     if distributions.is_empty() {
         writeln!(

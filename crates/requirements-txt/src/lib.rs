@@ -92,6 +92,19 @@ impl EditableRequirement {
     }
 }
 
+impl FromStr for EditableRequirement {
+    type Err = RequirementsTxtParserError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let editable_requirement = if let Ok(url) = VerbatimUrl::from_str(s) {
+            ParsedEditableRequirement::Url(url)
+        } else {
+            ParsedEditableRequirement::Path(s.to_string())
+        };
+        editable_requirement.with_working_dir(".")
+    }
+}
+
 /// Relative paths aren't resolved with the current dir yet
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParsedEditableRequirement {
@@ -508,6 +521,41 @@ pub enum RequirementsTxtParserError {
     },
 }
 
+impl Display for RequirementsTxtParserError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RequirementsTxtParserError::IO(err) => err.fmt(f),
+            RequirementsTxtParserError::InvalidPath(path) => {
+                write!(f, "Invalid path: {}", path.display())
+            }
+            RequirementsTxtParserError::Parser { message, location } => {
+                write!(f, "{message} at position {location}")
+            }
+            RequirementsTxtParserError::Pep508 { start, end, .. } => {
+                write!(f, "Couldn't parse requirement in position {start} to {end}")
+            }
+            RequirementsTxtParserError::Subfile { start, end, .. } => {
+                write!(
+                    f,
+                    "Error parsing file included at position {start} to {end}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for RequirementsTxtParserError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match &self {
+            RequirementsTxtParserError::IO(err) => err.source(),
+            RequirementsTxtParserError::InvalidPath(_) => None,
+            RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
+            RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
+            RequirementsTxtParserError::Parser { .. } => None,
+        }
+    }
+}
+
 impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.error {
@@ -553,13 +601,7 @@ impl Display for RequirementsTxtFileError {
 
 impl std::error::Error for RequirementsTxtFileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.error {
-            RequirementsTxtParserError::IO(err) => err.source(),
-            RequirementsTxtParserError::InvalidPath(_) => None,
-            RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
-            RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
-            RequirementsTxtParserError::Parser { .. } => None,
-        }
+        self.error.source()
     }
 }
 
