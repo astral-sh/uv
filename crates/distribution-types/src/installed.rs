@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
+use url::Url;
 
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
@@ -139,5 +140,16 @@ impl InstalledDist {
         let contents = fs::read(&path)?;
         Metadata21::parse(&contents)
             .with_context(|| format!("Failed to parse METADATA file at: {}", path.display()))
+    }
+
+    /// Return the [`Url`] of the distribution, if it is editable.
+    pub fn editable(&self) -> Option<&Url> {
+        match self {
+            Self::Url(InstalledDirectUrlDist {
+                url: DirectUrl::LocalDirectory { url, dir_info },
+                ..
+            }) if dir_info.editable == Some(true) => Some(url),
+            _ => None,
+        }
     }
 }
