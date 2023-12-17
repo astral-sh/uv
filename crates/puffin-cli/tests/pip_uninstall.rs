@@ -22,9 +22,9 @@ fn no_arguments() -> Result<()> {
 
     ----- stderr -----
     error: the following required arguments were not provided:
-      <PACKAGE|--requirement <REQUIREMENT>>
+      <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
-    Usage: puffin pip-uninstall <PACKAGE|--requirement <REQUIREMENT>>
+    Usage: puffin pip-uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
     For more information, try '--help'.
     "###);
@@ -277,6 +277,200 @@ fn uninstall() -> Result<()> {
         .arg("-c")
         .arg("import markupsafe")
         .current_dir(&temp_dir)
+        .assert()
+        .failure();
+
+    Ok(())
+}
+
+#[test]
+fn uninstall_editable_by_name() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-sync")
+        .arg(requirements_txt.path())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .assert()
+        .success();
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import poetry_editable")
+        .assert()
+        .success();
+
+    // Uninstall the editable by name.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-uninstall")
+            .arg("poetry-editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            , @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Uninstalled 1 package in [TIME]
+         - poetry-editable==0.1.0
+        "###);
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import poetry_editable")
+        .assert()
+        .failure();
+
+    Ok(())
+}
+
+#[test]
+fn uninstall_editable_by_path() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-sync")
+        .arg(requirements_txt.path())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .assert()
+        .success();
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import poetry_editable")
+        .assert()
+        .success();
+
+    // Uninstall the editable by path.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-uninstall")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/poetry_editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Uninstalled 1 package in [TIME]
+         - poetry-editable==0.1.0
+        "###);
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import poetry_editable")
+        .assert()
+        .failure();
+
+    Ok(())
+}
+
+#[test]
+fn uninstall_duplicate_editable() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .assert()
+        .success();
+    venv.assert(predicates::path::is_dir());
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-sync")
+        .arg(requirements_txt.path())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .assert()
+        .success();
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import poetry_editable")
+        .assert()
+        .success();
+
+    // Uninstall the editable by both path and name.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-uninstall")
+            .arg("poetry-editable")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/poetry_editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Uninstalled 1 package in [TIME]
+         - poetry-editable==0.1.0
+        "###);
+    });
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import poetry_editable")
         .assert()
         .failure();
 

@@ -13,18 +13,14 @@ use requirements_txt::{EditableRequirement, RequirementsTxt};
 
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {
-    /// A dependency was provided on the command line (e.g., `pip install flask`).
-    Name(String),
+    /// A package was provided on the command line (e.g., `pip install flask`).
+    Package(String),
+    /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
+    Editable(String),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
     RequirementsTxt(PathBuf),
     /// Dependencies were provided via a `pyproject.toml` file (e.g., `pip-compile pyproject.toml`).
     PyprojectToml(PathBuf),
-}
-
-impl From<String> for RequirementsSource {
-    fn from(name: String) -> Self {
-        Self::Name(name)
-    }
 }
 
 impl From<PathBuf> for RequirementsSource {
@@ -79,7 +75,7 @@ impl RequirementsSpecification {
         extras: &ExtrasSpecification,
     ) -> Result<Self> {
         Ok(match source {
-            RequirementsSource::Name(name) => {
+            RequirementsSource::Package(name) => {
                 let requirement = Requirement::from_str(name)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
@@ -88,6 +84,18 @@ impl RequirementsSpecification {
                     constraints: vec![],
                     overrides: vec![],
                     editables: vec![],
+                    extras: FxHashSet::default(),
+                }
+            }
+            RequirementsSource::Editable(name) => {
+                let requirement = EditableRequirement::from_str(name)
+                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                Self {
+                    project: None,
+                    requirements: vec![],
+                    constraints: vec![],
+                    overrides: vec![],
+                    editables: vec![requirement],
                     extras: FxHashSet::default(),
                 }
             }
