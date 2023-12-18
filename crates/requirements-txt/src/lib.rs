@@ -71,7 +71,7 @@ enum RequirementsTxtStatement {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum EditableRequirement {
     Path { path: PathBuf, url: VerbatimUrl },
-    Url(VerbatimUrl),
+    Url { path: PathBuf, url: VerbatimUrl },
 }
 
 impl EditableRequirement {
@@ -79,7 +79,7 @@ impl EditableRequirement {
     pub fn url(&self) -> &VerbatimUrl {
         match self {
             EditableRequirement::Path { url, .. } => url,
-            EditableRequirement::Url(url) => url,
+            EditableRequirement::Url { url, .. } => url,
         }
     }
 
@@ -87,7 +87,15 @@ impl EditableRequirement {
     pub fn raw(&self) -> &Url {
         match self {
             EditableRequirement::Path { url, .. } => url.raw(),
-            EditableRequirement::Url(url) => url.raw(),
+            EditableRequirement::Url { url, .. } => url.raw(),
+        }
+    }
+
+    /// Return the resolved path to the editable.
+    pub fn path(&self) -> &Path {
+        match self {
+            EditableRequirement::Path { path, .. } => path,
+            EditableRequirement::Url { path, .. } => path,
         }
     }
 }
@@ -136,8 +144,20 @@ impl ParsedEditableRequirement {
                     }
                 }
             }
-            // TODO(konstin): Add support for file URLs.
-            ParsedEditableRequirement::Url(url) => EditableRequirement::Url(url),
+            ParsedEditableRequirement::Url(url) => {
+                // Require, e.g., `file:///home/ferris/project/scripts/...`.
+                if url.scheme() != "file" {
+                    return Err(RequirementsTxtParserError::UnsupportedUrl(url.clone()));
+                }
+                EditableRequirement::Url {
+                    path: fs::canonicalize(
+                        url.to_file_path().map_err(|()| {
+                            RequirementsTxtParserError::UnsupportedUrl(url.clone())
+                        })?,
+                    )?,
+                    url,
+                }
+            }
         })
     }
 }
@@ -155,7 +175,7 @@ impl Display for EditableRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             EditableRequirement::Path { url, .. } => url.fmt(f),
-            EditableRequirement::Url(url) => url.fmt(f),
+            EditableRequirement::Url { url, .. } => url.fmt(f),
         }
     }
 }
@@ -505,6 +525,7 @@ pub struct RequirementsTxtFileError {
 pub enum RequirementsTxtParserError {
     IO(io::Error),
     InvalidPath(PathBuf),
+    UnsupportedUrl(VerbatimUrl),
     Parser {
         message: String,
         location: usize,
@@ -528,6 +549,9 @@ impl Display for RequirementsTxtParserError {
             RequirementsTxtParserError::InvalidPath(path) => {
                 write!(f, "Invalid path: {}", path.display())
             }
+            RequirementsTxtParserError::UnsupportedUrl(url) => {
+                write!(f, "Unsupported URL (expected a `file://` scheme): {url}")
+            }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(f, "{message} at position {location}")
             }
@@ -549,6 +573,7 @@ impl std::error::Error for RequirementsTxtParserError {
         match &self {
             RequirementsTxtParserError::IO(err) => err.source(),
             RequirementsTxtParserError::InvalidPath(_) => None,
+            RequirementsTxtParserError::UnsupportedUrl(_) => None,
             RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
             RequirementsTxtParserError::Parser { .. } => None,
@@ -566,6 +591,14 @@ impl Display for RequirementsTxtFileError {
                     "Invalid path in {}: {}",
                     self.file.display(),
                     path.display()
+                )
+            }
+            RequirementsTxtParserError::UnsupportedUrl(url) => {
+                write!(
+                    f,
+                    "Unsupported URL (expected a `file://` scheme) in {}: {}",
+                    self.file.display(),
+                    url
                 )
             }
             RequirementsTxtParserError::Parser { message, location } => {
@@ -680,7 +713,7 @@ mod test {
     #[test]
     fn invalid_include_missing_file() {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let basic = working_dir.join("invalid-include");
+        let basic = working_dir.join("invalid-include.txt");
         let missing = working_dir.join("missing.txt");
         let err = RequirementsTxt::parse(&basic, &working_dir).unwrap_err();
         let errors = anyhow::Error::new(err)
@@ -705,7 +738,7 @@ mod test {
     #[test]
     fn invalid_requirement() {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let basic = working_dir.join("invalid-requirement");
+        let basic = working_dir.join("invalid-requirement.txt");
         let err = RequirementsTxt::parse(&basic, &working_dir).unwrap_err();
         let errors = anyhow::Error::new(err)
             .chain()
@@ -731,25 +764,16 @@ mod test {
     }
 
     #[test]
-    fn invalid_editable() {
+    fn unsupported_editable() {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let basic = working_dir.join("invalid-requirement");
-        let err = RequirementsTxt::parse(&basic, &working_dir).unwrap_err();
+        let basic = working_dir.join("unsupported-editable.txt");
+        let err = RequirementsTxt::parse(basic, &working_dir).unwrap_err();
         let errors = anyhow::Error::new(err)
             .chain()
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         let expected = &[
-            format!(
-                "Couldn't parse requirement in {} position 0 to 15",
-                basic.display()
-            ),
-            indoc! {"
-                Expected an alphanumeric character starting the extra name, found 'ö'
-                numpy[ö]==1.29
-                      ^"
-            }
-            .to_string(),
+            "Unsupported URL (expected a `file://` scheme) in ./test-data/requirements-txt/unsupported-editable.txt: http://localhost:8080".to_string()
         ];
         assert_eq!(errors, expected);
     }

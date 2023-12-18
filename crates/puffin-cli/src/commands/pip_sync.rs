@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use colored::Colorize;
 use fs_err as fs;
 use itertools::Itertools;
@@ -389,12 +389,13 @@ async fn resolve_editables(
             .iter()
             .map(|editable| match editable {
                 EditableRequirement::Path { path, .. } => Ok(LocalEditable {
-                    requirement: editable.clone(),
                     path: path.clone(),
+                    requirement: editable.clone(),
                 }),
-                EditableRequirement::Url(_) => {
-                    bail!("Editable installs for URLs are not yet supported");
-                }
+                EditableRequirement::Url { path, .. } => Ok(LocalEditable {
+                    path: path.clone(),
+                    requirement: editable.clone(),
+                }),
             })
             .collect::<Result<_>>()?;
 
