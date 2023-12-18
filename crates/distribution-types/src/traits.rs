@@ -1,4 +1,8 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
+
+use pep508_rs::VerbatimUrl;
 use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 
@@ -57,7 +61,32 @@ pub trait Identifier {
     fn resource_id(&self) -> ResourceId;
 }
 
-// Implement `Display` for all known types that implement `DistributionIdentifier`.
+pub trait Verbatim {
+    /// Return the verbatim representation of the distribution.
+    fn verbatim(&self) -> Cow<'_, str>;
+}
+
+impl Verbatim for VerbatimUrl {
+    fn verbatim(&self) -> Cow<'_, str> {
+        if let Some(given) = self.given() {
+            Cow::Borrowed(given)
+        } else {
+            Cow::Owned(self.to_string())
+        }
+    }
+}
+
+impl<T: Metadata> Verbatim for T {
+    fn verbatim(&self) -> Cow<'_, str> {
+        Cow::Owned(format!(
+            "{}{}",
+            self.name(),
+            self.version_or_url().verbatim()
+        ))
+    }
+}
+
+// Implement `Display` for all known types that implement `Metadata`.
 impl std::fmt::Display for AnyDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())

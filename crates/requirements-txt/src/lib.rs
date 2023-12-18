@@ -83,7 +83,7 @@ impl EditableRequirement {
         }
     }
 
-    /// Return the underlying [`Url`].
+    /// Return the underlying [`Url`] of the editable.
     pub fn raw(&self) -> &Url {
         match self {
             EditableRequirement::Path { url, .. } => url.raw(),
@@ -773,7 +773,7 @@ mod test {
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         let expected = &[
-            "Unsupported URL (expected a `file://` scheme) in ./test-data/requirements-txt/unsupported-editable.txt: http://localhost:8080".to_string()
+            "Unsupported URL (expected a `file://` scheme) in ./test-data/requirements-txt/unsupported-editable.txt: http://localhost:8080/".to_string()
         ];
         assert_eq!(errors, expected);
     }

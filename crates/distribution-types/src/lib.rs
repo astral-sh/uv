@@ -36,6 +36,7 @@
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 //!
 //! TODO(konstin): Track all kinds from [`Dist`].
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -74,6 +75,15 @@ pub enum VersionOrUrl<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
     Url(&'a VerbatimUrl),
+}
+
+impl Verbatim for VersionOrUrl<'_> {
+    fn verbatim(&self) -> Cow<'_, str> {
+        match self {
+            VersionOrUrl::Version(version) => Cow::Owned(format!("=={version}")),
+            VersionOrUrl::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
+        }
+    }
 }
 
 impl std::fmt::Display for VersionOrUrl<'_> {

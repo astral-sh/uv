@@ -37,6 +37,11 @@ impl VerbatimUrl {
         })
     }
 
+    /// Return the original string as given by the user, if available.
+    pub fn given(&self) -> Option<&str> {
+        self.given.as_deref()
+    }
+
     /// Return the underlying [`Url`].
     pub fn raw(&self) -> &Url {
         &self.url
@@ -66,11 +71,7 @@ impl std::str::FromStr for VerbatimUrl {
 
 impl std::fmt::Display for VerbatimUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(given) = &self.given {
-            given.fmt(f)
-        } else {
-            self.url.fmt(f)
-        }
+        self.url.fmt(f)
     }
 }
 

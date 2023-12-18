@@ -432,9 +432,16 @@ fn install_editable() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    let current_dir = std::env::current_dir()?
+        .join("..")
+        .join("..")
+        .canonicalize()?;
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((current_dir.to_str().unwrap(), "[CURRENT_DIR]"));
+
     // Install the editable package.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -454,13 +461,13 @@ fn install_editable() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 2 packages in [TIME]
          + numpy==1.26.2
-         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable/
         "###);
     });
 
     // Install it again (no-op).
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -481,7 +488,7 @@ fn install_editable() -> Result<()> {
 
     // Add another, non-editable dependency.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -514,14 +521,14 @@ fn install_editable() -> Result<()> {
          + pathspec==0.12.1
          + platformdirs==4.1.0
          - poetry-editable==0.1.0
-         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable/
          + yarl==1.9.4
         "###);
     });
 
     // Add another, editable dependency.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -542,9 +549,9 @@ fn install_editable() -> Result<()> {
         Built 2 editables in [TIME]
         Resolved 16 packages in [TIME]
         Installed 2 packages in [TIME]
-         + maturin-editable @ ../../scripts/editable-installs/maturin_editable
+         + maturin-editable @ file://[CURRENT_DIR]/scripts/editable-installs/maturin_editable/
          - poetry-editable==0.1.0
-         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable/
         "###);
     });
 
@@ -557,9 +564,16 @@ fn install_editable_and_registry() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    let current_dir = std::env::current_dir()?
+        .join("..")
+        .join("..")
+        .canonicalize()?;
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((current_dir.to_str().unwrap(), "[CURRENT_DIR]"));
+
     // Install the registry-based version of Black.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -594,7 +608,7 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Install the editable version of Black. This should remove the registry-based version.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -613,14 +627,14 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==23.12.0
-         + black @ ../../scripts/editable-installs/black_editable
+         + black @ file://[CURRENT_DIR]/scripts/editable-installs/black_editable/
         "###);
     });
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -640,7 +654,7 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Re-install Black at a specific version. This should replace the editable version.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")

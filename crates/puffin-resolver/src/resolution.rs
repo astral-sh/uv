@@ -10,7 +10,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{Dist, LocalEditable, Metadata, PackageId};
+use distribution_types::{Dist, LocalEditable, Metadata, PackageId, Verbatim};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -212,9 +212,9 @@ impl std::fmt::Display for ResolutionGraph {
         // Print out the dependency graph.
         for (index, package) in nodes {
             if let Some((editable, _)) = self.editables.get(package.name()) {
-                writeln!(f, "-e {editable}")?;
+                writeln!(f, "-e {}", editable.verbatim())?;
             } else {
-                writeln!(f, "{package}")?;
+                writeln!(f, "{}", package.verbatim())?;
             }
 
             let mut edges = self
