@@ -1,8 +1,9 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use assert_fs::TempDir;
@@ -2599,4 +2600,103 @@ fn compile_editable() -> Result<()> {
     });
 
     Ok(())
+}
+
+#[test]
+fn cache_errors_are_non_fatal() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_in = temp_dir.child("requirements.in");
+    // No git dep, git has its own locking strategy
+    requirements_in.write_str(indoc! {r"
+        # pypi wheel
+        pandas
+        # url wheel
+        flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
+        # url source dist
+        werkzeug @ https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz
+    "
+    })?;
+
+    // Pick a file from each kind of cache
+    let interpreter_cache = cache_dir
+        .path()
+        .join("interpreter-v0")
+        .read_dir()?
+        .next()
+        .context("Expected a python interpreter cache file")??
+        .path();
+    let cache_files = [
+        PathBuf::from("simple-v0/pypi/numpy.msgpack"),
+        PathBuf::from(
+            "wheels-v0/pypi/python-dateutil/python_dateutil-2.8.2-py2.py3-none-any.msgpack",
+        ),
+        PathBuf::from("wheels-v0/url/4b8be67c801a7ecb/flask/flask-3.0.0-py3-none-any.msgpack"),
+        PathBuf::from("built-wheels-v0/url/6781bd6440ae72c2/werkzeug/metadata.msgpack"),
+        interpreter_cache,
+    ];
+
+    let check = || {
+        insta::with_settings!({
+            filters => INSTA_FILTERS.to_vec()
+        }, {
+            assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+                .arg("pip-compile")
+                .arg(requirements_in.path())
+                .arg("--cache-dir")
+                .arg(cache_dir.path())
+                .arg("--exclude-newer")
+                .arg(EXCLUDE_NEWER)
+                // It's sufficient to check that we resolve to a fix number of packages
+                .stdout(std::process::Stdio::null())
+                .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+
+            ----- stderr -----
+            Resolved 13 packages in [TIME]
+            "###);
+        });
+    };
+
+    insta::allow_duplicates! {
+        check();
+
+        // Replace some cache files with invalid contents
+        for file in &cache_files {
+            let file = cache_dir.join(file);
+            if !file.is_file() {
+                bail!("Missing cache file {}", file.display());
+            }
+            fs_err::write(file, "I borken you cache")?;
+        }
+
+        check();
+
+        #[cfg(unix)]
+        {
+            use fs_err::os::unix::fs::OpenOptionsExt;
+
+            // Make some files read-only, so that the read instead of the deserialization will fail
+            for file in cache_files {
+                let file = cache_dir.join(file);
+                if !file.is_file() {
+                    bail!("Missing cache file {}", file.display());
+                }
+
+                fs_err::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .mode(0o000)
+                    .open(file)?;
+            }
+        }
+
+        check();
+
+        Ok(())
+    }
 }
