@@ -100,7 +100,7 @@ impl RegistryClientBuilder {
 }
 
 /// A client for fetching packages from a `PyPI`-compatible index.
-// TODO(konstin): Clean up the clients once we moved everything to common caching
+// TODO(konstin): Clean up the clients once we moved everything to common caching.
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
     pub(crate) index_urls: IndexUrls,

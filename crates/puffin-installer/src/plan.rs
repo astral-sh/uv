@@ -1,8 +1,8 @@
 use std::hash::BuildHasherDefault;
 
-use anyhow::{bail, Context, Result};
-use rustc_hash::FxHashMap;
-use tracing::debug;
+use anyhow::{bail, Result};
+use rustc_hash::FxHashSet;
+use tracing::{debug, warn};
 
 use distribution_types::direct_url::{git_reference, DirectUrl};
 use distribution_types::{BuiltDist, Dist, SourceDist};
@@ -14,9 +14,8 @@ use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use pypi_types::IndexUrls;
-use requirements_txt::EditableRequirement;
 
-use crate::SitePackages;
+use crate::{ResolvedEditable, SitePackages};
 
 #[derive(Debug, Default)]
 pub struct InstallPlan {
@@ -35,12 +34,6 @@ pub struct InstallPlan {
     /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
     pub extraneous: Vec<InstalledDist>,
-
-    /// Editable installs that are missing in the current environment.
-    ///
-    /// Since editable installs happen from a path through a non-cacheable wheel, we don't have to
-    /// divide those into cached and non-cached.
-    pub editables: Vec<EditableRequirement>,
 }
 
 impl InstallPlan {
@@ -49,18 +42,14 @@ impl InstallPlan {
     #[allow(clippy::too_many_arguments)]
     pub fn from_requirements(
         requirements: &[Requirement],
-        editable_requirements: &[EditableRequirement],
+        editable_requirements: Vec<ResolvedEditable>,
+        mut site_packages: SitePackages,
         reinstall: &Reinstall,
         index_urls: &IndexUrls,
         cache: &Cache,
         venv: &Virtualenv,
         tags: &Tags,
-        editable_mode: EditableMode,
     ) -> Result<Self> {
-        // Index all the already-installed packages in site-packages.
-        let mut site_packages =
-            SitePackages::from_executable(venv).context("Failed to list installed packages")?;
-
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_urls);
 
@@ -68,43 +57,44 @@ impl InstallPlan {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
-        let mut editables = vec![];
         let mut seen =
-            FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+            FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         // Remove any editable requirements.
-        for editable in editable_requirements {
-            // Check if the package should be reinstalled. A reinstall involves (1) purging any
-            // cached distributions, and (2) marking any installed distributions as extraneous.
-            // For editables, we don't cache installations, so there's nothing to purge; and since
-            // editable installs lack a package name, we first lookup by URL, and then by name.
-            let reinstall = match reinstall {
-                Reinstall::None => false,
-                Reinstall::All => true,
-                Reinstall::Packages(packages) => site_packages
-                    .get_editable(editable.raw())
-                    .is_some_and(|distribution| packages.contains(distribution.name())),
-            };
+        for requirement in editable_requirements {
+            // If we see the same requirement twice, then we have a conflict.
+            if !seen.insert(requirement.name().clone()) {
+                bail!(
+                    "Detected duplicate package in requirements: {}",
+                    requirement.name()
+                );
+            }
 
-            if reinstall {
-                if let Some(distribution) = site_packages.remove_editable(editable.raw()) {
-                    reinstalls.push(distribution);
-                }
-                editables.push(editable.clone());
-            } else {
-                if let Some(dist) = site_packages.remove_editable(editable.raw()) {
-                    match editable_mode {
-                        EditableMode::Immutable => {
-                            debug!("Treating editable requirement as immutable: {editable}");
-                        }
-                        EditableMode::Mutable => {
-                            debug!("Treating editable requirement as mutable: {editable}");
-                            reinstalls.push(dist);
-                            editables.push(editable.clone());
-                        }
+            match requirement {
+                ResolvedEditable::Installed(installed) => {
+                    debug!("Treating editable requirement as immutable: {installed}");
+
+                    // Remove from the site-packages index, to avoid marking as extraneous.
+                    let Some(editable) = installed.editable() else {
+                        warn!("Editable requirement is not editable: {installed}");
+                        continue;
+                    };
+                    if site_packages.remove_editable(editable).is_none() {
+                        warn!("Editable requirement is not installed: {installed}");
+                        continue;
                     }
-                } else {
-                    editables.push(editable.clone());
+                }
+                ResolvedEditable::Built(built) => {
+                    debug!("Treating editable requirement as mutable: {built}");
+
+                    if let Some(dist) = site_packages.remove_editable(built.editable.raw()) {
+                        // Remove any editable installs.
+                        reinstalls.push(dist);
+                    } else if let Some(dist) = site_packages.remove(built.name()) {
+                        // Remove any non-editable installs of the same package.
+                        reinstalls.push(dist);
+                    }
+                    local.push(built.wheel);
                 }
             }
         }
@@ -116,8 +106,11 @@ impl InstallPlan {
             }
 
             // If we see the same requirement twice, then we have a conflict.
-            if let Some(existing) = seen.insert(requirement.name.clone(), requirement) {
-                bail!("Detected duplicate package in requirements:\n    {requirement}\n    {existing}");
+            if !seen.insert(requirement.name.clone()) {
+                bail!(
+                    "Detected duplicate package in requirements: {}",
+                    requirement.name
+                );
             }
 
             // Check if the package should be reinstalled. A reinstall involves (1) purging any
@@ -328,7 +321,6 @@ impl InstallPlan {
             remote,
             reinstalls,
             extraneous,
-            editables,
         })
     }
 }
@@ -361,14 +353,4 @@ impl Reinstall {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-pub enum EditableMode {
-    /// Assume that editables are immutable, such that they're left untouched if already present
-    /// in the environment.
-    #[default]
-    Immutable,
-    /// Assume that editables are mutable, such that they're always reinstalled.
-    Mutable,
 }

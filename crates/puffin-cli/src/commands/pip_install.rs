@@ -18,9 +18,10 @@ use puffin_cache::Cache;
 use puffin_client::{RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{
-    BuiltEditable, Downloader, EditableMode, InstallPlan, Reinstall, SitePackages,
+    BuiltEditable, Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages,
 };
 use puffin_interpreter::Virtualenv;
+use puffin_normalize::PackageName;
 use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
@@ -62,8 +63,32 @@ pub(crate) async fn pip_install(
 
     let start = std::time::Instant::now();
 
-    // Determine the requirements.
-    let spec = specification(requirements, constraints, overrides, extras)?;
+    // Read all requirements from the provided sources.
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        extras: used_extras,
+    } = specification(requirements, constraints, overrides, extras)?;
+
+    // Check that all provided extras are used
+    if let ExtrasSpecification::Some(extras) = extras {
+        let mut unused_extras = extras
+            .iter()
+            .filter(|extra| !used_extras.contains(extra))
+            .collect::<Vec<_>>();
+        if !unused_extras.is_empty() {
+            unused_extras.sort_unstable();
+            unused_extras.dedup();
+            let s = if unused_extras.len() == 1 { "" } else { "s" };
+            return Err(anyhow!(
+                "Requested extra{s} not found: {}",
+                unused_extras.iter().join(", ")
+            ));
+        }
+    }
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -73,11 +98,15 @@ pub(crate) async fn pip_install(
         venv.python_executable().display()
     );
 
+    // Determine the set of installed packages.
+    let site_packages =
+        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
     // magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none() && satisfied(&spec, &venv)? {
-        let num_requirements = spec.requirements.len() + spec.editables.len();
+    if reinstall.is_none() && site_packages.satisfies(&requirements, &editables, &constraints)? {
+        let num_requirements = requirements.len() + editables.len();
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -92,13 +121,9 @@ pub(crate) async fn pip_install(
         return Ok(ExitStatus::Success);
     }
 
-    // Determine the compatible platform tags.
-    let tags = Tags::from_interpreter(venv.interpreter())?;
-
-    // Determine the interpreter to use for resolution.
+    // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
-
-    // Determine the markers to use for resolution.
+    let tags = Tags::from_interpreter(venv.interpreter())?;
     let markers = venv.interpreter().markers();
 
     // Instantiate a client.
@@ -107,6 +132,7 @@ pub(crate) async fn pip_install(
         .build();
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
+
     let build_dispatch = BuildDispatch::new(
         client.clone(),
         cache.clone(),
@@ -121,12 +147,12 @@ pub(crate) async fn pip_install(
     // installation, and should live for the duration of the command. If an editable is already
     // installed in the environment, we'll still re-build it here.
     let editable_wheel_dir;
-    let editables = if spec.editables.is_empty() {
+    let editables = if editables.is_empty() {
         vec![]
     } else {
         editable_wheel_dir = tempdir_in(venv.root())?;
         build_editables(
-            &spec.editables,
+            &editables,
             editable_wheel_dir.path(),
             &cache,
             &tags,
@@ -139,15 +165,18 @@ pub(crate) async fn pip_install(
 
     // Resolve the requirements.
     let resolution = match resolve(
-        spec,
+        requirements,
+        constraints,
+        overrides,
+        project,
         &editables,
+        &site_packages,
         reinstall,
         &tags,
         markers,
         &client,
         &build_dispatch,
         options,
-        &venv,
         printer,
     )
     .await
@@ -168,7 +197,8 @@ pub(crate) async fn pip_install(
     // Sync the environment.
     install(
         &resolution,
-        &editables,
+        editables,
+        site_packages,
         reinstall,
         link_mode,
         index_urls,
@@ -228,15 +258,6 @@ fn specification(
     Ok(spec)
 }
 
-/// Returns `true` if the requirements are already satisfied.
-fn satisfied(spec: &RequirementsSpecification, venv: &Virtualenv) -> Result<bool, Error> {
-    Ok(SitePackages::from_executable(venv)?.satisfies(
-        &spec.requirements,
-        &spec.editables,
-        &spec.constraints,
-    )?)
-}
-
 /// Build a set of editable distributions.
 async fn build_editables(
     editables: &[EditableRequirement],
@@ -290,36 +311,27 @@ async fn build_editables(
 /// Resolve a set of requirements, similar to running `pip-compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
-    spec: RequirementsSpecification,
+    requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
+    overrides: Vec<Requirement>,
+    project: Option<PackageName>,
     editables: &[BuiltEditable],
+    site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
     tags: &Tags,
     markers: &MarkerEnvironment,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch,
     options: ResolutionOptions,
-    venv: &Virtualenv,
     mut printer: Printer,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
-    // Create a manifest of the requirements.
-    let RequirementsSpecification {
-        project,
-        requirements,
-        constraints,
-        overrides,
-        editables: _,
-        extras: _,
-    } = spec;
-
     // Respect preferences from the existing environments.
     let preferences: Vec<Requirement> = match reinstall {
         Reinstall::All => vec![],
-        Reinstall::None => SitePackages::from_executable(venv)?
-            .requirements()
-            .collect(),
-        Reinstall::Packages(packages) => SitePackages::from_executable(venv)?
+        Reinstall::None => site_packages.requirements().collect(),
+        Reinstall::Packages(packages) => site_packages
             .requirements()
             .filter(|requirement| !packages.contains(&requirement.name))
             .collect(),
@@ -336,6 +348,7 @@ async fn resolve(
         })
         .collect();
 
+    // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
         constraints,
@@ -369,7 +382,8 @@ async fn resolve(
 #[allow(clippy::too_many_arguments)]
 async fn install(
     resolution: &Resolution,
-    built_editables: &[BuiltEditable],
+    built_editables: Vec<BuiltEditable>,
+    site_packages: SitePackages<'_>,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
@@ -384,26 +398,30 @@ async fn install(
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
+    let requirements = resolution.requirements();
+    let editables = built_editables
+        .into_iter()
+        .map(ResolvedEditable::Built)
+        .collect::<Vec<_>>();
     let InstallPlan {
         local,
         remote,
         reinstalls,
-        editables,
         extraneous: _,
     } = InstallPlan::from_requirements(
-        &resolution.requirements(),
-        &resolution.editable_requirements(),
+        &requirements,
+        editables,
+        site_packages,
         reinstall,
         &index_urls,
         cache,
         venv,
         tags,
-        EditableMode::Mutable,
     )
     .context("Failed to determine installation plan")?;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && editables.is_empty() {
+    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
@@ -427,18 +445,6 @@ async fn install(
                 .get(&dist.name)
                 .cloned()
                 .expect("Resolution should contain all packages")
-        })
-        .collect::<Vec<_>>();
-
-    // Map any local editable requirements back to those that were built ahead of time.
-    let built_editables = editables
-        .iter()
-        .map(|editable| {
-            let built_editable = built_editables
-                .iter()
-                .find(|built_editable| built_editable.editable.requirement == *editable)
-                .expect("Editable should be built");
-            built_editable.wheel.clone()
         })
         .collect::<Vec<_>>();
 
@@ -487,11 +493,7 @@ async fn install(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels
-        .into_iter()
-        .chain(local)
-        .chain(built_editables)
-        .collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         puffin_installer::Installer::new(venv)

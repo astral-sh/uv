@@ -114,9 +114,6 @@ pub(crate) async fn pip_compile(
         .map(|spec| spec.requirements)
         .unwrap_or_default();
 
-    // Create a manifest of the requirements.
-    let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
-
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
@@ -127,13 +124,9 @@ pub(crate) async fn pip_compile(
         venv.python_executable().display()
     );
 
-    // Determine the compatible platform tags.
-    let tags = Tags::from_interpreter(venv.interpreter())?;
-
-    // Determine the interpreter to use for resolution.
+    // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
-
-    // Determine the markers to use for resolution.
+    let tags = Tags::from_interpreter(venv.interpreter())?;
     let markers = python_version.map_or_else(
         || Cow::Borrowed(venv.interpreter().markers()),
         |python_version| Cow::Owned(python_version.markers(venv.interpreter().markers())),
@@ -144,6 +137,7 @@ pub(crate) async fn pip_compile(
         .index_urls(index_urls.clone())
         .build();
 
+    let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
     let build_dispatch = BuildDispatch::new(
         client.clone(),
         cache.clone(),
@@ -203,6 +197,7 @@ pub(crate) async fn pip_compile(
         editable_metadata
     };
 
+    // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
         constraints,

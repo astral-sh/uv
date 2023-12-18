@@ -2,7 +2,6 @@ use rustc_hash::FxHashMap;
 
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
-use requirements_txt::EditableRequirement;
 
 use crate::{BuiltDist, Dist, PathSourceDist, SourceDist};
 
@@ -58,31 +57,6 @@ impl Resolution {
             })
             .collect::<Vec<_>>();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-        requirements
-    }
-
-    /// Return the set of [`EditableRequirement`]s that this resolution represents.
-    pub fn editable_requirements(&self) -> Vec<EditableRequirement> {
-        let mut requirements = self
-            .0
-            .values()
-            .filter_map(|dist| {
-                let Dist::Source(SourceDist::Path(PathSourceDist {
-                    url,
-                    path,
-                    editable: true,
-                    ..
-                })) = dist
-                else {
-                    return None;
-                };
-                Some(EditableRequirement::Path {
-                    path: path.clone(),
-                    url: url.clone(),
-                })
-            })
-            .collect::<Vec<_>>();
-        requirements.sort_unstable_by(|a, b| a.url().cmp(b.url()));
         requirements
     }
 }
