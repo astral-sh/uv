@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use anstream::println;
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use clap::{Parser, ValueEnum};
 use fs_err as fs;
 use fs_err::File;
@@ -40,6 +41,8 @@ pub(crate) struct ResolveCliArgs {
     format: ResolveCliFormat,
     #[command(flatten)]
     cache_args: CacheArgs,
+    #[arg(long)]
+    exclude_newer: Option<DateTime<Utc>>,
 }
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
