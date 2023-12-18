@@ -13,6 +13,9 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+puffin-warnings = { path = "../puffin-warnings" }
+
 fs-err = { workspace = true, features = ["tokio"] }
+fs2 = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }

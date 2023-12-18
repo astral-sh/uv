@@ -2471,7 +2471,6 @@ dependencies = [
  "distribution-filename",
  "distribution-types",
  "fs-err",
- "fs2",
  "futures",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
@@ -2516,6 +2515,8 @@ name = "puffin-fs"
 version = "0.0.1"
 dependencies = [
  "fs-err",
+ "fs2",
+ "puffin-warnings",
  "tempfile",
  "tracing",
 ]
