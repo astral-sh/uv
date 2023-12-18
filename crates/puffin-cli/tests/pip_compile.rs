@@ -2680,7 +2680,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
         {
             use fs_err::os::unix::fs::OpenOptionsExt;
 
-            // Make some files read-only, so that the read instead of the deserialization will fail
+            // Make some files unreadable, so that the read instead of the deserialization will fail
             for file in cache_files {
                 let file = cache_dir.join(file);
                 if !file.is_file() {
