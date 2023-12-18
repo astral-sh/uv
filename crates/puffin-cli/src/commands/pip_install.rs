@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
 use itertools::Itertools;
@@ -276,12 +276,13 @@ async fn build_editables(
         .iter()
         .map(|editable| match editable {
             EditableRequirement::Path { path, .. } => Ok(LocalEditable {
-                requirement: editable.clone(),
                 path: path.clone(),
+                requirement: editable.clone(),
             }),
-            EditableRequirement::Url(_) => {
-                bail!("Editable installs for URLs are not yet supported");
-            }
+            EditableRequirement::Url { path, .. } => Ok(LocalEditable {
+                path: path.clone(),
+                requirement: editable.clone(),
+            }),
         })
         .collect::<Result<_>>()?;
 

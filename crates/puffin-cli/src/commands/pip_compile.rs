@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anstream::AutoStream;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
 use itertools::Itertools;
@@ -156,14 +156,15 @@ pub(crate) async fn pip_compile(
 
         let editables: Vec<LocalEditable> = editables
             .into_iter()
-            .map(|editable| match editable.clone() {
+            .map(|editable| match &editable {
                 EditableRequirement::Path { path, .. } => Ok(LocalEditable {
+                    path: path.clone(),
                     requirement: editable,
-                    path,
                 }),
-                EditableRequirement::Url(_) => {
-                    bail!("Editable installs for URLs are not yet supported");
-                }
+                EditableRequirement::Url { path, .. } => Ok(LocalEditable {
+                    path: path.clone(),
+                    requirement: editable,
+                }),
             })
             .collect::<Result<_>>()?;
 

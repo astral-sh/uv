@@ -6,7 +6,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
@@ -2092,24 +2092,33 @@ fn sync_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let current_dir = std::env::current_dir()?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
+    requirements_txt.write_str(&formatdoc! {r"
         boltons==23.1.1
         -e ../../scripts/editable-installs/maturin_editable
         numpy==1.26.2
             # via poetry-editable
-        -e ../../scripts/editable-installs/poetry_editable
-        "
+        -e file://{current_dir}/../../scripts/editable-installs/poetry_editable
+        ",
+        current_dir = current_dir.display(),
     })?;
 
-    // Install the editable packages.
     let filter_path = requirements_txt.display().to_string();
     let filters = INSTA_FILTERS
         .iter()
-        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .chain(&[
+            (filter_path.as_str(), "requirements.txt"),
+            (
+                r"file://.*/../../scripts/editable-installs/poetry_editable",
+                "file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable",
+            ),
+        ])
         .copied()
         .collect::<Vec<_>>();
+
+    // Install the editable packages.
     insta::with_settings!({
         filters => filters.clone()
     }, {
@@ -2132,7 +2141,7 @@ fn sync_editable() -> Result<()> {
          + boltons==23.1.1
          + maturin-editable @ ../../scripts/editable-installs/maturin_editable
          + numpy==1.26.2
-         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable
         "###);
     });
 
@@ -2158,7 +2167,7 @@ fn sync_editable() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - poetry-editable==0.1.0
-         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable
         "###);
     });
 
@@ -2198,13 +2207,8 @@ fn sync_editable() -> Result<()> {
     // Don't create a git diff.
     fs_err::write(python_source_file, python_version_1)?;
 
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[(filter_path.as_str(), "requirements.txt")])
-        .copied()
-        .collect::<Vec<_>>();
     insta::with_settings!({
-        filters => filters
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-sync")

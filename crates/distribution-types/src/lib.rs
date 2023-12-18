@@ -255,14 +255,14 @@ impl Dist {
                     editable: true,
                 })))
             }
-            EditableRequirement::Url(url) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                name,
-                path: url
-                    .to_file_path()
-                    .map_err(|()| Error::UrlFilename(url.to_url()))?,
-                url,
-                editable: true,
-            }))),
+            EditableRequirement::Url { url, path } => {
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    path,
+                    url,
+                    editable: true,
+                })))
+            }
         }
     }
 
