@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, Metadata, Resolution};
+use distribution_types::{CachedDist, Name, Resolution};
 use pep508_rs::Requirement;
 use platform_tags::Tags;
 use puffin_build::{SourceBuild, SourceBuildContext};

@@ -4,7 +4,7 @@ use anyhow::Result;
 use colored::Colorize;
 use tracing::debug;
 
-use distribution_types::Metadata;
+use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use puffin_cache::Cache;
 use puffin_interpreter::Virtualenv;
@@ -143,7 +143,7 @@ pub(crate) async fn pip_uninstall(
             " {} {}{}",
             "-".red(),
             distribution.name().as_ref().white().bold(),
-            distribution.version_or_url().to_string().dimmed()
+            distribution.installed_version().to_string().dimmed()
         )?;
     }
 

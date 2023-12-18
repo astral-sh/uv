@@ -17,7 +17,7 @@ use tracing::{debug, trace};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{BuiltDist, Metadata};
+use distribution_types::{BuiltDist, Name};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
 use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelCache};

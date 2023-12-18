@@ -8,16 +8,20 @@ use puffin_normalize::PackageName;
 
 use crate::error::Error;
 use crate::{
-    AnyDist, BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
-    InstalledDist, InstalledRegistryDist, PackageId, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionOrUrl,
+    InstalledDist, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionOrUrl,
 };
 
-pub trait Metadata {
+pub trait Name {
     /// Return the normalized [`PackageName`] of the distribution.
     fn name(&self) -> &PackageName;
+}
 
+/// Metadata that can be resolved from a requirements specification alone (i.e., prior to building
+/// or installing the distribution).
+pub trait DistributionMetadata: Name {
     /// Return a [`pep440_rs::Version`], for registry-based distributions, or a [`url::Url`],
     /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrl;
@@ -35,9 +39,14 @@ pub trait Metadata {
                 format!("{}-{}", self.name().as_dist_info_name(), version)
             }
             VersionOrUrl::Url(url) => puffin_cache::digest(&CanonicalUrl::new(url)),
-            VersionOrUrl::VersionedUrl(url, ..) => puffin_cache::digest(&CanonicalUrl::new(url)),
         })
     }
+}
+
+/// Metadata that can be resolved from a built distribution.
+pub trait InstalledMetadata: Name {
+    /// Return the resolved version of the installed distribution.
+    fn installed_version(&self) -> InstalledVersion;
 }
 
 pub trait RemoteSource {
@@ -77,7 +86,7 @@ impl Verbatim for VerbatimUrl {
     }
 }
 
-impl<T: Metadata> Verbatim for T {
+impl<T: DistributionMetadata> Verbatim for T {
     fn verbatim(&self) -> Cow<'_, str> {
         Cow::Owned(format!(
             "{}{}",
@@ -88,9 +97,9 @@ impl<T: Metadata> Verbatim for T {
 }
 
 // Implement `Display` for all known types that implement `Metadata`.
-impl std::fmt::Display for AnyDist {
+impl std::fmt::Display for LocalDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
@@ -102,19 +111,19 @@ impl std::fmt::Display for BuiltDist {
 
 impl std::fmt::Display for CachedDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
 impl std::fmt::Display for CachedDirectUrlDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
 impl std::fmt::Display for CachedRegistryDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
@@ -144,19 +153,19 @@ impl std::fmt::Display for GitSourceDist {
 
 impl std::fmt::Display for InstalledDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
 impl std::fmt::Display for InstalledDirectUrlDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
 impl std::fmt::Display for InstalledRegistryDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
@@ -185,12 +194,6 @@ impl std::fmt::Display for RegistrySourceDist {
 }
 
 impl std::fmt::Display for SourceDist {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
-    }
-}
-
-impl std::fmt::Display for &dyn Metadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

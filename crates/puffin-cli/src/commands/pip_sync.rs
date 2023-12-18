@@ -5,7 +5,7 @@ use colored::Colorize;
 use itertools::Itertools;
 use tracing::debug;
 
-use distribution_types::{AnyDist, LocalEditable, Metadata};
+use distribution_types::{InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -271,11 +271,11 @@ pub(crate) async fn pip_sync(
         .into_iter()
         .chain(reinstalls.into_iter())
         .map(|distribution| ChangeEvent {
-            dist: AnyDist::from(distribution),
+            dist: LocalDist::from(distribution),
             kind: ChangeEventKind::Removed,
         })
         .chain(wheels.into_iter().map(|distribution| ChangeEvent {
-            dist: AnyDist::from(distribution),
+            dist: LocalDist::from(distribution),
             kind: ChangeEventKind::Added,
         }))
         .sorted_unstable_by(|a, b| {
@@ -292,7 +292,7 @@ pub(crate) async fn pip_sync(
                     " {} {}{}",
                     "+".green(),
                     event.dist.name().as_ref().white().bold(),
-                    event.dist.version_or_url().to_string().dimmed()
+                    event.dist.installed_version().to_string().dimmed()
                 )?;
             }
             ChangeEventKind::Removed => {
@@ -301,7 +301,7 @@ pub(crate) async fn pip_sync(
                     " {} {}{}",
                     "-".red(),
                     event.dist.name().as_ref().white().bold(),
-                    event.dist.version_or_url().to_string().dimmed()
+                    event.dist.installed_version().to_string().dimmed()
                 )?;
             }
         }

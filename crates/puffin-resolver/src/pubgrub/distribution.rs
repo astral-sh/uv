@@ -1,4 +1,4 @@
-use distribution_types::{Metadata, VersionOrUrl};
+use distribution_types::{DistributionMetadata, Name, VersionOrUrl};
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 
@@ -20,14 +20,16 @@ impl<'a> PubGrubDistribution<'a> {
     }
 }
 
-impl Metadata for PubGrubDistribution<'_> {
+impl Name for PubGrubDistribution<'_> {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(name, _) => name,
             Self::Url(name, _) => name,
         }
     }
+}
 
+impl DistributionMetadata for PubGrubDistribution<'_> {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
             Self::Registry(_, version) => VersionOrUrl::Version((*version).into()),

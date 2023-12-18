@@ -14,7 +14,7 @@ use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::DirectGitUrl;
-use distribution_types::{BuiltDist, Dist, LocalEditable, Metadata, SourceDist};
+use distribution_types::{BuiltDist, Dist, LocalEditable, Name, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::{digest, Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;

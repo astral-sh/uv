@@ -10,7 +10,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{Dist, LocalEditable, Metadata, PackageId, Verbatim};
+use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_normalize::{ExtraName, PackageName};

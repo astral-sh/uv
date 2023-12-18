@@ -8,7 +8,7 @@ use itertools::Itertools;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{AnyDist, LocalEditable, Metadata, Resolution};
+use distribution_types::{InstalledMetadata, LocalDist, LocalEditable, Name, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_host::Platform;
@@ -518,11 +518,11 @@ async fn install(
     for event in reinstalls
         .into_iter()
         .map(|distribution| ChangeEvent {
-            dist: AnyDist::from(distribution),
+            dist: LocalDist::from(distribution),
             kind: ChangeEventKind::Removed,
         })
         .chain(wheels.into_iter().map(|distribution| ChangeEvent {
-            dist: AnyDist::from(distribution),
+            dist: LocalDist::from(distribution),
             kind: ChangeEventKind::Added,
         }))
         .sorted_unstable_by(|a, b| {
@@ -539,7 +539,7 @@ async fn install(
                     " {} {}{}",
                     "+".green(),
                     event.dist.name().as_ref().white().bold(),
-                    event.dist.version_or_url().to_string().dimmed()
+                    event.dist.installed_version().to_string().dimmed()
                 )?;
             }
             ChangeEventKind::Removed => {
@@ -548,7 +548,7 @@ async fn install(
                     " {} {}{}",
                     "-".red(),
                     event.dist.name().as_ref().white().bold(),
-                    event.dist.version_or_url().to_string().dimmed()
+                    event.dist.installed_version().to_string().dimmed()
                 )?;
             }
         }

@@ -5,8 +5,8 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
 use distribution_types::direct_url::git_reference;
-use distribution_types::{BuiltDist, Dist, SourceDist};
-use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist, Metadata};
+use distribution_types::{BuiltDist, Dist, Name, SourceDist};
+use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};

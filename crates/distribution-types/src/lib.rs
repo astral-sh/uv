@@ -3,7 +3,7 @@
 //! When we receive the requirements from `pip-sync`, we check which requirements already fulfilled
 //! in the users environment ([`InstalledDist`]), whether the matching package is in our wheel cache
 //! ([`CachedDist`]) or whether we need to download, (potentially build) and install it ([`Dist`]).
-//! These three variants make up [`AnyDist`].
+//! These three variants make up [`BuiltDist`].
 //!
 //! ## `Dist`
 //! A [`Dist`] is either a built distribution (a wheel), or a source distribution that exists at
@@ -75,13 +75,6 @@ pub enum VersionOrUrl<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
     Url(&'a VerbatimUrl),
-    /// A URL, used to identify a distribution at an arbitrary location, along with the version
-    /// specifier to which it resolved. This is typically derived from a distribution that's already
-    /// been built and perhaps even installed on-disk, as the version specifier is not available
-    /// from the URL itself. As such, the URL is not guaranteed to be verbatim, as it could've been
-    /// serialized to disk and deserialized back from the virtual environment's `direct_url.json`.
-    /// TODO(charlie): Separate into a distinct enum to avoid this confusion.
-    VersionedUrl(&'a Url, &'a Version),
 }
 
 impl Verbatim for VersionOrUrl<'_> {
@@ -89,7 +82,6 @@ impl Verbatim for VersionOrUrl<'_> {
         match self {
             VersionOrUrl::Version(version) => Cow::Owned(format!("=={version}")),
             VersionOrUrl::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
-            VersionOrUrl::VersionedUrl(url, ..) => Cow::Owned(format!(" @ {url}")),
         }
     }
 }
@@ -99,7 +91,24 @@ impl std::fmt::Display for VersionOrUrl<'_> {
         match self {
             VersionOrUrl::Version(version) => write!(f, "=={version}"),
             VersionOrUrl::Url(url) => write!(f, " @ {url}"),
-            VersionOrUrl::VersionedUrl(url, version) => write!(f, "=={version} (from {url})"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum InstalledVersion<'a> {
+    /// A PEP 440 version specifier, used to identify a distribution in a registry.
+    Version(&'a Version),
+    /// A URL, used to identify a distribution at an arbitrary location, along with the version
+    /// specifier to which it resolved.
+    Url(&'a Url, &'a Version),
+}
+
+impl std::fmt::Display for InstalledVersion<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstalledVersion::Version(version) => write!(f, "=={version}"),
+            InstalledVersion::Url(url, version) => write!(f, "=={version} (from {url})"),
         }
     }
 }
@@ -333,77 +342,49 @@ impl SourceDist {
     }
 }
 
-impl Metadata for RegistryBuiltDist {
+impl Name for RegistryBuiltDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
-    }
 }
 
-impl Metadata for DirectUrlBuiltDist {
+impl Name for DirectUrlBuiltDist {
     fn name(&self) -> &PackageName {
         &self.filename.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
-    }
 }
 
-impl Metadata for PathBuiltDist {
+impl Name for PathBuiltDist {
     fn name(&self) -> &PackageName {
         &self.filename.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
-    }
 }
 
-impl Metadata for RegistrySourceDist {
+impl Name for RegistrySourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
-    }
 }
 
-impl Metadata for DirectUrlSourceDist {
+impl Name for DirectUrlSourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
-    }
 }
 
-impl Metadata for GitSourceDist {
+impl Name for GitSourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
-    }
 }
 
-impl Metadata for PathSourceDist {
+impl Name for PathSourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
-    }
 }
 
-impl Metadata for SourceDist {
+impl Name for SourceDist {
     fn name(&self) -> &PackageName {
         match self {
             Self::Registry(dist) => dist.name(),
@@ -412,7 +393,70 @@ impl Metadata for SourceDist {
             Self::Path(dist) => dist.name(),
         }
     }
+}
 
+impl Name for BuiltDist {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Registry(dist) => dist.name(),
+            Self::DirectUrl(dist) => dist.name(),
+            Self::Path(dist) => dist.name(),
+        }
+    }
+}
+
+impl Name for Dist {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Built(dist) => dist.name(),
+            Self::Source(dist) => dist.name(),
+        }
+    }
+}
+
+impl DistributionMetadata for RegistryBuiltDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Version(&self.version)
+    }
+}
+
+impl DistributionMetadata for DirectUrlBuiltDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl DistributionMetadata for PathBuiltDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl DistributionMetadata for RegistrySourceDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Version(&self.version)
+    }
+}
+
+impl DistributionMetadata for DirectUrlSourceDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl DistributionMetadata for GitSourceDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl DistributionMetadata for PathSourceDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl DistributionMetadata for SourceDist {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
@@ -423,15 +467,7 @@ impl Metadata for SourceDist {
     }
 }
 
-impl Metadata for BuiltDist {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(dist) => dist.name(),
-            Self::DirectUrl(dist) => dist.name(),
-            Self::Path(dist) => dist.name(),
-        }
-    }
-
+impl DistributionMetadata for BuiltDist {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
@@ -441,14 +477,7 @@ impl Metadata for BuiltDist {
     }
 }
 
-impl Metadata for Dist {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::Built(dist) => dist.name(),
-            Self::Source(dist) => dist.name(),
-        }
-    }
-
+impl DistributionMetadata for Dist {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
             Self::Built(dist) => dist.version_or_url(),
