@@ -432,12 +432,11 @@ fn install_editable() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
-    let current_dir = std::env::current_dir()?
-        .join("..")
-        .join("..")
-        .canonicalize()?;
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((current_dir.to_str().unwrap(), "[CURRENT_DIR]"));
+    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
 
     // Install the editable package.
     insta::with_settings!({
@@ -461,7 +460,7 @@ fn install_editable() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 2 packages in [TIME]
          + numpy==1.26.2
-         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable/
+         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
         "###);
     });
 
@@ -520,8 +519,8 @@ fn install_editable() -> Result<()> {
          + packaging==23.2
          + pathspec==0.12.1
          + platformdirs==4.1.0
-         - poetry-editable==0.1.0
-         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable/
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
+         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
          + yarl==1.9.4
         "###);
     });
@@ -549,9 +548,9 @@ fn install_editable() -> Result<()> {
         Built 2 editables in [TIME]
         Resolved 16 packages in [TIME]
         Installed 2 packages in [TIME]
-         + maturin-editable @ file://[CURRENT_DIR]/scripts/editable-installs/maturin_editable/
-         - poetry-editable==0.1.0
-         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable/
+         + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable/)
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
+         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
         "###);
     });
 
@@ -564,12 +563,11 @@ fn install_editable_and_registry() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
-    let current_dir = std::env::current_dir()?
-        .join("..")
-        .join("..")
-        .canonicalize()?;
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((current_dir.to_str().unwrap(), "[CURRENT_DIR]"));
+    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
 
     // Install the registry-based version of Black.
     insta::with_settings!({
@@ -627,7 +625,7 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==23.12.0
-         + black @ file://[CURRENT_DIR]/scripts/editable-installs/black_editable/
+         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
         "###);
     });
 
@@ -671,7 +669,7 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 6 packages in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==0.1.0
+         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
          + black==23.10.0
         "###);
     });

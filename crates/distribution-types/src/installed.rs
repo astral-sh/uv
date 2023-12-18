@@ -7,7 +7,6 @@ use url::Url;
 
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
-use pypi_types::{DirectUrl, Metadata21};
 
 use crate::{Metadata, VersionOrUrl};
 
@@ -31,7 +30,8 @@ pub struct InstalledRegistryDist {
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
-    pub url: DirectUrl,
+    pub url: Url,
+    pub editable: bool,
     pub path: PathBuf,
 }
 
@@ -51,8 +51,7 @@ impl Metadata for InstalledDirectUrlDist {
     }
 
     fn version_or_url(&self) -> VersionOrUrl {
-        // TODO(charlie): Convert a `DirectUrl` to `Url`.
-        VersionOrUrl::Version(&self.version)
+        VersionOrUrl::VersionedUrl(&self.url, &self.version)
     }
 }
 
@@ -94,7 +93,8 @@ impl InstalledDist {
                 Ok(Some(Self::Url(InstalledDirectUrlDist {
                     name,
                     version,
-                    url: direct_url,
+                    editable: matches!(&direct_url, pypi_types::DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
+                    url: Url::from(direct_url),
                     path: path.to_path_buf(),
                 })))
             } else {
@@ -125,31 +125,28 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    fn direct_url(path: &Path) -> Result<Option<DirectUrl>> {
+    fn direct_url(path: &Path) -> Result<Option<pypi_types::DirectUrl>> {
         let path = path.join("direct_url.json");
         let Ok(file) = fs_err::File::open(path) else {
             return Ok(None);
         };
-        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
+        let direct_url = serde_json::from_reader::<fs_err::File, pypi_types::DirectUrl>(file)?;
         Ok(Some(direct_url))
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.
-    pub fn metadata(&self) -> Result<Metadata21> {
+    pub fn metadata(&self) -> Result<pypi_types::Metadata21> {
         let path = self.path().join("METADATA");
         let contents = fs::read(&path)?;
-        Metadata21::parse(&contents)
+        pypi_types::Metadata21::parse(&contents)
             .with_context(|| format!("Failed to parse METADATA file at: {}", path.display()))
     }
 
     /// Return the [`Url`] of the distribution, if it is editable.
-    pub fn editable(&self) -> Option<&Url> {
+    pub fn as_editable(&self) -> Option<&Url> {
         match self {
-            Self::Url(InstalledDirectUrlDist {
-                url: DirectUrl::LocalDirectory { url, dir_info },
-                ..
-            }) if dir_info.editable == Some(true) => Some(url),
-            _ => None,
+            Self::Registry(_) => None,
+            Self::Url(dist) => dist.editable.then_some(&dist.url),
         }
     }
 }

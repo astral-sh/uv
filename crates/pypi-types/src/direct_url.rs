@@ -71,3 +71,49 @@ pub enum VcsKind {
     Bzr,
     Svn,
 }
+
+impl std::fmt::Display for VcsKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VcsKind::Git => write!(f, "git"),
+            VcsKind::Hg => write!(f, "hg"),
+            VcsKind::Bzr => write!(f, "bzr"),
+            VcsKind::Svn => write!(f, "svn"),
+        }
+    }
+}
+
+impl From<DirectUrl> for Url {
+    fn from(value: DirectUrl) -> Self {
+        match value {
+            DirectUrl::LocalDirectory { url, .. } => url,
+            DirectUrl::ArchiveUrl {
+                mut url,
+                subdirectory,
+                archive_info: _,
+            } => {
+                if let Some(subdirectory) = subdirectory {
+                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                }
+                url
+            }
+            DirectUrl::VcsUrl {
+                url,
+                vcs_info,
+                subdirectory,
+            } => {
+                let mut url =
+                    Url::parse(&format!("{}+{}", vcs_info.vcs, url)).expect("VCS URL is invalid");
+                if let Some(commit_id) = vcs_info.commit_id {
+                    url.set_path(&format!("{}@{commit_id}", url.path()));
+                } else if let Some(requested_revision) = vcs_info.requested_revision {
+                    url.set_path(&format!("{}@{requested_revision}", url.path()));
+                }
+                if let Some(subdirectory) = subdirectory {
+                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                }
+                url
+            }
+        }
+    }
+}
