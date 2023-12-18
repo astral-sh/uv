@@ -1,6 +1,7 @@
 #[cfg(feature = "pyo3")]
-use crate::version::PyVersion;
-use crate::{version, Operator, Pep440Error, Version};
+use std::hash::{Hash, Hasher};
+use std::{cmp::Ordering, str::FromStr};
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
     exceptions::{PyIndexError, PyNotImplementedError, PyValueError},
@@ -10,20 +11,11 @@ use pyo3::{
 };
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::Ordering;
-#[cfg(feature = "pyo3")]
-use std::collections::hash_map::DefaultHasher;
-use std::fmt::Formatter;
-use std::fmt::{Debug, Display};
-#[cfg(feature = "pyo3")]
-use std::hash::{Hash, Hasher};
-use std::ops::Deref;
-use std::str::FromStr;
 use unicode_width::UnicodeWidthStr;
 
-#[cfg(feature = "tracing")]
-use tracing::warn;
-use unscanny::Scanner;
+#[cfg(feature = "pyo3")]
+use crate::version::PyVersion;
+use crate::{version, Operator, Pep440Error, Version};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -46,7 +38,7 @@ use unscanny::Scanner;
 #[cfg_attr(feature = "pyo3", pyclass(sequence))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
-impl Deref for VersionSpecifiers {
+impl std::ops::Deref for VersionSpecifiers {
     type Target = [VersionSpecifier];
 
     fn deref(&self) -> &Self::Target {
@@ -81,8 +73,8 @@ impl From<VersionSpecifier> for VersionSpecifiers {
     }
 }
 
-impl Display for VersionSpecifiers {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for VersionSpecifiers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (idx, version_specifier) in self.0.iter().enumerate() {
             // Separate version specifiers by comma, but we need one comma less than there are
             // specifiers
@@ -255,7 +247,7 @@ impl VersionSpecifier {
 
     /// Returns the normalized representation
     pub fn __hash__(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.hash(&mut hasher);
         hasher.finish()
     }
@@ -401,7 +393,7 @@ impl VersionSpecifier {
             Operator::ExactEqual => {
                 #[cfg(feature = "tracing")]
                 {
-                    warn!("Using arbitrary equality (`===`) is discouraged");
+                    tracing::warn!("Using arbitrary equality (`===`) is discouraged");
                 }
                 self.version.to_string() == version.to_string()
             }
@@ -495,7 +487,7 @@ impl FromStr for VersionSpecifier {
 
     /// Parses a version such as `>= 1.19`, `== 1.1.*`,`~=1.0+abc.5` or `<=1!2012.2`
     fn from_str(spec: &str) -> Result<Self, Self::Err> {
-        let mut s = Scanner::new(spec);
+        let mut s = unscanny::Scanner::new(spec);
         s.eat_while(|c: char| c.is_whitespace());
         // operator but we don't know yet if it has a star
         let operator = s.eat_while(['=', '!', '~', '<', '>']);
@@ -518,8 +510,8 @@ impl FromStr for VersionSpecifier {
     }
 }
 
-impl Display for VersionSpecifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for VersionSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.operator == Operator::EqualStar || self.operator == Operator::NotEqualStar {
             return write!(f, "{}{}.*", self.operator, self.version);
         }
@@ -568,10 +560,11 @@ pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep
 
 #[cfg(test)]
 mod test {
-    use crate::{Operator, Version, VersionSpecifier, VersionSpecifiers};
+    use std::{cmp::Ordering, str::FromStr};
+
     use indoc::indoc;
-    use std::cmp::Ordering;
-    use std::str::FromStr;
+
+    use crate::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 
     /// <https://peps.python.org/pep-0440/#version-matching>
     #[test]

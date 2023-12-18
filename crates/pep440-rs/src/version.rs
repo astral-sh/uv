@@ -1,23 +1,20 @@
-use once_cell::sync::Lazy;
+use std::{
+    cmp::Ordering,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, FromPyObject, IntoPy, PyAny,
     PyObject, PyResult, Python,
 };
-use regex::Captures;
-use regex::Regex;
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::{max, Ordering};
-#[cfg(feature = "pyo3")]
-use std::collections::hash_map::DefaultHasher;
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
-use std::iter;
-use std::str::FromStr;
-
-#[cfg(feature = "tracing")]
-use tracing::warn;
+use {
+    once_cell::sync::Lazy,
+    regex::{Captures, Regex},
+};
 
 /// A regex copied from <https://peps.python.org/pep-0440/#appendix-b-parsing-version-strings-with-regular-expressions>,
 /// updated to support stars for version ranges
@@ -98,7 +95,7 @@ impl FromStr for Operator {
             "===" => {
                 #[cfg(feature = "tracing")]
                 {
-                    warn!("Using arbitrary equality (`===`) is discouraged");
+                    tracing::warn!("Using arbitrary equality (`===`) is discouraged");
                 }
                 #[allow(deprecated)]
                 Self::ExactEqual
@@ -120,9 +117,9 @@ impl FromStr for Operator {
     }
 }
 
-impl Display for Operator {
+impl std::fmt::Display for Operator {
     /// Note the `EqualStar` is also `==`.
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let operator = match self {
             Operator::Equal => "==",
             // Beware, this doesn't print the star
@@ -183,8 +180,8 @@ impl FromStr for PreRelease {
     }
 }
 
-impl Display for PreRelease {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for PreRelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Alpha => write!(f, "a"),
             Self::Beta => write!(f, "b"),
@@ -216,8 +213,8 @@ pub enum LocalSegment {
     Number(u64),
 }
 
-impl Display for LocalSegment {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for LocalSegment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(string) => write!(f, "{string}"),
             Self::Number(number) => write!(f, "{number}"),
@@ -402,7 +399,7 @@ impl PyVersion {
     /// Returns the normalized representation
     #[cfg(feature = "pyo3")]
     pub fn __hash__(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.0.hash(&mut hasher);
         hasher.finish()
     }
@@ -492,8 +489,8 @@ impl Version {
 }
 
 /// Shows normalized version
-impl Display for Version {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let epoch = if self.epoch == 0 {
             String::new()
         } else {
@@ -533,8 +530,8 @@ impl Display for Version {
     }
 }
 
-impl Debug for Version {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Debug for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "\"{}\"", self)
     }
 }
@@ -544,11 +541,11 @@ impl Debug for Version {
 pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
     // "When comparing release segments with different numbers of components, the shorter segment
     // is padded out with additional zeros as necessary"
-    for (this, other) in this.iter().chain(iter::repeat(&0)).zip(
+    for (this, other) in this.iter().chain(std::iter::repeat(&0)).zip(
         other
             .iter()
-            .chain(iter::repeat(&0))
-            .take(max(this.len(), other.len())),
+            .chain(std::iter::repeat(&0))
+            .take(this.len().max(other.len())),
     ) {
         match this.cmp(other) {
             Ordering::Less => {
@@ -856,9 +853,10 @@ fn version_fast_parse(version: &str) -> Option<Version> {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     #[cfg(feature = "pyo3")]
     use pyo3::pyfunction;
-    use std::str::FromStr;
 
     use crate::{Version, VersionSpecifier};
 
