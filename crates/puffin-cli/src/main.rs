@@ -137,10 +137,10 @@ struct PipCompileArgs {
     #[clap(long, conflicts_with = "extra")]
     all_extras: bool,
 
-    #[clap(long, value_enum, default_value_t = Default::default())]
+    #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = Default::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
     prerelease: PreReleaseMode,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
@@ -210,7 +210,7 @@ struct PipSyncArgs {
     reinstall_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
-    #[clap(long, value_enum, default_value_t = Default::default())]
+    #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python Package Index.
@@ -291,13 +291,13 @@ struct PipInstallArgs {
     reinstall_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
-    #[clap(long, value_enum, default_value_t = Default::default())]
+    #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
-    #[clap(long, value_enum, default_value_t = Default::default())]
+    #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = Default::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
     prerelease: PreReleaseMode,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
