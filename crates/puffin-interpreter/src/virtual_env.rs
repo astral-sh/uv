@@ -24,6 +24,7 @@ impl Virtualenv {
         let Some(venv) = detect_virtual_env(&platform)? else {
             return Err(Error::NotFound);
         };
+        let venv = fs_err::canonicalize(venv)?;
         let executable = platform.venv_python(&venv);
         let interpreter = Interpreter::query(&executable, platform.0, cache)?;
 

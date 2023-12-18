@@ -56,7 +56,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
         RegistryClientBuilder::new(cache.clone()).build(),
         cache.clone(),
         venv.interpreter().clone(),
-        fs::canonicalize(venv.python_executable())?,
+        venv.python_executable(),
         args.no_build,
         IndexUrls::default(),
     );

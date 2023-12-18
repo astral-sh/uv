@@ -4,7 +4,6 @@ use std::path::Path;
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
-use fs_err as fs;
 use itertools::Itertools;
 use tempfile::tempdir_in;
 use tracing::debug;
@@ -137,7 +136,7 @@ pub(crate) async fn pip_install(
         client.clone(),
         cache.clone(),
         interpreter,
-        fs::canonicalize(venv.python_executable())?,
+        venv.python_executable(),
         no_build,
         index_urls.clone(),
     )

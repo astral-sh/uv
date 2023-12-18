@@ -2,7 +2,6 @@ use std::fmt::Write;
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
-use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -66,7 +65,7 @@ pub(crate) async fn pip_sync(
         client.clone(),
         cache.clone(),
         venv.interpreter().clone(),
-        fs::canonicalize(venv.python_executable())?,
+        venv.python_executable(),
         no_build,
         index_urls.clone(),
     );

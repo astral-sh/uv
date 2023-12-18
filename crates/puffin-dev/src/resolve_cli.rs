@@ -5,7 +5,7 @@ use anstream::println;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, ValueEnum};
-use fs_err as fs;
+
 use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
@@ -55,7 +55,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         client.clone(),
         cache.clone(),
         venv.interpreter().clone(),
-        fs::canonicalize(venv.python_executable())?,
+        venv.python_executable(),
         args.no_build,
         IndexUrls::default(),
     );
