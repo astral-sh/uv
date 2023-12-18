@@ -62,12 +62,12 @@ pub(crate) async fn pip_sync(
 
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
-        client.clone(),
-        cache.clone(),
-        venv.interpreter().clone(),
+        &client,
+        &cache,
+        venv.interpreter(),
+        &index_urls,
         venv.python_executable(),
         no_build,
-        index_urls.clone(),
     );
 
     // Determine the set of installed packages.
@@ -341,7 +341,7 @@ async fn resolve_editables(
     tags: &Tags,
     cache: &Cache,
     client: &RegistryClient,
-    build_dispatch: &BuildDispatch,
+    build_dispatch: &BuildDispatch<'_>,
     mut printer: Printer,
 ) -> Result<ResolvedEditables> {
     // Partition the editables into those that are already installed, and those that must be built.

@@ -133,12 +133,12 @@ pub(crate) async fn pip_install(
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     let build_dispatch = BuildDispatch::new(
-        client.clone(),
-        cache.clone(),
-        interpreter,
+        &client,
+        &cache,
+        &interpreter,
+        &index_urls,
         venv.python_executable(),
         no_build,
-        index_urls.clone(),
     )
     .with_options(options);
 
@@ -200,7 +200,7 @@ pub(crate) async fn pip_install(
         site_packages,
         reinstall,
         link_mode,
-        index_urls,
+        &index_urls,
         &tags,
         &client,
         &build_dispatch,
@@ -264,7 +264,7 @@ async fn build_editables(
     cache: &Cache,
     tags: &Tags,
     client: &RegistryClient,
-    build_dispatch: &BuildDispatch,
+    build_dispatch: &BuildDispatch<'_>,
     mut printer: Printer,
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
@@ -321,7 +321,7 @@ async fn resolve(
     tags: &Tags,
     markers: &MarkerEnvironment,
     client: &RegistryClient,
-    build_dispatch: &BuildDispatch,
+    build_dispatch: &BuildDispatch<'_>,
     options: ResolutionOptions,
     mut printer: Printer,
 ) -> Result<ResolutionGraph, Error> {
@@ -386,10 +386,10 @@ async fn install(
     site_packages: SitePackages<'_>,
     reinstall: &Reinstall,
     link_mode: LinkMode,
-    index_urls: IndexUrls,
+    index_urls: &IndexUrls,
     tags: &Tags,
     client: &RegistryClient,
-    build_dispatch: &BuildDispatch,
+    build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &Virtualenv,
     mut printer: Printer,
@@ -413,7 +413,7 @@ async fn install(
         editables,
         site_packages,
         reinstall,
-        &index_urls,
+        index_urls,
         cache,
         venv,
         tags,

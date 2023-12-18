@@ -24,36 +24,36 @@ use pypi_types::IndexUrls;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
-pub struct BuildDispatch {
-    client: RegistryClient,
-    cache: Cache,
-    interpreter: Interpreter,
+pub struct BuildDispatch<'a> {
+    client: &'a RegistryClient,
+    cache: &'a Cache,
+    interpreter: &'a Interpreter,
+    index_urls: &'a IndexUrls,
     base_python: PathBuf,
     no_build: bool,
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
-    index_urls: IndexUrls,
     in_flight_unzips: OnceMap<PathBuf, Result<CachedDist, String>>,
 }
 
-impl BuildDispatch {
+impl<'a> BuildDispatch<'a> {
     pub fn new(
-        client: RegistryClient,
-        cache: Cache,
-        interpreter: Interpreter,
+        client: &'a RegistryClient,
+        cache: &'a Cache,
+        interpreter: &'a Interpreter,
+        index_urls: &'a IndexUrls,
         base_python: PathBuf,
         no_build: bool,
-        index_urls: IndexUrls,
     ) -> Self {
         Self {
             client,
             cache,
             interpreter,
+            index_urls,
             base_python,
             no_build,
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
-            index_urls,
             in_flight_unzips: OnceMap::default(),
         }
     }
@@ -65,15 +65,15 @@ impl BuildDispatch {
     }
 }
 
-impl BuildContext for BuildDispatch {
+impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
     fn cache(&self) -> &Cache {
-        &self.cache
+        self.cache
     }
 
     fn interpreter(&self) -> &Interpreter {
-        &self.interpreter
+        self.interpreter
     }
 
     fn base_python(&self) -> &Path {
@@ -85,18 +85,18 @@ impl BuildContext for BuildDispatch {
     }
 
     #[instrument(skip(self, requirements), fields(requirements = requirements.iter().map(ToString::to_string).join(", ")))]
-    fn resolve<'a>(
-        &'a self,
-        requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'a>> {
+    fn resolve<'data>(
+        &'data self,
+        requirements: &'data [Requirement],
+    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'data>> {
         Box::pin(async {
-            let tags = Tags::from_interpreter(&self.interpreter)?;
+            let tags = Tags::from_interpreter(self.interpreter)?;
             let resolver = Resolver::new(
                 Manifest::simple(requirements.to_vec()),
                 self.options,
                 self.interpreter.markers(),
                 &tags,
-                &self.client,
+                self.client,
                 self,
             );
             let graph = resolver.resolve().await.with_context(|| {
@@ -116,11 +116,11 @@ impl BuildContext for BuildDispatch {
             venv = ?venv.root()
         )
     )]
-    fn install<'a>(
-        &'a self,
-        resolution: &'a Resolution,
-        venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+    fn install<'data>(
+        &'data self,
+        resolution: &'data Resolution,
+        venv: &'data Virtualenv,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'data>> {
         Box::pin(async move {
             debug!(
                 "Installing in {} in {}",
@@ -132,7 +132,7 @@ impl BuildContext for BuildDispatch {
             );
 
             // Determine the current environment markers.
-            let tags = Tags::from_interpreter(&self.interpreter)?;
+            let tags = Tags::from_interpreter(self.interpreter)?;
 
             // Determine the set of installed packages.
             let site_packages =
@@ -148,7 +148,7 @@ impl BuildContext for BuildDispatch {
                 Vec::new(),
                 site_packages,
                 &Reinstall::None,
-                &self.index_urls,
+                self.index_urls,
                 self.cache(),
                 venv,
                 &tags,
@@ -170,7 +170,7 @@ impl BuildContext for BuildDispatch {
                 vec![]
             } else {
                 // TODO(konstin): Check that there is no endless recursion.
-                let downloader = Downloader::new(self.cache(), &tags, &self.client, self);
+                let downloader = Downloader::new(self.cache(), &tags, self.client, self);
                 debug!(
                     "Downloading and building requirement{} for build: {}",
                     if remote.len() == 1 { "" } else { "s" },
@@ -218,13 +218,13 @@ impl BuildContext for BuildDispatch {
     }
 
     #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
-    fn setup_build<'a>(
-        &'a self,
-        source: &'a Path,
-        subdirectory: Option<&'a Path>,
-        package_id: &'a str,
+    fn setup_build<'data>(
+        &'data self,
+        source: &'data Path,
+        subdirectory: Option<&'data Path>,
+        package_id: &'data str,
         build_kind: BuildKind,
-    ) -> Pin<Box<dyn Future<Output = Result<SourceBuild>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<SourceBuild>> + Send + 'data>> {
         Box::pin(async move {
             if self.no_build {
                 bail!("Building source distributions is disabled");
@@ -232,7 +232,7 @@ impl BuildContext for BuildDispatch {
             let builder = SourceBuild::setup(
                 source,
                 subdirectory,
-                &self.interpreter,
+                self.interpreter,
                 self,
                 self.source_build_context.clone(),
                 package_id.to_string(),
