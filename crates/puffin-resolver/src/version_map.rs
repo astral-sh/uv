@@ -10,7 +10,7 @@ use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
-use puffin_warnings::warn_once;
+use puffin_warnings::warn_user_once;
 use pypi_types::Yanked;
 
 use crate::file::{DistFile, SdistFile, WheelFile};
@@ -63,7 +63,7 @@ impl VersionMap {
                             continue;
                         }
                         None => {
-                            warn_once!(
+                            warn_user_once!(
                                 "{} is missing an upload date, but user provided: {}",
                                 file.filename,
                                 exclude_newer,
