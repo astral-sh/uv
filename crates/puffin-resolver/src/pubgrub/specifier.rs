@@ -36,21 +36,14 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 Range::singleton(version).complement()
             }
             Operator::TildeEqual => {
-                let [rest @ .., last, _] = specifier.version().release.as_slice() else {
+                let [rest @ .., last, _] = specifier.version().release() else {
                     return Err(ResolveError::InvalidTildeEquals(specifier.clone()));
                 };
-                let upper = PubGrubVersion::from(pep440_rs::Version {
-                    dev: Some(0),
-                    epoch: specifier.version().epoch,
-                    local: None,
-                    post: None,
-                    pre: None,
-                    release: rest
-                        .iter()
-                        .chain(std::iter::once(&(last + 1)))
-                        .copied()
-                        .collect(),
-                });
+                let upper = PubGrubVersion::from(
+                    pep440_rs::Version::new(rest.iter().chain([&(last + 1)]))
+                        .with_epoch(specifier.version().epoch())
+                        .with_dev(Some(0)),
+                );
                 let version = PubGrubVersion::from(specifier.version().clone());
                 Range::from_range_bounds(version..upper)
             }
@@ -65,14 +58,6 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
-                let mut low = specifier.version().clone();
-                if let Some(dev) = low.dev {
-                    low.dev = Some(dev + 1);
-                } else if let Some(post) = low.post {
-                    low.post = Some(post + 1);
-                } else {
-                    low.post = Some(u64::MAX);
-                }
                 let version = PubGrubVersion::from(specifier.version().clone());
                 Range::strictly_higher_than(version)
             }
@@ -81,46 +66,38 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 Range::higher_than(version)
             }
             Operator::EqualStar => {
-                let low = pep440_rs::Version {
-                    dev: Some(0),
-                    ..specifier.version().clone()
-                };
-                let mut high = pep440_rs::Version {
-                    dev: Some(0),
-                    ..specifier.version().clone()
-                };
-                if let Some(post) = high.post {
-                    high.post = Some(post + 1);
-                } else if let Some(pre) = high.pre {
-                    high.pre = Some(match pre {
+                let low = specifier.version().clone().with_dev(Some(0));
+                let mut high = low.clone();
+                if let Some(post) = high.post() {
+                    high = high.with_post(Some(post + 1));
+                } else if let Some(pre) = high.pre() {
+                    high = high.with_pre(Some(match pre {
                         (pep440_rs::PreRelease::Rc, n) => (pep440_rs::PreRelease::Rc, n + 1),
                         (pep440_rs::PreRelease::Alpha, n) => (pep440_rs::PreRelease::Alpha, n + 1),
                         (pep440_rs::PreRelease::Beta, n) => (pep440_rs::PreRelease::Beta, n + 1),
-                    });
+                    }));
                 } else {
-                    *high.release.last_mut().unwrap() += 1;
+                    let mut release = high.release().to_vec();
+                    *release.last_mut().unwrap() += 1;
+                    high = high.with_release(release);
                 }
                 Range::from_range_bounds(PubGrubVersion::from(low)..PubGrubVersion::from(high))
             }
             Operator::NotEqualStar => {
-                let low = pep440_rs::Version {
-                    dev: Some(0),
-                    ..specifier.version().clone()
-                };
-                let mut high = pep440_rs::Version {
-                    dev: Some(0),
-                    ..specifier.version().clone()
-                };
-                if let Some(post) = high.post {
-                    high.post = Some(post + 1);
-                } else if let Some(pre) = high.pre {
-                    high.pre = Some(match pre {
+                let low = specifier.version().clone().with_dev(Some(0));
+                let mut high = low.clone();
+                if let Some(post) = high.post() {
+                    high = high.with_post(Some(post + 1));
+                } else if let Some(pre) = high.pre() {
+                    high = high.with_pre(Some(match pre {
                         (pep440_rs::PreRelease::Rc, n) => (pep440_rs::PreRelease::Rc, n + 1),
                         (pep440_rs::PreRelease::Alpha, n) => (pep440_rs::PreRelease::Alpha, n + 1),
                         (pep440_rs::PreRelease::Beta, n) => (pep440_rs::PreRelease::Beta, n + 1),
-                    });
+                    }));
                 } else {
-                    *high.release.last_mut().unwrap() += 1;
+                    let mut release = high.release().to_vec();
+                    *release.last_mut().unwrap() += 1;
+                    high = high.with_release(release);
                 }
                 Range::from_range_bounds(PubGrubVersion::from(low)..PubGrubVersion::from(high))
                     .complement()

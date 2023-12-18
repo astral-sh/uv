@@ -10,13 +10,12 @@ impl PubGrubVersion {
     /// Returns the smallest PEP 440 version that is larger than `self`.
     pub fn next(&self) -> PubGrubVersion {
         let mut next = self.clone();
-        if let Some(dev) = &mut next.0.dev {
-            *dev += 1;
-        } else if let Some(post) = &mut next.0.post {
-            *post += 1;
+        if let Some(dev) = next.0.dev() {
+            next.0 = next.0.with_dev(Some(dev + 1));
+        } else if let Some(post) = next.0.post() {
+            next.0 = next.0.with_post(Some(post + 1));
         } else {
-            next.0.post = Some(0);
-            next.0.dev = Some(0);
+            next.0 = next.0.with_post(Some(0)).with_dev(Some(0));
         }
         next
     }

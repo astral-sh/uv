@@ -82,8 +82,8 @@ impl Interpreter {
     /// Returns the Python version as a simple tuple.
     pub fn simple_version(&self) -> (u8, u8) {
         (
-            u8::try_from(self.version().release[0]).expect("invalid major version"),
-            u8::try_from(self.version().release[1]).expect("invalid minor version"),
+            u8::try_from(self.version().release()[0]).expect("invalid major version"),
+            u8::try_from(self.version().release()[1]).expect("invalid minor version"),
         )
     }
 

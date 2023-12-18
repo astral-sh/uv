@@ -281,7 +281,7 @@ impl VersionSpecifier {
     /// parameter indicates a trailing `.*`, to differentiate between `1.1.*` and `1.1`
     pub fn new(operator: Operator, version: Version, star: bool) -> Result<Self, String> {
         // "Local version identifiers are NOT permitted in this version specifier."
-        if let Some(local) = &version.local {
+        if let Some(local) = &version.local() {
             if matches!(
                 operator,
                 Operator::GreaterThan
@@ -319,7 +319,7 @@ impl VersionSpecifier {
             operator
         };
 
-        if operator == Operator::TildeEqual && version.release.len() < 2 {
+        if operator == Operator::TildeEqual && version.release().len() < 2 {
             return Err(
                 "The ~= operator requires at least two parts in the release version".to_string(),
             );
@@ -371,7 +371,7 @@ impl VersionSpecifier {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking
         // if candidate versions match a given version specifier."
-        let (this, other) = if self.version.local.is_some() {
+        let (this, other) = if self.version.local().is_some() {
             (self.version.clone(), version.clone())
         } else {
             // self is already without local
@@ -381,12 +381,12 @@ impl VersionSpecifier {
         match self.operator {
             Operator::Equal => other == this,
             Operator::EqualStar => {
-                this.epoch == other.epoch
+                this.epoch() == other.epoch()
                     && self
                         .version
-                        .release
+                        .release()
                         .iter()
-                        .zip(&other.release)
+                        .zip(other.release())
                         .all(|(this, other)| this == other)
             }
             #[allow(deprecated)]
@@ -399,11 +399,11 @@ impl VersionSpecifier {
             }
             Operator::NotEqual => other != this,
             Operator::NotEqualStar => {
-                this.epoch != other.epoch
+                this.epoch() != other.epoch()
                     || !this
-                        .release
+                        .release()
                         .iter()
-                        .zip(&version.release)
+                        .zip(version.release())
                         .all(|(this, other)| this == other)
             }
             Operator::TildeEqual => {
@@ -411,14 +411,14 @@ impl VersionSpecifier {
                 // approximately equivalent to the pair of comparison clauses: `>= V.N, == V.*`"
                 // First, we test that every but the last digit matches.
                 // We know that this must hold true since we checked it in the constructor
-                assert!(this.release.len() > 1);
-                if this.epoch != other.epoch {
+                assert!(this.release().len() > 1);
+                if this.epoch() != other.epoch() {
                     return false;
                 }
 
-                if !this.release[..this.release.len() - 1]
+                if !this.release()[..this.release().len() - 1]
                     .iter()
-                    .zip(&other.release)
+                    .zip(other.release())
                     .all(|(this, other)| this == other)
                 {
                     return false;
@@ -432,7 +432,8 @@ impl VersionSpecifier {
             Operator::GreaterThanEqual => Self::greater_than(&this, &other) || other >= this,
             Operator::LessThan => {
                 Self::less_than(&this, &other)
-                    && !(version::compare_release(&this.release, &other.release) == Ordering::Equal
+                    && !(version::compare_release(this.release(), other.release())
+                        == Ordering::Equal
                         && other.any_prerelease())
             }
             Operator::LessThanEqual => Self::less_than(&this, &other) || other <= this,
@@ -440,7 +441,7 @@ impl VersionSpecifier {
     }
 
     fn less_than(this: &Version, other: &Version) -> bool {
-        if other.epoch < this.epoch {
+        if other.epoch() < this.epoch() {
             return true;
         }
 
@@ -450,7 +451,7 @@ impl VersionSpecifier {
         // not match 3.1.dev0, but should match 3.0.dev0).
         if !this.any_prerelease()
             && other.is_pre()
-            && version::compare_release(&this.release, &other.release) == Ordering::Equal
+            && version::compare_release(this.release(), other.release()) == Ordering::Equal
         {
             return false;
         }
@@ -459,11 +460,11 @@ impl VersionSpecifier {
     }
 
     fn greater_than(this: &Version, other: &Version) -> bool {
-        if other.epoch > this.epoch {
+        if other.epoch() > this.epoch() {
             return true;
         }
 
-        if version::compare_release(&this.release, &other.release) == Ordering::Equal {
+        if version::compare_release(this.release(), other.release()) == Ordering::Equal {
             // This special case is here so that, unless the specifier itself
             // includes is a post-release version, that we do not accept
             // post-release versions for the version mentioned in the specifier
@@ -1055,47 +1056,19 @@ mod test {
             [
                 VersionSpecifier {
                     operator: Operator::TildeEqual,
-                    version: Version {
-                        epoch: 0,
-                        release: vec![0, 9],
-                        pre: None,
-                        post: None,
-                        dev: None,
-                        local: None
-                    }
+                    version: Version::new([0, 9]),
                 },
                 VersionSpecifier {
                     operator: Operator::GreaterThanEqual,
-                    version: Version {
-                        epoch: 0,
-                        release: vec![1, 0],
-                        pre: None,
-                        post: None,
-                        dev: None,
-                        local: None
-                    }
+                    version: Version::new([1, 0]),
                 },
                 VersionSpecifier {
                     operator: Operator::NotEqualStar,
-                    version: Version {
-                        epoch: 0,
-                        release: vec![1, 3, 4],
-                        pre: None,
-                        post: None,
-                        dev: None,
-                        local: None
-                    }
+                    version: Version::new([1, 3, 4]),
                 },
                 VersionSpecifier {
                     operator: Operator::LessThan,
-                    version: Version {
-                        epoch: 0,
-                        release: vec![2, 0],
-                        pre: None,
-                        post: None,
-                        dev: None,
-                        local: None
-                    }
+                    version: Version::new([2, 0]),
                 }
             ]
         );

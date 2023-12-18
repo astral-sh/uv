@@ -18,7 +18,7 @@ impl FromStr for PythonVersion {
         if version.is_local() {
             return Err(format!("Python version {s} is a local version"));
         }
-        if version.epoch != 0 {
+        if version.epoch() != 0 {
             return Err(format!("Python version {s} has a non-zero epoch"));
         }
         if version.version < Version::from_release(vec![3, 7]) {
@@ -29,7 +29,7 @@ impl FromStr for PythonVersion {
         }
 
         // If the version lacks a patch, assume the most recent known patch for that minor version.
-        match version.release.as_slice() {
+        match version.release() {
             [3, 7] => {
                 debug!("Assuming Python 3.7.17");
                 Ok(Self(StringVersion::from_str("3.7.17")?))

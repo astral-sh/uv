@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     cmp::Ordering,
     hash::{Hash, Hasher},
     str::FromStr,
@@ -154,7 +155,7 @@ impl Operator {
 /// Optional prerelease modifier (alpha, beta or release candidate) appended to version
 ///
 /// <https://peps.python.org/pep-0440/#pre-releases>
-#[derive(PartialEq, Eq, Debug, Hash, Clone, Ord, PartialOrd)]
+#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum PreRelease {
     /// alpha prerelease
@@ -260,25 +261,25 @@ impl FromStr for LocalSegment {
 pub struct Version {
     /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
     /// but you can increment it if you switched the versioning scheme.
-    pub epoch: u64,
+    epoch: u64,
     /// The normal number part of the version
     /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
     /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
     ///
     /// Note that we drop the * placeholder by moving it to `Operator`
-    pub release: Vec<u64>,
+    release: Vec<u64>,
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
     ///
     /// Note that whether this is Some influences the version
     /// range matching since normally we exclude all prerelease versions
-    pub pre: Option<(PreRelease, u64)>,
+    pre: Option<(PreRelease, u64)>,
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
     /// higher post version are preferred over lower post or none-post versions
-    pub post: Option<u64>,
+    post: Option<u64>,
     /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
     /// if any
-    pub dev: Option<u64>,
+    dev: Option<u64>,
     /// A [local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers)
     /// such as `+deadbeef` in `1.2.3+deadbeef`
     ///
@@ -286,7 +287,7 @@ pub struct Version {
     /// > along with an arbitrary “local version label”, separated from the public version
     /// > identifier by a plus. Local version labels have no specific semantics assigned, but some
     /// > syntactic restrictions are imposed.
-    pub local: Option<Vec<LocalSegment>>,
+    local: Option<Vec<LocalSegment>>,
 }
 
 #[cfg(feature = "pyo3")]
@@ -334,7 +335,7 @@ impl PyVersion {
     /// range matching since normally we exclude all prerelease versions
     #[getter]
     pub fn pre(&self) -> Option<(PreRelease, u64)> {
-        self.0.pre.clone()
+        self.0.pre
     }
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
     /// higher post version are preferred over lower post or none-post versions
@@ -462,29 +463,137 @@ impl Version {
 }
 
 impl Version {
+    /// Create a new version from an iterator of segments in the release part
+    /// of a version.
+    #[inline]
+    pub fn new<I, R>(release_numbers: I) -> Version
+    where
+        I: IntoIterator<Item = R>,
+        R: Borrow<u64>,
+    {
+        Version {
+            epoch: 0,
+            release: vec![],
+            pre: None,
+            post: None,
+            dev: None,
+            local: None,
+        }
+        .with_release(release_numbers)
+    }
+
     /// Whether this is an alpha/beta/rc or dev version
+    #[inline]
     pub fn any_prerelease(&self) -> bool {
         self.is_pre() || self.is_dev()
     }
 
     /// Whether this is an alpha/beta/rc version
+    #[inline]
     pub fn is_pre(&self) -> bool {
         self.pre.is_some()
     }
 
     /// Whether this is a dev version
+    #[inline]
     pub fn is_dev(&self) -> bool {
         self.dev.is_some()
     }
 
     /// Whether this is a post version
+    #[inline]
     pub fn is_post(&self) -> bool {
         self.post.is_some()
     }
 
     /// Whether this is a local version (e.g. `1.2.3+localsuffixesareweird`)
+    #[inline]
     pub fn is_local(&self) -> bool {
         self.local.is_some()
+    }
+
+    /// Returns the epoch of this version.
+    #[inline]
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// Returns the release number part of the version.
+    #[inline]
+    pub fn release(&self) -> &[u64] {
+        &self.release
+    }
+
+    /// Returns the pre-relase part of this version, if it exists.
+    #[inline]
+    pub fn pre(&self) -> Option<(PreRelease, u64)> {
+        self.pre
+    }
+
+    /// Returns the post-release part of this version, if it exists.
+    #[inline]
+    pub fn post(&self) -> Option<u64> {
+        self.post
+    }
+
+    /// Returns the dev-release part of this version, if it exists.
+    #[inline]
+    pub fn dev(&self) -> Option<u64> {
+        self.dev
+    }
+
+    /// Returns the local segments in this version, if any exist.
+    #[inline]
+    pub fn local(&self) -> Option<&[LocalSegment]> {
+        self.local.as_deref()
+    }
+
+    /// Set the release numbers and return the updated version.
+    ///
+    /// Usually one can just use `Version::new` to create a new version with
+    /// the updated release numbers, but this is useful when one wants to
+    /// preserve the other components of a version number while only changing
+    /// the release numbers.
+    #[inline]
+    pub fn with_release<I, R>(self, release_numbers: I) -> Version
+    where
+        I: IntoIterator<Item = R>,
+        R: Borrow<u64>,
+    {
+        Version {
+            release: release_numbers.into_iter().map(|r| *r.borrow()).collect(),
+            ..self
+        }
+    }
+
+    /// Set the epoch and return the updated version.
+    #[inline]
+    pub fn with_epoch(self, epoch: u64) -> Version {
+        Version { epoch, ..self }
+    }
+
+    /// Set the pre-release component and return the updated version.
+    #[inline]
+    pub fn with_pre(self, pre: Option<(PreRelease, u64)>) -> Version {
+        Version { pre, ..self }
+    }
+
+    /// Set the post-release component and return the updated version.
+    #[inline]
+    pub fn with_post(self, post: Option<u64>) -> Version {
+        Version { post, ..self }
+    }
+
+    /// Set the dev-release component and return the updated version.
+    #[inline]
+    pub fn with_dev(self, dev: Option<u64>) -> Version {
+        Version { dev, ..self }
+    }
+
+    /// Set the local segments and return the updated version.
+    #[inline]
+    pub fn with_local(self, local: Option<Vec<LocalSegment>>) -> Version {
+        Version { local, ..self }
     }
 }
 

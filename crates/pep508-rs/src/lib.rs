@@ -977,30 +977,11 @@ mod tests {
                 [
                     VersionSpecifier::new(
                         Operator::GreaterThanEqual,
-                        Version {
-                            epoch: 0,
-                            release: vec![2, 8, 1],
-                            pre: None,
-                            post: None,
-                            dev: None,
-                            local: None,
-                        },
+                        Version::new([2, 8, 1]),
                         false,
                     )
                     .unwrap(),
-                    VersionSpecifier::new(
-                        Operator::Equal,
-                        Version {
-                            epoch: 0,
-                            release: vec![2, 8],
-                            pre: None,
-                            post: None,
-                            dev: None,
-                            local: None,
-                        },
-                        true,
-                    )
-                    .unwrap(),
+                    VersionSpecifier::new(Operator::Equal, Version::new([2, 8]), true).unwrap(),
                 ]
                 .into_iter()
                 .collect(),
