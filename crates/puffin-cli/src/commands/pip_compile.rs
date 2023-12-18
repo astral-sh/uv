@@ -142,7 +142,7 @@ pub(crate) async fn pip_compile(
         client.clone(),
         cache.clone(),
         interpreter,
-        fs_err::canonicalize(venv.python_executable())?,
+        venv.python_executable(),
         no_build,
         index_urls,
     )

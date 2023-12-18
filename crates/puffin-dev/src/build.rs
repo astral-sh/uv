@@ -58,7 +58,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         RegistryClientBuilder::new(cache.clone()).build(),
         cache,
         venv.interpreter().clone(),
-        fs::canonicalize(venv.python_executable())?,
+        venv.python_executable(),
         false,
         IndexUrls::default(),
     );
