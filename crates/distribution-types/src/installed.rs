@@ -8,7 +8,7 @@ use url::Url;
 use pep440_rs::Version;
 use puffin_normalize::PackageName;
 
-use crate::{Metadata, VersionOrUrl};
+use crate::{InstalledMetadata, InstalledVersion, Name};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
 #[derive(Debug, Clone)]
@@ -33,42 +33,6 @@ pub struct InstalledDirectUrlDist {
     pub url: Url,
     pub editable: bool,
     pub path: PathBuf,
-}
-
-impl Metadata for InstalledRegistryDist {
-    fn name(&self) -> &PackageName {
-        &self.name
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
-    }
-}
-
-impl Metadata for InstalledDirectUrlDist {
-    fn name(&self) -> &PackageName {
-        &self.name
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::VersionedUrl(&self.url, &self.version)
-    }
-}
-
-impl Metadata for InstalledDist {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(dist) => dist.name(),
-            Self::Url(dist) => dist.name(),
-        }
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Registry(dist) => dist.version_or_url(),
-            Self::Url(dist) => dist.version_or_url(),
-        }
-    }
 }
 
 impl InstalledDist {
@@ -147,6 +111,48 @@ impl InstalledDist {
         match self {
             Self::Registry(_) => None,
             Self::Url(dist) => dist.editable.then_some(&dist.url),
+        }
+    }
+}
+
+impl Name for InstalledRegistryDist {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+}
+
+impl Name for InstalledDirectUrlDist {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+}
+
+impl Name for InstalledDist {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Registry(dist) => dist.name(),
+            Self::Url(dist) => dist.name(),
+        }
+    }
+}
+
+impl InstalledMetadata for InstalledRegistryDist {
+    fn installed_version(&self) -> InstalledVersion {
+        InstalledVersion::Version(&self.version)
+    }
+}
+
+impl InstalledMetadata for InstalledDirectUrlDist {
+    fn installed_version(&self) -> InstalledVersion {
+        InstalledVersion::Url(&self.url, &self.version)
+    }
+}
+
+impl InstalledMetadata for InstalledDist {
+    fn installed_version(&self) -> InstalledVersion {
+        match self {
+            Self::Registry(dist) => dist.installed_version(),
+            Self::Url(dist) => dist.installed_version(),
         }
     }
 }

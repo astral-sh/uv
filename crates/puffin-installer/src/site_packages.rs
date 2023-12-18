@@ -5,7 +5,7 @@ use fs_err as fs;
 use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
+use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_interpreter::Virtualenv;
@@ -94,14 +94,13 @@ impl<'a> SitePackages<'a> {
         self.iter().map(|dist| Requirement {
             name: dist.name().clone(),
             extras: None,
-            version_or_url: Some(match dist.version_or_url() {
-                VersionOrUrl::Version(version) => {
+            version_or_url: Some(match dist.installed_version() {
+                InstalledVersion::Version(version) => {
                     pep508_rs::VersionOrUrl::VersionSpecifier(pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(version.clone()),
                     ))
                 }
-                VersionOrUrl::Url(url) => pep508_rs::VersionOrUrl::Url(url.clone()),
-                VersionOrUrl::VersionedUrl(url, ..) => {
+                InstalledVersion::Url(url, ..) => {
                     pep508_rs::VersionOrUrl::Url(VerbatimUrl::unknown(url.clone()))
                 }
             }),

@@ -22,7 +22,7 @@ use zip::ZipArchive;
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{
-    Dist, GitSourceDist, LocalEditable, Metadata, PathSourceDist, RemoteSource, SourceDist,
+    Dist, GitSourceDist, LocalEditable, Name, PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;

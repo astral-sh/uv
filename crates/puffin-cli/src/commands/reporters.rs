@@ -5,7 +5,9 @@ use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use url::Url;
 
-use distribution_types::{CachedDist, LocalEditable, Metadata, SourceDist, VersionOrUrl};
+use distribution_types::{
+    CachedDist, Dist, DistributionMetadata, LocalEditable, Name, SourceDist, VersionOrUrl,
+};
 use puffin_normalize::PackageName;
 
 use crate::printer::Printer;
@@ -35,7 +37,7 @@ impl FinderReporter {
 }
 
 impl puffin_resolver::FinderReporter for FinderReporter {
-    fn on_progress(&self, dist: &dyn Metadata) {
+    fn on_progress(&self, dist: &Dist) {
         self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
     }
@@ -103,7 +105,7 @@ impl DownloadReporter {
 }
 
 impl puffin_installer::DownloadReporter for DownloadReporter {
-    fn on_progress(&self, dist: &dyn Metadata) {
+    fn on_progress(&self, dist: &CachedDist) {
         self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
     }
@@ -112,11 +114,11 @@ impl puffin_installer::DownloadReporter for DownloadReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
+    fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.on_any_build_start(&dist.to_color_string())
     }
 
-    fn on_build_complete(&self, dist: &dyn Metadata, index: usize) {
+    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
         self.on_any_build_complete(&dist.to_color_string(), index);
     }
 
@@ -234,9 +236,6 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
             VersionOrUrl::Url(url) => {
                 self.progress.set_message(format!("{name} @ {url}"));
             }
-            VersionOrUrl::VersionedUrl(url, ..) => {
-                self.progress.set_message(format!("{name} @ {url}"));
-            }
         }
     }
 
@@ -244,7 +243,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
+    fn on_build_start(&self, dist: &SourceDist) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -262,7 +261,7 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, dist: &dyn Metadata, index: usize) {
+    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
@@ -307,14 +306,6 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
 /// Like [`std::fmt::Display`], but with colors.
 trait ColorDisplay {
     fn to_color_string(&self) -> String;
-}
-
-impl ColorDisplay for &dyn Metadata {
-    fn to_color_string(&self) -> String {
-        let name = self.name();
-        let version_or_url = self.version_or_url();
-        format!("{}{}", name, version_or_url.to_string().dimmed())
-    }
 }
 
 impl ColorDisplay for SourceDist {

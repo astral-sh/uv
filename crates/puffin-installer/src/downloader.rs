@@ -7,7 +7,7 @@ use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, LocalEditable, Metadata, RemoteSource};
+use distribution_types::{CachedDist, Dist, LocalEditable, RemoteSource, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
@@ -231,16 +231,16 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a wheel is unzipped. This implies that the wheel was downloaded and,
     /// if necessary, built.
-    fn on_progress(&self, dist: &dyn Metadata);
+    fn on_progress(&self, dist: &CachedDist);
 
     /// Callback to invoke when the operation is complete.
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &dyn Metadata) -> usize;
+    fn on_build_start(&self, dist: &SourceDist) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &dyn Metadata, id: usize);
+    fn on_build_complete(&self, dist: &SourceDist, id: usize);
 
     /// Callback to invoke when a editable build is kicked off.
     fn on_editable_build_start(&self, dist: &LocalEditable) -> usize;
@@ -267,11 +267,11 @@ impl From<Arc<dyn Reporter>> for Facade {
 }
 
 impl puffin_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
+    fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }
 
-    fn on_build_complete(&self, dist: &dyn Metadata, id: usize) {
+    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
         self.reporter.on_build_complete(dist, id);
     }
 

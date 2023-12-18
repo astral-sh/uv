@@ -2,48 +2,40 @@ use puffin_normalize::PackageName;
 
 use crate::cached::CachedDist;
 use crate::installed::InstalledDist;
-use crate::traits::Metadata;
-use crate::{Dist, VersionOrUrl};
+use crate::{InstalledMetadata, InstalledVersion, Name};
 
 /// A distribution which is either installable, is a wheel in our cache or is already installed.
 #[derive(Debug, Clone)]
-pub enum AnyDist {
-    Remote(Dist),
+pub enum LocalDist {
     Cached(CachedDist),
     Installed(InstalledDist),
 }
 
-impl Metadata for AnyDist {
+impl Name for LocalDist {
     fn name(&self) -> &PackageName {
         match self {
-            Self::Remote(dist) => dist.name(),
             Self::Cached(dist) => dist.name(),
             Self::Installed(dist) => dist.name(),
         }
     }
+}
 
-    fn version_or_url(&self) -> VersionOrUrl {
+impl InstalledMetadata for LocalDist {
+    fn installed_version(&self) -> InstalledVersion {
         match self {
-            Self::Remote(dist) => dist.version_or_url(),
-            Self::Cached(dist) => dist.version_or_url(),
-            Self::Installed(dist) => dist.version_or_url(),
+            Self::Cached(dist) => dist.installed_version(),
+            Self::Installed(dist) => dist.installed_version(),
         }
     }
 }
 
-impl From<Dist> for AnyDist {
-    fn from(dist: Dist) -> Self {
-        Self::Remote(dist)
-    }
-}
-
-impl From<CachedDist> for AnyDist {
+impl From<CachedDist> for LocalDist {
     fn from(dist: CachedDist) -> Self {
         Self::Cached(dist)
     }
 }
 
-impl From<InstalledDist> for AnyDist {
+impl From<InstalledDist> for LocalDist {
     fn from(dist: InstalledDist) -> Self {
         Self::Installed(dist)
     }

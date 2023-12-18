@@ -19,7 +19,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, LocalEditable, Metadata, PackageId, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, SourceDist, VersionOrUrl,
 };
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
@@ -799,10 +799,10 @@ pub trait Reporter: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &dyn Metadata) -> usize;
+    fn on_build_start(&self, dist: &SourceDist) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &dyn Metadata, id: usize);
+    fn on_build_complete(&self, dist: &SourceDist, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -817,11 +817,11 @@ struct Facade {
 }
 
 impl puffin_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &dyn Metadata) -> usize {
+    fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }
 
-    fn on_build_complete(&self, dist: &dyn Metadata, id: usize) {
+    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
         self.reporter.on_build_complete(dist, id);
     }
 

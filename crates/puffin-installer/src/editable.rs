@@ -1,4 +1,6 @@
-use distribution_types::{CachedDist, InstalledDist, LocalEditable, Metadata, VersionOrUrl};
+use distribution_types::{
+    CachedDist, InstalledDist, InstalledMetadata, InstalledVersion, LocalEditable, Name,
+};
 use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
 
@@ -20,40 +22,44 @@ pub enum ResolvedEditable {
     Built(BuiltEditable),
 }
 
-impl Metadata for BuiltEditable {
+impl Name for BuiltEditable {
     fn name(&self) -> &PackageName {
         &self.metadata.name
     }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.metadata.version)
-    }
 }
 
-impl Metadata for ResolvedEditable {
+impl Name for ResolvedEditable {
     fn name(&self) -> &PackageName {
         match self {
             Self::Installed(dist) => dist.name(),
             Self::Built(dist) => dist.name(),
         }
     }
+}
 
-    fn version_or_url(&self) -> VersionOrUrl {
+impl InstalledMetadata for BuiltEditable {
+    fn installed_version(&self) -> InstalledVersion {
+        self.wheel.installed_version()
+    }
+}
+
+impl InstalledMetadata for ResolvedEditable {
+    fn installed_version(&self) -> InstalledVersion {
         match self {
-            Self::Installed(dist) => dist.version_or_url(),
-            Self::Built(dist) => dist.version_or_url(),
+            Self::Installed(dist) => dist.installed_version(),
+            Self::Built(dist) => dist.installed_version(),
         }
     }
 }
 
 impl std::fmt::Display for BuiltEditable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }
 
 impl std::fmt::Display for ResolvedEditable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{}{}", self.name(), self.installed_version())
     }
 }

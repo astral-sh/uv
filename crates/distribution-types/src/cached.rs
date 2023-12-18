@@ -7,8 +7,10 @@ use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 
 use crate::direct_url::{DirectUrl, LocalFileUrl};
-use crate::traits::Metadata;
-use crate::{BuiltDist, Dist, SourceDist, VersionOrUrl};
+use crate::{
+    BuiltDist, Dist, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SourceDist,
+    VersionOrUrl,
+};
 
 /// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone)]
@@ -31,42 +33,6 @@ pub struct CachedDirectUrlDist {
     pub url: VerbatimUrl,
     pub path: PathBuf,
     pub editable: bool,
-}
-
-impl Metadata for CachedRegistryDist {
-    fn name(&self) -> &PackageName {
-        &self.filename.name
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.filename.version)
-    }
-}
-
-impl Metadata for CachedDirectUrlDist {
-    fn name(&self) -> &PackageName {
-        &self.filename.name
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::VersionedUrl(self.url.raw(), &self.filename.version)
-    }
-}
-
-impl Metadata for CachedDist {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::Registry(dist) => dist.name(),
-            Self::Url(dist) => dist.name(),
-        }
-    }
-
-    fn version_or_url(&self) -> VersionOrUrl {
-        match self {
-            Self::Registry(dist) => dist.version_or_url(),
-            Self::Url(dist) => dist.version_or_url(),
-        }
-    }
 }
 
 impl CachedDist {
@@ -202,6 +168,69 @@ impl CachedWheel {
             url,
             path: self.path,
             editable: false,
+        }
+    }
+}
+
+impl Name for CachedRegistryDist {
+    fn name(&self) -> &PackageName {
+        &self.filename.name
+    }
+}
+
+impl Name for CachedDirectUrlDist {
+    fn name(&self) -> &PackageName {
+        &self.filename.name
+    }
+}
+
+impl Name for CachedDist {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Registry(dist) => dist.name(),
+            Self::Url(dist) => dist.name(),
+        }
+    }
+}
+
+impl DistributionMetadata for CachedRegistryDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Version(&self.filename.version)
+    }
+}
+
+impl DistributionMetadata for CachedDirectUrlDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Url(&self.url)
+    }
+}
+
+impl DistributionMetadata for CachedDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        match self {
+            Self::Registry(dist) => dist.version_or_url(),
+            Self::Url(dist) => dist.version_or_url(),
+        }
+    }
+}
+
+impl InstalledMetadata for CachedRegistryDist {
+    fn installed_version(&self) -> InstalledVersion {
+        InstalledVersion::Version(&self.filename.version)
+    }
+}
+
+impl InstalledMetadata for CachedDirectUrlDist {
+    fn installed_version(&self) -> InstalledVersion {
+        InstalledVersion::Url(&self.url, &self.filename.version)
+    }
+}
+
+impl InstalledMetadata for CachedDist {
+    fn installed_version(&self) -> InstalledVersion {
+        match self {
+            Self::Registry(dist) => dist.installed_version(),
+            Self::Url(dist) => dist.installed_version(),
         }
     }
 }

@@ -1,8 +1,8 @@
 use anyhow::Result;
-use distribution_types::Metadata;
 use itertools::Itertools;
 use tracing::debug;
 
+use distribution_types::Name;
 use platform_host::Platform;
 use puffin_cache::Cache;
 use puffin_installer::SitePackages;
