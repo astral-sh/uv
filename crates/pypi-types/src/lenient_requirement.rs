@@ -12,8 +12,9 @@ use puffin_warnings::warn_once;
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
 /// Ex) `!=~5.0`
 static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
-/// Ex) `>=1.9.*`
-static GREATER_THAN_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r">=(\d+\.\d+)\.\*").unwrap());
+/// Ex) `>=1.9.*`, `<3.4.*`
+static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+\.\d+)\.\*").unwrap());
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
@@ -35,9 +36,9 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     ),
     // Given `>=1.9.*`, rewrite to `>=1.9`.
     (
-        &GREATER_THAN_STAR,
-        r">=${1}",
-        "removing star after greater equal",
+        &INVALID_TRAILING_DOT_STAR,
+        r"${1}${2}",
+        "removing star after comparison operator other than equal and not equal",
     ),
     // Given `!=3.0*`, rewrite to `!=3.0.*`.
     (&MISSING_DOT, r"${1}.*", "inserting missing dot"),
@@ -268,6 +269,18 @@ mod tests {
         let expected: VersionSpecifiers =
             VersionSpecifiers::from_str(">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*")
                 .unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://pypi.org/simple/wincertstore/?format=application/vnd.pypi.simple.v1+json>
+    #[test]
+    fn smaller_than_star() {
+        let actual: VersionSpecifiers =
+            LenientVersionSpecifiers::from_str(">=2.7,!=3.0.*,!=3.1.*,<3.4.*")
+                .unwrap()
+                .into();
+        let expected: VersionSpecifiers =
+            VersionSpecifiers::from_str(">=2.7,!=3.0.*,!=3.1.*,<3.4").unwrap();
         assert_eq!(actual, expected);
     }
 }
