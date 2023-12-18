@@ -139,12 +139,12 @@ pub(crate) async fn pip_compile(
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
     let build_dispatch = BuildDispatch::new(
-        client.clone(),
-        cache.clone(),
-        interpreter,
+        &client,
+        &cache,
+        &interpreter,
+        &index_urls,
         venv.python_executable(),
         no_build,
-        index_urls,
     )
     .with_options(options);
 

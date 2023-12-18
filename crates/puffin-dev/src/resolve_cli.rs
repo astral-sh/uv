@@ -51,13 +51,15 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
+    let index_urls = IndexUrls::default();
+
     let build_dispatch = BuildDispatch::new(
-        client.clone(),
-        cache.clone(),
-        venv.interpreter().clone(),
+        &client,
+        &cache,
+        venv.interpreter(),
+        &index_urls,
         venv.python_executable(),
         args.no_build,
-        IndexUrls::default(),
     );
 
     // Copied from `BuildDispatch`

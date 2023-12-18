@@ -53,14 +53,16 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
 
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
+    let client = RegistryClientBuilder::new(cache.clone()).build();
+    let index_urls = IndexUrls::default();
 
     let build_dispatch = BuildDispatch::new(
-        RegistryClientBuilder::new(cache.clone()).build(),
-        cache,
-        venv.interpreter().clone(),
+        &client,
+        &cache,
+        venv.interpreter(),
+        &index_urls,
         venv.python_executable(),
         false,
-        IndexUrls::default(),
     );
 
     let builder = SourceBuild::setup(
