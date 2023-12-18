@@ -560,7 +560,7 @@ pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::{cmp::Ordering, str::FromStr};
 
     use indoc::indoc;

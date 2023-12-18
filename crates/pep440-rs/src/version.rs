@@ -961,7 +961,7 @@ fn version_fast_parse(version: &str) -> Option<Version> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::str::FromStr;
 
     #[cfg(feature = "pyo3")]
