@@ -5,6 +5,7 @@ use tracing::debug;
 
 use platform_host::Platform;
 use puffin_cache::Cache;
+use puffin_fs::LockedFile;
 
 use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;
@@ -99,6 +100,11 @@ impl Virtualenv {
         {
             compile_error!("only unix (like mac and linux) and windows are supported")
         }
+    }
+
+    /// Lock the virtual environment to prevent concurrent writes.
+    pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
+        LockedFile::acquire(self.root.join(".lock"))
     }
 }
 

@@ -1,8 +1,11 @@
 use std::path::{Path, PathBuf};
 
+use fs2::FileExt;
 use fs_err as fs;
 use tempfile::NamedTempFile;
-use tracing::warn;
+use tracing::{error, warn};
+
+use puffin_warnings::warn_user;
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
@@ -89,4 +92,35 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 .map_or(false, |file_type| file_type.is_dir())
         })
         .map(|entry| entry.path())
+}
+
+/// A file lock that is automatically released when dropped.
+#[derive(Debug)]
+pub struct LockedFile(fs_err::File);
+
+impl LockedFile {
+    pub fn acquire(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        let file = fs_err::File::create(path.as_ref())?;
+        match file.file().try_lock_exclusive() {
+            Ok(()) => Ok(Self(file)),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                warn_user!("Waiting to acquire lock on directory");
+                file.file().lock_exclusive()?;
+                Ok(Self(file))
+            }
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl Drop for LockedFile {
+    fn drop(&mut self) {
+        if let Err(err) = self.0.file().unlock() {
+            error!(
+                "Failed to unlock {}; program may be stuck: {}",
+                self.0.path().display(),
+                err
+            );
+        }
+    }
 }
