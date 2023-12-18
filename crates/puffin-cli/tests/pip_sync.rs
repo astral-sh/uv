@@ -2092,7 +2092,9 @@ fn sync_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
+
     let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(&formatdoc! {r"
@@ -2114,6 +2116,7 @@ fn sync_editable() -> Result<()> {
                 r"file://.*/../../scripts/editable-installs/poetry_editable",
                 "file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable",
             ),
+            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2139,9 +2142,9 @@ fn sync_editable() -> Result<()> {
         Downloaded 2 packages in [TIME]
         Installed 4 packages in [TIME]
          + boltons==23.1.1
-         + maturin-editable @ ../../scripts/editable-installs/maturin_editable
+         + maturin-editable @ file://[CURRENT_DIR]/scripts/editable-installs/maturin_editable/
          + numpy==1.26.2
-         + poetry-editable @ file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable
         "###);
     });
 
@@ -2167,7 +2170,7 @@ fn sync_editable() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - poetry-editable==0.1.0
-         + poetry-editable @ file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable
+         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable
         "###);
     });
 
@@ -2182,7 +2185,7 @@ fn sync_editable() -> Result<()> {
 
     let command = indoc! {r#"
         from maturin_editable import sum_as_string, version
-                
+
         assert version == 1, version
         assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
    "#};
@@ -2198,7 +2201,7 @@ fn sync_editable() -> Result<()> {
     let command = indoc! {r#"
         from maturin_editable import sum_as_string, version
         from pathlib import Path
-        
+
         assert version == 2, version
         assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
    "#};
@@ -2235,6 +2238,9 @@ fn sync_editable_and_registry() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+
     // Install the registry-based version of Black.
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2245,7 +2251,10 @@ fn sync_editable_and_registry() -> Result<()> {
     let filter_path = requirements_txt.display().to_string();
     let filters = INSTA_FILTERS
         .iter()
-        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .chain(&[
+            (filter_path.as_str(), "requirements.txt"),
+            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+        ])
         .copied()
         .collect::<Vec<_>>();
     insta::with_settings!({
@@ -2286,7 +2295,10 @@ fn sync_editable_and_registry() -> Result<()> {
     let filter_path = requirements_txt.display().to_string();
     let filters = INSTA_FILTERS
         .iter()
-        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .chain(&[
+            (filter_path.as_str(), "requirements.txt"),
+            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+        ])
         .copied()
         .collect::<Vec<_>>();
     insta::with_settings!({
@@ -2308,7 +2320,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==24.1a1
-         + black @ ../../scripts/editable-installs/black_editable
+         + black @ file://[CURRENT_DIR]/scripts/editable-installs/black_editable/
         "###);
     });
 
@@ -2323,7 +2335,10 @@ fn sync_editable_and_registry() -> Result<()> {
     let filter_path = requirements_txt.display().to_string();
     let filters = INSTA_FILTERS
         .iter()
-        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .chain(&[
+            (filter_path.as_str(), "requirements.txt"),
+            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+        ])
         .copied()
         .collect::<Vec<_>>();
     insta::with_settings!({
@@ -2355,7 +2370,10 @@ fn sync_editable_and_registry() -> Result<()> {
     let filter_path = requirements_txt.display().to_string();
     let filters = INSTA_FILTERS
         .iter()
-        .chain(&[(filter_path.as_str(), "requirements.txt")])
+        .chain(&[
+            (filter_path.as_str(), "requirements.txt"),
+            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+        ])
         .copied()
         .collect::<Vec<_>>();
     insta::with_settings!({
