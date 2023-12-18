@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
+use itertools::Itertools;
 use tokio::time::Instant;
 use tracing::{info, info_span, span, Level, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -16,6 +17,7 @@ use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
+use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::IndexUrls;
 
@@ -40,7 +42,13 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?;
 
     let data = fs_err::read_to_string(&args.requirements)?;
-    let lines = data.lines().map(Requirement::from_str);
+
+    let tf_models_nightly = PackageName::from_str("tf-models-nightly").unwrap();
+    let lines = data
+        .lines()
+        .map(Requirement::from_str)
+        .filter_ok(|req| req.name != tf_models_nightly);
+
     let requirements: Vec<Requirement> = if let Some(limit) = args.limit {
         lines.take(limit).collect::<Result<_, _>>()?
     } else {
