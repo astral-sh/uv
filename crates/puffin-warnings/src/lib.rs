@@ -17,7 +17,7 @@ pub fn enable() {
 
 /// Warn a user, if warnings are enabled.
 #[macro_export]
-macro_rules! warn {
+macro_rules! warn_user {
     ($($arg:tt)*) => {
         use $crate::colored::Colorize;
 
@@ -34,7 +34,7 @@ pub static WARNINGS: Lazy<Mutex<FxHashSet<String>>> = Lazy::new(Mutex::default);
 /// Warn a user once, if warnings are enabled, with uniqueness determined by the content of the
 /// message.
 #[macro_export]
-macro_rules! warn_once {
+macro_rules! warn_user_once {
     ($($arg:tt)*) => {
         use $crate::colored::Colorize;
 

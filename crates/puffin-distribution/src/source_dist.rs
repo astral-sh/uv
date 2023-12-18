@@ -30,13 +30,12 @@ use puffin_cache::{
     digest, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, CanonicalUrl, WheelCache,
 };
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
-use puffin_fs::write_atomic;
+use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
 use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 use pypi_types::Metadata21;
 
-use crate::locks::LockedFile;
 use crate::Reporter;
 
 /// The caller is responsible for adding the source dist information to the error chain
@@ -652,9 +651,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
 
         // Avoid races between different processes, too.
-        let locks_dir = git_dir.join("locks");
-        fs::create_dir_all(&locks_dir).await?;
-        let _lockfile = LockedFile::new(locks_dir.join(digest(&CanonicalUrl::new(url))))?;
+        let lock_dir = git_dir.join("locks");
+        fs::create_dir_all(&lock_dir).await?;
+        let _lock = LockedFile::acquire(lock_dir.join(digest(&CanonicalUrl::new(url))))?;
 
         let DirectGitUrl { url, subdirectory } =
             DirectGitUrl::try_from(url).map_err(SourceDistError::Git)?;

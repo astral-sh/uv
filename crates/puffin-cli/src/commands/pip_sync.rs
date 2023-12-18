@@ -51,6 +51,7 @@ pub(crate) async fn pip_sync(
         "Using Python interpreter: {}",
         venv.python_executable().display()
     );
+    let _lock = venv.lock()?;
 
     // Determine the current environment markers.
     let tags = Tags::from_interpreter(venv.interpreter())?;

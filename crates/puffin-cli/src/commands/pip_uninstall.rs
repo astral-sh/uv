@@ -31,6 +31,7 @@ pub(crate) async fn pip_uninstall(
         "Using Python interpreter: {}",
         venv.python_executable().display()
     );
+    let _lock = venv.lock()?;
 
     // Index the current `site-packages` directory.
     let site_packages = puffin_installer::SitePackages::from_executable(&venv)?;

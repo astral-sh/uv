@@ -31,7 +31,6 @@ pypi-types = { path = "../pypi-types" }
 anyhow = { workspace = true }
 bytesize = { workspace = true }
 fs-err = { workspace = true }
-fs2 = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }
 rmp-serde = { workspace = true }
