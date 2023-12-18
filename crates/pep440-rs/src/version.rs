@@ -967,72 +967,338 @@ mod tests {
     #[cfg(feature = "pyo3")]
     use pyo3::pyfunction;
 
-    use crate::{Version, VersionSpecifier};
+    use crate::{LocalSegment, PreRelease, Version, VersionSpecifier};
 
     /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L24-L81>
     #[test]
     fn test_packaging_versions() {
         let versions = [
             // Implicit epoch of 0
-            "1.0.dev456",
-            "1.0a1",
-            "1.0a2.dev456",
-            "1.0a12.dev456",
-            "1.0a12",
-            "1.0b1.dev456",
-            "1.0b2",
-            "1.0b2.post345.dev456",
-            "1.0b2.post345",
-            "1.0b2-346",
-            "1.0c1.dev456",
-            "1.0c1",
-            "1.0rc2",
-            "1.0c3",
-            "1.0",
-            "1.0.post456.dev34",
-            "1.0.post456",
-            "1.1.dev1",
-            "1.2+123abc",
-            "1.2+123abc456",
-            "1.2+abc",
-            "1.2+abc123",
-            "1.2+abc123def",
-            "1.2+1234.abc",
-            "1.2+123456",
-            "1.2.r32+123456",
-            "1.2.rev33+123456",
+            ("1.0.dev456", Version::new([1, 0]).with_dev(Some(456))),
+            (
+                "1.0a1",
+                Version::new([1, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+            ),
+            (
+                "1.0a2.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Alpha, 2)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0a12.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Alpha, 12)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0a12",
+                Version::new([1, 0]).with_pre(Some((PreRelease::Alpha, 12))),
+            ),
+            (
+                "1.0b1.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Beta, 1)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0b2",
+                Version::new([1, 0]).with_pre(Some((PreRelease::Beta, 2))),
+            ),
+            (
+                "1.0b2.post345.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Beta, 2)))
+                    .with_dev(Some(456))
+                    .with_post(Some(345)),
+            ),
+            (
+                "1.0b2.post345",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Beta, 2)))
+                    .with_post(Some(345)),
+            ),
+            (
+                "1.0b2-346",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Beta, 2)))
+                    .with_post(Some(346)),
+            ),
+            (
+                "1.0c1.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some((PreRelease::Rc, 1)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0c1",
+                Version::new([1, 0]).with_pre(Some((PreRelease::Rc, 1))),
+            ),
+            (
+                "1.0rc2",
+                Version::new([1, 0]).with_pre(Some((PreRelease::Rc, 2))),
+            ),
+            (
+                "1.0c3",
+                Version::new([1, 0]).with_pre(Some((PreRelease::Rc, 3))),
+            ),
+            ("1.0", Version::new([1, 0])),
+            (
+                "1.0.post456.dev34",
+                Version::new([1, 0]).with_post(Some(456)).with_dev(Some(34)),
+            ),
+            ("1.0.post456", Version::new([1, 0]).with_post(Some(456))),
+            ("1.1.dev1", Version::new([1, 1]).with_dev(Some(1))),
+            (
+                "1.2+123abc",
+                Version::new([1, 2])
+                    .with_local(Some(vec![LocalSegment::String("123abc".to_string())])),
+            ),
+            (
+                "1.2+123abc456",
+                Version::new([1, 2])
+                    .with_local(Some(vec![LocalSegment::String("123abc456".to_string())])),
+            ),
+            (
+                "1.2+abc",
+                Version::new([1, 2])
+                    .with_local(Some(vec![LocalSegment::String("abc".to_string())])),
+            ),
+            (
+                "1.2+abc123",
+                Version::new([1, 2])
+                    .with_local(Some(vec![LocalSegment::String("abc123".to_string())])),
+            ),
+            (
+                "1.2+abc123def",
+                Version::new([1, 2])
+                    .with_local(Some(vec![LocalSegment::String("abc123def".to_string())])),
+            ),
+            (
+                "1.2+1234.abc",
+                Version::new([1, 2]).with_local(Some(vec![
+                    LocalSegment::Number(1234),
+                    LocalSegment::String("abc".to_string()),
+                ])),
+            ),
+            (
+                "1.2+123456",
+                Version::new([1, 2]).with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
+            (
+                "1.2.r32+123456",
+                Version::new([1, 2])
+                    .with_post(Some(32))
+                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
+            (
+                "1.2.rev33+123456",
+                Version::new([1, 2])
+                    .with_post(Some(33))
+                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
             // Explicit epoch of 1
-            "1!1.0.dev456",
-            "1!1.0a1",
-            "1!1.0a2.dev456",
-            "1!1.0a12.dev456",
-            "1!1.0a12",
-            "1!1.0b1.dev456",
-            "1!1.0b2",
-            "1!1.0b2.post345.dev456",
-            "1!1.0b2.post345",
-            "1!1.0b2-346",
-            "1!1.0c1.dev456",
-            "1!1.0c1",
-            "1!1.0rc2",
-            "1!1.0c3",
-            "1!1.0",
-            "1!1.0.post456.dev34",
-            "1!1.0.post456",
-            "1!1.1.dev1",
-            "1!1.2+123abc",
-            "1!1.2+123abc456",
-            "1!1.2+abc",
-            "1!1.2+abc123",
-            "1!1.2+abc123def",
-            "1!1.2+1234.abc",
-            "1!1.2+123456",
-            "1!1.2.r32+123456",
-            "1!1.2.rev33+123456",
+            (
+                "1!1.0.dev456",
+                Version::new([1, 0]).with_epoch(1).with_dev(Some(456)),
+            ),
+            (
+                "1!1.0a1",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Alpha, 1))),
+            ),
+            (
+                "1!1.0a2.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Alpha, 2)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0a12.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Alpha, 12)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0a12",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Alpha, 12))),
+            ),
+            (
+                "1!1.0b1.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Beta, 1)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0b2",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Beta, 2))),
+            ),
+            (
+                "1!1.0b2.post345.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Beta, 2)))
+                    .with_post(Some(345))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0b2.post345",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Beta, 2)))
+                    .with_post(Some(345)),
+            ),
+            (
+                "1!1.0b2-346",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Beta, 2)))
+                    .with_post(Some(346)),
+            ),
+            (
+                "1!1.0c1.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Rc, 1)))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0c1",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Rc, 1))),
+            ),
+            (
+                "1!1.0rc2",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Rc, 2))),
+            ),
+            (
+                "1!1.0c3",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some((PreRelease::Rc, 3))),
+            ),
+            ("1!1.0", Version::new([1, 0]).with_epoch(1)),
+            (
+                "1!1.0.post456.dev34",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_post(Some(456))
+                    .with_dev(Some(34)),
+            ),
+            (
+                "1!1.0.post456",
+                Version::new([1, 0]).with_epoch(1).with_post(Some(456)),
+            ),
+            (
+                "1!1.1.dev1",
+                Version::new([1, 1]).with_epoch(1).with_dev(Some(1)),
+            ),
+            (
+                "1!1.2+123abc",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local(Some(vec![LocalSegment::String("123abc".to_string())])),
+            ),
+            (
+                "1!1.2+123abc456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local(Some(vec![LocalSegment::String("123abc456".to_string())])),
+            ),
+            (
+                "1!1.2+abc",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local(Some(vec![LocalSegment::String("abc".to_string())])),
+            ),
+            (
+                "1!1.2+abc123",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local(Some(vec![LocalSegment::String("abc123".to_string())])),
+            ),
+            (
+                "1!1.2+abc123def",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local(Some(vec![LocalSegment::String("abc123def".to_string())])),
+            ),
+            (
+                "1!1.2+1234.abc",
+                Version::new([1, 2]).with_epoch(1).with_local(Some(vec![
+                    LocalSegment::Number(1234),
+                    LocalSegment::String("abc".to_string()),
+                ])),
+            ),
+            (
+                "1!1.2+123456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
+            (
+                "1!1.2.r32+123456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_post(Some(32))
+                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
+            (
+                "1!1.2.rev33+123456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_post(Some(33))
+                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
+            (
+                "98765!1.2.rev33+123456",
+                Version::new([1, 2])
+                    .with_epoch(98765)
+                    .with_post(Some(33))
+                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+            ),
         ];
-        for version in versions {
-            Version::from_str(version).unwrap();
-            VersionSpecifier::from_str(&format!("=={version}")).unwrap();
+        for (string, structured) in versions {
+            match Version::from_str(string) {
+                Err(err) => {
+                    unreachable!(
+                        "expected {string:?} to parse as {structured:?}, but got {err:?}",
+                        structured = structured.as_bloated_debug(),
+                    )
+                }
+                Ok(v) => assert!(
+                    v == structured,
+                    "for {string:?}, expected {structured:?} but got {v:?}",
+                    structured = structured.as_bloated_debug(),
+                    v = v.as_bloated_debug(),
+                ),
+            }
+            let spec = format!("=={string}");
+            match VersionSpecifier::from_str(&spec) {
+                Err(err) => {
+                    unreachable!(
+                        "expected version in {spec:?} to parse as {structured:?}, but got {err:?}",
+                        structured = structured.as_bloated_debug(),
+                    )
+                }
+                Ok(v) => assert!(
+                    v.version() == &structured,
+                    "for {string:?}, expected {structured:?} but got {v:?}",
+                    structured = structured.as_bloated_debug(),
+                    v = v.version.as_bloated_debug(),
+                ),
+            }
         }
     }
 
@@ -1312,5 +1578,36 @@ mod tests {
     #[pyfunction]
     fn _convert_in_and_out(version: Version) -> Version {
         version
+    }
+
+    /// Wraps a `Version` and provides a more "bloated" debug but standard
+    /// representation.
+    ///
+    /// We don't do this by default because it takes up a ton of space, and
+    /// just printing out the display version of the version is quite a bit
+    /// simpler.
+    ///
+    /// Nevertheless, when *testing* version parsing, you really want to
+    /// be able to peek at all of its constituent parts. So we use this in
+    /// assertion failure messages.
+    struct VersionBloatedDebug<'a>(&'a Version);
+
+    impl<'a> std::fmt::Debug for VersionBloatedDebug<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Version")
+                .field("epoch", &self.0.epoch())
+                .field("release", &self.0.release())
+                .field("pre", &self.0.pre())
+                .field("post", &self.0.post())
+                .field("dev", &self.0.dev())
+                .field("local", &self.0.local())
+                .finish()
+        }
+    }
+
+    impl Version {
+        fn as_bloated_debug(&self) -> VersionBloatedDebug<'_> {
+            VersionBloatedDebug(self)
+        }
     }
 }
