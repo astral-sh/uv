@@ -75,6 +75,13 @@ pub enum VersionOrUrl<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
     Url(&'a VerbatimUrl),
+    /// A URL, used to identify a distribution at an arbitrary location, along with the version
+    /// specifier to which it resolved. This is typically derived from a distribution that's already
+    /// been built and perhaps even installed on-disk, as the version specifier is not available
+    /// from the URL itself. As such, the URL is not guaranteed to be verbatim, as it could've been
+    /// serialized to disk and deserialized back from the virtual environment's `direct_url.json`.
+    /// TODO(charlie): Separate into a distinct enum to avoid this confusion.
+    VersionedUrl(&'a Url, &'a Version),
 }
 
 impl Verbatim for VersionOrUrl<'_> {
@@ -82,6 +89,7 @@ impl Verbatim for VersionOrUrl<'_> {
         match self {
             VersionOrUrl::Version(version) => Cow::Owned(format!("=={version}")),
             VersionOrUrl::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
+            VersionOrUrl::VersionedUrl(url, ..) => Cow::Owned(format!(" @ {url}")),
         }
     }
 }
@@ -91,6 +99,7 @@ impl std::fmt::Display for VersionOrUrl<'_> {
         match self {
             VersionOrUrl::Version(version) => write!(f, "=={version}"),
             VersionOrUrl::Url(url) => write!(f, " @ {url}"),
+            VersionOrUrl::VersionedUrl(url, version) => write!(f, "=={version} (from {url})"),
         }
     }
 }

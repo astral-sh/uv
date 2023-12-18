@@ -234,6 +234,9 @@ impl puffin_resolver::ResolverReporter for ResolverReporter {
             VersionOrUrl::Url(url) => {
                 self.progress.set_message(format!("{name} @ {url}"));
             }
+            VersionOrUrl::VersionedUrl(url, ..) => {
+                self.progress.set_message(format!("{name} @ {url}"));
+            }
         }
     }
 

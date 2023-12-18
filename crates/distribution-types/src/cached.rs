@@ -49,7 +49,7 @@ impl Metadata for CachedDirectUrlDist {
     }
 
     fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Url(&self.url)
+        VersionOrUrl::VersionedUrl(self.url.raw(), &self.filename.version)
     }
 }
 

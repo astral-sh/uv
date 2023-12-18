@@ -7,7 +7,7 @@ use url::Url;
 
 use distribution_types::{InstalledDist, Metadata, VersionOrUrl};
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::Requirement;
+use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use requirements_txt::EditableRequirement;
@@ -59,7 +59,7 @@ impl<'a> SitePackages<'a> {
                 }
 
                 // Index the distribution by URL.
-                if let Some(url) = dist_info.editable() {
+                if let Some(url) = dist_info.as_editable() {
                     if let Some(existing) = by_url.insert(url.clone(), idx) {
                         let existing = &distributions[existing];
                         anyhow::bail!(
@@ -101,6 +101,9 @@ impl<'a> SitePackages<'a> {
                     ))
                 }
                 VersionOrUrl::Url(url) => pep508_rs::VersionOrUrl::Url(url.clone()),
+                VersionOrUrl::VersionedUrl(url, ..) => {
+                    pep508_rs::VersionOrUrl::Url(VerbatimUrl::unknown(url.clone()))
+                }
             }),
             marker: None,
         })
@@ -139,7 +142,7 @@ impl<'a> SitePackages<'a> {
             if let Some(prev) = self.by_name.get_mut(moved.name()) {
                 *prev = idx;
             }
-            if let Some(url) = moved.editable() {
+            if let Some(url) = moved.as_editable() {
                 if let Some(prev) = self.by_url.get_mut(url) {
                     *prev = idx;
                 }

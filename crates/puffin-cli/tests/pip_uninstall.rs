@@ -289,6 +289,12 @@ fn uninstall_editable_by_name() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
+
     Command::new(get_cargo_bin(BIN_NAME))
         .arg("venv")
         .arg(venv.as_os_str())
@@ -320,7 +326,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
     // Uninstall the editable by name.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-uninstall")
@@ -335,7 +341,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
         ----- stderr -----
         Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
         "###);
     });
 
@@ -353,6 +359,12 @@ fn uninstall_editable_by_path() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
 
     Command::new(get_cargo_bin(BIN_NAME))
         .arg("venv")
@@ -384,7 +396,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 
     // Uninstall the editable by path.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-uninstall")
@@ -399,7 +411,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 
         ----- stderr -----
         Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
         "###);
     });
 
@@ -417,6 +429,12 @@ fn uninstall_duplicate_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
 
     Command::new(get_cargo_bin(BIN_NAME))
         .arg("venv")
@@ -448,7 +466,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
 
     // Uninstall the editable by both path and name.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-uninstall")
@@ -464,7 +482,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
 
         ----- stderr -----
         Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
         "###);
     });
 

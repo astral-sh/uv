@@ -542,7 +542,7 @@ fn install_url() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+         + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
         "###);
     });
 
@@ -583,7 +583,7 @@ fn install_git_commit() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
         "###);
     });
 
@@ -624,7 +624,7 @@ fn install_git_tag() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@2.0.0)
         "###);
     });
 
@@ -665,8 +665,8 @@ fn install_git_subdirectories() -> Result<()> {
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
         Installed 2 packages in [TIME]
-         + example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a
-         + example-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b
+         + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
+         + example-pkg-b==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b)
         "###);
     });
 
@@ -748,7 +748,7 @@ fn install_sdist_url() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz
+         + werkzeug==0.9.6 (from https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz)
         "###);
     });
 
@@ -905,7 +905,7 @@ fn install_version_then_install_url() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - werkzeug==2.0.0
-         + werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+         + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
         "###);
     });
 
@@ -1042,7 +1042,7 @@ fn install_local_wheel() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1089,7 +1089,7 @@ fn install_local_source_distribution() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
         "###);
     });
 
@@ -1135,7 +1135,7 @@ fn install_ujson() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz
+         + ujson==5.7.0 (from https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz)
         "###);
     });
 
@@ -1181,7 +1181,7 @@ fn install_dtls_socket() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + dtlssocket @ https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz
+         + dtlssocket==0.1.16 (from https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz)
         warning: The package `dtlssocket` requires `cython <3`, but it's not installed.
         "###);
     });
@@ -1220,7 +1220,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
+         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
         "###);
     });
 
@@ -1246,7 +1246,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
+         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
         "###);
     });
 
@@ -1293,7 +1293,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz
+         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
         "###);
     });
 
@@ -1332,7 +1332,7 @@ fn install_git_source_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
         "###);
     });
 
@@ -1358,7 +1358,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
         "###);
     });
 
@@ -1405,7 +1405,7 @@ fn install_git_source_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
         "###);
     });
 
@@ -1563,7 +1563,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
         "###);
     });
 
@@ -1589,7 +1589,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
         "###);
     });
 
@@ -1636,7 +1636,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz
+         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
         "###);
     });
 
@@ -1683,7 +1683,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1709,7 +1709,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1756,7 +1756,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli @ file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl
+         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1794,7 +1794,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
+         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
         "###);
     });
 
@@ -1820,7 +1820,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
+         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
         "###);
     });
 
@@ -1867,7 +1867,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl
+         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
         "###);
     });
 
@@ -2087,6 +2087,74 @@ fn reinstall_package() -> Result<()> {
     Ok(())
 }
 
+/// Verify that we can force reinstall of Git dependencies.
+#[test]
+#[cfg(feature = "git")]
+fn reinstall_git() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+        "###);
+    });
+
+    check_command(&venv, "import werkzeug", &temp_dir);
+
+    // Re-run the installation with `--reinstall`.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--reinstall-package")
+            .arg("WerkZeug")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+        "###);
+    });
+
+    check_command(&venv, "import werkzeug", &temp_dir);
+
+    Ok(())
+}
+
 #[test]
 fn sync_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2116,7 +2184,7 @@ fn sync_editable() -> Result<()> {
                 r"file://.*/../../scripts/editable-installs/poetry_editable",
                 "file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable",
             ),
-            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2142,9 +2210,9 @@ fn sync_editable() -> Result<()> {
         Downloaded 2 packages in [TIME]
         Installed 4 packages in [TIME]
          + boltons==23.1.1
-         + maturin-editable @ file://[CURRENT_DIR]/scripts/editable-installs/maturin_editable/
+         + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable/)
          + numpy==1.26.2
-         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable
+         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
         "###);
     });
 
@@ -2169,8 +2237,8 @@ fn sync_editable() -> Result<()> {
         Built 1 editable in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
-         - poetry-editable==0.1.0
-         + poetry-editable @ file://[CURRENT_DIR]/scripts/editable-installs/poetry_editable
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
         "###);
     });
 
@@ -2253,7 +2321,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2297,7 +2365,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2320,7 +2388,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==24.1a1
-         + black @ file://[CURRENT_DIR]/scripts/editable-installs/black_editable/
+         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
         "###);
     });
 
@@ -2337,7 +2405,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2372,7 +2440,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[CURRENT_DIR]"),
+            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2395,7 +2463,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Downloaded 1 package in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==0.1.0
+         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
          + black==23.10.0
         warning: The package `black` requires `click >=8.0.0`, but it's not installed.
         warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.

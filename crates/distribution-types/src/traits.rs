@@ -35,6 +35,7 @@ pub trait Metadata {
                 format!("{}-{}", self.name().as_dist_info_name(), version)
             }
             VersionOrUrl::Url(url) => puffin_cache::digest(&CanonicalUrl::new(url)),
+            VersionOrUrl::VersionedUrl(url, ..) => puffin_cache::digest(&CanonicalUrl::new(url)),
         })
     }
 }

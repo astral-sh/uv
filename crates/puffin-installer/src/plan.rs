@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
-use distribution_types::direct_url::{git_reference, DirectUrl};
+use distribution_types::direct_url::git_reference;
 use distribution_types::{BuiltDist, Dist, SourceDist};
 use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist, Metadata};
 use pep508_rs::{Requirement, VersionOrUrl};
@@ -75,7 +75,7 @@ impl InstallPlan {
                     debug!("Treating editable requirement as immutable: {installed}");
 
                     // Remove from the site-packages index, to avoid marking as extraneous.
-                    let Some(editable) = installed.editable() else {
+                    let Some(editable) = installed.as_editable() else {
                         warn!("Editable requirement is not editable: {installed}");
                         continue;
                     };
@@ -143,17 +143,9 @@ impl InstallPlan {
                         // If the requirement comes from a direct URL, check by URL.
                         Some(VersionOrUrl::Url(url)) => {
                             if let InstalledDist::Url(distribution) = &distribution {
-                                if let Ok(direct_url) = DirectUrl::try_from(url.raw()) {
-                                    if let Ok(direct_url) =
-                                        pypi_types::DirectUrl::try_from(&direct_url)
-                                    {
-                                        // TODO(charlie): These don't need to be strictly equal. We only care
-                                        // about a subset of the fields.
-                                        if direct_url == distribution.url {
-                                            debug!("Requirement already satisfied: {distribution}");
-                                            continue;
-                                        }
-                                    }
+                                if &distribution.url == url.raw() {
+                                    debug!("Requirement already satisfied: {distribution}");
+                                    continue;
                                 }
                             }
                         }
