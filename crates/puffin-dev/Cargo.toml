@@ -32,6 +32,7 @@ puffin-traits = { path = "../puffin-traits" }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 colored = { workspace = true }
 fs-err = { workspace = true }
