@@ -137,11 +137,11 @@ struct PipCompileArgs {
     #[clap(long, conflicts_with = "extra")]
     all_extras: bool,
 
-    #[clap(long, value_enum)]
-    resolution: Option<ResolutionMode>,
+    #[clap(long, value_enum, default_value_t = Default::default())]
+    resolution: ResolutionMode,
 
-    #[clap(long, value_enum)]
-    prerelease: Option<PreReleaseMode>,
+    #[clap(long, value_enum, default_value_t = Default::default())]
+    prerelease: PreReleaseMode,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
@@ -210,8 +210,8 @@ struct PipSyncArgs {
     reinstall_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
-    #[clap(long, value_enum)]
-    link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    #[clap(long, value_enum, default_value_t = Default::default())]
+    link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python Package Index.
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
@@ -291,14 +291,14 @@ struct PipInstallArgs {
     reinstall_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
-    #[clap(long, value_enum)]
-    link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    #[clap(long, value_enum, default_value_t = Default::default())]
+    link_mode: install_wheel_rs::linker::LinkMode,
 
-    #[clap(long, value_enum)]
-    resolution: Option<ResolutionMode>,
+    #[clap(long, value_enum, default_value_t = Default::default())]
+    resolution: ResolutionMode,
 
-    #[clap(long, value_enum)]
-    prerelease: Option<PreReleaseMode>,
+    #[clap(long, value_enum, default_value_t = Default::default())]
+    prerelease: PreReleaseMode,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(short, long)]
@@ -447,8 +447,8 @@ async fn inner() -> Result<ExitStatus> {
                 &overrides,
                 extras,
                 args.output_file.as_deref(),
-                args.resolution.unwrap_or_default(),
-                args.prerelease.unwrap_or_default(),
+                args.resolution,
+                args.prerelease,
                 args.upgrade.into(),
                 index_urls,
                 args.no_build,
@@ -471,7 +471,7 @@ async fn inner() -> Result<ExitStatus> {
             commands::pip_sync(
                 &sources,
                 &reinstall,
-                args.link_mode.unwrap_or_default(),
+                args.link_mode,
                 index_urls,
                 args.no_build,
                 cache,
@@ -512,11 +512,11 @@ async fn inner() -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 &extras,
-                args.resolution.unwrap_or_default(),
-                args.prerelease.unwrap_or_default(),
+                args.resolution,
+                args.prerelease,
                 index_urls,
                 &reinstall,
-                args.link_mode.unwrap_or_default(),
+                args.link_mode,
                 args.no_build,
                 args.exclude_newer,
                 cache,
