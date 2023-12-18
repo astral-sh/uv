@@ -121,6 +121,7 @@ pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathB
             );
             return Ok(Some(PathBuf::from(dir)));
         }
+        (Some(venv), Some(conda)) if venv == conda => return Ok(Some(PathBuf::from(venv))),
         (Some(_), Some(_)) => {
             return Err(Error::Conflict);
         }
