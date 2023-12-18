@@ -15,7 +15,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Downloader, InstallPlan, Reinstall, SitePackages};
+use puffin_installer::{Downloader, EditableMode, InstallPlan, Reinstall, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
 use pypi_types::{IndexUrls, Yanked};
@@ -98,6 +98,7 @@ pub(crate) async fn sync_requirements(
         cache,
         &venv,
         &tags,
+        EditableMode::Immutable,
     )
     .context("Failed to determine installation plan")?;
 
@@ -193,7 +194,7 @@ pub(crate) async fn sync_requirements(
         DownloadReporter::from(printer).with_length((editables.len() + remote.len()) as u64),
     );
 
-    // We must not cache editable wheels, so we put them in a temp dir.
+    // Build any editable requirements.
     let editable_wheel_dir = tempdir_in(venv.root())?;
     let built_editables = if editables.is_empty() {
         Vec::new()

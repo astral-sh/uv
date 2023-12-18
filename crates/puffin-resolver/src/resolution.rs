@@ -10,7 +10,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{Dist, DistributionId, Identifier, LocalEditable, Metadata, PackageId};
+use distribution_types::{Dist, LocalEditable, Metadata, PackageId};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_normalize::{ExtraName, PackageName};
@@ -28,7 +28,7 @@ pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>,
     /// The set of editable requirements in this resolution.
-    editables: FxHashMap<DistributionId, (LocalEditable, Metadata21)>,
+    editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
 }
@@ -41,7 +41,7 @@ impl ResolutionGraph {
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
-        editables: FxHashMap<DistributionId, (LocalEditable, Metadata21)>,
+        editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
@@ -66,11 +66,15 @@ impl ResolutionGraph {
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
-                    let url = redirects.get(url).map_or_else(
-                        || url.clone(),
-                        |url| VerbatimUrl::unknown(url.value().clone()),
-                    );
-                    let pinned_package = Dist::from_url(package_name.clone(), url)?;
+                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
+                        Dist::from_editable(package_name.clone(), editable.clone())?
+                    } else {
+                        let url = redirects.get(url).map_or_else(
+                            || url.clone(),
+                            |url| VerbatimUrl::unknown(url.value().clone()),
+                        );
+                        Dist::from_url(package_name.clone(), url)?
+                    };
 
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
@@ -173,13 +177,6 @@ impl ResolutionGraph {
 
     /// Return the set of [`Requirement`]s that this graph represents.
     pub fn requirements(&self) -> Vec<Requirement> {
-        // Collect and sort all packages.
-        let mut nodes = self
-            .petgraph
-            .node_indices()
-            .map(|node| (node, &self.petgraph[node]))
-            .collect::<Vec<_>>();
-        nodes.sort_unstable_by_key(|(_, package)| package.name());
         self.petgraph
             .node_indices()
             .map(|node| &self.petgraph[node])
@@ -199,14 +196,6 @@ impl ResolutionGraph {
     ) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
         &self.petgraph
     }
-
-    /// Return the set of editable requirements in this resolution.
-    ///
-    /// The editable requirements themselves are unchanged, but their dependencies were added to the general
-    /// list of dependencies.
-    pub fn editables(&self) -> &FxHashMap<DistributionId, (LocalEditable, Metadata21)> {
-        &self.editables
-    }
 }
 
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
@@ -222,9 +211,8 @@ impl std::fmt::Display for ResolutionGraph {
 
         // Print out the dependency graph.
         for (index, package) in nodes {
-            if let Some((editable_requirement, _)) = self.editables.get(&package.distribution_id())
-            {
-                writeln!(f, "-e {editable_requirement}")?;
+            if let Some((editable, _)) = self.editables.get(package.name()) {
+                writeln!(f, "-e {editable}")?;
             } else {
                 writeln!(f, "{package}")?;
             }

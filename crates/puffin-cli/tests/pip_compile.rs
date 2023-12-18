@@ -2560,7 +2560,7 @@ fn compile_editable() -> Result<()> {
     requirements_in.write_str(indoc! {r"
         -e ../../scripts/editable-installs/poetry_editable
         -e ../../scripts/editable-installs/maturin_editable
-        boltons # normal depedency for comparison
+        boltons # normal dependency for comparison
         "
     })?;
 

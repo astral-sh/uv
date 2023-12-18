@@ -2,8 +2,9 @@ use rustc_hash::FxHashMap;
 
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
+use requirements_txt::EditableRequirement;
 
-use crate::{BuiltDist, Dist, SourceDist};
+use crate::{BuiltDist, Dist, PathSourceDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
@@ -45,15 +46,43 @@ impl Resolution {
         self.0.is_empty()
     }
 
-    /// Return the set of [`Requirement`]s that this resolution represents.
+    /// Return the set of [`Requirement`]s that this resolution represents, exclusive of any
+    /// editable requirements.
     pub fn requirements(&self) -> Vec<Requirement> {
         let mut requirements = self
             .0
             .values()
-            .cloned()
-            .map(Requirement::from)
+            .filter_map(|dist| match dist {
+                Dist::Source(SourceDist::Path(PathSourceDist { editable: true, .. })) => None,
+                dist => Some(Requirement::from(dist.clone())),
+            })
             .collect::<Vec<_>>();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        requirements
+    }
+
+    /// Return the set of [`EditableRequirement`]s that this resolution represents.
+    pub fn editable_requirements(&self) -> Vec<EditableRequirement> {
+        let mut requirements = self
+            .0
+            .values()
+            .filter_map(|dist| {
+                let Dist::Source(SourceDist::Path(PathSourceDist {
+                    url,
+                    path,
+                    editable: true,
+                    ..
+                })) = dist
+                else {
+                    return None;
+                };
+                Some(EditableRequirement::Path {
+                    path: path.clone(),
+                    url: url.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
+        requirements.sort_unstable_by(|a, b| a.url().cmp(b.url()));
         requirements
     }
 }

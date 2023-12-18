@@ -8,7 +8,7 @@ use requirements_txt::EditableRequirement;
 #[derive(Debug, Clone)]
 pub struct LocalEditable {
     pub requirement: EditableRequirement,
-    /// Either the path to the editable or its checkout
+    /// Either the path to the editable or its checkout.
     pub path: PathBuf,
 }
 

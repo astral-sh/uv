@@ -13,14 +13,8 @@ use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, LocalWheel, Unzip};
 use puffin_traits::{BuildContext, OnceMap};
-use pypi_types::Metadata21;
 
-#[derive(Debug, Clone)]
-pub struct BuiltEditable {
-    pub editable: LocalEditable,
-    pub wheel: CachedDist,
-    pub metadata: Metadata21,
-}
+use crate::editable::BuiltEditable;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

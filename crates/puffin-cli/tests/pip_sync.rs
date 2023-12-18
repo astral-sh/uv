@@ -2090,7 +2090,7 @@ fn reinstall_package() -> Result<()> {
 }
 
 #[test]
-fn install_editable() -> Result<()> {
+fn sync_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);

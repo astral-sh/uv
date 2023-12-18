@@ -425,3 +425,128 @@ fn allow_incompatibilities() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_editable() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Install the editable package.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/poetry_editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 1 editable in [TIME]
+        Resolved 2 packages in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 2 packages in [TIME]
+         + numpy==1.26.2
+         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+        "###);
+    });
+
+    // Install it again (no-op).
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/poetry_editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
+    });
+
+    // Add another, non-editable dependency.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/poetry_editable")
+            .arg("black")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 1 editable in [TIME]
+        Resolved 15 packages in [TIME]
+        Downloaded 13 packages in [TIME]
+        Installed 14 packages in [TIME]
+         + aiohttp==3.9.1
+         + aiosignal==1.3.1
+         + attrs==23.1.0
+         + black==23.12.0
+         + click==8.1.7
+         + frozenlist==1.4.1
+         + idna==3.6
+         + multidict==6.0.4
+         + mypy-extensions==1.0.0
+         + packaging==23.2
+         + pathspec==0.12.1
+         + platformdirs==4.1.0
+         - poetry-editable==0.1.0
+         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+         + yarl==1.9.4
+        "###);
+    });
+
+    // Add another, editable dependency.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/poetry_editable")
+            .arg("black")
+            .arg("-e")
+            .arg("../../scripts/editable-installs/maturin_editable")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Built 2 editables in [TIME]
+        Resolved 16 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + maturin-editable @ ../../scripts/editable-installs/maturin_editable
+         - poetry-editable==0.1.0
+         + poetry-editable @ ../../scripts/editable-installs/poetry_editable
+        "###);
+    });
+
+    Ok(())
+}
