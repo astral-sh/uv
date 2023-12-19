@@ -104,7 +104,10 @@ impl LockedFile {
         match file.file().try_lock_exclusive() {
             Ok(()) => Ok(Self(file)),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                warn_user!("Waiting to acquire lock on directory");
+                warn_user!(
+                    "Waiting to acquire lock on {}",
+                    path.as_ref().parent().unwrap_or(path.as_ref()).display()
+                );
                 file.file().lock_exclusive()?;
                 Ok(Self(file))
             }
