@@ -303,10 +303,8 @@ impl RegistryClient {
             .await;
 
         match result {
-            Ok(metadata) => {
-                return Ok(metadata);
-            }
-            Err(CachedClientError::Client(Error::AsyncHttpRangeReader(
+            Ok(metadata) => return Ok(metadata),
+            Err(CachedClientError::Callback(Error::AsyncHttpRangeReader(
                 AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
             ))) => {}
             Err(err) => return Err(err.into()),
