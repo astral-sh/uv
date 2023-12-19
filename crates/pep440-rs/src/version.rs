@@ -290,131 +290,6 @@ pub struct Version {
     local: Option<Vec<LocalSegment>>,
 }
 
-#[cfg(feature = "pyo3")]
-impl IntoPy<PyObject> for Version {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        PyVersion(self).into_py(py)
-    }
-}
-
-#[cfg(feature = "pyo3")]
-impl<'source> FromPyObject<'source> for Version {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        Ok(ob.extract::<PyVersion>()?.0)
-    }
-}
-
-/// Workaround for <https://github.com/PyO3/pyo3/pull/2786>
-#[cfg(feature = "pyo3")]
-#[derive(Clone, Debug)]
-#[pyclass(name = "Version")]
-pub struct PyVersion(pub Version);
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl PyVersion {
-    /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
-    /// but you can increment it if you switched the versioning scheme.
-    #[getter]
-    pub fn epoch(&self) -> u64 {
-        self.0.epoch
-    }
-    /// The normal number part of the version
-    /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
-    /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
-    ///
-    /// Note that we drop the * placeholder by moving it to `Operator`
-    #[getter]
-    pub fn release(&self) -> Vec<u64> {
-        self.0.release.clone()
-    }
-    /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
-    /// plus a number
-    ///
-    /// Note that whether this is Some influences the version
-    /// range matching since normally we exclude all prerelease versions
-    #[getter]
-    pub fn pre(&self) -> Option<(PreRelease, u64)> {
-        self.0.pre
-    }
-    /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
-    /// higher post version are preferred over lower post or none-post versions
-    #[getter]
-    pub fn post(&self) -> Option<u64> {
-        self.0.post
-    }
-    /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
-    /// if any
-    #[getter]
-    pub fn dev(&self) -> Option<u64> {
-        self.0.dev
-    }
-    /// The first item of release or 0 if unavailable.
-    #[getter]
-    #[allow(clippy::get_first)]
-    pub fn major(&self) -> u64 {
-        self.0.release.get(0).copied().unwrap_or_default()
-    }
-    /// The second item of release or 0 if unavailable.
-    #[getter]
-    pub fn minor(&self) -> u64 {
-        self.0.release.get(1).copied().unwrap_or_default()
-    }
-    /// The third item of release or 0 if unavailable.
-    #[getter]
-    pub fn micro(&self) -> u64 {
-        self.0.release.get(2).copied().unwrap_or_default()
-    }
-
-    /// Parses a PEP 440 version string
-    #[cfg(feature = "pyo3")]
-    #[new]
-    pub fn parse(version: &str) -> PyResult<Self> {
-        Ok(Self(
-            Version::from_str(version).map_err(PyValueError::new_err)?,
-        ))
-    }
-
-    // Maps the error type
-    /// Parse a PEP 440 version optionally ending with `.*`
-    #[cfg(feature = "pyo3")]
-    #[staticmethod]
-    pub fn parse_star(version_specifier: &str) -> PyResult<(Self, bool)> {
-        Version::from_str_star(version_specifier)
-            .map_err(PyValueError::new_err)
-            .map(|(version, star)| (Self(version), star))
-    }
-
-    /// Returns the normalized representation
-    #[cfg(feature = "pyo3")]
-    pub fn __str__(&self) -> String {
-        self.0.to_string()
-    }
-
-    /// Returns the normalized representation
-    #[cfg(feature = "pyo3")]
-    pub fn __repr__(&self) -> String {
-        format!(r#"<Version("{}")>"#, self.0)
-    }
-
-    /// Returns the normalized representation
-    #[cfg(feature = "pyo3")]
-    pub fn __hash__(&self) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.0.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    #[cfg(feature = "pyo3")]
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
-        op.matches(self.0.cmp(&other.0))
-    }
-
-    fn any_prerelease(&self) -> bool {
-        self.0.any_prerelease()
-    }
-}
-
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Version {
@@ -925,6 +800,131 @@ impl Version {
             local,
         };
         Ok((version, star))
+    }
+}
+
+/// Workaround for <https://github.com/PyO3/pyo3/pull/2786>
+#[cfg(feature = "pyo3")]
+#[derive(Clone, Debug)]
+#[pyclass(name = "Version")]
+pub struct PyVersion(pub Version);
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl PyVersion {
+    /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
+    /// but you can increment it if you switched the versioning scheme.
+    #[getter]
+    pub fn epoch(&self) -> u64 {
+        self.0.epoch
+    }
+    /// The normal number part of the version
+    /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
+    /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
+    ///
+    /// Note that we drop the * placeholder by moving it to `Operator`
+    #[getter]
+    pub fn release(&self) -> Vec<u64> {
+        self.0.release.clone()
+    }
+    /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
+    /// plus a number
+    ///
+    /// Note that whether this is Some influences the version
+    /// range matching since normally we exclude all prerelease versions
+    #[getter]
+    pub fn pre(&self) -> Option<(PreRelease, u64)> {
+        self.0.pre
+    }
+    /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
+    /// higher post version are preferred over lower post or none-post versions
+    #[getter]
+    pub fn post(&self) -> Option<u64> {
+        self.0.post
+    }
+    /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
+    /// if any
+    #[getter]
+    pub fn dev(&self) -> Option<u64> {
+        self.0.dev
+    }
+    /// The first item of release or 0 if unavailable.
+    #[getter]
+    #[allow(clippy::get_first)]
+    pub fn major(&self) -> u64 {
+        self.0.release.get(0).copied().unwrap_or_default()
+    }
+    /// The second item of release or 0 if unavailable.
+    #[getter]
+    pub fn minor(&self) -> u64 {
+        self.0.release.get(1).copied().unwrap_or_default()
+    }
+    /// The third item of release or 0 if unavailable.
+    #[getter]
+    pub fn micro(&self) -> u64 {
+        self.0.release.get(2).copied().unwrap_or_default()
+    }
+
+    /// Parses a PEP 440 version string
+    #[cfg(feature = "pyo3")]
+    #[new]
+    pub fn parse(version: &str) -> PyResult<Self> {
+        Ok(Self(
+            Version::from_str(version).map_err(PyValueError::new_err)?,
+        ))
+    }
+
+    // Maps the error type
+    /// Parse a PEP 440 version optionally ending with `.*`
+    #[cfg(feature = "pyo3")]
+    #[staticmethod]
+    pub fn parse_star(version_specifier: &str) -> PyResult<(Self, bool)> {
+        Version::from_str_star(version_specifier)
+            .map_err(PyValueError::new_err)
+            .map(|(version, star)| (Self(version), star))
+    }
+
+    /// Returns the normalized representation
+    #[cfg(feature = "pyo3")]
+    pub fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    /// Returns the normalized representation
+    #[cfg(feature = "pyo3")]
+    pub fn __repr__(&self) -> String {
+        format!(r#"<Version("{}")>"#, self.0)
+    }
+
+    /// Returns the normalized representation
+    #[cfg(feature = "pyo3")]
+    pub fn __hash__(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.0.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[cfg(feature = "pyo3")]
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        op.matches(self.0.cmp(&other.0))
+    }
+
+    fn any_prerelease(&self) -> bool {
+        self.0.any_prerelease()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl IntoPy<PyObject> for Version {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        PyVersion(self).into_py(py)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl<'source> FromPyObject<'source> for Version {
+    fn extract(ob: &'source PyAny) -> PyResult<Self> {
+        Ok(ob.extract::<PyVersion>()?.0)
     }
 }
 
