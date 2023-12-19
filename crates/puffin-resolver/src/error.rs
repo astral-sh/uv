@@ -14,7 +14,8 @@ use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
 use pypi_types::BaseUrl;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubVersion};
+use crate::candidate_selector::CandidateSelector;
+use crate::pubgrub::{PubGrubHints, PubGrubPackage, PubGrubReportFormatter, PubGrubVersion};
 use crate::version_map::VersionMap;
 
 #[derive(Error, Debug)]
@@ -107,6 +108,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, In
                 ResolveError::NoSolution(NoSolutionError {
                     derivation_tree,
                     available_versions: FxHashMap::default(),
+                    selector: None,
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
@@ -124,18 +126,29 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, In
 pub struct NoSolutionError {
     derivation_tree: DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
     available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    selector: Option<CandidateSelector>,
 }
 
 impl std::error::Error for NoSolutionError {}
 
 impl std::fmt::Display for NoSolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Write the derivation report.
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
         };
         let report =
             DefaultStringReporter::report_with_formatter(&self.derivation_tree, &formatter);
-        write!(f, "{report}")
+        write!(f, "{report}")?;
+
+        // Include any additional hints.
+        if let Some(selector) = &self.selector {
+            for hint in PubGrubHints::from_derivation_tree(&self.derivation_tree, selector).iter() {
+                write!(f, "\n\n{hint}")?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -143,15 +156,17 @@ impl NoSolutionError {
     /// Update the available versions attached to the error using the given package version index.
     ///
     /// Only packages used in the error's derivation tree will be retrieved.
-    pub(crate) fn update_available_versions(
+    #[must_use]
+    pub(crate) fn with_available_versions(
         mut self,
         package_versions: &OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
     ) -> Self {
+        let mut available_versions = FxHashMap::default();
         for package in self.derivation_tree.packages() {
             if let PubGrubPackage::Package(name, ..) = package {
                 if let Some(entry) = package_versions.get(name) {
                     let (_, _, version_map) = entry.value();
-                    self.available_versions.insert(
+                    available_versions.insert(
                         package.clone(),
                         version_map
                             .iter()
@@ -161,6 +176,14 @@ impl NoSolutionError {
                 }
             }
         }
+        self.available_versions = available_versions;
+        self
+    }
+
+    /// Update the candidate selector attached to the error.
+    #[must_use]
+    pub(crate) fn with_selector(mut self, selector: CandidateSelector) -> Self {
+        self.selector = Some(selector);
         self
     }
 }
