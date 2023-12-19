@@ -42,7 +42,7 @@ impl RegistryClientBuilder {
             index_urls: IndexUrls::default(),
             proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
             cache,
-            retries: 0,
+            retries: 3,
         }
     }
 }
