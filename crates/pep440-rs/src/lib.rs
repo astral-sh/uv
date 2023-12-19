@@ -42,14 +42,15 @@
 //!   the version matching needs to catch all sorts of special cases
 #![deny(missing_docs)]
 
+pub use {
+    version::{LocalSegment, Operator, PreRelease, Version},
+    version_specifier::{parse_version_specifiers, VersionSpecifier, VersionSpecifiers},
+};
+
 #[cfg(feature = "pyo3")]
 use pyo3::{pymodule, types::PyModule, PyResult, Python};
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 #[cfg(feature = "pyo3")]
 pub use version::PyVersion;
-pub use version::{LocalSegment, Operator, PreRelease, Version};
-pub use version_specifier::{parse_version_specifiers, VersionSpecifier, VersionSpecifiers};
 
 mod version;
 mod version_specifier;
@@ -67,8 +68,8 @@ pub struct Pep440Error {
     pub width: usize,
 }
 
-impl Display for Pep440Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Pep440Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Failed to parse version:")?;
         writeln!(f, "{}", self.line)?;
         writeln!(f, "{}{}", " ".repeat(self.start), "^".repeat(self.width))?;
@@ -76,7 +77,7 @@ impl Display for Pep440Error {
     }
 }
 
-impl Error for Pep440Error {}
+impl std::error::Error for Pep440Error {}
 
 /// Python bindings shipped as `pep440_rs`
 #[cfg(feature = "pyo3")]

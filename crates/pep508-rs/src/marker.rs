@@ -715,14 +715,14 @@ impl MarkerExpression {
     ///
     /// # fn main() -> Result<(), Pep508Error> {
     /// let marker_tree = MarkerTree::from_str(r#"("linux" in sys_platform) and extra == 'day'"#)?;
-    /// let versions: Vec<Version> = (8..12).map(|minor| Version::from_release(vec![3, minor])).collect();
+    /// let versions: Vec<Version> = (8..12).map(|minor| Version::new([3, minor])).collect();
     /// assert!(marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &versions));
     /// assert!(!marker_tree.evaluate_extras_and_python_version(&["night".to_string()].into(), &versions));
     ///
     /// let marker_tree = MarkerTree::from_str(r#"extra == 'day' and python_version < '3.11' and '3.10' <= python_version"#)?;
-    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::from_release(vec![3, 9])]));
-    /// assert!(marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::from_release(vec![3, 10])]));
-    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::from_release(vec![3, 11])]));
+    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::new([3, 9])]));
+    /// assert!(marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::new([3, 10])]));
+    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::new([3, 11])]));
     /// # Ok(())
     /// # }
     /// ```
@@ -1556,7 +1556,7 @@ mod test {
     fn test_marker_environment_from_json() {
         let _env: MarkerEnvironment = serde_json::from_str(
             r##"{
-                "implementation_name": "cpython", 
+                "implementation_name": "cpython",
                 "implementation_version": "3.7.13",
                 "os_name": "posix",
                 "platform_machine": "x86_64",

@@ -18,18 +18,18 @@ impl FromStr for PythonVersion {
         if version.is_local() {
             return Err(format!("Python version {s} is a local version"));
         }
-        if version.epoch != 0 {
+        if version.epoch() != 0 {
             return Err(format!("Python version {s} has a non-zero epoch"));
         }
-        if version.version < Version::from_release(vec![3, 7]) {
+        if version.version < Version::new([3, 7]) {
             return Err(format!("Python version {s} must be >= 3.7"));
         }
-        if version.version >= Version::from_release(vec![4, 0]) {
+        if version.version >= Version::new([4, 0]) {
             return Err(format!("Python version {s} must be < 4.0"));
         }
 
         // If the version lacks a patch, assume the most recent known patch for that minor version.
-        match version.release.as_slice() {
+        match version.release() {
             [3, 7] => {
                 debug!("Assuming Python 3.7.17");
                 Ok(Self(StringVersion::from_str("3.7.17")?))
