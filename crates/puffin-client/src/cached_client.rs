@@ -12,6 +12,7 @@ use puffin_cache::CacheEntry;
 use puffin_fs::write_atomic;
 
 /// Either a cached client error or a (user specified) error from the callback
+#[derive(Debug)]
 pub enum CachedClientError<CallbackError> {
     Client(crate::Error),
     Callback(CallbackError),
