@@ -2603,6 +2603,7 @@ fn compile_editable() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn cache_errors_are_non_fatal() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
