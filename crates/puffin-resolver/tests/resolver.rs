@@ -3,6 +3,7 @@
 //! Integration tests for the resolver. These tests rely on a live network connection, and hit
 //! `PyPI` directly.
 
+use std::env;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -23,6 +24,8 @@ use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
+use pypi_types::IndexUrls;
+use url::Url;
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -100,7 +103,23 @@ async fn resolve(
     markers: &'static MarkerEnvironment,
     tags: &Tags,
 ) -> Result<ResolutionGraph> {
-    let client = RegistryClientBuilder::new(Cache::temp()?).build();
+    // Respect `PUFFIN_INDEX_URL` if set
+    let index_urls = env::var("PUFFIN_INDEX_URL")
+        .map(|value| {
+            IndexUrls::from_args(
+                pypi_types::IndexUrl::Url(
+                    Url::parse(value.as_str()).expect("PUFFIN_INDEX_URL should be a valid URL."),
+                ),
+                Vec::new(),
+                false,
+            )
+        })
+        .unwrap_or(IndexUrls::default());
+
+    let client = RegistryClientBuilder::new(Cache::temp()?)
+        .index_urls(index_urls)
+        .build();
+
     let build_context = DummyContext {
         cache: Cache::temp()?,
         interpreter: Interpreter::artificial(
