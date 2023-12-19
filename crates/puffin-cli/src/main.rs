@@ -148,7 +148,7 @@ struct PipCompileArgs {
     output_file: Option<PathBuf>,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -214,7 +214,7 @@ struct PipSyncArgs {
     link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -305,7 +305,7 @@ struct PipInstallArgs {
     output_file: Option<PathBuf>,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str())]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
