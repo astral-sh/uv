@@ -511,7 +511,7 @@ async fn black_disallow_prerelease() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err);
+    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
 
     Ok(())
 }
@@ -531,7 +531,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err);
+    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
 
     Ok(())
 }
