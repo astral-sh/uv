@@ -153,6 +153,7 @@ impl RegistryClient {
                 .uncached()
                 .get(url.clone())
                 .header("Accept-Encoding", "gzip")
+                .header("Accept", "application/vnd.pypi.simple.v1+json")
                 .build()?;
             let parse_simple_response = |response: Response| async {
                 let bytes = response.bytes().await?;
