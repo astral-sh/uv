@@ -7,9 +7,9 @@ use rustc_hash::FxHashMap;
 use super::{PubGrubPackage, PubGrubVersion};
 
 #[derive(Debug)]
-pub struct PubGrubReportFormatter<'a> {
+pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub available_versions: &'a FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
 }
 
 impl PubGrubReportFormatter<'_> {

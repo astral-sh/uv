@@ -2,7 +2,6 @@ use std::fmt::Formatter;
 
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
-use pypi_types::IndexUrl;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use url::Url;
@@ -12,10 +11,10 @@ use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
+use pypi_types::IndexUrl;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
+use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubVersion};
 use crate::version_map::VersionMap;
-use crate::PubGrubReportFormatter;
 
 #[derive(Error, Debug)]
 pub enum ResolveError {
