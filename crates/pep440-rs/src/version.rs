@@ -333,6 +333,25 @@ impl Version {
         .with_release(release_numbers)
     }
 
+    /// Like [`Self::from_str`], but also allows the version to end with a star
+    /// and returns whether it did. This variant is for use in specifiers.
+    ///
+    ///  * `1.2.3` -> false
+    ///  * `1.2.3.*` -> true
+    ///  * `1.2.*.4` -> err
+    ///  * `1.0-dev1.*` -> err
+    pub fn from_str_star(version: &str) -> Result<(Self, bool), String> {
+        if let Some(v) = version_fast_parse(version) {
+            return Ok((v, false));
+        }
+
+        let captures = VERSION_RE
+            .captures(version)
+            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
+        let (version, star) = Version::parse_impl(&captures)?;
+        Ok((version, star))
+    }
+
     /// Whether this is an alpha/beta/rc or dev version
     #[inline]
     pub fn any_prerelease(&self) -> bool {
@@ -461,244 +480,6 @@ impl Version {
             ..self
         }
     }
-}
-
-/// Shows normalized version
-impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let epoch = if self.epoch == 0 {
-            String::new()
-        } else {
-            format!("{}!", self.epoch)
-        };
-        let release = self
-            .release
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
-            .join(".");
-        let pre = self
-            .pre
-            .as_ref()
-            .map(|(pre_kind, pre_version)| format!("{pre_kind}{pre_version}"))
-            .unwrap_or_default();
-        let post = self
-            .post
-            .map(|post| format!(".post{post}"))
-            .unwrap_or_default();
-        let dev = self.dev.map(|dev| format!(".dev{dev}")).unwrap_or_default();
-        let local = self
-            .local
-            .as_ref()
-            .map(|segments| {
-                format!(
-                    "+{}",
-                    segments
-                        .iter()
-                        .map(std::string::ToString::to_string)
-                        .collect::<Vec<String>>()
-                        .join(".")
-                )
-            })
-            .unwrap_or_default();
-        write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
-    }
-}
-
-impl std::fmt::Debug for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "\"{}\"", self)
-    }
-}
-
-/// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` == `1.1` and
-/// `1.16` < `1.19`
-pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
-    // "When comparing release segments with different numbers of components, the shorter segment
-    // is padded out with additional zeros as necessary"
-    for (this, other) in this.iter().chain(std::iter::repeat(&0)).zip(
-        other
-            .iter()
-            .chain(std::iter::repeat(&0))
-            .take(this.len().max(other.len())),
-    ) {
-        match this.cmp(other) {
-            Ordering::Less => {
-                return Ordering::Less;
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Ordering::Greater;
-            }
-        }
-    }
-    Ordering::Equal
-}
-
-/// Compare the parts attached after the release, given equal release
-///
-/// According to <https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering>
-/// the order of pre/post-releases is:
-/// .devN, aN, bN, rcN, <no suffix (final)>, .postN
-/// but also, you can have dev/post releases on beta releases, so we make a three stage ordering:
-/// ({dev: 0, a: 1, b: 2, rc: 3, (): 4, post: 5}, <preN>, <postN or None as smallest>, <devN or Max as largest>, <local>)
-///
-/// For post, any number is better than none (so None defaults to None<0), but for dev, no number
-/// is better (so None default to the maximum). For local the Option<Vec<T>> luckily already has the
-/// correct default Ord implementation
-fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, Option<&[LocalSegment]>) {
-    match (&version.pre, &version.post, &version.dev) {
-        // dev release
-        (None, None, Some(n)) => (0, 0, None, *n, version.local.as_deref()),
-        // alpha release
-        (Some((PreRelease::Alpha, n)), post, dev) => (
-            1,
-            *n,
-            *post,
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
-        // beta release
-        (Some((PreRelease::Beta, n)), post, dev) => (
-            2,
-            *n,
-            *post,
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
-        // alpha release
-        (Some((PreRelease::Rc, n)), post, dev) => (
-            3,
-            *n,
-            *post,
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
-        // final release
-        (None, None, None) => (4, 0, None, 0, version.local.as_deref()),
-        // post release
-        (None, Some(post), dev) => (
-            5,
-            0,
-            Some(*post),
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
-    }
-}
-
-impl PartialEq<Self> for Version {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl Eq for Version {}
-
-impl Hash for Version {
-    /// Custom implementation to ignoring trailing zero because `PartialEq` zero pads
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.epoch.hash(state);
-        // Skip trailing zeros
-        for i in self.release.iter().rev().skip_while(|x| **x == 0) {
-            i.hash(state);
-        }
-        self.pre.hash(state);
-        self.dev.hash(state);
-        self.post.hash(state);
-        self.local.hash(state);
-    }
-}
-
-impl PartialOrd<Self> for Version {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Version {
-    /// 1.0.dev456 < 1.0a1 < 1.0a2.dev456 < 1.0a12.dev456 < 1.0a12 < 1.0b1.dev456 < 1.0b2
-    /// < 1.0b2.post345.dev456 < 1.0b2.post345 < 1.0b2-346 < 1.0c1.dev456 < 1.0c1 < 1.0rc2 < 1.0c3
-    /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.epoch.cmp(&other.epoch) {
-            Ordering::Less => {
-                return Ordering::Less;
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Ordering::Greater;
-            }
-        }
-
-        match compare_release(&self.release, &other.release) {
-            Ordering::Less => {
-                return Ordering::Less;
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Ordering::Greater;
-            }
-        }
-
-        // release is equal, so compare the other parts
-        sortable_tuple(self).cmp(&sortable_tuple(other))
-    }
-}
-
-impl Ord for LocalSegment {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // <https://peps.python.org/pep-0440/#local-version-identifiers>
-        match (self, other) {
-            (Self::Number(n1), Self::Number(n2)) => n1.cmp(n2),
-            (Self::String(s1), Self::String(s2)) => s1.cmp(s2),
-            (Self::Number(_), Self::String(_)) => Ordering::Greater,
-            (Self::String(_), Self::Number(_)) => Ordering::Less,
-        }
-    }
-}
-
-impl FromStr for Version {
-    type Err = String;
-
-    /// Parses a version such as `1.19`, `1.0a1`,`1.0+abc.5` or `1!2012.2`
-    ///
-    /// Note that this variant doesn't allow the version to end with a star, see
-    /// [`Self::from_str_star`] if you want to parse versions for specifiers
-    fn from_str(version: &str) -> Result<Self, Self::Err> {
-        if let Some(v) = version_fast_parse(version) {
-            return Ok(v);
-        }
-
-        let captures = VERSION_RE
-            .captures(version)
-            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
-        let (version, star) = Version::parse_impl(&captures)?;
-        if star {
-            return Err("A star (`*`) must not be used in a fixed version (use `Version::from_string_star` otherwise)".to_string());
-        }
-        Ok(version)
-    }
-}
-
-impl Version {
-    /// Like [`Self::from_str`], but also allows the version to end with a star and returns whether it
-    /// did. This variant is for use in specifiers.
-    ///  * `1.2.3` -> false
-    ///  * `1.2.3.*` -> true
-    ///  * `1.2.*.4` -> err
-    ///  * `1.0-dev1.*` -> err
-    pub fn from_str_star(version: &str) -> Result<(Self, bool), String> {
-        if let Some(v) = version_fast_parse(version) {
-            return Ok((v, false));
-        }
-
-        let captures = VERSION_RE
-            .captures(version)
-            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
-        let (version, star) = Version::parse_impl(&captures)?;
-        Ok((version, star))
-    }
 
     /// Extracted for reusability around star/non-star
     pub(crate) fn parse_impl(captures: &Captures) -> Result<(Version, bool), String> {
@@ -800,6 +581,148 @@ impl Version {
             local,
         };
         Ok((version, star))
+    }
+}
+
+/// Shows normalized version
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let epoch = if self.epoch == 0 {
+            String::new()
+        } else {
+            format!("{}!", self.epoch)
+        };
+        let release = self
+            .release
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join(".");
+        let pre = self
+            .pre
+            .as_ref()
+            .map(|(pre_kind, pre_version)| format!("{pre_kind}{pre_version}"))
+            .unwrap_or_default();
+        let post = self
+            .post
+            .map(|post| format!(".post{post}"))
+            .unwrap_or_default();
+        let dev = self.dev.map(|dev| format!(".dev{dev}")).unwrap_or_default();
+        let local = self
+            .local
+            .as_ref()
+            .map(|segments| {
+                format!(
+                    "+{}",
+                    segments
+                        .iter()
+                        .map(std::string::ToString::to_string)
+                        .collect::<Vec<String>>()
+                        .join(".")
+                )
+            })
+            .unwrap_or_default();
+        write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
+    }
+}
+
+impl std::fmt::Debug for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{}\"", self)
+    }
+}
+
+impl PartialEq<Self> for Version {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Version {}
+
+impl Hash for Version {
+    /// Custom implementation to ignoring trailing zero because `PartialEq` zero pads
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.epoch.hash(state);
+        // Skip trailing zeros
+        for i in self.release.iter().rev().skip_while(|x| **x == 0) {
+            i.hash(state);
+        }
+        self.pre.hash(state);
+        self.dev.hash(state);
+        self.post.hash(state);
+        self.local.hash(state);
+    }
+}
+
+impl PartialOrd<Self> for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Version {
+    /// 1.0.dev456 < 1.0a1 < 1.0a2.dev456 < 1.0a12.dev456 < 1.0a12 < 1.0b1.dev456 < 1.0b2
+    /// < 1.0b2.post345.dev456 < 1.0b2.post345 < 1.0b2-346 < 1.0c1.dev456 < 1.0c1 < 1.0rc2 < 1.0c3
+    /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.epoch.cmp(&other.epoch) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
+        }
+
+        match compare_release(&self.release, &other.release) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
+        }
+
+        // release is equal, so compare the other parts
+        sortable_tuple(self).cmp(&sortable_tuple(other))
+    }
+}
+
+impl Ord for LocalSegment {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // <https://peps.python.org/pep-0440/#local-version-identifiers>
+        match (self, other) {
+            (Self::Number(n1), Self::Number(n2)) => n1.cmp(n2),
+            (Self::String(s1), Self::String(s2)) => s1.cmp(s2),
+            (Self::Number(_), Self::String(_)) => Ordering::Greater,
+            (Self::String(_), Self::Number(_)) => Ordering::Less,
+        }
+    }
+}
+
+impl FromStr for Version {
+    type Err = String;
+
+    /// Parses a version such as `1.19`, `1.0a1`,`1.0+abc.5` or `1!2012.2`
+    ///
+    /// Note that this variant doesn't allow the version to end with a star, see
+    /// [`Self::from_str_star`] if you want to parse versions for specifiers
+    fn from_str(version: &str) -> Result<Self, Self::Err> {
+        if let Some(v) = version_fast_parse(version) {
+            return Ok(v);
+        }
+
+        let captures = VERSION_RE
+            .captures(version)
+            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
+        let (version, star) = Version::parse_impl(&captures)?;
+        if star {
+            return Err("A star (`*`) must not be used in a fixed version (use `Version::from_string_star` otherwise)".to_string());
+        }
+        Ok(version)
     }
 }
 
@@ -925,6 +848,86 @@ impl IntoPy<PyObject> for Version {
 impl<'source> FromPyObject<'source> for Version {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         Ok(ob.extract::<PyVersion>()?.0)
+    }
+}
+
+/// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` ==
+/// `1.1` and `1.16` < `1.19`
+pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
+    // "When comparing release segments with different numbers of components, the shorter segment
+    // is padded out with additional zeros as necessary"
+    for (this, other) in this.iter().chain(std::iter::repeat(&0)).zip(
+        other
+            .iter()
+            .chain(std::iter::repeat(&0))
+            .take(this.len().max(other.len())),
+    ) {
+        match this.cmp(other) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
+        }
+    }
+    Ordering::Equal
+}
+
+/// Compare the parts attached after the release, given equal release
+///
+/// According to [a summary of permitted suffixes and relative
+/// ordering][pep440-suffix-ordering] the order of pre/post-releases is: .devN,
+/// aN, bN, rcN, <no suffix (final)>, .postN but also, you can have dev/post
+/// releases on beta releases, so we make a three stage ordering: ({dev: 0, a:
+/// 1, b: 2, rc: 3, (): 4, post: 5}, <preN>, <postN or None as smallest>, <devN
+/// or Max as largest>, <local>)
+///
+/// For post, any number is better than none (so None defaults to None<0),
+/// but for dev, no number is better (so None default to the maximum). For
+/// local the Option<Vec<T>> luckily already has the correct default Ord
+/// implementation
+///
+/// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
+fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, Option<&[LocalSegment]>) {
+    match (&version.pre, &version.post, &version.dev) {
+        // dev release
+        (None, None, Some(n)) => (0, 0, None, *n, version.local.as_deref()),
+        // alpha release
+        (Some((PreRelease::Alpha, n)), post, dev) => (
+            1,
+            *n,
+            *post,
+            dev.unwrap_or(u64::MAX),
+            version.local.as_deref(),
+        ),
+        // beta release
+        (Some((PreRelease::Beta, n)), post, dev) => (
+            2,
+            *n,
+            *post,
+            dev.unwrap_or(u64::MAX),
+            version.local.as_deref(),
+        ),
+        // alpha release
+        (Some((PreRelease::Rc, n)), post, dev) => (
+            3,
+            *n,
+            *post,
+            dev.unwrap_or(u64::MAX),
+            version.local.as_deref(),
+        ),
+        // final release
+        (None, None, None) => (4, 0, None, 0, version.local.as_deref()),
+        // post release
+        (None, Some(post), dev) => (
+            5,
+            0,
+            Some(*post),
+            dev.unwrap_or(u64::MAX),
+            version.local.as_deref(),
+        ),
     }
 }
 
