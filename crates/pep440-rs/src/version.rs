@@ -439,30 +439,6 @@ impl Serialize for Version {
 }
 
 impl Version {
-    /// Constructor for a version that is just a release such as `3.8`
-    pub fn from_release(release: Vec<u64>) -> Self {
-        Self {
-            epoch: 0,
-            release,
-            pre: None,
-            post: None,
-            dev: None,
-            local: None,
-        }
-    }
-
-    /// For PEP 440 specifier matching: "Except where specifically noted below, local version
-    /// identifiers MUST NOT be permitted in version specifiers, and local version labels MUST be
-    /// ignored entirely when checking if candidate versions match a given version specifier."
-    pub(crate) fn without_local(&self) -> Self {
-        Self {
-            local: None,
-            ..self.clone()
-        }
-    }
-}
-
-impl Version {
     /// Create a new version from an iterator of segments in the release part
     /// of a version.
     #[inline]
@@ -592,8 +568,23 @@ impl Version {
 
     /// Set the local segments and return the updated version.
     #[inline]
-    pub fn with_local(self, local: Option<Vec<LocalSegment>>) -> Version {
-        Version { local, ..self }
+    pub fn with_local(self, local: Vec<LocalSegment>) -> Version {
+        Version {
+            local: Some(local),
+            ..self
+        }
+    }
+
+    /// For PEP 440 specifier matching: "Except where specifically noted below,
+    /// local version identifiers MUST NOT be permitted in version specifiers,
+    /// and local version labels MUST be ignored entirely when checking if
+    /// candidate versions match a given version specifier."
+    #[inline]
+    pub fn without_local(self) -> Version {
+        Version {
+            local: None,
+            ..self
+        }
     }
 }
 
@@ -1051,51 +1042,48 @@ mod tests {
             ("1.1.dev1", Version::new([1, 1]).with_dev(Some(1))),
             (
                 "1.2+123abc",
-                Version::new([1, 2])
-                    .with_local(Some(vec![LocalSegment::String("123abc".to_string())])),
+                Version::new([1, 2]).with_local(vec![LocalSegment::String("123abc".to_string())]),
             ),
             (
                 "1.2+123abc456",
                 Version::new([1, 2])
-                    .with_local(Some(vec![LocalSegment::String("123abc456".to_string())])),
+                    .with_local(vec![LocalSegment::String("123abc456".to_string())]),
             ),
             (
                 "1.2+abc",
-                Version::new([1, 2])
-                    .with_local(Some(vec![LocalSegment::String("abc".to_string())])),
+                Version::new([1, 2]).with_local(vec![LocalSegment::String("abc".to_string())]),
             ),
             (
                 "1.2+abc123",
-                Version::new([1, 2])
-                    .with_local(Some(vec![LocalSegment::String("abc123".to_string())])),
+                Version::new([1, 2]).with_local(vec![LocalSegment::String("abc123".to_string())]),
             ),
             (
                 "1.2+abc123def",
                 Version::new([1, 2])
-                    .with_local(Some(vec![LocalSegment::String("abc123def".to_string())])),
+                    .with_local(vec![LocalSegment::String("abc123def".to_string())]),
             ),
             (
                 "1.2+1234.abc",
-                Version::new([1, 2]).with_local(Some(vec![
+                Version::new([1, 2]).with_local(vec![
                     LocalSegment::Number(1234),
                     LocalSegment::String("abc".to_string()),
-                ])),
+                ]),
             ),
             (
                 "1.2+123456",
-                Version::new([1, 2]).with_local(Some(vec![LocalSegment::Number(123456)])),
+                Version::new([1, 2]).with_local(vec![LocalSegment::Number(123456)]),
             ),
             (
                 "1.2.r32+123456",
                 Version::new([1, 2])
                     .with_post(Some(32))
-                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+                    .with_local(vec![LocalSegment::Number(123456)]),
             ),
             (
                 "1.2.rev33+123456",
                 Version::new([1, 2])
                     .with_post(Some(33))
-                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+                    .with_local(vec![LocalSegment::Number(123456)]),
             ),
             // Explicit epoch of 1
             (
@@ -1208,65 +1196,65 @@ mod tests {
                 "1!1.2+123abc",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(Some(vec![LocalSegment::String("123abc".to_string())])),
+                    .with_local(vec![LocalSegment::String("123abc".to_string())]),
             ),
             (
                 "1!1.2+123abc456",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(Some(vec![LocalSegment::String("123abc456".to_string())])),
+                    .with_local(vec![LocalSegment::String("123abc456".to_string())]),
             ),
             (
                 "1!1.2+abc",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(Some(vec![LocalSegment::String("abc".to_string())])),
+                    .with_local(vec![LocalSegment::String("abc".to_string())]),
             ),
             (
                 "1!1.2+abc123",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(Some(vec![LocalSegment::String("abc123".to_string())])),
+                    .with_local(vec![LocalSegment::String("abc123".to_string())]),
             ),
             (
                 "1!1.2+abc123def",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(Some(vec![LocalSegment::String("abc123def".to_string())])),
+                    .with_local(vec![LocalSegment::String("abc123def".to_string())]),
             ),
             (
                 "1!1.2+1234.abc",
-                Version::new([1, 2]).with_epoch(1).with_local(Some(vec![
+                Version::new([1, 2]).with_epoch(1).with_local(vec![
                     LocalSegment::Number(1234),
                     LocalSegment::String("abc".to_string()),
-                ])),
+                ]),
             ),
             (
                 "1!1.2+123456",
                 Version::new([1, 2])
                     .with_epoch(1)
-                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+                    .with_local(vec![LocalSegment::Number(123456)]),
             ),
             (
                 "1!1.2.r32+123456",
                 Version::new([1, 2])
                     .with_epoch(1)
                     .with_post(Some(32))
-                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+                    .with_local(vec![LocalSegment::Number(123456)]),
             ),
             (
                 "1!1.2.rev33+123456",
                 Version::new([1, 2])
                     .with_epoch(1)
                     .with_post(Some(33))
-                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+                    .with_local(vec![LocalSegment::Number(123456)]),
             ),
             (
                 "98765!1.2.rev33+123456",
                 Version::new([1, 2])
                     .with_epoch(98765)
                     .with_post(Some(33))
-                    .with_local(Some(vec![LocalSegment::Number(123456)])),
+                    .with_local(vec![LocalSegment::Number(123456)]),
             ),
         ];
         for (string, structured) in versions {
