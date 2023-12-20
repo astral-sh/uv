@@ -23,7 +23,7 @@ pub struct File {
     pub hashes: Hashes,
     /// Note: Deserialized with [`LenientVersionSpecifiers`] since there are a number of invalid
     /// versions on pypi
-    #[serde(deserialize_with = "deserialize_version_specifiers_lenient")]
+    #[serde(default, deserialize_with = "deserialize_version_specifiers_lenient")]
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<usize>,
     pub upload_time: Option<DateTime<Utc>>,
