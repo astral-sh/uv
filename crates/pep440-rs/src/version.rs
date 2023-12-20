@@ -316,25 +316,6 @@ impl Version {
         .with_release(release_numbers)
     }
 
-    /// Like [`Self::from_str`], but also allows the version to end with a star
-    /// and returns whether it did. This variant is for use in specifiers.
-    ///
-    ///  * `1.2.3` -> false
-    ///  * `1.2.3.*` -> true
-    ///  * `1.2.*.4` -> err
-    ///  * `1.0-dev1.*` -> err
-    pub fn from_str_star(version: &str) -> Result<(Self, bool), String> {
-        if let Some(v) = version_fast_parse(version) {
-            return Ok((v, false));
-        }
-
-        let captures = VERSION_RE
-            .captures(version)
-            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
-        let (version, star) = Version::parse_impl(&captures)?;
-        Ok((version, star))
-    }
-
     /// Whether this is an alpha/beta/rc or dev version
     #[inline]
     pub fn any_prerelease(&self) -> bool {
@@ -720,6 +701,86 @@ impl FromStr for Version {
     }
 }
 
+/// A version number pattern.
+///
+/// A version pattern appears in a
+/// [`VersionSpecifier`](crate::VersionSpecifier). It is just like a version,
+/// except that it permits a trailing `*` (wildcard) at the end of the version
+/// number. The wildcard indicates that any version with the same prefix should
+/// match.
+///
+/// A `VersionPattern` cannot do any matching itself. Instead,
+/// it needs to be paired with an [`Operator`] to create a
+/// [`VersionSpecifier`](crate::VersionSpecifier).
+///
+/// Here are some valid and invalid examples:
+///
+/// * `1.2.3` -> verbatim pattern
+/// * `1.2.3.*` -> wildcard pattern
+/// * `1.2.*.4` -> invalid
+/// * `1.0-dev1.*` -> invalid
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct VersionPattern {
+    version: Version,
+    wildcard: bool,
+}
+
+impl VersionPattern {
+    /// Creates a new verbatim version pattern that matches the given
+    /// version exactly.
+    #[inline]
+    pub fn verbatim(version: Version) -> VersionPattern {
+        VersionPattern {
+            version,
+            wildcard: false,
+        }
+    }
+
+    /// Creates a new wildcard version pattern that matches any version with
+    /// the given version as a prefix.
+    #[inline]
+    pub fn wildcard(version: Version) -> VersionPattern {
+        VersionPattern {
+            version,
+            wildcard: true,
+        }
+    }
+
+    /// Returns the underlying version.
+    #[inline]
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    /// Consumes this pattern and returns ownership of the underlying version.
+    #[inline]
+    pub fn into_version(self) -> Version {
+        self.version
+    }
+
+    /// Returns true if and only if this pattern contains a wildcard.
+    #[inline]
+    pub fn is_wildcard(&self) -> bool {
+        self.wildcard
+    }
+}
+
+impl FromStr for VersionPattern {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<VersionPattern, String> {
+        if let Some(v) = version_fast_parse(s) {
+            return Ok(VersionPattern::verbatim(v));
+        }
+
+        let captures = VERSION_RE
+            .captures(s)
+            .ok_or_else(|| format!("Version `{s}` doesn't match PEP 440 rules"))?;
+        let (version, wildcard) = Version::parse_impl(&captures)?;
+        Ok(VersionPattern { version, wildcard })
+    }
+}
+
 /// Optional prerelease modifier (alpha, beta or release candidate) appended to version
 ///
 /// <https://peps.python.org/pep-0440/#pre-releases>
@@ -899,9 +960,10 @@ impl PyVersion {
     #[cfg(feature = "pyo3")]
     #[staticmethod]
     pub fn parse_star(version_specifier: &str) -> PyResult<(Self, bool)> {
-        Version::from_str_star(version_specifier)
+        version_specifier
+            .parse::<VersionPattern>()
             .map_err(PyValueError::new_err)
-            .map(|(version, star)| (Self(version), star))
+            .map(|VersionPattern { version, wildcard }| (Self(version), wildcard))
     }
 
     /// Returns the normalized representation
@@ -1058,7 +1120,9 @@ mod tests {
     #[cfg(feature = "pyo3")]
     use pyo3::pyfunction;
 
-    use crate::{LocalSegment, PreRelease, Version, VersionSpecifier};
+    use crate::VersionSpecifier;
+
+    use super::*;
 
     /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L24-L81>
     #[test]
@@ -1640,26 +1704,27 @@ mod tests {
 
     #[test]
     fn test_from_version_star() {
-        assert!(!Version::from_str_star("1.2.3").unwrap().1);
-        assert!(Version::from_str_star("1.2.3.*").unwrap().1);
+        let p = |s: &str| -> Result<VersionPattern, _> { s.parse() };
+        assert!(!p("1.2.3").unwrap().is_wildcard());
+        assert!(p("1.2.3.*").unwrap().is_wildcard());
         assert_eq!(
-            Version::from_str_star("1.2.*.4.*").unwrap_err(),
+            p("1.2.*.4.*").unwrap_err(),
             "Version `1.2.*.4.*` doesn't match PEP 440 rules"
         );
         assert_eq!(
-            Version::from_str_star("1.0-dev1.*").unwrap_err(),
+            p("1.0-dev1.*").unwrap_err(),
             "You can't have both a trailing `.*` and a dev version"
         );
         assert_eq!(
-            Version::from_str_star("1.0a1.*").unwrap_err(),
+            p("1.0a1.*").unwrap_err(),
             "You can't have both a trailing `.*` and a prerelease version"
         );
         assert_eq!(
-            Version::from_str_star("1.0.post1.*").unwrap_err(),
+            p("1.0.post1.*").unwrap_err(),
             "You can't have both a trailing `.*` and a post version"
         );
         assert_eq!(
-            Version::from_str_star("1.0+lolwat.*").unwrap_err(),
+            p("1.0+lolwat.*").unwrap_err(),
             "You can't have both a trailing `.*` and a local version"
         );
     }

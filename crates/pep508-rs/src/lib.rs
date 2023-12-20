@@ -913,7 +913,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use pep440_rs::{Operator, Version, VersionSpecifier};
+    use pep440_rs::{Operator, Version, VersionPattern, VersionSpecifier};
     use puffin_normalize::{ExtraName, PackageName};
 
     use crate::marker::{
@@ -977,11 +977,14 @@ mod tests {
                 [
                     VersionSpecifier::new(
                         Operator::GreaterThanEqual,
-                        Version::new([2, 8, 1]),
-                        false,
+                        VersionPattern::verbatim(Version::new([2, 8, 1])),
                     )
                     .unwrap(),
-                    VersionSpecifier::new(Operator::Equal, Version::new([2, 8]), true).unwrap(),
+                    VersionSpecifier::new(
+                        Operator::Equal,
+                        VersionPattern::wildcard(Version::new([2, 8])),
+                    )
+                    .unwrap(),
                 ]
                 .into_iter()
                 .collect(),

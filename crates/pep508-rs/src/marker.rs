@@ -10,7 +10,7 @@
 //! bogus comparisons with unintended semantics are made.
 
 use crate::{Cursor, Pep508Error, Pep508ErrorSource};
-use pep440_rs::{Version, VersionSpecifier};
+use pep440_rs::{Version, VersionPattern, VersionSpecifier};
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, PyAny, PyResult, Python,
@@ -559,9 +559,9 @@ impl MarkerExpression {
             // The only sound choice for this is `<version key> <version op> <quoted PEP 440 version>`
             MarkerValue::MarkerEnvVersion(l_key) => {
                 let value = &self.r_value;
-                let (r_version, r_star) = if let MarkerValue::QuotedString(r_string) = &value {
-                    match Version::from_str_star(r_string) {
-                        Ok((version, star)) => (version, star),
+                let r_vpat = if let MarkerValue::QuotedString(r_string) = &value {
+                    match r_string.parse::<VersionPattern>() {
+                        Ok(vpat) => vpat,
                         Err(err) => {
                             reporter(MarkerWarningKind::Pep440Error, format!(
                                 "Expected PEP 440 version to compare with {}, found {}, evaluating to false: {}",
@@ -582,14 +582,14 @@ impl MarkerExpression {
                     None => {
                         reporter(MarkerWarningKind::Pep440Error, format!(
                             "Expected PEP 440 version operator to compare {} with '{}', found '{}', evaluating to false",
-                            l_key, r_version, self.operator
+                            l_key, r_vpat.version(), self.operator
                         ), self);
                         return false;
                     }
                     Some(operator) => operator,
                 };
 
-                let specifier = match VersionSpecifier::new(operator, r_version, r_star) {
+                let specifier = match VersionSpecifier::new(operator, r_vpat) {
                     Ok(specifier) => specifier,
                     Err(err) => {
                         reporter(
@@ -660,18 +660,20 @@ impl MarkerExpression {
                             Some(operator) => operator,
                         };
 
-                        let specifier =
-                            match VersionSpecifier::new(operator, r_version.clone(), false) {
-                                Ok(specifier) => specifier,
-                                Err(err) => {
-                                    reporter(
-                                        MarkerWarningKind::Pep440Error,
-                                        format!("Invalid operator/version combination: {err}"),
-                                        self,
-                                    );
-                                    return false;
-                                }
-                            };
+                        let specifier = match VersionSpecifier::new(
+                            operator,
+                            VersionPattern::verbatim(r_version.clone()),
+                        ) {
+                            Ok(specifier) => specifier,
+                            Err(err) => {
+                                reporter(
+                                    MarkerWarningKind::Pep440Error,
+                                    format!("Invalid operator/version combination: {err}"),
+                                    self,
+                                );
+                                return false;
+                            }
+                        };
 
                         specifier.contains(&l_version)
                     }
@@ -756,10 +758,10 @@ impl MarkerExpression {
                 // ignore all errors block
                 (|| {
                     // The right hand side is allowed to contain a star, e.g. `python_version == '3.*'`
-                    let (r_version, r_star) = Version::from_str_star(r_string).ok()?;
+                    let r_vpat = r_string.parse::<VersionPattern>().ok()?;
                     let operator = operator.to_pep440_operator()?;
                     // operator and right hand side make the specifier
-                    let specifier = VersionSpecifier::new(operator, r_version, r_star).ok()?;
+                    let specifier = VersionSpecifier::new(operator, r_vpat).ok()?;
 
                     let compatible = python_versions
                         .iter()
@@ -783,7 +785,10 @@ impl MarkerExpression {
                     let compatible = python_versions.iter().any(|r_version| {
                         // operator and right hand side make the specifier and in this case the
                         // right hand is `python_version` so changes every iteration
-                        match VersionSpecifier::new(operator, r_version.clone(), false) {
+                        match VersionSpecifier::new(
+                            operator,
+                            VersionPattern::verbatim(r_version.clone()),
+                        ) {
                             Ok(specifier) => specifier.contains(&l_version),
                             Err(_) => true,
                         }

@@ -14,7 +14,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::{version, Operator, Version};
+use crate::{version, Operator, Version, VersionPattern};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -323,9 +323,10 @@ impl VersionSpecifier {
     /// parameter indicates a trailing `.*`, to differentiate between `1.1.*` and `1.1`
     pub fn new(
         operator: Operator,
-        version: Version,
-        star: bool,
+        version_pattern: VersionPattern,
     ) -> Result<Self, VersionSpecifierBuildError> {
+        let star = version_pattern.is_wildcard();
+        let version = version_pattern.into_version();
         // "Local version identifiers are NOT permitted in this version specifier."
         if version.local().is_some() && !operator.is_local_compatible() {
             return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
@@ -524,10 +525,9 @@ impl FromStr for VersionSpecifier {
         if version.is_empty() {
             return Err(ParseErrorKind::MissingVersion.into());
         }
-        let (version, star) =
-            Version::from_str_star(version).map_err(ParseErrorKind::InvalidVersion)?;
-        let version_specifier = VersionSpecifier::new(operator, version, star)
-            .map_err(ParseErrorKind::InvalidSpecifier)?;
+        let vpat = version.parse().map_err(ParseErrorKind::InvalidVersion)?;
+        let version_specifier =
+            VersionSpecifier::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
             return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
@@ -1625,7 +1625,8 @@ Failed to parse version: Unexpected end of version specifier, expected operator:
         };
         let op = Operator::TildeEqual;
         let v = Version::new([5]);
-        assert_eq!(err, VersionSpecifier::new(op, v, false).unwrap_err());
+        let vpat = VersionPattern::verbatim(v);
+        assert_eq!(err, VersionSpecifier::new(op, vpat).unwrap_err());
         assert_eq!(
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"
