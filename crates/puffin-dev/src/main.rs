@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 use resolve_many::ResolveManyArgs;
 
 use crate::build::{build, BuildArgs};
+use crate::install_many::InstallManyArgs;
 use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
 
@@ -35,6 +36,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod build;
+mod install_many;
 mod resolve_cli;
 mod resolve_many;
 mod wheel_metadata;
@@ -50,6 +52,7 @@ enum Cli {
     /// cargo run --bin puffin-dev -- resolve-many scripts/resolve/pypi_top_8k_flat.txt
     /// ```
     ResolveMany(ResolveManyArgs),
+    InstallMany(InstallManyArgs),
     /// Resolve requirements passed on the CLI
     ResolveCli(ResolveCliArgs),
     WheelMetadata(WheelMetadataArgs),
@@ -64,6 +67,9 @@ async fn run() -> Result<()> {
         }
         Cli::ResolveMany(args) => {
             resolve_many::resolve_many(args).await?;
+        }
+        Cli::InstallMany(args) => {
+            install_many::install_many(args).await?;
         }
         Cli::ResolveCli(args) => {
             resolve_cli::resolve_cli(args).await?;
