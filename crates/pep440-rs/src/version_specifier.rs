@@ -14,7 +14,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::{version, Operator, Version, VersionSpecifiersParseError};
+use crate::{version, Operator, Version};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -182,6 +182,36 @@ impl Serialize for VersionSpecifiers {
         )
     }
 }
+
+/// Error with span information (unicode width) inside the parsed line
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct VersionSpecifiersParseError {
+    /// The actual error message
+    message: String,
+    /// The string that failed to parse
+    line: String,
+    /// The starting byte offset into the original string where the error
+    /// occurred.
+    start: usize,
+    /// The ending byte offset into the original string where the error
+    /// occurred.
+    end: usize,
+}
+
+impl std::fmt::Display for VersionSpecifiersParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use unicode_width::UnicodeWidthStr;
+
+        writeln!(f, "Failed to parse version: {}:", self.message)?;
+        writeln!(f, "{}", self.line)?;
+        let indent = self.line[..self.start].width();
+        let point = self.line[self.start..self.end].width();
+        writeln!(f, "{}{}", " ".repeat(indent), "^".repeat(point))?;
+        Ok(())
+    }
+}
+
+impl std::error::Error for VersionSpecifiersParseError {}
 
 /// A version range such such as `>1.2.3`, `<=4!5.6.7-a8.post9.dev0` or `== 4.1.*`. Parse with
 /// `VersionSpecifier::from_str`

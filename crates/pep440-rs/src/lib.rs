@@ -44,7 +44,9 @@
 
 pub use {
     version::{LocalSegment, Operator, PreRelease, Version},
-    version_specifier::{parse_version_specifiers, VersionSpecifier, VersionSpecifiers},
+    version_specifier::{
+        parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,
+    },
 };
 
 #[cfg(feature = "pyo3")]
@@ -54,36 +56,6 @@ pub use version::PyVersion;
 
 mod version;
 mod version_specifier;
-
-/// Error with span information (unicode width) inside the parsed line
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct VersionSpecifiersParseError {
-    /// The actual error message
-    message: String,
-    /// The string that failed to parse
-    line: String,
-    /// The starting byte offset into the original string where the error
-    /// occurred.
-    start: usize,
-    /// The ending byte offset into the original string where the error
-    /// occurred.
-    end: usize,
-}
-
-impl std::fmt::Display for VersionSpecifiersParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use unicode_width::UnicodeWidthStr;
-
-        writeln!(f, "Failed to parse version: {}:", self.message)?;
-        writeln!(f, "{}", self.line)?;
-        let indent = self.line[..self.start].width();
-        let point = self.line[self.start..self.end].width();
-        writeln!(f, "{}{}", " ".repeat(indent), "^".repeat(point))?;
-        Ok(())
-    }
-}
-
-impl std::error::Error for VersionSpecifiersParseError {}
 
 /// Python bindings shipped as `pep440_rs`
 #[cfg(feature = "pyo3")]
