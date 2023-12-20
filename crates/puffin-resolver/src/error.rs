@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt::Formatter;
 
 use pubgrub::range::Range;
@@ -104,24 +105,23 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
     }
 }
 
-impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
-    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, Infallible>>
+    for ResolveError
+{
+    fn from(
+        value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, Infallible>,
+    ) -> Self {
         match value {
-            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(inner) => {
-                ResolveError::ErrorChoosingPackageVersion(inner)
+            // These are all never type variant that can never match, but never is experimental
+            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_) => {
+                unreachable!()
             }
-            pubgrub::error::PubGrubError::ErrorInShouldCancel(inner) => {
-                ResolveError::ErrorInShouldCancel(inner)
+            pubgrub::error::PubGrubError::ErrorInShouldCancel(_) => {
+                unreachable!()
             }
-            pubgrub::error::PubGrubError::ErrorRetrievingDependencies {
-                package,
-                version,
-                source,
-            } => ResolveError::ErrorRetrievingDependencies {
-                package: Box::new(package),
-                version: Box::new(version),
-                source,
-            },
+            pubgrub::error::PubGrubError::ErrorRetrievingDependencies { .. } => {
+                unreachable!()
+            }
             pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
             pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
                 ResolveError::NoSolution(NoSolutionError {
