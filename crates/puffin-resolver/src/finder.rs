@@ -44,16 +44,18 @@ impl<'a> DistFinder<'a> {
         }
     }
 
-    /// Resolve a single pinned package, either as cached network request (version or no constraint) or by constructing
-    /// a URL [`Dist`] from the specifier URL.
+    /// Resolve a single pinned package, either as cached network request
+    /// (version or no constraint) or by constructing a URL [`Dist`] from the
+    /// specifier URL.
     async fn resolve_requirement(
         &self,
         requirement: &Requirement,
     ) -> Result<(PackageName, Dist), ResolveError> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                // Query the index(es) (cached) to get the URLs for the available files
+                // Query the index(es) (cached) to get the URLs for the available files.
                 let (index, metadata) = self.client.simple(&requirement.name).await?;
+
                 // Pick a version that satisfies the requirement.
                 let Some(distribution) = self.select(requirement, &index, metadata) else {
                     return Err(ResolveError::NotFound(requirement.clone()));
@@ -67,7 +69,7 @@ impl<'a> DistFinder<'a> {
                 Ok((normalized_name, distribution))
             }
             Some(VersionOrUrl::Url(url)) => {
-                // We have a URL, which is all the resolved information we need to fetch the distribution
+                // We have a URL; fetch the distribution directly.
                 let package_name = requirement.name.clone();
                 let package = Dist::from_url(package_name.clone(), url.clone())?;
                 Ok((package_name, package))
@@ -76,10 +78,10 @@ impl<'a> DistFinder<'a> {
     }
 
     /// Resolve the pinned packages in parallel
-    pub fn resolve_stream<'b>(
-        &'b self,
-        requirements: &'b [Requirement],
-    ) -> impl Stream<Item = Result<(PackageName, Dist), ResolveError>> + 'b {
+    pub fn resolve_stream<'data>(
+        &'data self,
+        requirements: &'data [Requirement],
+    ) -> impl Stream<Item = Result<(PackageName, Dist), ResolveError>> + 'data {
         stream::iter(requirements)
             .map(move |requirement| self.resolve_requirement(requirement))
             .buffer_unordered(32)
