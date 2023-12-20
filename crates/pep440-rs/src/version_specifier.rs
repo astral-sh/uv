@@ -11,7 +11,6 @@ use pyo3::{
 };
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use unicode_width::UnicodeWidthStr;
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
@@ -549,15 +548,15 @@ pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep
                     message: err,
                     line: spec.to_string(),
                     start,
-                    width: version_range_spec.width(),
+                    end: start + version_range_spec.len(),
                 });
             }
             Ok(version_range) => {
                 version_ranges.push(version_range);
             }
         }
-        start += version_range_spec.width();
-        start += separator.width();
+        start += version_range_spec.len();
+        start += separator.len();
     }
     Ok(version_ranges)
 }
@@ -1083,7 +1082,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             indoc! {r#"
-                Failed to parse version:
+                Failed to parse version: Missing comparison operator:
                 ~= 0.9, %‍= 1.0, != 1.3.4.*
                        ^^^^^^^
             "#}
@@ -1287,7 +1286,7 @@ mod tests {
         let s = "💩";
         let err = s.parse::<VersionSpecifiers>().unwrap_err();
         assert_eq!(err.start, 0);
-        assert_eq!(err.width, 2);
+        assert_eq!(err.end, 4);
 
         // The first test here is plain ASCII and it gives the
         // expected result: the error starts at codepoint 12,
@@ -1295,15 +1294,18 @@ mod tests {
         let s = ">=3.7, <4.0,>5.%";
         let err = s.parse::<VersionSpecifiers>().unwrap_err();
         assert_eq!(err.start, 12);
-        assert_eq!(err.width, 4);
+        assert_eq!(err.end, 16);
         // In this case, we replace a single ASCII codepoint
         // with U+3000 IDEOGRAPHIC SPACE. Its *visual* width is
         // 2 despite it being a single codepoint. This causes
         // the offsets in the error reporting logic to become
         // incorrect.
+        //
+        // ... it did. This bug was fixed by switching to byte
+        // offsets.
         let s = ">=3.7,\u{3000}<4.0,>5.%";
         let err = s.parse::<VersionSpecifiers>().unwrap_err();
-        assert_eq!(err.start, 12);
-        assert_eq!(err.width, 4);
+        assert_eq!(err.start, 14);
+        assert_eq!(err.end, 18);
     }
 }
