@@ -1278,4 +1278,32 @@ mod tests {
     fn test_version_specifiers_empty() {
         assert_eq!(VersionSpecifiers::from_str("").unwrap().to_string(), "");
     }
+
+    /// All non-ASCII version specifiers are invalid, but the user can still
+    /// attempt to parse a non-ASCII string as a version specifier. This
+    /// ensures no panics occur and that the error reported has correct info.
+    #[test]
+    fn non_ascii_version_specifier() {
+        let s = "💩";
+        let err = s.parse::<VersionSpecifiers>().unwrap_err();
+        assert_eq!(err.start, 0);
+        assert_eq!(err.width, 2);
+
+        // The first test here is plain ASCII and it gives the
+        // expected result: the error starts at codepoint 12,
+        // which is the start of `>5.%`.
+        let s = ">=3.7, <4.0,>5.%";
+        let err = s.parse::<VersionSpecifiers>().unwrap_err();
+        assert_eq!(err.start, 12);
+        assert_eq!(err.width, 4);
+        // In this case, we replace a single ASCII codepoint
+        // with U+3000 IDEOGRAPHIC SPACE. Its *visual* width is
+        // 2 despite it being a single codepoint. This causes
+        // the offsets in the error reporting logic to become
+        // incorrect.
+        let s = ">=3.7,\u{3000}<4.0,>5.%";
+        let err = s.parse::<VersionSpecifiers>().unwrap_err();
+        assert_eq!(err.start, 12);
+        assert_eq!(err.width, 4);
+    }
 }
