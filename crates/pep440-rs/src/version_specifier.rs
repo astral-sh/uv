@@ -186,8 +186,8 @@ impl Serialize for VersionSpecifiers {
 /// Error with span information (unicode width) inside the parsed line
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct VersionSpecifiersParseError {
-    /// The actual error message
-    message: String,
+    /// The underlying error that occurred.
+    err: VersionSpecifierParseError,
     /// The string that failed to parse
     line: String,
     /// The starting byte offset into the original string where the error
@@ -202,7 +202,7 @@ impl std::fmt::Display for VersionSpecifiersParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use unicode_width::UnicodeWidthStr;
 
-        writeln!(f, "Failed to parse version: {}:", self.message)?;
+        writeln!(f, "Failed to parse version: {}:", self.err)?;
         writeln!(f, "{}", self.line)?;
         let indent = self.line[..self.start].width();
         let point = self.line[self.start..self.end].width();
@@ -240,7 +240,7 @@ impl VersionSpecifier {
     /// Parse a PEP 440 version
     #[new]
     pub fn parse(version_specifier: &str) -> PyResult<Self> {
-        Self::from_str(version_specifier).map_err(PyValueError::new_err)
+        Self::from_str(version_specifier).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
     /// See [VersionSpecifier::contains]
@@ -308,40 +308,22 @@ impl Serialize for VersionSpecifier {
 impl VersionSpecifier {
     /// Build from parts, validating that the operator is allowed with that version. The last
     /// parameter indicates a trailing `.*`, to differentiate between `1.1.*` and `1.1`
-    pub fn new(operator: Operator, version: Version, star: bool) -> Result<Self, String> {
+    pub fn new(
+        operator: Operator,
+        version: Version,
+        star: bool,
+    ) -> Result<Self, VersionSpecifierBuildError> {
         // "Local version identifiers are NOT permitted in this version specifier."
-        if let Some(local) = &version.local() {
-            if matches!(
-                operator,
-                Operator::GreaterThan
-                    | Operator::GreaterThanEqual
-                    | Operator::LessThan
-                    | Operator::LessThanEqual
-                    | Operator::TildeEqual
-                    | Operator::EqualStar
-                    | Operator::NotEqualStar
-            ) {
-                return Err(format!(
-                    "You can't mix a {} operator with a local version (`+{}`)",
-                    operator,
-                    local
-                        .iter()
-                        .map(std::string::ToString::to_string)
-                        .collect::<Vec<String>>()
-                        .join(".")
-                ));
-            }
+        if version.local().is_some() && !operator.is_local_compatible() {
+            return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
         }
 
         // Check if there are star versions and if so, switch operator to star version
         let operator = if star {
-            match operator {
-                Operator::Equal => Operator::EqualStar,
-                Operator::NotEqual => Operator::NotEqualStar,
-                other => {
-                    return Err(format!(
-                        "Operator {other} must not be used in version ending with a star"
-                    ))
+            match operator.to_star() {
+                Some(starop) => starop,
+                None => {
+                    return Err(BuildErrorKind::OperatorWithStar { operator }.into());
                 }
             }
         } else {
@@ -349,9 +331,7 @@ impl VersionSpecifier {
         };
 
         if operator == Operator::TildeEqual && version.release().len() < 2 {
-            return Err(
-                "The ~= operator requires at least two parts in the release version".to_string(),
-            );
+            return Err(BuildErrorKind::CompatibleRelease.into());
         }
 
         Ok(Self { operator, version })
@@ -379,9 +359,7 @@ impl VersionSpecifier {
     pub fn any_prerelease(&self) -> bool {
         self.version.any_prerelease()
     }
-}
 
-impl VersionSpecifier {
     /// Whether the given version satisfies the version range
     ///
     /// e.g. `>=1.19,<2.0` and `1.21` -> true
@@ -516,7 +494,7 @@ impl VersionSpecifier {
 }
 
 impl FromStr for VersionSpecifier {
-    type Err = String;
+    type Err = VersionSpecifierParseError;
 
     /// Parses a version such as `>= 1.19`, `== 1.1.*`,`~=1.0+abc.5` or `<=1!2012.2`
     fn from_str(spec: &str) -> Result<Self, Self::Err> {
@@ -525,19 +503,21 @@ impl FromStr for VersionSpecifier {
         // operator but we don't know yet if it has a star
         let operator = s.eat_while(['=', '!', '~', '<', '>']);
         if operator.is_empty() {
-            return Err("Missing comparison operator".to_string());
+            return Err(ParseErrorKind::MissingOperator.into());
         }
-        let operator = Operator::from_str(operator)?;
+        let operator = Operator::from_str(operator).map_err(ParseErrorKind::InvalidOperator)?;
         s.eat_while(|c: char| c.is_whitespace());
         let version = s.eat_while(|c: char| !c.is_whitespace());
         if version.is_empty() {
-            return Err("Missing version".to_string());
+            return Err(ParseErrorKind::MissingVersion.into());
         }
-        let (version, star) = Version::from_str_star(version)?;
-        let version_specifier = VersionSpecifier::new(operator, version, star)?;
+        let (version, star) =
+            Version::from_str_star(version).map_err(ParseErrorKind::InvalidVersion)?;
+        let version_specifier = VersionSpecifier::new(operator, version, star)
+            .map_err(ParseErrorKind::InvalidSpecifier)?;
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
-            return Err(format!("Trailing `{}` not allowed", s.after()));
+            return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
         }
         Ok(version_specifier)
     }
@@ -549,6 +529,138 @@ impl std::fmt::Display for VersionSpecifier {
             return write!(f, "{}{}.*", self.operator, self.version);
         }
         write!(f, "{}{}", self.operator, self.version)
+    }
+}
+
+/// An error that can occur when constructing a version specifier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VersionSpecifierBuildError {
+    // We box to shrink the error type's size. This in turn keeps Result<T, E>
+    // smaller and should lead to overall better codegen.
+    kind: Box<BuildErrorKind>,
+}
+
+impl std::error::Error for VersionSpecifierBuildError {}
+
+impl std::fmt::Display for VersionSpecifierBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self.kind {
+            BuildErrorKind::OperatorLocalCombo {
+                operator: ref op,
+                ref version,
+            } => {
+                let local = version
+                    .local()
+                    .iter()
+                    .flat_map(|segments| segments.iter())
+                    .map(|segment| segment.to_string())
+                    .collect::<Vec<String>>()
+                    .join(".");
+                write!(
+                    f,
+                    "Operator {op} is incompatible with versions \
+                     containing non-empty local segments (`+{local}`)",
+                )
+            }
+            BuildErrorKind::OperatorWithStar { operator: ref op } => {
+                write!(
+                    f,
+                    "Operator {op} cannot be used with a wildcard version specifier",
+                )
+            }
+            BuildErrorKind::CompatibleRelease => {
+                write!(
+                    f,
+                    "The ~= operator requires at least two segments in the release version"
+                )
+            }
+        }
+    }
+}
+
+/// The specific kind of error that can occur when building a version specifier
+/// from an operator and version pair.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum BuildErrorKind {
+    /// Occurs when one attempts to build a version specifier with
+    /// a version containing a non-empty local segment with and an
+    /// incompatible operator.
+    OperatorLocalCombo {
+        /// The operator given.
+        operator: Operator,
+        /// The version given.
+        version: Version,
+    },
+    /// Occurs when a version specifier contains a wildcard, but is used with
+    /// an incompatible operator.
+    OperatorWithStar {
+        /// The operator given.
+        operator: Operator,
+    },
+    /// Occurs when the compatible release operator (`~=`) is used with a
+    /// version that has fewer than 2 segments in its release version.
+    CompatibleRelease,
+}
+
+impl From<BuildErrorKind> for VersionSpecifierBuildError {
+    fn from(kind: BuildErrorKind) -> VersionSpecifierBuildError {
+        VersionSpecifierBuildError {
+            kind: Box::new(kind),
+        }
+    }
+}
+
+/// An error that can occur when parsing or constructing a version specifier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VersionSpecifierParseError {
+    // We box to shrink the error type's size. This in turn keeps Result<T, E>
+    // smaller and should lead to overall better codegen.
+    kind: Box<ParseErrorKind>,
+}
+
+impl std::error::Error for VersionSpecifierParseError {}
+
+impl std::fmt::Display for VersionSpecifierParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // Note that even though we have nested error types here, since we
+        // don't expose them through std::error::Error::source, we emit them
+        // as part of the error message here. This makes the error a bit
+        // more self-contained. And it's not clear how useful it is exposing
+        // internal errors.
+        match *self.kind {
+            ParseErrorKind::InvalidOperator(ref err) => err.fmt(f),
+            ParseErrorKind::InvalidVersion(ref err) => err.fmt(f),
+            ParseErrorKind::InvalidSpecifier(ref err) => err.fmt(f),
+            ParseErrorKind::MissingOperator => {
+                write!(f, "Unexpected end of version specifier, expected operator")
+            }
+            ParseErrorKind::MissingVersion => {
+                write!(f, "Unexpected end of version specifier, expected version")
+            }
+            ParseErrorKind::InvalidTrailing(ref trail) => {
+                write!(f, "Trailing `{trail}` is not allowed")
+            }
+        }
+    }
+}
+
+/// The specific kind of error that occurs when parsing a single version
+/// specifier from a string.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ParseErrorKind {
+    InvalidOperator(String),
+    InvalidVersion(String),
+    InvalidSpecifier(VersionSpecifierBuildError),
+    MissingOperator,
+    MissingVersion,
+    InvalidTrailing(String),
+}
+
+impl From<ParseErrorKind> for VersionSpecifierParseError {
+    fn from(kind: ParseErrorKind) -> VersionSpecifierParseError {
+        VersionSpecifierParseError {
+            kind: Box::new(kind),
+        }
     }
 }
 
@@ -577,7 +689,7 @@ pub fn parse_version_specifiers(
         match VersionSpecifier::from_str(version_range_spec) {
             Err(err) => {
                 return Err(VersionSpecifiersParseError {
-                    message: err,
+                    err,
                     line: spec.to_string(),
                     start,
                     end: start + version_range_spec.len(),
@@ -599,7 +711,9 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::{Operator, Version, VersionSpecifier, VersionSpecifiers};
+    use crate::LocalSegment;
+
+    use super::*;
 
     /// <https://peps.python.org/pep-0440/#version-matching>
     #[test]
@@ -1114,7 +1228,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             indoc! {r#"
-                Failed to parse version: Missing comparison operator:
+                Failed to parse version: Unexpected end of version specifier, expected operator:
                 ~= 0.9, %‍= 1.0, != 1.3.4.*
                        ^^^^^^^
             "#}
@@ -1125,8 +1239,11 @@ mod tests {
     fn test_non_star_after_star() {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
-            result.unwrap_err().message,
-            "Version `0.9.*.1` doesn't match PEP 440 rules"
+            result.unwrap_err().inner.err,
+            ParseErrorKind::InvalidVersion(
+                "Version `0.9.*.1` doesn't match PEP 440 rules".to_string()
+            )
+            .into()
         );
     }
 
@@ -1134,15 +1251,24 @@ mod tests {
     fn test_star_wrong_operator() {
         let result = VersionSpecifiers::from_str(">= 0.9.1.*");
         assert_eq!(
-            result.unwrap_err().message,
-            "Operator >= must not be used in version ending with a star"
+            result.unwrap_err().err,
+            ParseErrorKind::InvalidSpecifier(
+                BuildErrorKind::OperatorWithStar {
+                    operator: Operator::GreaterThanEqual,
+                }
+                .into()
+            )
+            .into(),
         );
     }
 
     #[test]
     fn test_regex_mismatch() {
         let result = VersionSpecifiers::from_str("blergh");
-        assert_eq!(result.unwrap_err().message, "Missing comparison operator");
+        assert_eq!(
+            result.unwrap_err().err,
+            ParseErrorKind::MissingOperator.into(),
+        );
     }
 
     /// <https://github.com/pypa/packaging/blob/e184feef1a28a5c574ec41f5c263a3a573861f5a/tests/test_specifiers.py#L44-L84>
@@ -1150,126 +1276,234 @@ mod tests {
     fn test_invalid_specifier() {
         let specifiers = [
             // Operator-less specifier
-            ("2.0", Some("Missing comparison operator")),
+            ("2.0", ParseErrorKind::MissingOperator.into()),
             // Invalid operator
             (
                 "=>2.0",
-                Some("No such comparison operator '=>', must be one of ~= == != <= >= < > ==="),
+                ParseErrorKind::InvalidOperator(
+                    "No such comparison operator '=>', must be one of ~= == != <= >= < > ==="
+                        .to_string(),
+                )
+                .into(),
             ),
             // Version-less specifier
-            ("==", Some("Missing version")),
+            ("==", ParseErrorKind::MissingVersion.into()),
             // Local segment on operators which don't support them
             (
                 "~=1.0+5",
-                Some("You can't mix a ~= operator with a local version (`+5`)"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorLocalCombo {
+                        operator: Operator::TildeEqual,
+                        version: Version::new([1, 0]).with_local(vec![LocalSegment::Number(5)]),
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 ">=1.0+deadbeef",
-                Some("You can't mix a >= operator with a local version (`+deadbeef`)"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorLocalCombo {
+                        operator: Operator::GreaterThanEqual,
+                        version: Version::new([1, 0])
+                            .with_local(vec![LocalSegment::String("deadbeef".to_string())]),
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 "<=1.0+abc123",
-                Some("You can't mix a <= operator with a local version (`+abc123`)"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorLocalCombo {
+                        operator: Operator::LessThanEqual,
+                        version: Version::new([1, 0])
+                            .with_local(vec![LocalSegment::String("abc123".to_string())]),
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 ">1.0+watwat",
-                Some("You can't mix a > operator with a local version (`+watwat`)"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorLocalCombo {
+                        operator: Operator::GreaterThan,
+                        version: Version::new([1, 0])
+                            .with_local(vec![LocalSegment::String("watwat".to_string())]),
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 "<1.0+1.0",
-                Some("You can't mix a < operator with a local version (`+1.0`)"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorLocalCombo {
+                        operator: Operator::LessThan,
+                        version: Version::new([1, 0])
+                            .with_local(vec![LocalSegment::Number(1), LocalSegment::Number(0)]),
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             // Prefix matching on operators which don't support them
             (
                 "~=1.0.*",
-                Some("Operator ~= must not be used in version ending with a star"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorWithStar {
+                        operator: Operator::TildeEqual,
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 ">=1.0.*",
-                Some("Operator >= must not be used in version ending with a star"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorWithStar {
+                        operator: Operator::GreaterThanEqual,
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 "<=1.0.*",
-                Some("Operator <= must not be used in version ending with a star"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorWithStar {
+                        operator: Operator::LessThanEqual,
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 ">1.0.*",
-                Some("Operator > must not be used in version ending with a star"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorWithStar {
+                        operator: Operator::GreaterThan,
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             (
                 "<1.0.*",
-                Some("Operator < must not be used in version ending with a star"),
+                ParseErrorKind::InvalidSpecifier(
+                    BuildErrorKind::OperatorWithStar {
+                        operator: Operator::LessThan,
+                    }
+                    .into(),
+                )
+                .into(),
             ),
             // Combination of local and prefix matching on operators which do
             // support one or the other
             (
                 "==1.0.*+5",
-                Some("Version `1.0.*+5` doesn't match PEP 440 rules"),
+                ParseErrorKind::InvalidVersion(
+                    "Version `1.0.*+5` doesn't match PEP 440 rules".to_string(),
+                )
+                .into(),
             ),
             (
                 "!=1.0.*+deadbeef",
-                Some("Version `1.0.*+deadbeef` doesn't match PEP 440 rules"),
+                ParseErrorKind::InvalidVersion(
+                    "Version `1.0.*+deadbeef` doesn't match PEP 440 rules".to_string(),
+                )
+                .into(),
             ),
             // Prefix matching cannot be used with a pre-release, post-release,
             // dev or local version
             (
                 "==2.0a1.*",
-                Some("You can't have both a trailing `.*` and a prerelease version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
+                )
+                .into(),
             ),
             (
                 "!=2.0a1.*",
-                Some("You can't have both a trailing `.*` and a prerelease version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
+                )
+                .into(),
             ),
             (
                 "==2.0.post1.*",
-                Some("You can't have both a trailing `.*` and a post version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a post version".to_string(),
+                )
+                .into(),
             ),
             (
                 "!=2.0.post1.*",
-                Some("You can't have both a trailing `.*` and a post version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a post version".to_string(),
+                )
+                .into(),
             ),
             (
                 "==2.0.dev1.*",
-                Some("You can't have both a trailing `.*` and a dev version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                )
+                .into(),
             ),
             (
                 "!=2.0.dev1.*",
-                Some("You can't have both a trailing `.*` and a dev version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                )
+                .into(),
             ),
             (
                 "==1.0+5.*",
-                Some("You can't have both a trailing `.*` and a local version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a local version".to_string(),
+                )
+                .into(),
             ),
             (
                 "!=1.0+deadbeef.*",
-                Some("You can't have both a trailing `.*` and a local version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a local version".to_string(),
+                )
+                .into(),
             ),
             // Prefix matching must appear at the end
             (
                 "==1.0.*.5",
-                Some("Version `1.0.*.5` doesn't match PEP 440 rules"),
+                ParseErrorKind::InvalidVersion(
+                    "Version `1.0.*.5` doesn't match PEP 440 rules".to_string(),
+                )
+                .into(),
             ),
             // Compatible operator requires 2 digits in the release operator
             (
                 "~=1",
-                Some("The ~= operator requires at least two parts in the release version"),
+                ParseErrorKind::InvalidSpecifier(BuildErrorKind::CompatibleRelease.into()).into(),
             ),
             // Cannot use a prefix matching after a .devN version
             (
                 "==1.0.dev1.*",
-                Some("You can't have both a trailing `.*` and a dev version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                )
+                .into(),
             ),
             (
                 "!=1.0.dev1.*",
-                Some("You can't have both a trailing `.*` and a dev version"),
+                ParseErrorKind::InvalidVersion(
+                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                )
+                .into(),
             ),
         ];
         for (specifier, error) in specifiers {
-            if let Some(error) = error {
-                assert_eq!(VersionSpecifier::from_str(specifier).unwrap_err(), error);
-            } else {
-                unreachable!("expected an error, but got valid version specifier")
-            }
+            assert_eq!(VersionSpecifier::from_str(specifier).unwrap_err(), error);
         }
     }
 

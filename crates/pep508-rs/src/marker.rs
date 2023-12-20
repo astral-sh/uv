@@ -783,7 +783,7 @@ impl MarkerExpression {
                     let compatible = python_versions.iter().any(|r_version| {
                         // operator and right hand side make the specifier and in this case the
                         // right hand is `python_version` so changes every iteration
-                        match VersionSpecifier::new(operator.clone(), r_version.clone(), false) {
+                        match VersionSpecifier::new(operator, r_version.clone(), false) {
                             Ok(specifier) => specifier.contains(&l_version),
                             Err(_) => true,
                         }

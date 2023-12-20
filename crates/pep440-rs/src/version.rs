@@ -56,7 +56,7 @@ static VERSION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(&format!(r#"(?xi)^(?:\s*){VERSION_RE_INNER}(?:\s*)$"#)).unwrap());
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
-#[derive(Eq, PartialEq, Debug, Hash, Clone)]
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Operator {
     /// `== 1.2.3`
@@ -84,6 +84,41 @@ pub enum Operator {
     GreaterThan,
     /// `>=`
     GreaterThanEqual,
+}
+
+impl Operator {
+    /// Returns true if and only if this operator can be used in a version
+    /// specifier with a version containing a non-empty local segment.
+    ///
+    /// Specifically, this comes from the "Local version identifiers are
+    /// NOT permitted in this version specifier." phrasing in the version
+    /// specifiers [spec].
+    ///
+    /// [spec]: https://packaging.python.org/en/latest/specifications/version-specifiers/
+    pub(crate) fn is_local_compatible(&self) -> bool {
+        !matches!(
+            *self,
+            Operator::GreaterThan
+                | Operator::GreaterThanEqual
+                | Operator::LessThan
+                | Operator::LessThanEqual
+                | Operator::TildeEqual
+                | Operator::EqualStar
+                | Operator::NotEqualStar
+        )
+    }
+
+    /// Returns the wildcard version of this operator, if appropriate.
+    ///
+    /// This returns `None` when this operator doesn't have an analogous
+    /// wildcard operator.
+    pub(crate) fn to_star(self) -> Option<Operator> {
+        match self {
+            Operator::Equal => Some(Operator::EqualStar),
+            Operator::NotEqual => Some(Operator::NotEqualStar),
+            _ => None,
+        }
+    }
 }
 
 impl FromStr for Operator {
@@ -1372,7 +1407,9 @@ mod tests {
                 format!("Version `{version}` doesn't match PEP 440 rules")
             );
             assert_eq!(
-                VersionSpecifier::from_str(&format!("=={version}")).unwrap_err(),
+                VersionSpecifier::from_str(&format!("=={version}"))
+                    .unwrap_err()
+                    .to_string(),
                 format!("Version `{version}` doesn't match PEP 440 rules")
             );
         }
