@@ -653,7 +653,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Avoid races between different processes, too.
         let lock_dir = git_dir.join("locks");
         fs::create_dir_all(&lock_dir).await?;
-        let _lock = LockedFile::acquire(lock_dir.join(digest(&CanonicalUrl::new(url))))?;
+        let canonical_url = CanonicalUrl::new(url);
+        let _lock = LockedFile::acquire(lock_dir.join(digest(&canonical_url)), &canonical_url)?;
 
         let DirectGitUrl { url, subdirectory } =
             DirectGitUrl::try_from(url).map_err(SourceDistError::Git)?;
