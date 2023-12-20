@@ -70,16 +70,6 @@ pub enum ResolveError {
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
 
-    #[error("Retrieving dependencies of {package} {version} failed")]
-    ErrorRetrievingDependencies {
-        /// Package whose dependencies we want.
-        package: Box<PubGrubPackage>,
-        /// Version of the package for which we want the dependencies.
-        version: Box<PubGrubVersion>,
-        /// Error raised by the implementer of [DependencyProvider](crate::solver::DependencyProvider).
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
-
     #[error("{package} {version} depends on itself")]
     SelfDependency {
         /// Package whose dependencies we want.
@@ -87,12 +77,6 @@ pub enum ResolveError {
         /// Version of the package for which we want the dependencies.
         version: Box<PubGrubVersion>,
     },
-
-    #[error("Decision making failed")]
-    ErrorChoosingPackageVersion(Box<dyn std::error::Error + Send + Sync>),
-
-    #[error("We should cancel")]
-    ErrorInShouldCancel(Box<dyn std::error::Error + Send + Sync>),
 
     /// Something unexpected happened.
     #[error("{0}")]
@@ -113,13 +97,9 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, In
     ) -> Self {
         match value {
             // These are all never type variant that can never match, but never is experimental
-            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_) => {
-                unreachable!()
-            }
-            pubgrub::error::PubGrubError::ErrorInShouldCancel(_) => {
-                unreachable!()
-            }
-            pubgrub::error::PubGrubError::ErrorRetrievingDependencies { .. } => {
+            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_)
+            | pubgrub::error::PubGrubError::ErrorInShouldCancel(_)
+            | pubgrub::error::PubGrubError::ErrorRetrievingDependencies { .. } => {
                 unreachable!()
             }
             pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
