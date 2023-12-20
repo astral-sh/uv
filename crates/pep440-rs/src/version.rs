@@ -801,7 +801,7 @@ impl PyVersion {
     /// but you can increment it if you switched the versioning scheme.
     #[getter]
     pub fn epoch(&self) -> u64 {
-        self.0.epoch
+        self.0.epoch()
     }
     /// The normal number part of the version
     /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
@@ -810,7 +810,7 @@ impl PyVersion {
     /// Note that we drop the * placeholder by moving it to `Operator`
     #[getter]
     pub fn release(&self) -> Vec<u64> {
-        self.0.release.clone()
+        self.0.release().to_vec()
     }
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
@@ -819,35 +819,35 @@ impl PyVersion {
     /// range matching since normally we exclude all prerelease versions
     #[getter]
     pub fn pre(&self) -> Option<(PreRelease, u64)> {
-        self.0.pre
+        self.0.pre()
     }
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
     /// higher post version are preferred over lower post or none-post versions
     #[getter]
     pub fn post(&self) -> Option<u64> {
-        self.0.post
+        self.0.post()
     }
     /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
     /// if any
     #[getter]
     pub fn dev(&self) -> Option<u64> {
-        self.0.dev
+        self.0.dev()
     }
     /// The first item of release or 0 if unavailable.
     #[getter]
     #[allow(clippy::get_first)]
     pub fn major(&self) -> u64 {
-        self.0.release.get(0).copied().unwrap_or_default()
+        self.0.release().get(0).copied().unwrap_or_default()
     }
     /// The second item of release or 0 if unavailable.
     #[getter]
     pub fn minor(&self) -> u64 {
-        self.0.release.get(1).copied().unwrap_or_default()
+        self.0.release().get(1).copied().unwrap_or_default()
     }
     /// The third item of release or 0 if unavailable.
     #[getter]
     pub fn micro(&self) -> u64 {
-        self.0.release.get(2).copied().unwrap_or_default()
+        self.0.release().get(2).copied().unwrap_or_default()
     }
 
     /// Parses a PEP 440 version string
