@@ -45,9 +45,13 @@ enum Cli {
     Build(BuildArgs),
     /// Resolve many requirements independently in parallel and report failures and sucesses.
     ///
-    /// Run `scripts/resolve/get_pypi_top_8k.sh` once, then
+    /// Run `scripts/popular_packages/pypi_8k_downloads.sh` once, then
     /// ```bash
-    /// cargo run --bin puffin-dev -- resolve-many scripts/resolve/pypi_top_8k_flat.txt
+    /// cargo run --bin puffin-dev -- resolve-many scripts/popular_packages/pypi_8k_downloads.txt
+    /// ```
+    /// or
+    /// ```bash
+    /// cargo run --bin puffin-dev -- resolve-many scripts/popular_packages/pypi_10k_most_dependents.txt
     /// ```
     ResolveMany(ResolveManyArgs),
     /// Resolve requirements passed on the CLI
