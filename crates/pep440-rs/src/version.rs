@@ -243,6 +243,68 @@ impl FromStr for LocalSegment {
     }
 }
 
+// NOTE: I did a little bit of experimentation to determine what most version
+// numbers actually look like. The idea here is that if we know what most look
+// like, then we can optimize our representation for the common case, while
+// falling back to something more complete for any cases that fall outside of
+// that.
+//
+// The experiment downloaded PyPI's distribution metadata from Google BigQuery,
+// and then counted the number of versions with various qualities:
+//
+//     total: 11264078
+//     release counts:
+//         01: 51204 (0.45%)
+//         02: 754520 (6.70%)
+//         03: 9757602 (86.63%)
+//         04: 527403 (4.68%)
+//         05: 77994 (0.69%)
+//         06: 91346 (0.81%)
+//         07: 1421 (0.01%)
+//         08: 205 (0.00%)
+//         09: 72 (0.00%)
+//         10: 2297 (0.02%)
+//         11: 5 (0.00%)
+//         12: 2 (0.00%)
+//         13: 4 (0.00%)
+//         20: 2 (0.00%)
+//         39: 1 (0.00%)
+//     JUST release counts:
+//         01: 48297 (0.43%)
+//         02: 604692 (5.37%)
+//         03: 8460917 (75.11%)
+//         04: 465354 (4.13%)
+//         05: 49293 (0.44%)
+//         06: 25909 (0.23%)
+//         07: 1413 (0.01%)
+//         08: 192 (0.00%)
+//         09: 72 (0.00%)
+//         10: 2292 (0.02%)
+//         11: 5 (0.00%)
+//         12: 2 (0.00%)
+//         13: 4 (0.00%)
+//         20: 2 (0.00%)
+//         39: 1 (0.00%)
+//     non-zero epochs: 1902 (0.02%)
+//     pre-releases: 752184 (6.68%)
+//     post-releases: 134383 (1.19%)
+//     dev-releases: 765099 (6.79%)
+//     locals: 1 (0.00%)
+//     fitsu8: 10388430 (92.23%)
+//     sweetspot: 10236089 (90.87%)
+//
+// The "JUST release counts" corresponds to versions that only have a release
+// component and nothing else. The "fitsu8" property indicates that all numbers
+// (except for local numeric segments) fit into `u8`. The "sweetspot" property
+// consists of any version number with no local part, 4 or fewer parts in the
+// release version and *all* numbers fit into a u8.
+//
+// This somewhat confirms what one might expect: the vast majority of versions
+// (75%) are precisely in the format of `x.y.z`. That is, a version with only a
+// release version of 3 components.
+//
+// ---AG
+
 /// A version number such as `1.2.3` or `4!5.6.7-a8.post9.dev0`.
 ///
 /// Beware that the sorting implemented with [Ord] and [Eq] is not consistent with the operators
