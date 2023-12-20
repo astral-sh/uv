@@ -186,6 +186,13 @@ impl Serialize for VersionSpecifiers {
 /// Error with span information (unicode width) inside the parsed line
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct VersionSpecifiersParseError {
+    // Clippy complains about this error type being too big (at time of
+    // writing, over 150 bytes). That does seem a little big, so we box things.
+    inner: Box<VersionSpecifiersParseErrorInner>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+struct VersionSpecifiersParseErrorInner {
     /// The underlying error that occurred.
     err: VersionSpecifierParseError,
     /// The string that failed to parse
@@ -202,10 +209,16 @@ impl std::fmt::Display for VersionSpecifiersParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use unicode_width::UnicodeWidthStr;
 
-        writeln!(f, "Failed to parse version: {}:", self.err)?;
-        writeln!(f, "{}", self.line)?;
-        let indent = self.line[..self.start].width();
-        let point = self.line[self.start..self.end].width();
+        let VersionSpecifiersParseErrorInner {
+            ref err,
+            ref line,
+            start,
+            end,
+        } = *self.inner;
+        writeln!(f, "Failed to parse version: {}:", err)?;
+        writeln!(f, "{}", line)?;
+        let indent = line[..start].width();
+        let point = line[start..end].width();
         writeln!(f, "{}{}", " ".repeat(indent), "^".repeat(point))?;
         Ok(())
     }
@@ -689,10 +702,12 @@ pub fn parse_version_specifiers(
         match VersionSpecifier::from_str(version_range_spec) {
             Err(err) => {
                 return Err(VersionSpecifiersParseError {
-                    err,
-                    line: spec.to_string(),
-                    start,
-                    end: start + version_range_spec.len(),
+                    inner: Box::new(VersionSpecifiersParseErrorInner {
+                        err,
+                        line: spec.to_string(),
+                        start,
+                        end: start + version_range_spec.len(),
+                    }),
                 });
             }
             Ok(version_range) => {
@@ -1251,7 +1266,7 @@ mod tests {
     fn test_star_wrong_operator() {
         let result = VersionSpecifiers::from_str(">= 0.9.1.*");
         assert_eq!(
-            result.unwrap_err().err,
+            result.unwrap_err().inner.err,
             ParseErrorKind::InvalidSpecifier(
                 BuildErrorKind::OperatorWithStar {
                     operator: Operator::GreaterThanEqual,
@@ -1266,7 +1281,7 @@ mod tests {
     fn test_regex_mismatch() {
         let result = VersionSpecifiers::from_str("blergh");
         assert_eq!(
-            result.unwrap_err().err,
+            result.unwrap_err().inner.err,
             ParseErrorKind::MissingOperator.into(),
         );
     }
@@ -1551,16 +1566,16 @@ mod tests {
     fn non_ascii_version_specifier() {
         let s = "💩";
         let err = s.parse::<VersionSpecifiers>().unwrap_err();
-        assert_eq!(err.start, 0);
-        assert_eq!(err.end, 4);
+        assert_eq!(err.inner.start, 0);
+        assert_eq!(err.inner.end, 4);
 
         // The first test here is plain ASCII and it gives the
         // expected result: the error starts at codepoint 12,
         // which is the start of `>5.%`.
         let s = ">=3.7, <4.0,>5.%";
         let err = s.parse::<VersionSpecifiers>().unwrap_err();
-        assert_eq!(err.start, 12);
-        assert_eq!(err.end, 16);
+        assert_eq!(err.inner.start, 12);
+        assert_eq!(err.inner.end, 16);
         // In this case, we replace a single ASCII codepoint
         // with U+3000 IDEOGRAPHIC SPACE. Its *visual* width is
         // 2 despite it being a single codepoint. This causes
@@ -1571,7 +1586,7 @@ mod tests {
         // offsets.
         let s = ">=3.7,\u{3000}<4.0,>5.%";
         let err = s.parse::<VersionSpecifiers>().unwrap_err();
-        assert_eq!(err.start, 14);
-        assert_eq!(err.end, 18);
+        assert_eq!(err.inner.start, 14);
+        assert_eq!(err.inner.end, 18);
     }
 }
