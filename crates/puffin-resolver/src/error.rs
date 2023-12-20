@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt::Formatter;
 
 use pubgrub::range::Range;
@@ -69,16 +70,6 @@ pub enum ResolveError {
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
 
-    #[error("Retrieving dependencies of {package} {version} failed")]
-    ErrorRetrievingDependencies {
-        /// Package whose dependencies we want.
-        package: Box<PubGrubPackage>,
-        /// Version of the package for which we want the dependencies.
-        version: Box<PubGrubVersion>,
-        /// Error raised by the implementer of [DependencyProvider](crate::solver::DependencyProvider).
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
-
     #[error("{package} {version} depends on itself")]
     SelfDependency {
         /// Package whose dependencies we want.
@@ -86,12 +77,6 @@ pub enum ResolveError {
         /// Version of the package for which we want the dependencies.
         version: Box<PubGrubVersion>,
     },
-
-    #[error("Decision making failed")]
-    ErrorChoosingPackageVersion(Box<dyn std::error::Error + Send + Sync>),
-
-    #[error("We should cancel")]
-    ErrorInShouldCancel(Box<dyn std::error::Error + Send + Sync>),
 
     /// Something unexpected happened.
     #[error("{0}")]
@@ -104,24 +89,19 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
     }
 }
 
-impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>> for ResolveError {
-    fn from(value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>>) -> Self {
+impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, Infallible>>
+    for ResolveError
+{
+    fn from(
+        value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, Infallible>,
+    ) -> Self {
         match value {
-            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(inner) => {
-                ResolveError::ErrorChoosingPackageVersion(inner)
+            // These are all never type variant that can never match, but never is experimental
+            pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_)
+            | pubgrub::error::PubGrubError::ErrorInShouldCancel(_)
+            | pubgrub::error::PubGrubError::ErrorRetrievingDependencies { .. } => {
+                unreachable!()
             }
-            pubgrub::error::PubGrubError::ErrorInShouldCancel(inner) => {
-                ResolveError::ErrorInShouldCancel(inner)
-            }
-            pubgrub::error::PubGrubError::ErrorRetrievingDependencies {
-                package,
-                version,
-                source,
-            } => ResolveError::ErrorRetrievingDependencies {
-                package: Box::new(package),
-                version: Box::new(version),
-                source,
-            },
             pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
             pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
                 ResolveError::NoSolution(NoSolutionError {
