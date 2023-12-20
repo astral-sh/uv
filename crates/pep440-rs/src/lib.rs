@@ -57,20 +57,20 @@ mod version_specifier;
 
 /// Error with span information (unicode width) inside the parsed line
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Pep440Error {
+pub struct VersionSpecifiersParseError {
     /// The actual error message
-    pub message: String,
+    message: String,
     /// The string that failed to parse
-    pub line: String,
+    line: String,
     /// The starting byte offset into the original string where the error
     /// occurred.
-    pub start: usize,
+    start: usize,
     /// The ending byte offset into the original string where the error
     /// occurred.
-    pub end: usize,
+    end: usize,
 }
 
-impl std::fmt::Display for Pep440Error {
+impl std::fmt::Display for VersionSpecifiersParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use unicode_width::UnicodeWidthStr;
 
@@ -83,7 +83,7 @@ impl std::fmt::Display for Pep440Error {
     }
 }
 
-impl std::error::Error for Pep440Error {}
+impl std::error::Error for VersionSpecifiersParseError {}
 
 /// Python bindings shipped as `pep440_rs`
 #[cfg(feature = "pyo3")]

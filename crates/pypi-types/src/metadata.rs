@@ -7,7 +7,7 @@ use mailparse::{MailHeaderMap, MailParseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use pep440_rs::{Pep440Error, Version, VersionSpecifiers};
+use pep440_rs::{Version, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
 use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
 
@@ -63,7 +63,7 @@ pub enum Error {
     Pep440VersionError(String),
     /// Invalid VersionSpecifier
     #[error(transparent)]
-    Pep440Error(#[from] Pep440Error),
+    Pep440Error(#[from] VersionSpecifiersParseError),
     /// Invalid Requirement
     #[error(transparent)]
     Pep508Error(#[from] Pep508Error),

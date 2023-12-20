@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use pep440_rs::{Pep440Error, VersionSpecifiers};
+use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
 use puffin_warnings::warn_user_once;
 
@@ -99,7 +99,7 @@ impl From<LenientRequirement> for Requirement {
 pub struct LenientVersionSpecifiers(VersionSpecifiers);
 
 impl FromStr for LenientVersionSpecifiers {
-    type Err = Pep440Error;
+    type Err = VersionSpecifiersParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(Self(parse_with_fixups(input, "version specifier")?))

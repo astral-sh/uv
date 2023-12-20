@@ -14,7 +14,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::{version, Operator, Pep440Error, Version};
+use crate::{version, Operator, Version, VersionSpecifiersParseError};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -59,7 +59,7 @@ impl FromIterator<VersionSpecifier> for VersionSpecifiers {
 }
 
 impl FromStr for VersionSpecifiers {
-    type Err = Pep440Error;
+    type Err = VersionSpecifiersParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_version_specifiers(s).map(Self)
@@ -534,7 +534,9 @@ impl std::fmt::Display for VersionSpecifier {
 /// let version_specifiers = parse_version_specifiers(">=1.16, <2.0").unwrap();
 /// assert!(version_specifiers.iter().all(|specifier| specifier.contains(&version)));
 /// ```
-pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep440Error> {
+pub fn parse_version_specifiers(
+    spec: &str,
+) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
     let mut version_ranges = Vec::new();
     if spec.is_empty() {
         return Ok(version_ranges);
@@ -544,7 +546,7 @@ pub fn parse_version_specifiers(spec: &str) -> Result<Vec<VersionSpecifier>, Pep
     for version_range_spec in spec.split(separator) {
         match VersionSpecifier::from_str(version_range_spec) {
             Err(err) => {
-                return Err(Pep440Error {
+                return Err(VersionSpecifiersParseError {
                     message: err,
                     line: spec.to_string(),
                     start,
