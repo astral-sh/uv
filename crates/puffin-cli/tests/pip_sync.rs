@@ -1479,8 +1479,14 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&parent, &cache_dir);
 
+    let mut clean_filters = INSTA_FILTERS.to_vec().clone();
+
+    // We allow the number of entries to vary, as the cache count is different when using
+    // a local index mirror
+    clean_filters.push((r"Cleared \d (entry|entries) for", "Cleared [N] entries for"));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => clean_filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("clean")
@@ -1494,7 +1500,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 2 entries for package: future
+        Cleared [N] entries for package: future
         "###);
     });
 
