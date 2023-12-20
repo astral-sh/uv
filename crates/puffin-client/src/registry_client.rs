@@ -300,16 +300,15 @@ impl RegistryClient {
         let result = self
             .client
             .get_cached_with_callback(req, &cache_entry, read_metadata_from_initial_response)
-            .await;
+            .await
+            .map_err(crate::Error::from);
 
         match result {
-            Ok(metadata) => {
-                return Ok(metadata);
-            }
-            Err(CachedClientError::Client(Error::AsyncHttpRangeReader(
+            Ok(metadata) => return Ok(metadata),
+            Err(Error::AsyncHttpRangeReader(
                 AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-            ))) => {}
-            Err(err) => return Err(err.into()),
+            )) => {}
+            Err(err) => return Err(err),
         }
 
         // The range request version failed (this is bad, the webserver should support this), fall
