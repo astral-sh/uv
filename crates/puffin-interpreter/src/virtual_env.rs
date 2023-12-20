@@ -104,7 +104,7 @@ impl Virtualenv {
 
     /// Lock the virtual environment to prevent concurrent writes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(self.root.join(".lock"))
+        LockedFile::acquire(self.root.join(".lock"), self.root.display())
     }
 }
 

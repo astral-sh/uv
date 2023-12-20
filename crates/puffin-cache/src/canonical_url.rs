@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
@@ -82,6 +83,12 @@ impl Hash for CanonicalUrl {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
         self.0.as_str().hash(state);
+    }
+}
+
+impl std::fmt::Display for CanonicalUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
     }
 }
 

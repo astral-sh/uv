@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
@@ -99,14 +100,15 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
 pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
-    pub fn acquire(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+    pub fn acquire(path: impl AsRef<Path>, resource: impl Display) -> Result<Self, std::io::Error> {
         let file = fs_err::File::create(path.as_ref())?;
         match file.file().try_lock_exclusive() {
             Ok(()) => Ok(Self(file)),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 warn_user!(
-                    "Waiting to acquire lock on {}",
-                    path.as_ref().parent().unwrap_or(path.as_ref()).display()
+                    "Waiting to acquire lock for {} (lockfile: {})",
+                    resource,
+                    path.as_ref().display()
                 );
                 file.file().lock_exclusive()?;
                 Ok(Self(file))
