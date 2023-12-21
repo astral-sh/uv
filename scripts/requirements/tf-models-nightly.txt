@@ -1,0 +1,2 @@
+# Run this on python 3.12 for a pathologically slow case of backtracking through many versions
+tf-models-nightly>2.9.0
