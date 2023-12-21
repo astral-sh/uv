@@ -328,7 +328,7 @@ impl VersionSpecifier {
         let star = version_pattern.is_wildcard();
         let version = version_pattern.into_version();
         // "Local version identifiers are NOT permitted in this version specifier."
-        if version.local().is_some() && !operator.is_local_compatible() {
+        if version.is_local() && !operator.is_local_compatible() {
             return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
         }
 
@@ -392,7 +392,7 @@ impl VersionSpecifier {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking
         // if candidate versions match a given version specifier."
-        let (this, other) = if self.version.local().is_some() {
+        let (this, other) = if !self.version.local().is_empty() {
             (self.version.clone(), version.clone())
         } else {
             // self is already without local
@@ -565,7 +565,6 @@ impl std::fmt::Display for VersionSpecifierBuildError {
                 let local = version
                     .local()
                     .iter()
-                    .flat_map(|segments| segments.iter())
                     .map(|segment| segment.to_string())
                     .collect::<Vec<String>>()
                     .join(".");

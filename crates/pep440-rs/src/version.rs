@@ -293,7 +293,7 @@ pub struct Version {
     /// > along with an arbitrary “local version label”, separated from the public version
     /// > identifier by a plus. Local version labels have no specific semantics assigned, but some
     /// > syntactic restrictions are imposed.
-    local: Option<Vec<LocalSegment>>,
+    local: Vec<LocalSegment>,
 }
 
 impl Version {
@@ -311,7 +311,7 @@ impl Version {
             pre: None,
             post: None,
             dev: None,
-            local: None,
+            local: vec![],
         }
         .with_release(release_numbers)
     }
@@ -343,7 +343,7 @@ impl Version {
     /// Whether this is a local version (e.g. `1.2.3+localsuffixesareweird`)
     #[inline]
     pub fn is_local(&self) -> bool {
-        self.local.is_some()
+        !self.local.is_empty()
     }
 
     /// Returns the epoch of this version.
@@ -378,8 +378,8 @@ impl Version {
 
     /// Returns the local segments in this version, if any exist.
     #[inline]
-    pub fn local(&self) -> Option<&[LocalSegment]> {
-        self.local.as_deref()
+    pub fn local(&self) -> &[LocalSegment] {
+        &self.local
     }
 
     /// Set the release numbers and return the updated version.
@@ -427,10 +427,7 @@ impl Version {
     /// Set the local segments and return the updated version.
     #[inline]
     pub fn with_local(self, local: Vec<LocalSegment>) -> Version {
-        Version {
-            local: Some(local),
-            ..self
-        }
+        Version { local, ..self }
     }
 
     /// For PEP 440 specifier matching: "Except where specifically noted below,
@@ -440,7 +437,7 @@ impl Version {
     #[inline]
     pub fn without_local(self) -> Version {
         Version {
-            local: None,
+            local: vec![],
             ..self
         }
     }
@@ -495,20 +492,23 @@ impl Version {
         } else {
             None
         };
-        let local = captures.name("local").map(|local| {
-            local
-                .as_str()
-                .split(&['-', '_', '.'][..])
-                .map(|segment| {
-                    if let Ok(number) = segment.parse::<u64>() {
-                        LocalSegment::Number(number)
-                    } else {
-                        // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
-                        LocalSegment::String(segment.to_lowercase())
-                    }
-                })
-                .collect()
-        });
+        let local = match captures.name("local") {
+            None => vec![],
+            Some(local) => {
+                local
+                    .as_str()
+                    .split(&['-', '_', '.'][..])
+                    .map(|segment| {
+                        if let Ok(number) = segment.parse::<u64>() {
+                            LocalSegment::Number(number)
+                        } else {
+                            // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
+                            LocalSegment::String(segment.to_lowercase())
+                        }
+                    })
+                    .collect()
+            }
+        };
         let release = captures
             .name("release")
             // Should be forbidden by the regex
@@ -531,7 +531,7 @@ impl Version {
             if dev.is_some() {
                 return Err("You can't have both a trailing `.*` and a dev version".to_string());
             }
-            if local.is_some() {
+            if !local.is_empty() {
                 return Err("You can't have both a trailing `.*` and a local version".to_string());
             }
         }
@@ -595,20 +595,18 @@ impl std::fmt::Display for Version {
             .map(|post| format!(".post{post}"))
             .unwrap_or_default();
         let dev = self.dev.map(|dev| format!(".dev{dev}")).unwrap_or_default();
-        let local = self
-            .local
-            .as_ref()
-            .map(|segments| {
-                format!(
-                    "+{}",
-                    segments
-                        .iter()
-                        .map(std::string::ToString::to_string)
-                        .collect::<Vec<String>>()
-                        .join(".")
-                )
-            })
-            .unwrap_or_default();
+        let local = if self.local.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "+{}",
+                self.local
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect::<Vec<String>>()
+                    .join(".")
+            )
+        };
         write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
     }
 }
@@ -1049,44 +1047,26 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 /// implementation
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
-fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, Option<&[LocalSegment]>) {
-    match (&version.pre, &version.post, &version.dev) {
+fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegment]) {
+    match (version.pre(), version.post(), version.dev()) {
         // dev release
-        (None, None, Some(n)) => (0, 0, None, *n, version.local.as_deref()),
+        (None, None, Some(n)) => (0, 0, None, n, version.local()),
         // alpha release
-        (Some((PreRelease::Alpha, n)), post, dev) => (
-            1,
-            *n,
-            *post,
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
+        (Some((PreRelease::Alpha, n)), post, dev) => {
+            (1, n, post, dev.unwrap_or(u64::MAX), version.local())
+        }
         // beta release
-        (Some((PreRelease::Beta, n)), post, dev) => (
-            2,
-            *n,
-            *post,
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
+        (Some((PreRelease::Beta, n)), post, dev) => {
+            (2, n, post, dev.unwrap_or(u64::MAX), version.local())
+        }
         // alpha release
-        (Some((PreRelease::Rc, n)), post, dev) => (
-            3,
-            *n,
-            *post,
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
+        (Some((PreRelease::Rc, n)), post, dev) => {
+            (3, n, post, dev.unwrap_or(u64::MAX), version.local())
+        }
         // final release
-        (None, None, None) => (4, 0, None, 0, version.local.as_deref()),
+        (None, None, None) => (4, 0, None, 0, version.local()),
         // post release
-        (None, Some(post), dev) => (
-            5,
-            0,
-            Some(*post),
-            dev.unwrap_or(u64::MAX),
-            version.local.as_deref(),
-        ),
+        (None, Some(post), dev) => (5, 0, Some(post), dev.unwrap_or(u64::MAX), version.local()),
     }
 }
 
@@ -1109,7 +1089,7 @@ fn version_fast_parse(version: &str) -> Option<Version> {
         pre: None,
         post: None,
         dev: None,
-        local: None,
+        local: vec![],
     })
 }
 
