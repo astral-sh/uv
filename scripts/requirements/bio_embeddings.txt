@@ -1,0 +1,2 @@
+# Run this on python 3.10 for a pathologically slow case of backtracking through many versions due to botocore and urllib
+bio-embeddings
