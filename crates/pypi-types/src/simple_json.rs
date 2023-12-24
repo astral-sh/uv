@@ -18,7 +18,7 @@ pub struct SimpleJson {
 pub struct File {
     // Not PEP 691 compliant alias used by pypi
     #[serde(alias = "data_dist_info_metadata")]
-    pub dist_info_metadata: Option<Metadata>,
+    pub dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
     pub hashes: Hashes,
     /// Note: Deserialized with [`LenientVersionSpecifiers`] since there are a number of invalid
@@ -47,12 +47,12 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Metadata {
+pub enum DistInfoMetadata {
     Bool(bool),
     Hashes(Hashes),
 }
 
-impl Metadata {
+impl DistInfoMetadata {
     pub fn is_available(&self) -> bool {
         match self {
             Self::Bool(is_available) => *is_available,

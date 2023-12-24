@@ -5,6 +5,7 @@ use async_zip::error::ZipError;
 use thiserror::Error;
 use url::Url;
 
+use crate::html;
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use puffin_normalize::PackageName;
 
@@ -49,6 +50,9 @@ pub enum Error {
     #[error("Received some unexpected JSON from {url}")]
     BadJson { source: serde_json::Error, url: Url },
 
+    #[error("Received some unexpected HTML from {url}")]
+    BadHtml { source: html::Error, url: Url },
+
     #[error(transparent)]
     AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
 
@@ -82,10 +86,23 @@ pub enum Error {
     /// An [`io::Error`] with a filename attached
     #[error(transparent)]
     Persist(#[from] tempfile::PersistError),
+
+    #[error("Missing `Content-Type` header for {0}")]
+    MissingContentType(Url),
+
+    #[error("Invalid `Content-Type` header for {0}")]
+    InvalidContentTypeHeader(Url, #[source] http::header::ToStrError),
+
+    #[error("Unsupported `Content-Type` \"{1}\" for {0}")]
+    UnsupportedMediaType(Url, String),
 }
 
 impl Error {
-    pub fn from_json_err(err: serde_json::Error, url: Url) -> Self {
+    pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
         Self::BadJson { source: err, url }
+    }
+
+    pub(crate) fn from_html_err(err: html::Error, url: Url) -> Self {
+        Self::BadHtml { source: err, url }
     }
 }

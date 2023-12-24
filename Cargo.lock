@@ -2373,6 +2373,7 @@ dependencies = [
  "futures",
  "http",
  "http-cache-semantics",
+ "insta",
  "install-wheel-rs",
  "pep440_rs 0.3.12",
  "pep508_rs",
@@ -2389,6 +2390,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+ "tl",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3700,6 +3702,12 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tl"
+version = "0.7.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5e993a1c7c32fdf90a308cec4d457f507b2573acc909bd6e7a092321664fdb3"
 
 [[package]]
 name = "tokio"

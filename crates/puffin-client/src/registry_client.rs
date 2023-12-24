@@ -25,7 +25,7 @@ use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
 
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::{CachedClient, CachedClientError, Error};
+use crate::{html, CachedClient, CachedClientError, Error};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -135,7 +135,6 @@ impl RegistryClient {
             let mut url: Url = index.clone().into();
             url.path_segments_mut().unwrap().push(package_name.as_ref());
             url.path_segments_mut().unwrap().push("");
-            url.set_query(Some("format=application/vnd.pypi.simple.v1+json"));
 
             trace!("Fetching metadata for {} from {}", package_name, url);
 
@@ -153,14 +152,37 @@ impl RegistryClient {
                 .uncached()
                 .get(url.clone())
                 .header("Accept-Encoding", "gzip")
-                .header("Accept", "application/vnd.pypi.simple.v1+json")
+                .header("Accept", MediaType::accepts())
                 .build()?;
             let parse_simple_response = |response: Response| async {
-                let bytes = response.bytes().await?;
-                let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
-                    .map_err(|err| Error::from_json_err(err, url))?;
-                let metadata = SimpleMetadata::from_package_simple_json(package_name, data);
-                Ok(metadata)
+                let content_type = response
+                    .headers()
+                    .get("content-type")
+                    .ok_or_else(|| Error::MissingContentType(url.clone()))?;
+                let content_type = content_type
+                    .to_str()
+                    .map_err(|err| Error::InvalidContentTypeHeader(url.clone(), err))?;
+                let media_type = content_type.split(';').next().unwrap_or(content_type);
+                let media_type = MediaType::from_str(media_type).ok_or_else(|| {
+                    Error::UnsupportedMediaType(url.clone(), media_type.to_string())
+                })?;
+
+                match media_type {
+                    MediaType::Json => {
+                        let bytes = response.bytes().await?;
+                        let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                        let metadata = SimpleMetadata::from_files(package_name, data.files);
+                        Ok(metadata)
+                    }
+                    MediaType::Html => {
+                        let text = response.text().await?;
+                        let files = html::parse_simple(&text, &url)
+                            .map_err(|err| Error::from_html_err(err, url.clone()))?;
+                        let metadata = SimpleMetadata::from_files(package_name, files);
+                        Ok(metadata)
+                    }
+                }
             };
             let result = self
                 .client
@@ -189,7 +211,7 @@ impl RegistryClient {
 
     /// Fetch the metadata for a remote wheel file.
     ///
-    /// For a remote wheel, we try the following ways to fetch the metadata:  
+    /// For a remote wheel, we try the following ways to fetch the metadata:
     /// 1. From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
@@ -239,7 +261,7 @@ impl RegistryClient {
         if file
             .dist_info_metadata
             .as_ref()
-            .is_some_and(pypi_types::Metadata::is_available)
+            .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
             let url = Url::parse(&format!("{}.metadata", file.url))?;
 
@@ -423,11 +445,11 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_package_simple_json(package_name: &PackageName, simple_json: SimpleJson) -> Self {
+    fn from_files(package_name: &PackageName, files: Vec<File>) -> Self {
         let mut metadata = Self::default();
 
         // Group the distributions by version and kind
-        for file in simple_json.files {
+        for file in files {
             if let Some(filename) =
                 DistFilename::try_from_filename(file.filename.as_str(), package_name)
             {
@@ -459,5 +481,28 @@ impl IntoIterator for SimpleMetadata {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+#[derive(Debug)]
+enum MediaType {
+    Json,
+    Html,
+}
+
+impl MediaType {
+    /// Parse a media type from a string, returning `None` if the media type is not supported.
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "application/vnd.pypi.simple.v1+json" => Some(Self::Json),
+            "application/vnd.pypi.simple.v1+html" | "text/html" => Some(Self::Html),
+            _ => None,
+        }
+    }
+
+    /// Return the `Accept` header value for all supported media types.
+    #[inline]
+    const fn accepts() -> &'static str {
+        "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html"
     }
 }
