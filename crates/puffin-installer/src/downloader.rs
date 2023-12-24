@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use futures::{StreamExt, TryFutureExt};
+use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
 use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
@@ -60,8 +60,27 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         }
     }
 
+    /// Fetch, build, and unzip the distributions in parallel.
+    #[instrument(name = "download_distributions", skip_all, fields(total = distributions.len()))]
+    pub fn download_stream<'stream>(
+        &'stream self,
+        distributions: Vec<Dist>,
+        in_flight: &'stream OnceMap<PathBuf, Result<CachedDist, String>>,
+    ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
+        futures::stream::iter(distributions)
+            .map(|dist| async {
+                let wheel = self.get_wheel(dist, in_flight).await?;
+                if let Some(reporter) = self.reporter.as_ref() {
+                    reporter.on_progress(&wheel);
+                }
+                Ok::<CachedDist, Error>(wheel)
+            })
+            // TODO(charlie): The number of concurrent fetches, such that we limit the number of
+            // concurrent builds to the number of cores, while allowing more concurrent downloads.
+            .buffer_unordered(50)
+    }
+
     /// Download, build, and unzip a set of downloaded wheels.
-    #[instrument(skip_all)]
     pub async fn download(
         &self,
         mut distributions: Vec<Dist>,
@@ -72,20 +91,10 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             Reverse(distribution.size().unwrap_or(usize::MAX))
         });
 
-        // Fetch, build, and unzip the distributions in parallel.
-        // TODO(charlie): The number of concurrent fetches, such that we limit the number of
-        // concurrent builds to the number of cores, while allowing more concurrent downloads.
-        let mut wheels = Vec::with_capacity(distributions.len());
-        let mut fetches = futures::stream::iter(distributions)
-            .map(|dist| self.get_wheel(dist, in_flight))
-            .buffer_unordered(50);
-
-        while let Some(wheel) = fetches.next().await.transpose()? {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_progress(&wheel);
-            }
-            wheels.push(wheel);
-        }
+        let wheels = self
+            .download_stream(distributions, in_flight)
+            .try_collect()
+            .await?;
 
         if let Some(reporter) = self.reporter.as_ref() {
             reporter.on_complete();
@@ -143,7 +152,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Download, build, and unzip a single wheel.
-    async fn get_wheel(
+    #[instrument(skip_all, fields(name = %dist, url = dist.file().unwrap().url))]
+    pub async fn get_wheel(
         &self,
         dist: Dist,
         in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
