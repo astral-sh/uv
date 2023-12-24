@@ -65,8 +65,8 @@ fn no_solution() -> Result<()> {
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
-            .arg(EXCLUDE_NEWER)
-            .env("VIRTUAL_ENV", venv.as_os_str())
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 1
@@ -448,6 +448,8 @@ fn install_editable() -> Result<()> {
             .arg("../../scripts/editable-installs/poetry_editable")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -474,6 +476,8 @@ fn install_editable() -> Result<()> {
             .arg("../../scripts/editable-installs/poetry_editable")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -496,6 +500,8 @@ fn install_editable() -> Result<()> {
             .arg("black")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -504,24 +510,17 @@ fn install_editable() -> Result<()> {
 
         ----- stderr -----
         Built 1 editable in [TIME]
-        Resolved 15 packages in [TIME]
-        Downloaded 13 packages in [TIME]
-        Installed 14 packages in [TIME]
-         + aiohttp==3.9.1
-         + aiosignal==1.3.1
-         + attrs==23.1.0
-         + black==23.12.0
+        Resolved 8 packages in [TIME]
+        Downloaded 6 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + black==23.11.0
          + click==8.1.7
-         + frozenlist==1.4.1
-         + idna==3.6
-         + multidict==6.0.4
          + mypy-extensions==1.0.0
          + packaging==23.2
-         + pathspec==0.12.1
-         + platformdirs==4.1.0
+         + pathspec==0.11.2
+         + platformdirs==4.0.0
          - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
          + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
-         + yarl==1.9.4
         "###);
     });
 
@@ -538,6 +537,8 @@ fn install_editable() -> Result<()> {
             .arg("../../scripts/editable-installs/maturin_editable")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -546,7 +547,7 @@ fn install_editable() -> Result<()> {
 
         ----- stderr -----
         Built 2 editables in [TIME]
-        Resolved 16 packages in [TIME]
+        Resolved 9 packages in [TIME]
         Installed 2 packages in [TIME]
          + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable/)
          - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
@@ -578,6 +579,8 @@ fn install_editable_and_registry() -> Result<()> {
             .arg("black")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -585,22 +588,15 @@ fn install_editable_and_registry() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 13 packages in [TIME]
-        Downloaded 13 packages in [TIME]
-        Installed 13 packages in [TIME]
-         + aiohttp==3.9.1
-         + aiosignal==1.3.1
-         + attrs==23.1.0
-         + black==23.12.0
+        Resolved 6 packages in [TIME]
+        Downloaded 6 packages in [TIME]
+        Installed 6 packages in [TIME]
+         + black==23.11.0
          + click==8.1.7
-         + frozenlist==1.4.1
-         + idna==3.6
-         + multidict==6.0.4
          + mypy-extensions==1.0.0
          + packaging==23.2
-         + pathspec==0.12.1
-         + platformdirs==4.1.0
-         + yarl==1.9.4
+         + pathspec==0.11.2
+         + platformdirs==4.0.0
         "###);
     });
 
@@ -614,6 +610,8 @@ fn install_editable_and_registry() -> Result<()> {
             .arg("../../scripts/editable-installs/black_editable")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -624,7 +622,7 @@ fn install_editable_and_registry() -> Result<()> {
         Built 1 editable in [TIME]
         Resolved 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==23.12.0
+         - black==23.11.0
          + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
         "###);
     });
@@ -639,6 +637,8 @@ fn install_editable_and_registry() -> Result<()> {
             .arg("black")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
@@ -659,6 +659,8 @@ fn install_editable_and_registry() -> Result<()> {
             .arg("black==23.10.0")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
