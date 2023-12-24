@@ -8,7 +8,8 @@ use thiserror::Error;
 use pep440_rs::Version;
 use puffin_normalize::{InvalidNameError, PackageName};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SourceDistExtension {
     Zip,
     TarGz,

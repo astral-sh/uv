@@ -6,5 +6,6 @@ pub use registry_client::{
 
 mod cached_client;
 mod error;
+mod html;
 mod registry_client;
 mod remote_metadata;

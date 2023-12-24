@@ -75,6 +75,7 @@ target-lexicon = { version = "0.12.12" }
 tempfile = { version = "3.8.1" }
 textwrap = { version = "0.15.2" }
 thiserror = { version = "1.0.50" }
+tl = { version = "0.7.7" }
 tokio = { version = "1.33.0", features = ["rt-multi-thread"] }
 tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.6" }
