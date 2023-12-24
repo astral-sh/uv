@@ -1433,7 +1433,7 @@ mod tests {
         assert_err(
             "name==1.0.org1",
             indoc! {"
-                Version `1.0.org1` doesn't match PEP 440 rules
+                after parsing 1.0, found \".org1\" after it, which is not part of a valid version
                 name==1.0.org1
                     ^^^^^^^^^^"
             },

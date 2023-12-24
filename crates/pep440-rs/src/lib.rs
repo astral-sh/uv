@@ -39,7 +39,10 @@
 #![deny(missing_docs)]
 
 pub use {
-    version::{LocalSegment, Operator, PreRelease, Version, VersionPattern},
+    version::{
+        LocalSegment, Operator, PreRelease, Version, VersionParseError, VersionPattern,
+        VersionPatternParseError,
+    },
     version_specifier::{
         parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,
     },

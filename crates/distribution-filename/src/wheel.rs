@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn err_invalid_version() {
         let err = WheelFilename::from_str("foo-x.y.z-python-abi-platform.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: Version `x.y.z` doesn't match PEP 440 rules"###);
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: expected version to start with a number, but no leading ASCII digits were found"###);
     }
 
     #[test]

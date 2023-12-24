@@ -1254,10 +1254,8 @@ mod tests {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
             result.unwrap_err().inner.err,
-            ParseErrorKind::InvalidVersion(
-                "Version `0.9.*.1` doesn't match PEP 440 rules".to_string()
-            )
-            .into()
+            ParseErrorKind::InvalidVersion("wildcards in versions must be at the end".to_string())
+                .into()
         );
     }
 
@@ -1418,14 +1416,14 @@ mod tests {
             (
                 "==1.0.*+5",
                 ParseErrorKind::InvalidVersion(
-                    "Version `1.0.*+5` doesn't match PEP 440 rules".to_string(),
+                    "wildcards in versions must be at the end".to_string(),
                 )
                 .into(),
             ),
             (
                 "!=1.0.*+deadbeef",
                 ParseErrorKind::InvalidVersion(
-                    "Version `1.0.*+deadbeef` doesn't match PEP 440 rules".to_string(),
+                    "wildcards in versions must be at the end".to_string(),
                 )
                 .into(),
             ),
@@ -1434,56 +1432,74 @@ mod tests {
             (
                 "==2.0a1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
+                    "after parsing 2.0a1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "!=2.0a1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
+                    "after parsing 2.0a1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "==2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a post version".to_string(),
+                    "after parsing 2.0.post1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "!=2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a post version".to_string(),
+                    "after parsing 2.0.post1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "==2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    "after parsing 2.0.dev1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "!=2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    "after parsing 2.0.dev1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "==1.0+5.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a local version".to_string(),
+                    "found a `.` indicating the start of a local component \
+                     in a version, but did not find any alpha-numeric ASCII \
+                     segment following the `.`"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "!=1.0+deadbeef.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a local version".to_string(),
+                    "found a `.` indicating the start of a local component \
+                     in a version, but did not find any alpha-numeric ASCII \
+                     segment following the `.`"
+                        .to_string(),
                 )
                 .into(),
             ),
@@ -1491,7 +1507,7 @@ mod tests {
             (
                 "==1.0.*.5",
                 ParseErrorKind::InvalidVersion(
-                    "Version `1.0.*.5` doesn't match PEP 440 rules".to_string(),
+                    "wildcards in versions must be at the end".to_string(),
                 )
                 .into(),
             ),
@@ -1504,14 +1520,18 @@ mod tests {
             (
                 "==1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    "after parsing 1.0.dev1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),
             (
                 "!=1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    "after parsing 1.0.dev1, found \".*\" after it, \
+                     which is not part of a valid version"
+                        .to_string(),
                 )
                 .into(),
             ),

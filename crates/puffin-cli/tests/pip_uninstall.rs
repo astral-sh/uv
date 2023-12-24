@@ -49,7 +49,7 @@ fn invalid_requirement() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `flask==1.0.x`
-      Caused by: Version `1.0.x` doesn't match PEP 440 rules
+      Caused by: after parsing 1.0, found ".x" after it, which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
     "###);
@@ -96,7 +96,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 
     ----- stderr -----
     error: Couldn't parse requirement in requirements.txt position 0 to 12
-      Caused by: Version `1.0.x` doesn't match PEP 440 rules
+      Caused by: after parsing 1.0, found ".x" after it, which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
     "###);
@@ -210,7 +210,7 @@ dependencies = ["flask==1.0.x"]
       |
     3 | dependencies = ["flask==1.0.x"]
       |                ^^^^^^^^^^^^^^^^
-    Version `1.0.x` doesn't match PEP 440 rules
+    after parsing 1.0, found ".x" after it, which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
 

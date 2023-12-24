@@ -12,48 +12,6 @@ use pyo3::{
 };
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use {
-    once_cell::sync::Lazy,
-    regex::{Captures, Regex},
-};
-
-/// A regex copied from <https://peps.python.org/pep-0440/#appendix-b-parsing-version-strings-with-regular-expressions>,
-/// updated to support stars for version ranges
-pub(crate) const VERSION_RE_INNER: &str = r"
-(?:
-    (?:v?)                                            # <https://peps.python.org/pep-0440/#preceding-v-character>
-    (?:(?P<epoch>[0-9]+)!)?                           # epoch
-    (?P<release>[0-9*]+(?:\.[0-9]+)*)                 # release segment, this now allows for * versions which are more lenient than necessary so we can put better error messages in the code
-    (?P<pre_field>                                    # pre-release
-        [-_\.]?
-        (?P<pre_name>(a|b|c|rc|alpha|beta|pre|preview))
-        [-_\.]?
-        (?P<pre>[0-9]+)?
-    )?
-    (?P<post_field>                                   # post release
-        (?:-(?P<post_old>[0-9]+))
-        |
-        (?:
-            [-_\.]?
-            (?P<post_l>post|rev|r)
-            [-_\.]?
-            (?P<post_new>[0-9]+)?
-        )
-    )?
-    (?P<dev_field>                                    # dev release
-        [-_\.]?
-        (?P<dev_l>dev)
-        [-_\.]?
-        (?P<dev>[0-9]+)?
-    )?
-)
-(?:\+(?P<local>[a-z0-9]+(?:[-_\.][a-z0-9]+)*))?       # local version
-(?P<trailing_dot_star>\.\*)?                          # allow for version matching `.*`
-";
-
-/// Matches a python version, such as `1.19.a1`. Based on the PEP 440 regex
-static VERSION_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(&format!(r#"(?xi)^(?:\s*){VERSION_RE_INNER}(?:\s*)$"#)).unwrap());
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
@@ -341,6 +299,9 @@ impl Version {
     }
 
     /// Whether this is a local version (e.g. `1.2.3+localsuffixesareweird`)
+    ///
+    /// When true, it is guaranteed that the slice returned by
+    /// [`Version::local`] is non-empty.
     #[inline]
     pub fn is_local(&self) -> bool {
         !self.local.is_empty()
@@ -440,111 +401,6 @@ impl Version {
             local: vec![],
             ..self
         }
-    }
-
-    /// Extracted for reusability around star/non-star
-    pub(crate) fn parse_impl(captures: &Captures) -> Result<(Version, bool), String> {
-        let number_field = |field_name| {
-            if let Some(field_str) = captures.name(field_name) {
-                match field_str.as_str().parse::<u64>() {
-                    Ok(number) => Ok(Some(number)),
-                    // Should be already forbidden by the regex
-                    Err(err) => Err(format!(
-                        "Couldn't parse '{}' as number from {}: {}",
-                        field_str.as_str(),
-                        field_name,
-                        err
-                    )),
-                }
-            } else {
-                Ok(None)
-            }
-        };
-        let epoch = number_field("epoch")?
-            // "If no explicit epoch is given, the implicit epoch is 0"
-            .unwrap_or_default();
-        let pre = {
-            let pre_type = captures
-                .name("pre_name")
-                .map(|pre| PreRelease::from_str(pre.as_str()))
-                // Shouldn't fail due to the regex
-                .transpose()?;
-            let pre_number = number_field("pre")?
-                // <https://peps.python.org/pep-0440/#implicit-pre-release-number>
-                .unwrap_or_default();
-            pre_type.map(|pre_type| (pre_type, pre_number))
-        };
-        let post = if captures.name("post_field").is_some() {
-            // While PEP 440 says .post is "followed by a non-negative integer value",
-            // packaging has tests that ensure that it defaults to 0
-            // https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L187-L202
-            Some(
-                number_field("post_new")?
-                    .or(number_field("post_old")?)
-                    .unwrap_or_default(),
-            )
-        } else {
-            None
-        };
-        let dev = if captures.name("dev_field").is_some() {
-            // <https://peps.python.org/pep-0440/#implicit-development-release-number>
-            Some(number_field("dev")?.unwrap_or_default())
-        } else {
-            None
-        };
-        let local = match captures.name("local") {
-            None => vec![],
-            Some(local) => {
-                local
-                    .as_str()
-                    .split(&['-', '_', '.'][..])
-                    .map(|segment| {
-                        if let Ok(number) = segment.parse::<u64>() {
-                            LocalSegment::Number(number)
-                        } else {
-                            // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
-                            LocalSegment::String(segment.to_lowercase())
-                        }
-                    })
-                    .collect()
-            }
-        };
-        let release = captures
-            .name("release")
-            // Should be forbidden by the regex
-            .ok_or_else(|| "No release in version".to_string())?
-            .as_str()
-            .split('.')
-            .map(|segment| segment.parse::<u64>().map_err(|err| err.to_string()))
-            .collect::<Result<Vec<u64>, String>>()?;
-
-        let star = captures.name("trailing_dot_star").is_some();
-        if star {
-            if pre.is_some() {
-                return Err(
-                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
-                );
-            }
-            if post.is_some() {
-                return Err("You can't have both a trailing `.*` and a post version".to_string());
-            }
-            if dev.is_some() {
-                return Err("You can't have both a trailing `.*` and a dev version".to_string());
-            }
-            if !local.is_empty() {
-                return Err("You can't have both a trailing `.*` and a local version".to_string());
-            }
-        }
-
-        let version = Version {
-            epoch,
-            release,
-            pre,
-            post,
-            dev,
-            local,
-        };
-        Ok((version, star))
     }
 }
 
@@ -684,18 +540,9 @@ impl FromStr for Version {
     /// Note that this variant doesn't allow the version to end with a star, see
     /// [`Self::from_str_star`] if you want to parse versions for specifiers
     fn from_str(version: &str) -> Result<Self, Self::Err> {
-        if let Some(v) = version_fast_parse(version) {
-            return Ok(v);
-        }
-
-        let captures = VERSION_RE
-            .captures(version)
-            .ok_or_else(|| format!("Version `{version}` doesn't match PEP 440 rules"))?;
-        let (version, star) = Version::parse_impl(&captures)?;
-        if star {
-            return Err("A star (`*`) must not be used in a fixed version (use `Version::from_string_star` otherwise)".to_string());
-        }
-        Ok(version)
+        Parser::new(version.as_bytes())
+            .parse()
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -766,16 +613,10 @@ impl VersionPattern {
 impl FromStr for VersionPattern {
     type Err = String;
 
-    fn from_str(s: &str) -> Result<VersionPattern, String> {
-        if let Some(v) = version_fast_parse(s) {
-            return Ok(VersionPattern::verbatim(v));
-        }
-
-        let captures = VERSION_RE
-            .captures(s)
-            .ok_or_else(|| format!("Version `{s}` doesn't match PEP 440 rules"))?;
-        let (version, wildcard) = Version::parse_impl(&captures)?;
-        Ok(VersionPattern { version, wildcard })
+    fn from_str(version: &str) -> Result<VersionPattern, String> {
+        Parser::new(version.as_bytes())
+            .parse_pattern()
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -791,21 +632,6 @@ pub enum PreRelease {
     Beta,
     /// release candidate prerelease
     Rc,
-}
-
-impl FromStr for PreRelease {
-    type Err = String;
-
-    fn from_str(prerelease: &str) -> Result<Self, Self::Err> {
-        match prerelease.to_lowercase().as_str() {
-            "a" | "alpha" => Ok(Self::Alpha),
-            "b" | "beta" => Ok(Self::Beta),
-            "c" | "rc" | "pre" | "preview" => Ok(Self::Rc),
-            _ => Err(format!(
-                "'{prerelease}' isn't recognized as alpha, beta or release candidate",
-            )),
-        }
-    }
 }
 
 impl std::fmt::Display for PreRelease {
@@ -856,20 +682,6 @@ impl PartialOrd for LocalSegment {
     }
 }
 
-impl FromStr for LocalSegment {
-    /// This can be a never type when stabilized
-    type Err = ();
-
-    fn from_str(segment: &str) -> Result<Self, Self::Err> {
-        Ok(if let Ok(number) = segment.parse::<u64>() {
-            Self::Number(number)
-        } else {
-            // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
-            Self::String(segment.to_lowercase())
-        })
-    }
-}
-
 impl Ord for LocalSegment {
     fn cmp(&self, other: &Self) -> Ordering {
         // <https://peps.python.org/pep-0440/#local-version-identifiers>
@@ -878,6 +690,767 @@ impl Ord for LocalSegment {
             (Self::String(s1), Self::String(s2)) => s1.cmp(s2),
             (Self::Number(_), Self::String(_)) => Ordering::Greater,
             (Self::String(_), Self::Number(_)) => Ordering::Less,
+        }
+    }
+}
+
+/// The state used for [parsing a version][pep440].
+///
+/// This parses the most "flexible" format of a version as described in the
+/// "normalization" section of PEP 440.
+///
+/// This can also parse a version "pattern," which essentially is just like
+/// parsing a version, but permits a trailing wildcard. e.g., `1.2.*`.
+///
+/// [pep440]: https://packaging.python.org/en/latest/specifications/version-specifiers/
+#[derive(Debug)]
+struct Parser<'a> {
+    /// The version string we are parsing.
+    v: &'a [u8],
+    /// The current position of the parser.
+    i: usize,
+    /// The epoch extracted from the version.
+    epoch: u64,
+    /// The release numbers extracted from the version.
+    release: ReleaseNumbers,
+    /// The pre-release version, if any.
+    pre: Option<(PreRelease, u64)>,
+    /// The post-release version, if any.
+    post: Option<u64>,
+    /// The dev release, if any.
+    dev: Option<u64>,
+    /// The local segments, if any.
+    local: Vec<LocalSegment>,
+    /// Whether a wildcard at the end of the version was found or not.
+    ///
+    /// This is only valid when a version pattern is being parsed.
+    wildcard: bool,
+}
+
+impl<'a> Parser<'a> {
+    /// The "separators" that are allowed in several different parts of a
+    /// version.
+    const SEPARATOR: ByteSet = ByteSet::new(&[b'.', b'_', b'-']);
+
+    /// Create a new `Parser` for parsing the version in the given byte string.
+    fn new(version: &'a [u8]) -> Parser<'a> {
+        Parser {
+            v: version,
+            i: 0,
+            epoch: 0,
+            release: ReleaseNumbers::new(),
+            pre: None,
+            post: None,
+            dev: None,
+            local: vec![],
+            wildcard: false,
+        }
+    }
+
+    /// Parse a verbatim version.
+    ///
+    /// If a version pattern is found, then an error is returned.
+    fn parse(self) -> Result<Version, VersionParseError> {
+        match self.parse_pattern() {
+            Ok(vpat) => {
+                if !vpat.is_wildcard() {
+                    Ok(vpat.into_version())
+                } else {
+                    Err(ErrorKind::Wildcard.into())
+                }
+            }
+            // If we get an error when parsing a version pattern, then
+            // usually it will actually just be a VersionParseError.
+            // But if it's specific to version patterns, and since
+            // we are expecting a verbatim version here, we can just
+            // return a generic "wildcards not allowed" error in that
+            // case.
+            Err(err) => match *err.kind {
+                PatternErrorKind::Version(err) => Err(err),
+                PatternErrorKind::WildcardNotTrailing => Err(ErrorKind::Wildcard.into()),
+            },
+        }
+    }
+
+    /// Parse a version pattern, which may be a verbatim version.
+    fn parse_pattern(mut self) -> Result<VersionPattern, VersionPatternParseError> {
+        self.bump_while(|byte| byte.is_ascii_whitespace());
+        self.bump_if("v");
+        self.parse_epoch_and_initial_release()?;
+        self.parse_rest_of_release()?;
+        if self.parse_wildcard()? {
+            return Ok(self.into_pattern());
+        }
+        self.parse_pre()?;
+        self.parse_post()?;
+        self.parse_dev()?;
+        self.parse_local()?;
+        self.bump_while(|byte| byte.is_ascii_whitespace());
+        if !self.is_done() {
+            let remaining = String::from_utf8_lossy(&self.v[self.i..]).into_owned();
+            let version = self.into_pattern().version;
+            return Err(ErrorKind::UnexpectedEnd { version, remaining }.into());
+        }
+        Ok(self.into_pattern())
+    }
+
+    /// Parses an optional initial epoch number and the first component of the
+    /// release part of a version number. In all cases, the first part of a
+    /// version must be a single number, and if one isn't found, an error is
+    /// returned.
+    ///
+    /// Upon success, the epoch is possibly set and the release has exactly one
+    /// number in it. The parser will be positioned at the beginning of the
+    /// next component, which is usually a `.`, indicating the start of the
+    /// second number in the release component. It could however point to the
+    /// end of input, in which case, a valid version should be returned.
+    fn parse_epoch_and_initial_release(&mut self) -> Result<(), VersionPatternParseError> {
+        let first_number = self.parse_number()?.ok_or(ErrorKind::NoLeadingNumber)?;
+        let first_release_number = if self.bump_if("!") {
+            self.epoch = first_number;
+            self.parse_number()?
+                .ok_or(ErrorKind::NoLeadingReleaseNumber)?
+        } else {
+            first_number
+        };
+        self.release.push(first_release_number);
+        Ok(())
+    }
+
+    /// This parses the rest of the numbers in the release component of
+    /// the version. Upon success, the release part of this parser will be
+    /// completely finished, and the parser will be positioned at the first
+    /// character after the last number in the release component. This position
+    /// may point to a `.`, for example, the second dot in `1.2.*` or `1.2.a5`
+    /// or `1.2.dev5`. It may also point to the end of the input, in which
+    /// case, the caller should return the current version.
+    ///
+    /// Callers should use this after the initial optional epoch and the first
+    /// release number have been parsed.
+    fn parse_rest_of_release(&mut self) -> Result<(), VersionPatternParseError> {
+        while self.bump_if(".") {
+            let Some(n) = self.parse_number()? else {
+                self.unbump();
+                break;
+            };
+            self.release.push(n);
+        }
+        Ok(())
+    }
+
+    /// Attempts to parse a trailing wildcard after the numbers in the release
+    /// component. Upon success, this returns `true` and positions the parser
+    /// immediately after the `.*` (which must necessarily be the end of
+    /// input), or leaves it unchanged if no wildcard was found. It is an error
+    /// if a `.*` is found and there is still more input after the `.*`.
+    ///
+    /// Callers should use this immediately after parsing all of the numbers in
+    /// the release component of the version.
+    fn parse_wildcard(&mut self) -> Result<bool, VersionPatternParseError> {
+        if !self.bump_if(".*") {
+            return Ok(false);
+        }
+        if !self.is_done() {
+            return Err(PatternErrorKind::WildcardNotTrailing.into());
+        }
+        self.wildcard = true;
+        Ok(true)
+    }
+
+    /// Parses the pre-release component of a version.
+    ///
+    /// If this version has no pre-release component, then this is a no-op.
+    /// Otherwise, it sets `self.pre` and positions the parser to the first
+    /// byte immediately following the pre-release.
+    fn parse_pre(&mut self) -> Result<(), VersionPatternParseError> {
+        // SPELLINGS and MAP are in correspondence. SPELLINGS is used to look
+        // for what spelling is used in the version string (if any), and
+        // the index of the element found is used to lookup which type of
+        // PreRelease it is.
+        //
+        // Note also that the order of the strings themselves matters. If 'pre'
+        // were before 'preview' for example, then 'preview' would never match
+        // since the strings are matched in order.
+        const SPELLINGS: StringSet =
+            StringSet::new(&["alpha", "beta", "preview", "pre", "rc", "a", "b", "c"]);
+        const MAP: &[PreRelease] = &[
+            PreRelease::Alpha,
+            PreRelease::Beta,
+            PreRelease::Rc,
+            PreRelease::Rc,
+            PreRelease::Rc,
+            PreRelease::Alpha,
+            PreRelease::Beta,
+            PreRelease::Rc,
+        ];
+
+        let oldpos = self.i;
+        self.bump_if_byte_set(&Parser::SEPARATOR);
+        let Some(spelling) = self.bump_if_string_set(&SPELLINGS) else {
+            // We might see a separator (or not) and then something
+            // that isn't a pre-release. At this stage, we can't tell
+            // whether it's invalid or not. So we back-up and let the
+            // caller try something else.
+            self.reset(oldpos);
+            return Ok(());
+        };
+        let kind = MAP[spelling];
+        self.bump_if_byte_set(&Parser::SEPARATOR);
+        // Under the normalization rules, a pre-release without an
+        // explicit number defaults to `0`.
+        let number = self.parse_number()?.unwrap_or(0);
+        self.pre = Some((kind, number));
+        Ok(())
+    }
+
+    /// Parses the post-release component of a version.
+    ///
+    /// If this version has no post-release component, then this is a no-op.
+    /// Otherwise, it sets `self.post` and positions the parser to the first
+    /// byte immediately following the post-release.
+    fn parse_post(&mut self) -> Result<(), VersionPatternParseError> {
+        const SPELLINGS: StringSet = StringSet::new(&["post", "rev", "r"]);
+
+        let oldpos = self.i;
+        if self.bump_if("-") {
+            if let Some(n) = self.parse_number()? {
+                self.post = Some(n);
+                return Ok(());
+            }
+            self.reset(oldpos);
+        }
+        self.bump_if_byte_set(&Parser::SEPARATOR);
+        if self.bump_if_string_set(&SPELLINGS).is_none() {
+            // As with pre-releases, if we don't see post|rev|r here, we can't
+            // yet determine whether the version as a whole is invalid since
+            // post-releases are optional.
+            self.reset(oldpos);
+            return Ok(());
+        }
+        self.bump_if_byte_set(&Parser::SEPARATOR);
+        // Under the normalization rules, a post-release without an
+        // explicit number defaults to `0`.
+        self.post = Some(self.parse_number()?.unwrap_or(0));
+        Ok(())
+    }
+
+    /// Parses the dev-release component of a version.
+    ///
+    /// If this version has no dev-release component, then this is a no-op.
+    /// Otherwise, it sets `self.dev` and positions the parser to the first
+    /// byte immediately following the post-release.
+    fn parse_dev(&mut self) -> Result<(), VersionPatternParseError> {
+        let oldpos = self.i;
+        self.bump_if_byte_set(&Parser::SEPARATOR);
+        if !self.bump_if("dev") {
+            // As with pre-releases, if we don't see dev here, we can't
+            // yet determine whether the version as a whole is invalid
+            // since dev-releases are optional.
+            self.reset(oldpos);
+            return Ok(());
+        }
+        self.bump_if_byte_set(&Parser::SEPARATOR);
+        // Under the normalization rules, a post-release without an
+        // explicit number defaults to `0`.
+        self.dev = Some(self.parse_number()?.unwrap_or(0));
+        Ok(())
+    }
+
+    /// Parses the local component of a version.
+    ///
+    /// If this version has no local component, then this is a no-op.
+    /// Otherwise, it adds to `self.local` and positions the parser to the
+    /// first byte immediately following the local component. (Which ought to
+    /// be the end of the version since the local component is the last thing
+    /// that can appear in a version.)
+    fn parse_local(&mut self) -> Result<(), VersionPatternParseError> {
+        if !self.bump_if("+") {
+            return Ok(());
+        }
+        let mut precursor = '+';
+        loop {
+            let first = self.bump_while(|byte| byte.is_ascii_alphanumeric());
+            if first.is_empty() {
+                return Err(ErrorKind::LocalEmpty { precursor }.into());
+            }
+            self.local.push(if let Ok(number) = parse_u64(first) {
+                LocalSegment::Number(number)
+            } else {
+                let string = String::from_utf8(first.to_ascii_lowercase())
+                    .expect("ASCII alphanumerics are always valid UTF-8");
+                LocalSegment::String(string)
+            });
+            let Some(byte) = self.bump_if_byte_set(&Parser::SEPARATOR) else {
+                break;
+            };
+            precursor = char::from(byte);
+        }
+        Ok(())
+    }
+
+    /// Consumes input from the current position while the characters are ASCII
+    /// digits, and then attempts to parse what was consumed as a decimal
+    /// number.
+    ///
+    /// If nothing was consumed, then `Ok(None)` is returned. Otherwise, if the
+    /// digits consumed do not form a valid decimal number that fits into a
+    /// `u64`, then an error is returned.
+    fn parse_number(&mut self) -> Result<Option<u64>, VersionPatternParseError> {
+        let digits = self.bump_while(|ch| ch.is_ascii_digit());
+        if digits.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(parse_u64(digits)?))
+    }
+
+    /// Turns whatever state has been gathered into a `VersionPattern`.
+    ///
+    /// # Panics
+    ///
+    /// When `self.release` is empty. Callers must ensure at least one part
+    /// of the release component has been successfully parsed. Otherwise, the
+    /// version itself is invalid.
+    fn into_pattern(self) -> VersionPattern {
+        assert!(
+            self.release.len() > 0,
+            "version with no release numbers is invalid"
+        );
+        let version = Version {
+            epoch: self.epoch,
+            release: self.release.into_numbers(),
+            pre: self.pre,
+            post: self.post,
+            dev: self.dev,
+            local: self.local,
+        };
+        VersionPattern {
+            version,
+            wildcard: self.wildcard,
+        }
+    }
+
+    /// Consumes input from this parser while the given predicate returns true.
+    /// The resulting input (which may be empty) is returned.
+    ///
+    /// Once returned, the parser is positioned at the first position where the
+    /// predicate returns `false`. (This may be the position at the end of the
+    /// input such that [`Parser::is_done`] returns `true`.)
+    fn bump_while(&mut self, mut predicate: impl FnMut(u8) -> bool) -> &'a [u8] {
+        let start = self.i;
+        while !self.is_done() && predicate(self.byte()) {
+            self.i = self.i.saturating_add(1);
+        }
+        &self.v[start..self.i]
+    }
+
+    /// Consumes `bytes.len()` bytes from the current position of the parser if
+    /// and only if `bytes` is a prefix of the input starting at the current
+    /// position. Otherwise, this is a no-op. Returns true when consumption was
+    /// successful.
+    fn bump_if(&mut self, string: &str) -> bool {
+        if self.is_done() {
+            return false;
+        }
+        if starts_with_ignore_ascii_case(string.as_bytes(), &self.v[self.i..]) {
+            self.i = self
+                .i
+                .checked_add(string.len())
+                .expect("valid offset because of prefix");
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Like [`Parser::bump_if`], but attempts each string in the ordered set
+    /// given. If one is successfully consumed from the start of the current
+    /// position in the input, then it is returned.
+    fn bump_if_string_set(&mut self, set: &StringSet) -> Option<usize> {
+        let index = set.starts_with(&self.v[self.i..])?;
+        let found = &set.strings[index];
+        self.i = self
+            .i
+            .checked_add(found.len())
+            .expect("valid offset because of prefix");
+        Some(index)
+    }
+
+    /// Like [`Parser::bump_if`], but attempts each byte in the set
+    /// given. If one is successfully consumed from the start of the
+    /// current position in the input.
+    fn bump_if_byte_set(&mut self, set: &ByteSet) -> Option<u8> {
+        let found = set.starts_with(&self.v[self.i..])?;
+        self.i = self
+            .i
+            .checked_add(1)
+            .expect("valid offset because of prefix");
+        Some(found)
+    }
+
+    /// Moves the parser back one byte. i.e., ungetch.
+    ///
+    /// This is useful when one has bumped the parser "too far" and wants to
+    /// back-up. This tends to help with composition among parser routines.
+    ///
+    /// # Panics
+    ///
+    /// When the parser is already positioned at the beginning.
+    fn unbump(&mut self) {
+        self.i = self.i.checked_sub(1).expect("not at beginning of input");
+    }
+
+    /// Resets the parser to the given position.
+    ///
+    /// # Panics
+    ///
+    /// When `offset` is greater than `self.v.len()`.
+    fn reset(&mut self, offset: usize) {
+        assert!(offset <= self.v.len());
+        self.i = offset;
+    }
+
+    /// Returns the byte at the current position of the parser.
+    ///
+    /// # Panics
+    ///
+    /// When `Parser::is_done` returns `true`.
+    fn byte(&self) -> u8 {
+        self.v[self.i]
+    }
+
+    /// Returns true if and only if there is no more input to consume.
+    fn is_done(&self) -> bool {
+        self.i >= self.v.len()
+    }
+}
+
+/// Stores the numbers found in the release portion of a version.
+///
+/// We use this in the version parser to avoid allocating in the 90+% case.
+#[derive(Debug)]
+enum ReleaseNumbers {
+    Inline { numbers: [u64; 4], len: usize },
+    Vec(Vec<u64>),
+}
+
+impl ReleaseNumbers {
+    /// Create a new empty set of release numbers.
+    fn new() -> ReleaseNumbers {
+        ReleaseNumbers::Inline {
+            numbers: [0; 4],
+            len: 0,
+        }
+    }
+
+    /// Push a new release number. This automatically switches over to the heap
+    /// when the lengths grow too big.
+    fn push(&mut self, n: u64) {
+        match *self {
+            ReleaseNumbers::Inline {
+                ref mut numbers,
+                ref mut len,
+            } => {
+                assert!(*len <= 4);
+                if *len == 4 {
+                    let mut numbers = numbers.to_vec();
+                    numbers.push(n);
+                    *self = ReleaseNumbers::Vec(numbers.to_vec());
+                } else {
+                    numbers[*len] = n;
+                    *len += 1;
+                }
+            }
+            ReleaseNumbers::Vec(ref mut numbers) => {
+                numbers.push(n);
+            }
+        }
+    }
+
+    /// Returns the number of components in this release component.
+    fn len(&self) -> usize {
+        match *self {
+            ReleaseNumbers::Inline { len, .. } => len,
+            ReleaseNumbers::Vec(ref vec) => vec.len(),
+        }
+    }
+
+    /// Consume this component into a `Vec<u64>`.
+    fn into_numbers(self) -> Vec<u64> {
+        match self {
+            ReleaseNumbers::Inline { numbers, len } => numbers[..len].to_vec(),
+            ReleaseNumbers::Vec(vec) => vec,
+        }
+    }
+}
+
+/// Represents a set of strings for prefix searching.
+///
+/// This can be built as a constant and is useful for quickly looking for one
+/// of a number of matching literal strings while ignoring ASCII case.
+struct StringSet {
+    /// A set of the first bytes of each string in this set. We use this to
+    /// quickly bail out of searching if the first byte of our haystack doesn't
+    /// match any element in this set.
+    first_byte: ByteSet,
+    /// The strings in this set. They are matched in order.
+    strings: &'static [&'static str],
+}
+
+impl StringSet {
+    /// Create a new string set for prefix searching from the given strings.
+    ///
+    /// # Panics
+    ///
+    /// When the number of strings is too big.
+    const fn new(strings: &'static [&'static str]) -> StringSet {
+        assert!(
+            strings.len() <= 20,
+            "only a small number of strings are supported"
+        );
+        let (mut firsts, mut firsts_len) = ([0u8; 20], 0);
+        let mut i = 0;
+        while i < strings.len() {
+            assert!(
+                !strings[i].is_empty(),
+                "every string in set should be non-empty",
+            );
+            firsts[firsts_len] = strings[i].as_bytes()[0];
+            firsts_len += 1;
+            i += 1;
+        }
+        let first_byte = ByteSet::new(&firsts);
+        StringSet {
+            first_byte,
+            strings,
+        }
+    }
+
+    /// Returns the index of the first string in this set that is a prefix of
+    /// the given haystack, or `None` if no elements are a prefix.
+    fn starts_with(&self, haystack: &[u8]) -> Option<usize> {
+        let first_byte = self.first_byte.starts_with(haystack)?;
+        for (i, &string) in self.strings.iter().enumerate() {
+            let bytes = string.as_bytes();
+            if bytes[0].eq_ignore_ascii_case(&first_byte)
+                && starts_with_ignore_ascii_case(bytes, haystack)
+            {
+                return Some(i);
+            }
+        }
+        None
+    }
+}
+
+/// A set of bytes for searching case insensitively (ASCII only).
+struct ByteSet {
+    set: [bool; 256],
+}
+
+impl ByteSet {
+    /// Create a new byte set for searching from the given bytes.
+    const fn new(bytes: &[u8]) -> ByteSet {
+        let mut set = [false; 256];
+        let mut i = 0;
+        while i < bytes.len() {
+            set[bytes[i].to_ascii_uppercase() as usize] = true;
+            set[bytes[i].to_ascii_lowercase() as usize] = true;
+            i += 1;
+        }
+        ByteSet { set }
+    }
+
+    /// Returns the first byte in the haystack if and only if that byte is in
+    /// this set (ignoring ASCII case).
+    fn starts_with(&self, haystack: &[u8]) -> Option<u8> {
+        let byte = *haystack.first()?;
+        if self.contains(byte) {
+            Some(byte)
+        } else {
+            None
+        }
+    }
+
+    /// Returns true if and only if the given byte is in this set.
+    fn contains(&self, byte: u8) -> bool {
+        self.set[usize::from(byte)]
+    }
+}
+
+impl std::fmt::Debug for ByteSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut set = f.debug_set();
+        for byte in 0..=255 {
+            if self.contains(byte) {
+                set.entry(&char::from(byte));
+            }
+        }
+        set.finish()
+    }
+}
+
+/// An error that occurs when parsing a [`Version`] string fails.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VersionParseError {
+    kind: Box<ErrorKind>,
+}
+
+impl std::error::Error for VersionParseError {}
+
+impl std::fmt::Display for VersionParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self.kind {
+            ErrorKind::Wildcard => write!(f, "wildcards are not allowed in a version"),
+            ErrorKind::InvalidDigit { got } if got.is_ascii() => {
+                write!(f, "expected ASCII digit, but found {:?}", char::from(got))
+            }
+            ErrorKind::InvalidDigit { got } => {
+                write!(
+                    f,
+                    "expected ASCII digit, but found non-ASCII byte \\x{:02X}",
+                    got
+                )
+            }
+            ErrorKind::NumberTooBig { ref bytes } => {
+                let string = match std::str::from_utf8(bytes) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        std::str::from_utf8(&bytes[..err.valid_up_to()]).expect("valid UTF-8")
+                    }
+                };
+                write!(
+                    f,
+                    "expected number less than or equal to {}, \
+                     but number found in {string:?} exceeds it",
+                    u64::MAX,
+                )
+            }
+            ErrorKind::NoLeadingNumber => {
+                write!(
+                    f,
+                    "expected version to start with a number, \
+                     but no leading ASCII digits were found"
+                )
+            }
+            ErrorKind::NoLeadingReleaseNumber => {
+                write!(
+                    f,
+                    "expected version to have a non-empty release component after an epoch, \
+                     but no ASCII digits after the epoch were found"
+                )
+            }
+            ErrorKind::LocalEmpty { precursor } => {
+                write!(
+                    f,
+                    "found a `{precursor}` indicating the start of a local \
+                     component in a version, but did not find any alpha-numeric \
+                     ASCII segment following the `{precursor}`",
+                )
+            }
+            ErrorKind::UnexpectedEnd {
+                ref version,
+                ref remaining,
+            } => {
+                write!(
+                    f,
+                    "after parsing {version}, found {remaining:?} after it, \
+                     which is not part of a valid version",
+                )
+            }
+        }
+    }
+}
+
+/// The kind of error that occurs when parsing a `Version`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ErrorKind {
+    /// Occurs when a version pattern is found but a normal verbatim version is
+    /// expected.
+    Wildcard,
+    /// Occurs when an ASCII digit was expected, but something else was found.
+    InvalidDigit {
+        /// The (possibly non-ASCII) byte that was seen instead of [0-9].
+        got: u8,
+    },
+    /// Occurs when a number was found that exceeds what can fit into a u64.
+    NumberTooBig {
+        /// The bytes that were being parsed as a number. These may contain
+        /// invalid digits or even invalid UTF-8.
+        bytes: Vec<u8>,
+    },
+    /// Occurs when a version does not start with a leading number.
+    NoLeadingNumber,
+    /// Occurs when an epoch version does not have a number after the `!`.
+    NoLeadingReleaseNumber,
+    /// Occurs when a `+` (or a `.` after the first local segment) is seen
+    /// (indicating a local component of a version), but no alpha-numeric ASCII
+    /// string is found following it.
+    LocalEmpty {
+        /// Either a `+` or a `[-_.]` indicating what was found that demands a
+        /// non-empty local segment following it.
+        precursor: char,
+    },
+    /// Occurs when a version has been parsed but there is some unexpected
+    /// trailing data in the string.
+    UnexpectedEnd {
+        /// The version that has been parsed so far.
+        version: Version,
+        /// The bytes that were remaining and not parsed.
+        remaining: String,
+    },
+}
+
+impl From<ErrorKind> for VersionParseError {
+    fn from(kind: ErrorKind) -> VersionParseError {
+        VersionParseError {
+            kind: Box::new(kind),
+        }
+    }
+}
+
+/// An error that occurs when parsing a [`VersionPattern`] string fails.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VersionPatternParseError {
+    kind: Box<PatternErrorKind>,
+}
+
+impl std::error::Error for VersionPatternParseError {}
+
+impl std::fmt::Display for VersionPatternParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self.kind {
+            PatternErrorKind::Version(ref err) => err.fmt(f),
+            PatternErrorKind::WildcardNotTrailing => {
+                write!(f, "wildcards in versions must be at the end")
+            }
+        }
+    }
+}
+
+/// The kind of error that occurs when parsing a `VersionPattern`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PatternErrorKind {
+    Version(VersionParseError),
+    WildcardNotTrailing,
+}
+
+impl From<PatternErrorKind> for VersionPatternParseError {
+    fn from(kind: PatternErrorKind) -> VersionPatternParseError {
+        VersionPatternParseError {
+            kind: Box::new(kind),
+        }
+    }
+}
+
+impl From<ErrorKind> for VersionPatternParseError {
+    fn from(kind: ErrorKind) -> VersionPatternParseError {
+        VersionPatternParseError::from(VersionParseError::from(kind))
+    }
+}
+
+impl From<VersionParseError> for VersionPatternParseError {
+    fn from(err: VersionParseError) -> VersionPatternParseError {
+        VersionPatternParseError {
+            kind: Box::new(PatternErrorKind::Version(err)),
         }
     }
 }
@@ -1070,27 +1643,46 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
     }
 }
 
-/// Attempt to parse the given version string very quickly.
+/// Returns true only when, ignoring ASCII case, `needle` is a prefix of
+/// `haystack`.
+fn starts_with_ignore_ascii_case(needle: &[u8], haystack: &[u8]) -> bool {
+    needle.len() <= haystack.len()
+        && std::iter::zip(needle, haystack).all(|(b1, b2)| b1.eq_ignore_ascii_case(b2))
+}
+
+/// Parses a u64 number from the given slice of ASCII digit characters.
 ///
-/// This looks for a version string that is of the form `n(.n)*` (i.e., release
-/// only) and returns the corresponding `Version` of it. If the version string
-/// has any other form, then this returns `None`.
-fn version_fast_parse(version: &str) -> Option<Version> {
-    let mut parts = vec![];
-    for part in version.split('.') {
-        if !part.as_bytes().iter().all(|b| b.is_ascii_digit()) {
-            return None;
-        }
-        parts.push(part.parse().ok()?);
+/// If any byte in the given slice is not [0-9], then this returns an error.
+/// Similarly, if the number parsed does not fit into a `u64`, then this
+/// returns an error.
+///
+/// # Motivation
+///
+/// We hand-write this for a couple reasons. Firstly, the standard library's
+/// FromStr impl for parsing integers requires UTF-8 validation first. We
+/// don't need that for version parsing since we stay in the realm of ASCII.
+/// Secondly, std's version is a little more flexible because it supports
+/// signed integers. So for example, it permits a leading `+` before the actual
+/// integer. We don't need that for version parsing.
+fn parse_u64(bytes: &[u8]) -> Result<u64, VersionParseError> {
+    let mut n: u64 = 0;
+    for &byte in bytes {
+        let digit = match byte.checked_sub(b'0') {
+            None => return Err(ErrorKind::InvalidDigit { got: byte }.into()),
+            Some(digit) if digit > 9 => return Err(ErrorKind::InvalidDigit { got: byte }.into()),
+            Some(digit) => {
+                debug_assert!((0..=9).contains(&digit));
+                u64::from(digit)
+            }
+        };
+        n = n
+            .checked_mul(10)
+            .and_then(|n| n.checked_add(digit))
+            .ok_or_else(|| ErrorKind::NumberTooBig {
+                bytes: bytes.to_vec(),
+            })?;
     }
-    Some(Version {
-        epoch: 0,
-        release: parts,
-        pre: None,
-        post: None,
-        dev: None,
-        local: vec![],
-    })
+    Ok(n)
 }
 
 #[cfg(test)]
@@ -1444,22 +2036,14 @@ mod tests {
             "1.0+_foobar",
             "1.0+foo&asd",
             "1.0+1+1",
+            // Nonsensical versions should also be invalid
+            "french toast",
+            "==french toast",
         ];
         for version in versions {
-            assert_eq!(
-                Version::from_str(version).unwrap_err(),
-                format!("Version `{version}` doesn't match PEP 440 rules")
-            );
-            assert_eq!(
-                VersionSpecifier::from_str(&format!("=={version}"))
-                    .unwrap_err()
-                    .to_string(),
-                format!("Version `{version}` doesn't match PEP 440 rules")
-            );
+            assert!(Version::from_str(version).is_err());
+            assert!(VersionSpecifier::from_str(&format!("=={version}")).is_err());
         }
-        // Nonsensical versions should be invalid (different error message)
-        Version::from_str("french toast").unwrap_err();
-        VersionSpecifier::from_str("==french toast").unwrap_err();
     }
 
     #[test]
@@ -1669,7 +2253,7 @@ mod tests {
         let result = Version::from_str("0.9.1.*");
         assert_eq!(
             result.unwrap_err(),
-            "A star (`*`) must not be used in a fixed version (use `Version::from_string_star` otherwise)"
+            "wildcards are not allowed in a version",
         );
     }
 
@@ -1678,7 +2262,7 @@ mod tests {
         let result = Version::from_str("blergh");
         assert_eq!(
             result.unwrap_err(),
-            "Version `blergh` doesn't match PEP 440 rules"
+            "expected version to start with a number, but no leading ASCII digits were found",
         );
     }
 
@@ -1689,23 +2273,412 @@ mod tests {
         assert!(p("1.2.3.*").unwrap().is_wildcard());
         assert_eq!(
             p("1.2.*.4.*").unwrap_err(),
-            "Version `1.2.*.4.*` doesn't match PEP 440 rules"
+            "wildcards in versions must be at the end",
         );
         assert_eq!(
             p("1.0-dev1.*").unwrap_err(),
-            "You can't have both a trailing `.*` and a dev version"
+            "after parsing 1.0.dev1, found \".*\" after it, which is not part of a valid version",
         );
         assert_eq!(
             p("1.0a1.*").unwrap_err(),
-            "You can't have both a trailing `.*` and a prerelease version"
+            "after parsing 1.0a1, found \".*\" after it, which is not part of a valid version",
         );
         assert_eq!(
             p("1.0.post1.*").unwrap_err(),
-            "You can't have both a trailing `.*` and a post version"
+            "after parsing 1.0.post1, found \".*\" after it, which is not part of a valid version",
         );
         assert_eq!(
             p("1.0+lolwat.*").unwrap_err(),
-            "You can't have both a trailing `.*` and a local version"
+            "found a `.` indicating the start of a local component in a version, \
+             but did not find any alpha-numeric ASCII segment following the `.`",
+        );
+    }
+
+    // Tests the valid cases of our version parser. These were written
+    // in tandem with the parser.
+    //
+    // They are meant to be additional (but in some cases likely redundant)
+    // with some of the above tests.
+    #[test]
+    fn parse_version_valid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse() {
+            Ok(v) => v,
+            Err(err) => unreachable!("expected valid version, but got error: {err:?}"),
+        };
+
+        // release-only tests
+        assert_eq!(p("5"), Version::new([5]));
+        assert_eq!(p("5.6"), Version::new([5, 6]));
+        assert_eq!(p("5.6.7"), Version::new([5, 6, 7]));
+        assert_eq!(p("512.623.734"), Version::new([512, 623, 734]));
+
+        // epoch tests
+        assert_eq!(p("4!5"), Version::new([5]).with_epoch(4));
+        assert_eq!(p("4!5.6"), Version::new([5, 6]).with_epoch(4));
+
+        // pre-release tests
+        assert_eq!(
+            p("5a1"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 1)))
+        );
+        assert_eq!(
+            p("5alpha1"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 1)))
+        );
+        assert_eq!(
+            p("5b1"),
+            Version::new([5]).with_pre(Some((PreRelease::Beta, 1)))
+        );
+        assert_eq!(
+            p("5beta1"),
+            Version::new([5]).with_pre(Some((PreRelease::Beta, 1)))
+        );
+        assert_eq!(
+            p("5rc1"),
+            Version::new([5]).with_pre(Some((PreRelease::Rc, 1)))
+        );
+        assert_eq!(
+            p("5c1"),
+            Version::new([5]).with_pre(Some((PreRelease::Rc, 1)))
+        );
+        assert_eq!(
+            p("5preview1"),
+            Version::new([5]).with_pre(Some((PreRelease::Rc, 1)))
+        );
+        assert_eq!(
+            p("5pre1"),
+            Version::new([5]).with_pre(Some((PreRelease::Rc, 1)))
+        );
+        assert_eq!(
+            p("5.6.7pre1"),
+            Version::new([5, 6, 7]).with_pre(Some((PreRelease::Rc, 1)))
+        );
+        assert_eq!(
+            p("5alpha789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5.alpha789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5-alpha789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5_alpha789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5alpha.789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5alpha-789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5alpha_789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5ALPHA789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5aLpHa789"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 789)))
+        );
+        assert_eq!(
+            p("5alpha"),
+            Version::new([5]).with_pre(Some((PreRelease::Alpha, 0)))
+        );
+
+        // post-release tests
+        assert_eq!(p("5post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5rev2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5r2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5-post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5_post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post.2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post-2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post_2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(
+            p("5.6.7.post_2"),
+            Version::new([5, 6, 7]).with_post(Some(2))
+        );
+        assert_eq!(p("5-2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.6.7-2"), Version::new([5, 6, 7]).with_post(Some(2)));
+        assert_eq!(p("5POST2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5PoSt2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5post"), Version::new([5]).with_post(Some(0)));
+
+        // dev-release tests
+        assert_eq!(p("5dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5-dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5_dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev.2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev-2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev_2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.6.7.dev_2"), Version::new([5, 6, 7]).with_dev(Some(2)));
+        assert_eq!(p("5DEV2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5dEv2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5DeV2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5dev"), Version::new([5]).with_dev(Some(0)));
+
+        // local tests
+        assert_eq!(
+            p("5+2"),
+            Version::new([5]).with_local(vec![LocalSegment::Number(2)])
+        );
+        assert_eq!(
+            p("5+a"),
+            Version::new([5]).with_local(vec![LocalSegment::String("a".to_string())])
+        );
+        assert_eq!(
+            p("5+abc.123"),
+            Version::new([5]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+            ])
+        );
+        assert_eq!(
+            p("5+123.abc"),
+            Version::new([5]).with_local(vec![
+                LocalSegment::Number(123),
+                LocalSegment::String("abc".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5+18446744073709551615.abc"),
+            Version::new([5]).with_local(vec![
+                LocalSegment::Number(18446744073709551615),
+                LocalSegment::String("abc".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5+18446744073709551616.abc"),
+            Version::new([5]).with_local(vec![
+                LocalSegment::String("18446744073709551616".to_string()),
+                LocalSegment::String("abc".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5+ABC.123"),
+            Version::new([5]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+            ])
+        );
+        assert_eq!(
+            p("5+ABC-123.4_5_xyz-MNO"),
+            Version::new([5]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+                LocalSegment::Number(4),
+                LocalSegment::Number(5),
+                LocalSegment::String("xyz".to_string()),
+                LocalSegment::String("mno".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5.6.7+abc-00123"),
+            Version::new([5, 6, 7]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+            ])
+        );
+        assert_eq!(
+            p("5.6.7+abc-foo00123"),
+            Version::new([5, 6, 7]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::String("foo00123".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5.6.7+abc-00123a"),
+            Version::new([5, 6, 7]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::String("00123a".to_string()),
+            ])
+        );
+
+        // {pre-release, post-release} tests
+        assert_eq!(
+            p("5a2post3"),
+            Version::new([5])
+                .with_pre(Some((PreRelease::Alpha, 2)))
+                .with_post(Some(3))
+        );
+        assert_eq!(
+            p("5.a-2_post-3"),
+            Version::new([5])
+                .with_pre(Some((PreRelease::Alpha, 2)))
+                .with_post(Some(3))
+        );
+        assert_eq!(
+            p("5a2-3"),
+            Version::new([5])
+                .with_pre(Some((PreRelease::Alpha, 2)))
+                .with_post(Some(3))
+        );
+
+        // Ignoring a no-op 'v' prefix.
+        assert_eq!(p("v5"), Version::new([5]));
+        assert_eq!(p("V5"), Version::new([5]));
+        assert_eq!(p("v5.6.7"), Version::new([5, 6, 7]));
+
+        // Ignoring leading and trailing whitespace.
+        assert_eq!(p("  v5  "), Version::new([5]));
+        assert_eq!(p("  5  "), Version::new([5]));
+        assert_eq!(
+            p("  5.6.7+abc.123.xyz  "),
+            Version::new([5, 6, 7]).with_local(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+                LocalSegment::String("xyz".to_string())
+            ])
+        );
+        assert_eq!(p("  \n5\n \t"), Version::new([5]));
+    }
+
+    // Tests the error cases of our version parser.
+    //
+    // I wrote these with the intent to cover every possible error
+    // case.
+    //
+    // They are meant to be additional (but in some cases likely redundant)
+    // with some of the above tests.
+    #[test]
+    fn parse_version_invalid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse() {
+            Err(err) => err,
+            Ok(v) => unreachable!(
+                "expected version parser error, but got: {v:?}",
+                v = v.as_bloated_debug()
+            ),
+        };
+
+        assert_eq!(p(""), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("a"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("v 5"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("V 5"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("x 5"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(
+            p("18446744073709551616"),
+            ErrorKind::NumberTooBig {
+                bytes: b"18446744073709551616".to_vec()
+            }
+            .into()
+        );
+        assert_eq!(p("5!"), ErrorKind::NoLeadingReleaseNumber.into());
+        assert_eq!(
+            p("5.6./"),
+            ErrorKind::UnexpectedEnd {
+                version: Version::new([5, 6]),
+                remaining: "./".to_string()
+            }
+            .into()
+        );
+        assert_eq!(
+            p("5.6.-alpha2"),
+            ErrorKind::UnexpectedEnd {
+                version: Version::new([5, 6]),
+                remaining: ".-alpha2".to_string()
+            }
+            .into()
+        );
+        assert_eq!(
+            p("1.2.3a18446744073709551616"),
+            ErrorKind::NumberTooBig {
+                bytes: b"18446744073709551616".to_vec()
+            }
+            .into()
+        );
+        assert_eq!(p("5+"), ErrorKind::LocalEmpty { precursor: '+' }.into());
+        assert_eq!(p("5+ "), ErrorKind::LocalEmpty { precursor: '+' }.into());
+        assert_eq!(p("5+abc."), ErrorKind::LocalEmpty { precursor: '.' }.into());
+        assert_eq!(p("5+abc-"), ErrorKind::LocalEmpty { precursor: '-' }.into());
+        assert_eq!(p("5+abc_"), ErrorKind::LocalEmpty { precursor: '_' }.into());
+        assert_eq!(
+            p("5+abc. "),
+            ErrorKind::LocalEmpty { precursor: '.' }.into()
+        );
+        assert_eq!(
+            p("5.6-"),
+            ErrorKind::UnexpectedEnd {
+                version: Version::new([5, 6]),
+                remaining: "-".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn parse_version_pattern_valid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse_pattern() {
+            Ok(v) => v,
+            Err(err) => unreachable!("expected valid version, but got error: {err:?}"),
+        };
+
+        assert_eq!(p("5.*"), VersionPattern::wildcard(Version::new([5])));
+        assert_eq!(p("5.6.*"), VersionPattern::wildcard(Version::new([5, 6])));
+        assert_eq!(
+            p("2!5.6.*"),
+            VersionPattern::wildcard(Version::new([5, 6]).with_epoch(2))
+        );
+    }
+
+    #[test]
+    fn parse_version_pattern_invalid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse_pattern() {
+            Err(err) => err,
+            Ok(vpat) => unreachable!("expected version pattern parser error, but got: {vpat:?}"),
+        };
+
+        assert_eq!(p("*"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("2!*"), ErrorKind::NoLeadingReleaseNumber.into());
+    }
+
+    // Tests our bespoke u64 decimal integer parser.
+    #[test]
+    fn parse_number_u64() {
+        let p = |s: &str| parse_u64(s.as_bytes());
+        assert_eq!(p("0"), Ok(0));
+        assert_eq!(p("00"), Ok(0));
+        assert_eq!(p("1"), Ok(1));
+        assert_eq!(p("01"), Ok(1));
+        assert_eq!(p("9"), Ok(9));
+        assert_eq!(p("10"), Ok(10));
+        assert_eq!(p("18446744073709551615"), Ok(18446744073709551615));
+        assert_eq!(p("018446744073709551615"), Ok(18446744073709551615));
+        assert_eq!(p("000000018446744073709551615"), Ok(18446744073709551615));
+
+        assert_eq!(p("10a"), Err(ErrorKind::InvalidDigit { got: b'a' }.into()));
+        assert_eq!(p("10["), Err(ErrorKind::InvalidDigit { got: b'[' }.into()));
+        assert_eq!(p("10/"), Err(ErrorKind::InvalidDigit { got: b'/' }.into()));
+        assert_eq!(
+            p("18446744073709551616"),
+            Err(ErrorKind::NumberTooBig {
+                bytes: b"18446744073709551616".to_vec()
+            }
+            .into())
+        );
+        assert_eq!(
+            p("18446744073799551615abc"),
+            Err(ErrorKind::NumberTooBig {
+                bytes: b"18446744073799551615abc".to_vec()
+            }
+            .into())
+        );
+        assert_eq!(
+            parse_u64(b"18446744073799551615\xFF"),
+            Err(ErrorKind::NumberTooBig {
+                bytes: b"18446744073799551615\xFF".to_vec()
+            }
+            .into())
         );
     }
 
