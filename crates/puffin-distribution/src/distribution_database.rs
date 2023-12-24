@@ -30,7 +30,7 @@ use crate::{
 
 #[derive(Debug, Error)]
 pub enum DistributionDatabaseError {
-    #[error("Failed to parse '{0}' as url")]
+    #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
     #[error(transparent)]
     WheelFilename(#[from] WheelFilenameError),
@@ -108,9 +108,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 // Fetch the wheel.
-                let url = Url::parse(&wheel.file.url).map_err(|err| {
-                    DistributionDatabaseError::Url(wheel.file.url.to_string(), err)
-                })?;
+                let url = wheel
+                    .base
+                    .join_relative(&wheel.file.url)
+                    .map_err(|err| DistributionDatabaseError::Url(wheel.file.url.clone(), err))?;
+
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
 
                 let reader = self.client.stream_external(&url).await?;

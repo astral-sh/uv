@@ -12,6 +12,7 @@ use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
+use pypi_types::BaseUrl;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubVersion};
 use crate::version_map::VersionMap;
@@ -144,12 +145,12 @@ impl NoSolutionError {
     /// Only packages used in the error's derivation tree will be retrieved.
     pub(crate) fn update_available_versions(
         mut self,
-        package_versions: &OnceMap<PackageName, (IndexUrl, VersionMap)>,
+        package_versions: &OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
     ) -> Self {
         for package in self.derivation_tree.packages() {
             if let PubGrubPackage::Package(name, ..) = package {
                 if let Some(entry) = package_versions.get(name) {
-                    let (_, version_map) = entry.value();
+                    let (_, _, version_map) = entry.value();
                     self.available_versions.insert(
                         package.clone(),
                         version_map

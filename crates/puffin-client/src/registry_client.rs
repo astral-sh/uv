@@ -22,7 +22,7 @@ use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
-use pypi_types::{Metadata21, SimpleJson};
+use pypi_types::{BaseUrl, Metadata21, SimpleJson};
 
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -104,6 +104,7 @@ impl RegistryClientBuilder {
 // TODO(konstin): Clean up the clients once we moved everything to common caching.
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
+    /// The index URLs to use for fetching packages.
     pub(crate) index_urls: IndexUrls,
     pub(crate) client: CachedClient,
     /// Don't use this client, it only exists because `async_http_range_reader` needs
@@ -126,7 +127,7 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, SimpleMetadata), Error> {
+    ) -> Result<(IndexUrl, BaseUrl, SimpleMetadata), Error> {
         if self.index_urls.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
@@ -173,15 +174,16 @@ impl RegistryClient {
                         let bytes = response.bytes().await?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
-                        let metadata = SimpleMetadata::from_files(package_name, data.files);
-                        Ok(metadata)
+                        let metadata = SimpleMetadata::from_files(data.files, package_name);
+                        let base = BaseUrl::from(url.clone());
+                        Ok((base, metadata))
                     }
                     MediaType::Html => {
                         let text = response.text().await?;
-                        let data = SimpleHtml::parse(&text, &url)
+                        let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                        let metadata = SimpleMetadata::from_files(package_name, data.files);
-                        Ok(metadata)
+                        let metadata = SimpleMetadata::from_files(files, package_name);
+                        Ok((base, metadata))
                     }
                 }
             };
@@ -191,20 +193,16 @@ impl RegistryClient {
                 .await;
 
             // Fetch from the index.
-            match result {
-                Ok(simple_metadata) => {
-                    return Ok((index.clone(), simple_metadata));
-                }
+            return match result {
+                Ok((base, metadata)) => Ok((index.clone(), base, metadata)),
                 Err(CachedClientError::Client(Error::RequestError(err))) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {
                         continue;
                     }
-                    return Err(err.into());
+                    Err(err.into())
                 }
-                Err(err) => {
-                    return Err(err.into());
-                }
-            }
+                Err(err) => Err(err.into()),
+            };
         }
 
         Err(Error::PackageNotFound(package_name.to_string()))
@@ -219,7 +217,7 @@ impl RegistryClient {
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => {
-                self.wheel_metadata_registry(wheel.index.clone(), wheel.file.clone())
+                self.wheel_metadata_registry(&wheel.index, &wheel.base, &wheel.file)
                     .await?
             }
             BuiltDist::DirectUrl(wheel) => {
@@ -249,26 +247,27 @@ impl RegistryClient {
     /// Fetch the metadata from a wheel file.
     async fn wheel_metadata_registry(
         &self,
-        index: IndexUrl,
-        file: File,
+        index: &IndexUrl,
+        base: &BaseUrl,
+        file: &File,
     ) -> Result<Metadata21, Error> {
         if self.index_urls.no_index() {
-            return Err(Error::NoIndex(file.filename));
+            return Err(Error::NoIndex(file.filename.clone()));
         }
 
-        // If the metadata file is available at its own url (PEP 658), download it from there
-        let url = Url::parse(&file.url)?;
+        // If the metadata file is available at its own url (PEP 658), download it from there.
+        let url = base.join_relative(&file.url)?;
         let filename = WheelFilename::from_str(&file.filename)?;
         if file
             .dist_info_metadata
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{}.metadata", file.url))?;
+            let url = Url::parse(&format!("{}.metadata", url))?;
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Index(&index).remote_wheel_dir(filename.name.as_ref()),
+                WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.stem()),
             );
 
@@ -285,7 +284,7 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, &url, WheelCache::Index(&index))
+            self.wheel_metadata_no_pep658(&filename, &url, WheelCache::Index(index))
                 .await
         }
     }
@@ -446,7 +445,7 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(package_name: &PackageName, files: Vec<pypi_types::File>) -> Self {
+    fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName) -> Self {
         let mut metadata = Self::default();
 
         // Group the distributions by version and kind
@@ -504,6 +503,7 @@ impl MediaType {
     /// Return the `Accept` header value for all supported media types.
     #[inline]
     const fn accepts() -> &'static str {
-        "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html"
+        // See: https://peps.python.org/pep-0691/#version-format-selection
+        "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
     }
 }

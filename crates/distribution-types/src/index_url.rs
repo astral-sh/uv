@@ -3,12 +3,13 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
-/// The url of an index, newtype'd to avoid mixing it with file urls
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+/// The url of an index, newtype'd to avoid mixing it with file urls.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IndexUrl {
     Pypi,
     Url(Url),

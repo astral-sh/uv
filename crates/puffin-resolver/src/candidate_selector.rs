@@ -4,6 +4,7 @@ use rustc_hash::FxHashMap;
 use distribution_types::{Dist, DistributionMetadata, IndexUrl, Name};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
+use pypi_types::BaseUrl;
 
 use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
@@ -145,7 +146,7 @@ impl CandidateSelector {
     }
 
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
-    /// preferring wheels over sdists.
+    /// preferring wheels over source distributions.
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a PubGrubVersion, ResolvableFile<'a>)>,
         package_name: &'a PackageName,
@@ -242,12 +243,13 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the [`Dist`] to use when resolving the candidate.
-    pub(crate) fn into_distribution(self, index: IndexUrl) -> Dist {
+    pub(crate) fn into_distribution(self, index: IndexUrl, base: BaseUrl) -> Dist {
         Dist::from_registry(
             self.name().clone(),
             self.version().clone().into(),
             self.resolve().clone().into(),
             index,
+            base,
         )
     }
 }

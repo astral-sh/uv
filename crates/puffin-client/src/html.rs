@@ -4,10 +4,12 @@ use tl::HTMLTag;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
-use pypi_types::{DistInfoMetadata, File, Hashes, Yanked};
+use pypi_types::{BaseUrl, DistInfoMetadata, File, Hashes, Yanked};
 
 #[derive(Debug, Clone)]
 pub(crate) struct SimpleHtml {
+    /// The [`BaseUrl`] to which all relative URLs should be resolved.
+    pub(crate) base: BaseUrl,
     /// The list of [`File`]s available for download.
     pub(crate) files: Vec<File>,
 }
@@ -20,16 +22,17 @@ impl SimpleHtml {
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
         // relative URLs should be resolved. The HTML spec requires that the `<base>` tag
         // appear before other tags with attribute values of URLs.
-        let base = dom
-            .nodes()
-            .iter()
-            .filter_map(|node| node.as_tag())
-            .take_while(|tag| !matches!(tag.name().as_bytes(), b"a" | b"link"))
-            .find(|tag| tag.name().as_bytes() == b"base")
-            .map(|base| Self::parse_base(base))
-            .transpose()?
-            .flatten()
-            .unwrap_or_else(|| url.clone());
+        let base = BaseUrl::from(
+            dom.nodes()
+                .iter()
+                .filter_map(|node| node.as_tag())
+                .take_while(|tag| !matches!(tag.name().as_bytes(), b"a" | b"link"))
+                .find(|tag| tag.name().as_bytes() == b"base")
+                .map(|base| Self::parse_base(base))
+                .transpose()?
+                .flatten()
+                .unwrap_or_else(|| url.clone()),
+        );
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
         let files: Vec<File> = dom
@@ -37,10 +40,10 @@ impl SimpleHtml {
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| link.name().as_bytes() == b"a")
-            .map(|link| Self::parse_anchor(link, &base))
+            .map(|link| Self::parse_anchor(link))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Self { files })
+        Ok(Self { base, files })
     }
 
     /// Parse the `href` from a `<base>` tag.
@@ -54,25 +57,25 @@ impl SimpleHtml {
     }
 
     /// Parse the hash from a fragment, as in: `sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`
-    fn parse_hash(fragment: &str, url: &Url) -> Result<Hashes, Error> {
+    fn parse_hash(fragment: &str) -> Result<Hashes, Error> {
         let mut parts = fragment.split('=');
 
         // Extract the key and value.
         let name = parts
             .next()
-            .ok_or_else(|| Error::FragmentParse(url.clone()))?;
+            .ok_or_else(|| Error::FragmentParse(fragment.to_string()))?;
         let value = parts
             .next()
-            .ok_or_else(|| Error::FragmentParse(url.clone()))?;
+            .ok_or_else(|| Error::FragmentParse(fragment.to_string()))?;
 
         // Ensure there are no more parts.
         if parts.next().is_some() {
-            return Err(Error::FragmentParse(url.clone()));
+            return Err(Error::FragmentParse(fragment.to_string()));
         }
 
         // TODO(charlie): Support all hash algorithms.
         if name != "sha256" {
-            return Err(Error::UnsupportedHashAlgorithm(url.clone()));
+            return Err(Error::UnsupportedHashAlgorithm(fragment.to_string()));
         }
 
         let sha256 = std::str::from_utf8(value.as_bytes())?;
@@ -81,31 +84,30 @@ impl SimpleHtml {
     }
 
     /// Parse a [`File`] from an `<a>` tag.
-    fn parse_anchor(link: &HTMLTag, base: &Url) -> Result<File, Error> {
+    fn parse_anchor(link: &HTMLTag) -> Result<File, Error> {
         // Extract the href.
         let href = link
             .attributes()
             .get("href")
             .flatten()
-            .ok_or_else(|| Error::MissingHref(base.clone()))?;
+            .filter(|bytes| !bytes.as_bytes().is_empty())
+            .ok_or(Error::MissingHref)?;
         let href = std::str::from_utf8(href.as_bytes())?;
-        let url = base
-            .join(href)
-            .map_err(|err| Error::UrlParse(href.to_string(), err))?;
+
+        // Split the base and the fragment.
+        let (path, fragment) = href
+            .split_once('#')
+            .ok_or_else(|| Error::MissingHash(href.to_string()))?;
 
         // Extract the filename from the body text, which MUST match that of
         // the final path component of the URL.
-        let filename = url
-            .path_segments()
-            .and_then(|segments| segments.last())
-            .ok_or_else(|| Error::MissingFilename(url.clone()))?;
+        let filename = path
+            .split('/')
+            .last()
+            .ok_or_else(|| Error::MissingFilename(href.to_string()))?;
 
         // Extract the hash, which should be in the fragment.
-        let hashes = url
-            .fragment()
-            .map(|fragment| Self::parse_hash(fragment, &url))
-            .transpose()?
-            .ok_or_else(|| Error::MissingHash(url.clone()))?;
+        let hashes = Self::parse_hash(fragment)?;
 
         // Extract the `requires-python` field, which should be set on the
         // `data-requires-python` attribute.
@@ -131,7 +133,7 @@ impl SimpleHtml {
             match dist_info_metadata.as_ref() {
                 "true" => Some(DistInfoMetadata::Bool(true)),
                 "false" => Some(DistInfoMetadata::Bool(false)),
-                fragment => Some(DistInfoMetadata::Hashes(Self::parse_hash(fragment, &url)?)),
+                fragment => Some(DistInfoMetadata::Hashes(Self::parse_hash(fragment)?)),
             }
         } else {
             None
@@ -153,8 +155,7 @@ impl SimpleHtml {
             requires_python,
             hashes,
             filename: filename.to_string(),
-            // TODO(charlie): Store serialized URLs.
-            url: url.to_string(),
+            url: href.to_string(),
             size: None,
             upload_time: None,
         })
@@ -172,20 +173,20 @@ pub enum Error {
     #[error(transparent)]
     HtmlParse(#[from] tl::ParseError),
 
-    #[error("Missing href attribute on URL: {0}")]
-    MissingHref(Url),
+    #[error("Missing href attribute on anchor link")]
+    MissingHref,
 
     #[error("Expected distribution filename as last path component of URL: {0}")]
-    MissingFilename(Url),
+    MissingFilename(String),
 
     #[error("Missing hash attribute on URL: {0}")]
-    MissingHash(Url),
+    MissingHash(String),
 
     #[error("Unexpected fragment (expected `#sha256=...`) on URL: {0}")]
-    FragmentParse(Url),
+    FragmentParse(String),
 
     #[error("Unsupported hash algorithm (expected `sha256`) on: {0}")]
-    UnsupportedHashAlgorithm(Url),
+    UnsupportedHashAlgorithm(String),
 
     #[error("Invalid `requires-python` specifier: {0}")]
     Pep440(#[source] pep440_rs::Pep440Error),
@@ -211,6 +212,23 @@ mod tests {
         let result = SimpleHtml::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r###"
         SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
             files: [
                 File {
                     dist_info_metadata: None,
@@ -221,7 +239,7 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "https://download.pytorch.org/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                     yanked: None,
                 },
             ],
@@ -248,6 +266,23 @@ mod tests {
         let result = SimpleHtml::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r###"
         SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "index.python.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
             files: [
                 File {
                     dist_info_metadata: None,
@@ -258,7 +293,7 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "https://index.python.org/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                     yanked: None,
                 },
             ],
@@ -280,7 +315,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Missing href attribute on URL: https://download.pytorch.org/whl/jinja2/");
+        insta::assert_display_snapshot!(result, @"Missing href attribute on anchor link");
     }
 
     #[test]
@@ -297,7 +332,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Missing hash attribute on URL: https://download.pytorch.org/whl/jinja2/");
+        insta::assert_display_snapshot!(result, @"Missing href attribute on anchor link");
     }
 
     #[test]
@@ -314,7 +349,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Missing hash attribute on URL: https://download.pytorch.org/whl/Jinja2-3.1.2-py3-none-any.whl");
+        insta::assert_display_snapshot!(result, @"Missing hash attribute on URL: /whl/Jinja2-3.1.2-py3-none-any.whl");
     }
 
     #[test]
@@ -331,7 +366,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Unexpected fragment (expected `#sha256=...`) on URL: https://download.pytorch.org/whl/Jinja2-3.1.2-py3-none-any.whl#sha256");
+        insta::assert_display_snapshot!(result, @"Unexpected fragment (expected `#sha256=...`) on URL: sha256");
     }
 
     #[test]
@@ -348,6 +383,6 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Unsupported hash algorithm (expected `sha256`) on: https://download.pytorch.org/whl/Jinja2-3.1.2-py3-none-any.whl#sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
+        insta::assert_display_snapshot!(result, @"Unsupported hash algorithm (expected `sha256`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
     }
 }

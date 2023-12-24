@@ -1,7 +1,9 @@
-use chrono::{DateTime, Utc};
-use pep440_rs::VersionSpecifiers;
-use serde::{de, Deserialize, Deserializer, Serialize};
 use std::str::FromStr;
+
+use chrono::{DateTime, Utc};
+use serde::{de, Deserialize, Deserializer, Serialize};
+
+use pep440_rs::VersionSpecifiers;
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
@@ -10,13 +12,13 @@ pub struct SimpleJson {
     pub files: Vec<File>,
 }
 
-/// A single (remote) file belonging to a package, generally either a wheel or a source dist.
+/// A single (remote) file belonging to a package, either a wheel or a source distribution.
 ///
 /// <https://peps.python.org/pep-0691/#project-detail>
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {
-    // Not PEP 691 compliant alias used by pypi
+    // Non-PEP 691-compliant alias used by PyPI.
     #[serde(alias = "data_dist_info_metadata")]
     pub dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
