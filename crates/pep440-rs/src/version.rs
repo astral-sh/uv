@@ -80,7 +80,7 @@ impl Operator {
 }
 
 impl FromStr for Operator {
-    type Err = String;
+    type Err = OperatorParseError;
 
     /// Notably, this does not know about star versions, it just assumes the base operator
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -102,9 +102,9 @@ impl FromStr for Operator {
             ">=" => Self::GreaterThanEqual,
             // Should be forbidden by the regex if called from normal parsing
             other => {
-                return Err(format!(
-                    "No such comparison operator '{other}', must be one of ~= == != <= >= < > ===",
-                ));
+                return Err(OperatorParseError {
+                    got: other.to_string(),
+                })
             }
         };
         Ok(operator)
@@ -142,6 +142,24 @@ impl Operator {
 
     fn __repr__(&self) -> String {
         self.to_string()
+    }
+}
+
+/// An error that occurs when parsing an invalid version specifier operator.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OperatorParseError {
+    pub(crate) got: String,
+}
+
+impl std::error::Error for OperatorParseError {}
+
+impl std::fmt::Display for OperatorParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "no such comparison operator {:?}, must be one of ~= == != <= >= < > ===",
+            self.got
+        )
     }
 }
 

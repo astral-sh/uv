@@ -1117,7 +1117,7 @@ mod tests {
         assert_err(
             "numpy ( ><1.19 )",
             indoc! {"
-                No such comparison operator '><', must be one of ~= == != <= >= < > ===
+                no such comparison operator \"><\", must be one of ~= == != <= >= < > ===
                 numpy ( ><1.19 )
                         ^^^^^^^"
             },

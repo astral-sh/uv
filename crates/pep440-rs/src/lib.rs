@@ -40,8 +40,8 @@
 
 pub use {
     version::{
-        LocalSegment, Operator, PreRelease, Version, VersionParseError, VersionPattern,
-        VersionPatternParseError,
+        LocalSegment, Operator, OperatorParseError, PreRelease, Version, VersionParseError,
+        VersionPattern, VersionPatternParseError,
     },
     version_specifier::{
         parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,

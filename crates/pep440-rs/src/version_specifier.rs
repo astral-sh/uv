@@ -14,7 +14,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::{version, Operator, Version, VersionPattern};
+use crate::{version, Operator, OperatorParseError, Version, VersionPattern};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -660,7 +660,7 @@ impl std::fmt::Display for VersionSpecifierParseError {
 /// specifier from a string.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ParseErrorKind {
-    InvalidOperator(String),
+    InvalidOperator(OperatorParseError),
     InvalidVersion(String),
     InvalidSpecifier(VersionSpecifierBuildError),
     MissingOperator,
@@ -1292,10 +1292,9 @@ mod tests {
             // Invalid operator
             (
                 "=>2.0",
-                ParseErrorKind::InvalidOperator(
-                    "No such comparison operator '=>', must be one of ~= == != <= >= < > ==="
-                        .to_string(),
-                )
+                ParseErrorKind::InvalidOperator(OperatorParseError {
+                    got: "=>".to_string(),
+                })
                 .into(),
             ),
             // Version-less specifier
