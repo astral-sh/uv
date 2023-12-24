@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 
 use distribution_types::{CachedDist, Name, Resolution};
 use pep508_rs::Requirement;
-use platform_tags::Tags;
+
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
@@ -90,11 +90,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         requirements: &'data [Requirement],
     ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'data>> {
         Box::pin(async {
-            let tags = Tags::from_interpreter(self.interpreter)?;
+            let markers = self.interpreter.markers();
+            let tags = self.interpreter.tags()?;
             let resolver = Resolver::new(
                 Manifest::simple(requirements.to_vec()),
                 self.options,
-                self.interpreter.markers(),
+                markers,
                 &tags,
                 self.client,
                 self,
@@ -132,7 +133,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             // Determine the current environment markers.
-            let tags = Tags::from_interpreter(self.interpreter)?;
+            let tags = self.interpreter.tags()?;
 
             // Determine the set of installed packages.
             let site_packages =

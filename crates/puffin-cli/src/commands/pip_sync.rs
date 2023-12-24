@@ -54,7 +54,7 @@ pub(crate) async fn pip_sync(
     let _lock = venv.lock()?;
 
     // Determine the current environment markers.
-    let tags = Tags::from_interpreter(venv.interpreter())?;
+    let tags = venv.interpreter().tags()?;
 
     // Prep the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

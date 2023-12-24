@@ -2127,7 +2127,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "platform-host",
- "puffin-interpreter",
  "rustc-hash",
 ]
 
@@ -2599,6 +2598,7 @@ dependencies = [
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",
+ "platform-tags",
  "puffin-cache",
  "puffin-fs",
  "rmp-serde",
