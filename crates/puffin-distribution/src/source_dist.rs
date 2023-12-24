@@ -20,9 +20,9 @@ use zip::result::ZipError;
 use zip::ZipArchive;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
-use distribution_types::direct_url::{DirectArchiveUrl, DirectGitUrl};
 use distribution_types::{
-    Dist, GitSourceDist, LocalEditable, Name, PathSourceDist, RemoteSource, SourceDist,
+    DirectArchiveUrl, DirectGitUrl, Dist, GitSourceDist, LocalEditable, Name, PathSourceDist,
+    RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
