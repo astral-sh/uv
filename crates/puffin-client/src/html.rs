@@ -111,8 +111,9 @@ impl SimpleHtml {
             link.attributes().get("data-requires-python").flatten()
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
+            let requires_python = html_escape::decode_html_entities(requires_python);
             let requires_python =
-                VersionSpecifiers::from_str(requires_python).map_err(Error::Pep440)?;
+                VersionSpecifiers::from_str(&requires_python).map_err(Error::Pep440)?;
             Some(requires_python)
         } else {
             None
@@ -124,7 +125,8 @@ impl SimpleHtml {
             link.attributes().get("data-dist-info-metadata").flatten()
         {
             let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
-            match dist_info_metadata {
+            let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
+            match dist_info_metadata.as_ref() {
                 "true" => Some(DistInfoMetadata::Bool(true)),
                 "false" => Some(DistInfoMetadata::Bool(false)),
                 fragment => Some(DistInfoMetadata::Hashes(Self::parse_hash(fragment, &url)?)),
@@ -137,6 +139,7 @@ impl SimpleHtml {
         // attribute.
         let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
             let yanked = std::str::from_utf8(yanked.as_bytes())?;
+            let yanked = html_escape::decode_html_entities(yanked);
             Some(Yanked::Reason(yanked.to_string()))
         } else {
             None

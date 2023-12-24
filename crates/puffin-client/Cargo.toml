@@ -17,6 +17,7 @@ async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+html-escape = { workspace = true }
 http = { workspace = true }
 http-cache-semantics = { workspace = true }
 reqwest = { workspace = true }

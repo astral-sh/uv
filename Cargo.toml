@@ -39,6 +39,7 @@ git2 = { version = "0.18.1" }
 glob = { version = "0.3.1" }
 goblin = { version = "0.7.1" }
 hex = { version = "0.4.3" }
+html-escape = { version = "0.2.13" }
 http = { version = "0.2.9" }
 http-cache-semantics = { version = "1.0.1" }
 indicatif = { version = "0.17.7" }
