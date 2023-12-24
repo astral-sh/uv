@@ -24,8 +24,9 @@ use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelCache};
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
 
+use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::{html, CachedClient, CachedClientError, Error};
+use crate::{CachedClient, CachedClientError, Error};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -177,9 +178,9 @@ impl RegistryClient {
                     }
                     MediaType::Html => {
                         let text = response.text().await?;
-                        let files = html::parse_simple(&text, &url)
+                        let data = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                        let metadata = SimpleMetadata::from_files(package_name, files);
+                        let metadata = SimpleMetadata::from_files(package_name, data.files);
                         Ok(metadata)
                     }
                 }
