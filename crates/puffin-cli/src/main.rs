@@ -7,11 +7,11 @@ use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 
+use distribution_types::{IndexUrl, IndexUrls};
 use puffin_cache::{Cache, CacheArgs};
 use puffin_installer::Reinstall;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
-use pypi_types::{IndexUrl, IndexUrls};
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus};

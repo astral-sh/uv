@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SimpleJson {
     pub files: Vec<File>,
 }
@@ -13,7 +13,7 @@ pub struct SimpleJson {
 /// A single (remote) file belonging to a package, generally either a wheel or a source dist.
 ///
 /// <https://peps.python.org/pep-0691/#project-detail>
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct File {
     // Not PEP 691 compliant alias used by pypi

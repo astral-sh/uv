@@ -17,12 +17,12 @@ use tracing::{debug, trace};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{BuiltDist, Name};
+use distribution_types::{BuiltDist, File, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
-use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
+use pypi_types::{Metadata21, SimpleJson};
 
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -446,7 +446,7 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(package_name: &PackageName, files: Vec<File>) -> Self {
+    fn from_files(package_name: &PackageName, files: Vec<pypi_types::File>) -> Self {
         let mut metadata = Self::default();
 
         // Group the distributions by version and kind
@@ -461,11 +461,11 @@ impl SimpleMetadata {
 
                 match metadata.0.entry(version.clone()) {
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        entry.get_mut().push(filename, file);
+                        entry.get_mut().push(filename, file.into());
                     }
                     std::collections::btree_map::Entry::Vacant(entry) => {
                         let mut files = VersionFiles::default();
-                        files.push(filename, file);
+                        files.push(filename, file.into());
                         entry.insert(files);
                     }
                 }

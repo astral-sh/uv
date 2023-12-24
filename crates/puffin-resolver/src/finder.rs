@@ -6,14 +6,13 @@ use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, Resolution};
+use distribution_types::{Dist, IndexUrl, Resolution};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagPriority, Tags};
 use puffin_client::{RegistryClient, SimpleMetadata};
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
-use pypi_types::IndexUrl;
 
 use crate::error::ResolveError;
 

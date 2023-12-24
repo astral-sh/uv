@@ -9,7 +9,9 @@ use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use tracing::info;
 
-use distribution_types::{CachedDist, Dist, DistributionMetadata, Name, Resolution, VersionOrUrl};
+use distribution_types::{
+    CachedDist, Dist, DistributionMetadata, IndexUrls, Name, Resolution, VersionOrUrl,
+};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
@@ -23,7 +25,6 @@ use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::DistFinder;
 use puffin_traits::{BuildContext, OnceMap};
-use pypi_types::IndexUrls;
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {

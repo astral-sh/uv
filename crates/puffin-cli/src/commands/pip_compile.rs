@@ -13,10 +13,9 @@ use itertools::Itertools;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::LocalEditable;
+use distribution_types::{IndexUrls, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
-
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
@@ -24,7 +23,6 @@ use puffin_installer::Downloader;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver};
-use pypi_types::IndexUrls;
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};

@@ -1,7 +1,9 @@
-use crate::candidate_selector::Candidate;
-use puffin_normalize::PackageName;
-use pypi_types::{File, IndexUrl};
 use rustc_hash::FxHashMap;
+
+use distribution_types::{File, IndexUrl};
+use puffin_normalize::PackageName;
+
+use crate::candidate_selector::Candidate;
 
 /// A set of package versions pinned to specific files.
 ///

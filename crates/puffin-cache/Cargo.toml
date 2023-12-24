@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 cache-key = { path = "../cache-key" }
+distribution-types = { path = "../distribution-types" }
 puffin-fs = { path = "../puffin-fs" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }

@@ -7,12 +7,11 @@ use rustc_hash::FxHashMap;
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
+use distribution_types::{BuiltDist, IndexUrl, PathBuiltDist, PathSourceDist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
-use pypi_types::IndexUrl;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubVersion};
 use crate::version_map::VersionMap;
@@ -142,7 +141,7 @@ impl std::fmt::Display for NoSolutionError {
 impl NoSolutionError {
     /// Update the available versions attached to the error using the given package version index.
     ///
-    /// Only packages used in the error's deriviation tree will be retrieved.
+    /// Only packages used in the error's derivation tree will be retrieved.
     pub(crate) fn update_available_versions(
         mut self,
         package_versions: &OnceMap<PackageName, (IndexUrl, VersionMap)>,

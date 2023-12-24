@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use tracing::{info, info_span, span, Level, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use distribution_types::IndexUrls;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
@@ -19,7 +20,6 @@ use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
-use pypi_types::IndexUrls;
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {

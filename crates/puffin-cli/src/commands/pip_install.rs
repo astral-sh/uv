@@ -8,7 +8,9 @@ use itertools::Itertools;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, LocalDist, LocalEditable, Name, Resolution};
+use distribution_types::{
+    IndexUrls, InstalledMetadata, LocalDist, LocalEditable, Name, Resolution,
+};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_host::Platform;
@@ -25,7 +27,6 @@ use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::OnceMap;
-use pypi_types::IndexUrls;
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};

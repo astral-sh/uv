@@ -5,7 +5,7 @@ use colored::Colorize;
 use itertools::Itertools;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, LocalDist, LocalEditable, Name};
+use distribution_types::{IndexUrls, InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -15,7 +15,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_traits::OnceMap;
-use pypi_types::{IndexUrls, Yanked};
+use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
