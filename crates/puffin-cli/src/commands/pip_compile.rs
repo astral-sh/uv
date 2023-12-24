@@ -16,7 +16,7 @@ use tracing::debug;
 use distribution_types::LocalEditable;
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use platform_tags::Tags;
+
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
@@ -126,7 +126,7 @@ pub(crate) async fn pip_compile(
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
-    let tags = Tags::from_interpreter(venv.interpreter())?;
+    let tags = venv.interpreter().tags()?;
     let markers = python_version.map_or_else(
         || Cow::Borrowed(venv.interpreter().markers()),
         |python_version| Cow::Owned(python_version.markers(venv.interpreter().markers())),

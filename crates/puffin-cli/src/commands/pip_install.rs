@@ -123,7 +123,7 @@ pub(crate) async fn pip_install(
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
-    let tags = Tags::from_interpreter(venv.interpreter())?;
+    let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
     // Instantiate a client.

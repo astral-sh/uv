@@ -7,7 +7,8 @@ use tracing::{debug, warn};
 
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use platform_host::Platform;
+use platform_host::{Platform, PlatformError};
+use platform_tags::Tags;
 use puffin_cache::CachedByTimestamp;
 use puffin_cache::{digest, Cache, CacheBucket};
 use puffin_fs::write_atomic_sync;
@@ -72,6 +73,11 @@ impl Interpreter {
     /// Returns the [`MarkerEnvironment`] for this Python executable.
     pub fn markers(&self) -> &MarkerEnvironment {
         &self.markers
+    }
+
+    /// Returns the [`Tags`] for this Python executable.
+    pub fn tags(&self) -> Result<Tags, PlatformError> {
+        Tags::from_env(self.platform(), self.simple_version())
     }
 
     /// Returns the Python version.

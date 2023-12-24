@@ -12,7 +12,7 @@ use petgraph::dot::{Config as DotConfig, Dot};
 
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use platform_tags::Tags;
+
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
@@ -63,7 +63,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     );
 
     // Copied from `BuildDispatch`
-    let tags = Tags::from_interpreter(venv.interpreter())?;
+    let tags = venv.interpreter().tags()?;
     let resolver = Resolver::new(
         Manifest::simple(args.requirements.clone()),
         ResolutionOptions::default(),

@@ -16,6 +16,7 @@ workspace = true
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-fs = { path = "../puffin-fs" }
 

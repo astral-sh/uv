@@ -14,7 +14,6 @@ workspace = true
 
 [dependencies]
 platform-host = { path = "../platform-host" }
-puffin-interpreter = { path = "../puffin-interpreter" }
 
 anyhow = { workspace = true }
 rustc-hash = { workspace = true }

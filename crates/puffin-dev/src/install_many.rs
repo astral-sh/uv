@@ -58,7 +58,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexUrls::default();
-    let tags = Tags::from_interpreter(venv.interpreter())?;
+    let tags = venv.interpreter().tags()?;
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
