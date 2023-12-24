@@ -52,7 +52,8 @@ use requirements_txt::EditableRequirement;
 
 pub use crate::any::*;
 pub use crate::cached::*;
-pub use crate::editable::LocalEditable;
+pub use crate::direct_url::*;
+pub use crate::editable::*;
 pub use crate::error::*;
 pub use crate::id::*;
 pub use crate::installed::*;
@@ -61,7 +62,7 @@ pub use crate::traits::*;
 
 mod any;
 mod cached;
-pub mod direct_url;
+mod direct_url;
 mod editable;
 mod error;
 mod id;

@@ -4,9 +4,10 @@ use anyhow::{bail, Result};
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
-use distribution_types::direct_url::git_reference;
-use distribution_types::{BuiltDist, Dist, Name, SourceDist};
-use distribution_types::{CachedDirectUrlDist, CachedDist, InstalledDist};
+use distribution_types::{
+    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Name,
+    SourceDist,
+};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
