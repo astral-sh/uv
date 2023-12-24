@@ -41,13 +41,29 @@ impl<'a> RegistryWheelIndex<'a> {
         &mut self,
         name: &PackageName,
     ) -> impl Iterator<Item = (&Version, &CachedRegistryDist)> {
+        self.get_impl(name).iter().rev()
+    }
+
+    /// Get the best wheel for the given package name and version.
+    ///
+    /// If the package is not yet indexed, this will index the package by reading from the cache.
+    pub fn get_version(
+        &mut self,
+        name: &PackageName,
+        version: &Version,
+    ) -> Option<&CachedRegistryDist> {
+        self.get_impl(name).get(version)
+    }
+
+    /// Get an entry in the index.
+    fn get_impl(&mut self, name: &PackageName) -> &BTreeMap<Version, CachedRegistryDist> {
         let versions = match self.index.entry(name.clone()) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
                 entry.insert(Self::index(name, self.cache, self.tags, self.index_urls))
             }
         };
-        versions.iter().rev()
+        versions
     }
 
     /// Add a package to the index by reading from the cache.
