@@ -136,7 +136,7 @@ impl CachedClient {
                     .map_err(|err| CachedClientError::Callback(err))?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
-                    fs_err::tokio::create_dir_all(&cache_entry.dir)
+                    fs_err::tokio::create_dir_all(cache_entry.dir())
                         .await
                         .map_err(crate::Error::CacheWrite)?;
                     let data =

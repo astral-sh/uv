@@ -136,7 +136,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                     LocalWheel::InMemory(InMemoryWheel {
                         dist: dist.clone(),
-                        target: cache_entry.path(),
+                        target: cache_entry.into_path_buf(),
                         buffer,
                         filename: wheel_filename,
                     })
@@ -162,13 +162,16 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .remote_wheel_dir(wheel_filename.name.as_ref()),
                         filename,
                     );
-                    fs::create_dir_all(&cache_entry.dir).await?;
+                    fs::create_dir_all(&cache_entry.dir()).await?;
                     tokio::fs::rename(temp_file, &cache_entry.path()).await?;
 
                     LocalWheel::Disk(DiskWheel {
                         dist: dist.clone(),
-                        path: cache_entry.path(),
-                        target: cache_entry.with_file(wheel_filename.stem()).path(),
+                        target: cache_entry
+                            .with_file(wheel_filename.stem())
+                            .path()
+                            .to_path_buf(),
+                        path: cache_entry.into_path_buf(),
                         filename: wheel_filename,
                     })
                 };
@@ -195,13 +198,16 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                     filename,
                 );
-                fs::create_dir_all(&cache_entry.dir).await?;
+                fs::create_dir_all(&cache_entry.dir()).await?;
                 tokio::fs::rename(temp_file, &cache_entry.path()).await?;
 
                 let local_wheel = LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
-                    path: cache_entry.path(),
-                    target: cache_entry.with_file(wheel.filename.stem()).path(),
+                    target: cache_entry
+                        .with_file(wheel.filename.stem())
+                        .path()
+                        .to_path_buf(),
+                    path: cache_entry.into_path_buf(),
                     filename: wheel.filename.clone(),
                 });
 
@@ -218,7 +224,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 Ok(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
                     path: wheel.path.clone(),
-                    target: cache_entry.path(),
+                    target: cache_entry.into_path_buf(),
                     filename: wheel.filename.clone(),
                 }))
             }

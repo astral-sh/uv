@@ -22,25 +22,38 @@ mod by_timestamp;
 mod cli;
 mod wheel;
 
-/// A cache entry which may or may not exist yet.
+/// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
-pub struct CacheEntry {
-    pub dir: PathBuf,
-    pub file: String,
-}
+pub struct CacheEntry(PathBuf);
 
 impl CacheEntry {
-    pub fn path(&self) -> PathBuf {
-        // TODO(konstin): Cache this to avoid allocations?
-        self.dir.join(&self.file)
+    /// Create a new [`CacheEntry`] from a directory and a file name.
+    pub fn new(dir: impl Into<PathBuf>, file: impl AsRef<Path>) -> Self {
+        Self(dir.into().join(file))
     }
 
+    /// Convert the [`CacheEntry`] into a [`PathBuf`].
+    #[inline]
+    pub fn into_path_buf(self) -> PathBuf {
+        self.0
+    }
+
+    /// Return the path to the [`CacheEntry`].
+    #[inline]
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+
+    /// Return the cache entry's parent directory.
+    #[inline]
+    pub fn dir(&self) -> &Path {
+        self.0.parent().expect("Cache entry has no parent")
+    }
+
+    /// Create a new [`CacheEntry`] with the given file name.
     #[must_use]
-    pub fn with_file(self, file: impl Into<String>) -> Self {
-        Self {
-            file: file.into(),
-            ..self
-        }
+    pub fn with_file(&self, file: impl AsRef<Path>) -> Self {
+        Self(self.dir().join(file))
     }
 }
 
@@ -49,11 +62,8 @@ impl CacheEntry {
 pub struct CacheShard(PathBuf);
 
 impl CacheShard {
-    pub fn entry(&self, file: impl Into<String>) -> CacheEntry {
-        CacheEntry {
-            dir: self.0.clone(),
-            file: file.into(),
-        }
+    pub fn entry(&self, file: impl AsRef<Path>) -> CacheEntry {
+        CacheEntry::new(&self.0, file)
     }
 }
 
@@ -115,12 +125,9 @@ impl Cache {
         &self,
         cache_bucket: CacheBucket,
         dir: impl AsRef<Path>,
-        file: String,
+        file: impl AsRef<Path>,
     ) -> CacheEntry {
-        CacheEntry {
-            dir: self.bucket(cache_bucket).join(dir.as_ref()),
-            file,
-        }
+        CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
     }
 
     /// Initialize a directory for use as a cache.
