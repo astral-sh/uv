@@ -788,6 +788,9 @@ impl<'a> Parser<'a> {
 
     /// Parse a version pattern, which may be a verbatim version.
     fn parse_pattern(mut self) -> Result<VersionPattern, VersionPatternParseError> {
+        if let Some(vpat) = self.parse_fast() {
+            return Ok(vpat);
+        }
         self.bump_while(|byte| byte.is_ascii_whitespace());
         self.bump_if("v");
         self.parse_epoch_and_initial_release()?;
@@ -806,6 +809,54 @@ impl<'a> Parser<'a> {
             return Err(ErrorKind::UnexpectedEnd { version, remaining }.into());
         }
         Ok(self.into_pattern())
+    }
+
+    /// Attempts to do a "fast parse" of a version.
+    ///
+    /// This looks for versions of the form `w[.x[.y[.z]]]` while
+    /// simultaneously parsing numbers. This format corresponds to the
+    /// overwhelming majority of all version strings and can avoid most of the
+    /// work done in the more general parser.
+    ///
+    /// If the version string is not in the format of `w[.x[.y[.z]]]`, then
+    /// this returns `None`.
+    fn parse_fast(&self) -> Option<VersionPattern> {
+        let (mut prev_digit, mut cur, mut release, mut len) = (false, 0u64, [0u64; 4], 0);
+        for &byte in self.v {
+            if byte == b'.' {
+                if !prev_digit {
+                    return None;
+                }
+                prev_digit = false;
+                *release.get_mut(len)? = cur;
+                len += 1;
+                cur = 0;
+            } else {
+                let digit = byte.checked_sub(b'0')?;
+                if digit > 9 {
+                    return None;
+                }
+                prev_digit = true;
+                cur = cur.checked_mul(10)?.checked_add(u64::from(digit))?;
+            }
+        }
+        if !prev_digit {
+            return None;
+        }
+        *release.get_mut(len)? = cur;
+        len += 1;
+        let version = Version {
+            epoch: 0,
+            release: release[..len].to_vec(),
+            pre: None,
+            post: None,
+            dev: None,
+            local: vec![],
+        };
+        Some(VersionPattern {
+            version,
+            wildcard: false,
+        })
     }
 
     /// Parses an optional initial epoch number and the first component of the
@@ -2330,6 +2381,8 @@ mod tests {
         assert_eq!(p("5.6"), Version::new([5, 6]));
         assert_eq!(p("5.6.7"), Version::new([5, 6, 7]));
         assert_eq!(p("512.623.734"), Version::new([512, 623, 734]));
+        assert_eq!(p("1.2.3.4"), Version::new([1, 2, 3, 4]));
+        assert_eq!(p("1.2.3.4.5"), Version::new([1, 2, 3, 4, 5]));
 
         // epoch tests
         assert_eq!(p("4!5"), Version::new([5]).with_epoch(4));
