@@ -857,8 +857,10 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "chrono",
  "distribution-filename",
  "fs-err",
+ "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "puffin-git",
@@ -2304,6 +2306,7 @@ dependencies = [
  "cachedir",
  "clap",
  "directories",
+ "distribution-types",
  "fs-err",
  "puffin-fs",
  "puffin-normalize",

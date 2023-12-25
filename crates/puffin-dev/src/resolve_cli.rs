@@ -5,20 +5,18 @@ use anstream::println;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, ValueEnum};
-
 use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
 
+use distribution_types::IndexUrls;
 use pep508_rs::Requirement;
 use platform_host::Platform;
-
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
-use pypi_types::IndexUrls;
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {

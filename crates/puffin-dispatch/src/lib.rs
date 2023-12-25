@@ -10,9 +10,8 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, Name, Resolution};
+use distribution_types::{CachedDist, IndexUrls, Name, Resolution};
 use pep508_rs::Requirement;
-
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
@@ -20,7 +19,6 @@ use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackag
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, BuildKind, OnceMap};
-use pypi_types::IndexUrls;
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use url::Url;
 
 use cache_key::{digest, CanonicalUrl};
-use pypi_types::IndexUrl;
+use distribution_types::IndexUrl;
 
 #[allow(unused_imports)] // For rustdoc
 use crate::CacheBucket;

@@ -5,8 +5,8 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
 use distribution_types::{
-    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, InstalledDist, Name,
-    SourceDist,
+    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexUrls, InstalledDist,
+    Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
@@ -14,7 +14,6 @@ use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
-use pypi_types::IndexUrls;
 
 use crate::{ResolvedEditable, SitePackages};
 

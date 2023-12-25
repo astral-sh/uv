@@ -1,10 +1,9 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, DistributionMetadata, Name};
+use distribution_types::{Dist, DistributionMetadata, IndexUrl, Name};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
-use pypi_types::IndexUrl;
 
 use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;

@@ -19,7 +19,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, SourceDist,
+    VersionOrUrl,
 };
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
@@ -27,7 +28,7 @@ use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, OnceMap};
-use pypi_types::{IndexUrl, Metadata21};
+use pypi_types::Metadata21;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;

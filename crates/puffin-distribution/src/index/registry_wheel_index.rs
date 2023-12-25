@@ -6,13 +6,12 @@ use fs_err as fs;
 use rustc_hash::FxHashMap;
 use tracing::warn;
 
-use distribution_types::{CachedRegistryDist, CachedWheel};
+use distribution_types::{CachedRegistryDist, CachedWheel, IndexUrls};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_fs::directories;
 use puffin_normalize::PackageName;
-use pypi_types::IndexUrls;
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]

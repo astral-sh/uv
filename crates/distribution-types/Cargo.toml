@@ -23,7 +23,9 @@ pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 
 anyhow = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 fs-err = { workspace = true }
+once_cell = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

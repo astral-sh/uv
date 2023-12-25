@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use pypi_types::File;
+use distribution_types::File;
 
 /// A distribution can either be a wheel or a source distribution.
 #[derive(Debug, Clone)]
