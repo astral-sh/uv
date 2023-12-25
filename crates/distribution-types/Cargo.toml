@@ -13,10 +13,10 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+cache-key = { path = "../cache-key" }
 distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
-puffin-cache = { path = "../puffin-cache" }
 puffin-git = { path = "../puffin-git" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }

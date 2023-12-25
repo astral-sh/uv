@@ -9,9 +9,6 @@ target/
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
-# Use e.g. `--cache-dir cache-docker` to keep a cache across container invocations
-cache-*
-
 # Python tmp files
 __pycache__
 

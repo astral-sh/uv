@@ -26,9 +26,7 @@ use distribution_types::{
 };
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{
-    digest, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, CanonicalUrl, WheelCache,
-};
+use puffin_cache::{CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
@@ -653,8 +651,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Avoid races between different processes, too.
         let lock_dir = git_dir.join("locks");
         fs::create_dir_all(&lock_dir).await?;
-        let canonical_url = CanonicalUrl::new(url);
-        let _lock = LockedFile::acquire(lock_dir.join(digest(&canonical_url)), &canonical_url)?;
+        let canonical_url = cache_key::CanonicalUrl::new(url);
+        let _lock = LockedFile::acquire(
+            lock_dir.join(cache_key::digest(&canonical_url)),
+            &canonical_url,
+        )?;
 
         let DirectGitUrl { url, subdirectory } =
             DirectGitUrl::try_from(url).map_err(SourceDistError::Git)?;

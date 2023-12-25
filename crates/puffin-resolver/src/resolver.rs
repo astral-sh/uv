@@ -23,7 +23,6 @@ use distribution_types::{
 };
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_cache::CanonicalUrl;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::PackageName;
@@ -868,17 +867,17 @@ pub(crate) struct Index {
 }
 
 #[derive(Debug, Default)]
-struct AllowedUrls(FxHashSet<CanonicalUrl>);
+struct AllowedUrls(FxHashSet<cache_key::CanonicalUrl>);
 
 impl AllowedUrls {
     fn contains(&self, url: &Url) -> bool {
-        self.0.contains(&CanonicalUrl::new(url))
+        self.0.contains(&cache_key::CanonicalUrl::new(url))
     }
 }
 
 impl<'a> FromIterator<&'a Url> for AllowedUrls {
     fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
-        Self(iter.into_iter().map(CanonicalUrl::new).collect())
+        Self(iter.into_iter().map(cache_key::CanonicalUrl::new).collect())
     }
 }
 

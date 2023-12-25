@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-puffin-cache = { path = "../puffin-cache" }
+cache-key = { path = "../cache-key" }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }

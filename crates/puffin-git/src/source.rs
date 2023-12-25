@@ -8,7 +8,7 @@ use reqwest::Client;
 use tracing::debug;
 use url::Url;
 
-use puffin_cache::{digest, RepositoryUrl};
+use cache_key::{digest, RepositoryUrl};
 
 use crate::git::GitRemote;
 use crate::{FetchStrategy, GitSha, GitUrl};

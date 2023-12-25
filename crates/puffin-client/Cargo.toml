@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+cache-key = { path = "../cache-key" }
 distribution-filename = { path = "../distribution-filename", features = ["serde"] }
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }

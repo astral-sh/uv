@@ -392,6 +392,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e368af43e418a04d52505cf3dbc23dda4e3407ae2fa99fd0e4f308ce546acc"
 
 [[package]]
+name = "cache-key"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "seahash",
+ "url",
+]
+
+[[package]]
 name = "cachedir"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -847,11 +856,11 @@ name = "distribution-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "cache-key",
  "distribution-filename",
  "fs-err",
  "pep440_rs 0.3.12",
  "pep508_rs",
- "puffin-cache",
  "puffin-git",
  "puffin-normalize",
  "pypi-types",
@@ -2291,15 +2300,14 @@ dependencies = [
 name = "puffin-cache"
 version = "0.0.1"
 dependencies = [
+ "cache-key",
  "cachedir",
  "clap",
  "directories",
  "fs-err",
- "hex",
  "puffin-fs",
  "puffin-normalize",
  "pypi-types",
- "seahash",
  "serde",
  "tempfile",
  "tracing",
@@ -2375,6 +2383,7 @@ dependencies = [
  "anyhow",
  "async_http_range_reader",
  "async_zip",
+ "cache-key",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -2483,6 +2492,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bytesize",
+ "cache-key",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -2541,12 +2551,12 @@ name = "puffin-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "cache-key",
  "cargo-util",
  "git2",
  "glob",
  "hex",
  "once_cell",
- "puffin-cache",
  "rand",
  "reqwest",
  "serde",
@@ -2593,6 +2603,7 @@ dependencies = [
 name = "puffin-interpreter"
 version = "0.0.1"
 dependencies = [
+ "cache-key",
  "fs-err",
  "indoc",
  "once_cell",
@@ -2624,6 +2635,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.4.1",
+ "cache-key",
  "chrono",
  "clap",
  "colored",

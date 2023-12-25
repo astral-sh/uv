@@ -1,0 +1,19 @@
+[package]
+name = "cache-key"
+version = "0.0.1"
+description = "Generic functionality for caching paths, URLs, and other resources across platforms."
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+hex = { workspace = true }
+seahash = { workspace = true }
+url = { workspace = true }
