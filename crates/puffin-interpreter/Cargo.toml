@@ -21,6 +21,7 @@ puffin-cache = { path = "../puffin-cache" }
 puffin-fs = { path = "../puffin-fs" }
 
 fs-err = { workspace = true, features = ["tokio"] }
+once_cell = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

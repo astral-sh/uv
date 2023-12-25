@@ -9,7 +9,7 @@ use platform_host::{Arch, Os, Platform, PlatformError};
 ///
 /// Its principle function is to determine whether the tags for a particular
 /// wheel are compatible with the current environment.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tags {
     /// python_tag |--> abi_tag |--> platform_tag |--> priority
     map: FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>,

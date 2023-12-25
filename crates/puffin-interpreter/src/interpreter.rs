@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use fs_err as fs;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -24,6 +25,7 @@ pub struct Interpreter {
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
     pub(crate) sys_executable: PathBuf,
+    tags: OnceCell<Tags>,
 }
 
 impl Interpreter {
@@ -43,6 +45,7 @@ impl Interpreter {
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
             sys_executable: info.sys_executable,
+            tags: OnceCell::new(),
         })
     }
 
@@ -60,11 +63,19 @@ impl Interpreter {
             base_exec_prefix,
             base_prefix,
             sys_executable,
+            tags: OnceCell::new(),
         }
     }
-}
 
-impl Interpreter {
+    /// Return a new [`Interpreter`] with the given base prefix.
+    #[must_use]
+    pub fn with_base_prefix(self, base_prefix: PathBuf) -> Self {
+        Self {
+            base_prefix,
+            ..self
+        }
+    }
+
     /// Returns the path to the Python virtual environment.
     pub fn platform(&self) -> &Platform {
         &self.platform
@@ -76,8 +87,9 @@ impl Interpreter {
     }
 
     /// Returns the [`Tags`] for this Python executable.
-    pub fn tags(&self) -> Result<Tags, PlatformError> {
-        Tags::from_env(self.platform(), self.simple_version())
+    pub fn tags(&self) -> Result<&Tags, PlatformError> {
+        self.tags
+            .get_or_try_init(|| Tags::from_env(self.platform(), self.simple_version()))
     }
 
     /// Returns the Python version.
