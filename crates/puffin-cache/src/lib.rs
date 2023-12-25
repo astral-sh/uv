@@ -9,23 +9,17 @@ use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
-use crate::wheel::WheelCacheKind;
-pub use by_timestamp::CachedByTimestamp;
-pub use canonical_url::{CanonicalUrl, RepositoryUrl};
-#[cfg(feature = "clap")]
-pub use cli::CacheArgs;
-pub use digest::digest;
 use puffin_fs::{directories, force_remove_all};
 use puffin_normalize::PackageName;
-pub use stable_hash::{StableHash, StableHasher};
-pub use wheel::WheelCache;
+
+pub use crate::by_timestamp::CachedByTimestamp;
+#[cfg(feature = "clap")]
+pub use crate::cli::CacheArgs;
+pub use crate::wheel::WheelCache;
+use crate::wheel::WheelCacheKind;
 
 mod by_timestamp;
-mod cache_key;
-mod canonical_url;
 mod cli;
-mod digest;
-mod stable_hash;
 mod wheel;
 
 /// A cache entry which may or may not exist yet.

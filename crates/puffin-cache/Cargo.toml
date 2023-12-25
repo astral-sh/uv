@@ -14,6 +14,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+cache-key = { path = "../cache-key" }
 puffin-fs = { path = "../puffin-fs" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
@@ -22,8 +23,6 @@ cachedir = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
-hex = { workspace = true }
-seahash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }

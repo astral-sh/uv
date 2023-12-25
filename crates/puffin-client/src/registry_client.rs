@@ -20,7 +20,7 @@ use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, Name};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
-use puffin_cache::{digest, Cache, CacheBucket, CanonicalUrl, WheelCache};
+use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
 use pypi_types::{File, IndexUrl, IndexUrls, Metadata21, SimpleJson};
 
@@ -143,7 +143,7 @@ impl RegistryClient {
                 CacheBucket::Simple,
                 Path::new(&match index {
                     IndexUrl::Pypi => "pypi".to_string(),
-                    IndexUrl::Url(url) => digest(&CanonicalUrl::new(url)),
+                    IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
                 }),
                 format!("{}.msgpack", package_name.as_ref()),
             );

@@ -2,11 +2,11 @@ use std::path::{Path, PathBuf};
 
 use url::Url;
 
+use cache_key::{digest, CanonicalUrl};
 use pypi_types::IndexUrl;
 
 #[allow(unused_imports)] // For rustdoc
 use crate::CacheBucket;
-use crate::{digest, CanonicalUrl};
 
 /// Cache wheels and their metadata, both from remote wheels and built from source distributions.
 ///

@@ -639,13 +639,11 @@ impl RemoteSource for Dist {
 
 impl Identifier for Url {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(puffin_cache::digest(&puffin_cache::CanonicalUrl::new(self)))
+        DistributionId::new(cache_key::digest(&cache_key::CanonicalUrl::new(self)))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::new(puffin_cache::digest(&puffin_cache::RepositoryUrl::new(
-            self,
-        )))
+        ResourceId::new(cache_key::digest(&cache_key::RepositoryUrl::new(self)))
     }
 }
 
@@ -661,11 +659,11 @@ impl Identifier for File {
 
 impl Identifier for Path {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(puffin_cache::digest(&self))
+        DistributionId::new(cache_key::digest(&self))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::new(puffin_cache::digest(&self))
+        ResourceId::new(cache_key::digest(&self))
     }
 }
 

@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use anyhow::Result;
 
 use pep508_rs::VerbatimUrl;
-use puffin_cache::CanonicalUrl;
 use puffin_normalize::PackageName;
 
 use crate::error::Error;
@@ -38,7 +37,7 @@ pub trait DistributionMetadata: Name {
                 // `version` is normalized by its `ToString` impl
                 format!("{}-{}", self.name().as_dist_info_name(), version)
             }
-            VersionOrUrl::Url(url) => puffin_cache::digest(&CanonicalUrl::new(url)),
+            VersionOrUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
         })
     }
 }

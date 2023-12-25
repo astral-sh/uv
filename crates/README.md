@@ -4,6 +4,10 @@
 
 Functionality for benchmarking Puffin.
 
+## [cache-key](./cache-key)
+
+Generic functionality for caching paths, URLs, and other resources across platforms.
+
 ## [distribution-filename](./distribution-filename)
 
 Parse built distribution (wheel) and source distribution (sdist) filenames to extract structured

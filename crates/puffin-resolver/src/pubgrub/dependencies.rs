@@ -4,7 +4,6 @@ use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
-use puffin_cache::CanonicalUrl;
 use puffin_normalize::{ExtraName, PackageName};
 
 use crate::overrides::Overrides;
@@ -235,7 +234,7 @@ fn merge_package(
             PubGrubPackage::Package(name, _extra, Some(left)),
             PubGrubPackage::Package(.., Some(right)),
         ) => {
-            if CanonicalUrl::new(left) == CanonicalUrl::new(right) {
+            if cache_key::CanonicalUrl::new(left) == cache_key::CanonicalUrl::new(right) {
                 Ok(None)
             } else {
                 Err(ResolveError::ConflictingUrls(

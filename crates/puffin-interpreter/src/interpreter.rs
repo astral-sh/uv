@@ -6,12 +6,12 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use cache_key::digest;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::{Platform, PlatformError};
 use platform_tags::Tags;
-use puffin_cache::CachedByTimestamp;
-use puffin_cache::{digest, Cache, CacheBucket};
+use puffin_cache::{Cache, CacheBucket, CachedByTimestamp};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;

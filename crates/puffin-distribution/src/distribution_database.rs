@@ -15,7 +15,7 @@ use url::Url;
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use distribution_types::{BuiltDist, DirectGitUrl, Dist, LocalEditable, Name, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::{digest, Cache, CacheBucket, WheelCache};
+use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
@@ -288,7 +288,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             dist,
             filename,
             path: editable_wheel_dir.join(disk_filename),
-            target: editable_wheel_dir.join(digest(&editable.path)),
+            target: editable_wheel_dir.join(cache_key::digest(&editable.path)),
         };
         Ok((LocalWheel::Built(built_wheel), metadata))
     }

@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+cache-key = { path = "../cache-key" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
