@@ -96,7 +96,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 Manifest::simple(requirements.to_vec()),
                 self.options,
                 markers,
-                &tags,
+                tags,
                 self.client,
                 self,
             );
@@ -152,7 +152,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 self.index_urls,
                 self.cache(),
                 venv,
-                &tags,
+                tags,
             )?;
 
             // Resolve any registry-based requirements.
@@ -171,7 +171,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 vec![]
             } else {
                 // TODO(konstin): Check that there is no endless recursion.
-                let downloader = Downloader::new(self.cache(), &tags, self.client, self);
+                let downloader = Downloader::new(self.cache(), tags, self.client, self);
                 debug!(
                     "Downloading and building requirement{} for build: {}",
                     if remote.len() == 1 { "" } else { "s" },

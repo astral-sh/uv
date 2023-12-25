@@ -81,7 +81,7 @@ pub(crate) async fn pip_sync(
         &site_packages,
         reinstall,
         &venv,
-        &tags,
+        tags,
         &cache,
         &client,
         &build_dispatch,
@@ -104,7 +104,7 @@ pub(crate) async fn pip_sync(
         &index_urls,
         &cache,
         &venv,
-        &tags,
+        tags,
     )
     .context("Failed to determine installation plan")?;
 
@@ -136,7 +136,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::DistFinder::new(&tags, &client, venv.interpreter())
+        let wheel_finder = puffin_resolver::DistFinder::new(tags, &client, venv.interpreter())
             .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
@@ -188,7 +188,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, tags, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader

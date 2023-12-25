@@ -35,14 +35,11 @@ impl Virtualenv {
         })
     }
 
-    /// Creating a new venv from a python interpreter changes this
-    pub fn new_prefix(venv: &Path, interpreter: &Interpreter) -> Self {
+    /// Creating a new venv from a Python interpreter changes this.
+    pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
         Self {
+            interpreter: interpreter.with_base_prefix(venv.to_path_buf()),
             root: venv.to_path_buf(),
-            interpreter: Interpreter {
-                base_prefix: venv.to_path_buf(),
-                ..interpreter.clone()
-            },
         }
     }
 

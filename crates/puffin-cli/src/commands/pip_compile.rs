@@ -168,7 +168,7 @@ pub(crate) async fn pip_compile(
             })
             .collect::<Result<_>>()?;
 
-        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, tags, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
         let editable_wheel_dir = tempdir_in(venv.root())?;
@@ -209,7 +209,7 @@ pub(crate) async fn pip_compile(
     );
 
     // Resolve the dependencies.
-    let resolver = Resolver::new(manifest, options, &markers, &tags, &client, &build_dispatch)
+    let resolver = Resolver::new(manifest, options, &markers, tags, &client, &build_dispatch)
         .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {

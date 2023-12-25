@@ -290,7 +290,7 @@ impl SourceBuild {
             None
         };
 
-        let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter)?;
+        let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter.clone())?;
 
         // Setup the build environment using PEP 517 or the legacy setuptools backend.
         if let Some(pep517_backend) = pep517_backend.as_ref() {

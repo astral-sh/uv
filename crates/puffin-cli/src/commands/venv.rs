@@ -77,14 +77,14 @@ fn venv_impl(
     };
 
     let platform = Platform::current().into_diagnostic()?;
-    let interpreter_info =
+    let interpreter =
         Interpreter::query(&base_python, platform, cache).map_err(VenvError::InterpreterError)?;
 
     writeln!(
         printer,
         "Using Python {} at {}",
-        interpreter_info.version(),
-        format!("{}", interpreter_info.sys_executable().display()).cyan()
+        interpreter.version(),
+        format!("{}", interpreter.sys_executable().display()).cyan()
     )
     .into_diagnostic()?;
 
@@ -96,7 +96,7 @@ fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    gourgeist::create_venv(path, &interpreter_info).map_err(VenvError::CreationError)?;
+    gourgeist::create_venv(path, interpreter).map_err(VenvError::CreationError)?;
 
     Ok(ExitStatus::Success)
 }

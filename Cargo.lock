@@ -2595,6 +2595,7 @@ version = "0.0.1"
 dependencies = [
  "fs-err",
  "indoc",
+ "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",

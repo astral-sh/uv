@@ -73,7 +73,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         install_chunk(
             requirements,
             &build_dispatch,
-            &tags,
+            tags,
             &client,
             &venv,
             &index_urls,
