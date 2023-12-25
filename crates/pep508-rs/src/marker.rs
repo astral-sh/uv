@@ -307,7 +307,7 @@ impl FromStr for StringVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self {
             string: s.to_string(),
-            version: Version::from_str(s)?,
+            version: Version::from_str(s).map_err(|e| e.to_string())?,
         })
     }
 }

@@ -551,16 +551,14 @@ impl Ord for Version {
 }
 
 impl FromStr for Version {
-    type Err = String;
+    type Err = VersionParseError;
 
     /// Parses a version such as `1.19`, `1.0a1`,`1.0+abc.5` or `1!2012.2`
     ///
     /// Note that this variant doesn't allow the version to end with a star, see
     /// [`Self::from_str_star`] if you want to parse versions for specifiers
     fn from_str(version: &str) -> Result<Self, Self::Err> {
-        Parser::new(version.as_bytes())
-            .parse()
-            .map_err(|e| e.to_string())
+        Parser::new(version.as_bytes()).parse()
     }
 }
 
@@ -629,12 +627,10 @@ impl VersionPattern {
 }
 
 impl FromStr for VersionPattern {
-    type Err = String;
+    type Err = VersionPatternParseError;
 
-    fn from_str(version: &str) -> Result<VersionPattern, String> {
-        Parser::new(version.as_bytes())
-            .parse_pattern()
-            .map_err(|e| e.to_string())
+    fn from_str(version: &str) -> Result<VersionPattern, VersionPatternParseError> {
+        Parser::new(version.as_bytes()).parse_pattern()
     }
 }
 
@@ -1380,7 +1376,7 @@ impl std::fmt::Display for VersionParseError {
 
 /// The kind of error that occurs when parsing a `Version`.
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum ErrorKind {
+pub(crate) enum ErrorKind {
     /// Occurs when a version pattern is found but a normal verbatim version is
     /// expected.
     Wildcard,
@@ -1446,7 +1442,7 @@ impl std::fmt::Display for VersionPatternParseError {
 
 /// The kind of error that occurs when parsing a `VersionPattern`.
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum PatternErrorKind {
+pub(crate) enum PatternErrorKind {
     Version(VersionParseError),
     WildcardNotTrailing,
 }
@@ -1540,7 +1536,7 @@ impl PyVersion {
     #[new]
     pub fn parse(version: &str) -> PyResult<Self> {
         Ok(Self(
-            Version::from_str(version).map_err(PyValueError::new_err)?,
+            Version::from_str(version).map_err(|e| PyValueError::new_err(e.to_string()))?,
         ))
     }
 
@@ -1551,7 +1547,7 @@ impl PyVersion {
     pub fn parse_star(version_specifier: &str) -> PyResult<(Self, bool)> {
         version_specifier
             .parse::<VersionPattern>()
-            .map_err(PyValueError::new_err)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
             .map(|VersionPattern { version, wildcard }| (Self(version), wildcard))
     }
 
@@ -2269,19 +2265,13 @@ mod tests {
     #[test]
     fn test_star_fixed_version() {
         let result = Version::from_str("0.9.1.*");
-        assert_eq!(
-            result.unwrap_err(),
-            "wildcards are not allowed in a version",
-        );
+        assert_eq!(result.unwrap_err(), ErrorKind::Wildcard.into());
     }
 
     #[test]
     fn test_regex_mismatch() {
         let result = Version::from_str("blergh");
-        assert_eq!(
-            result.unwrap_err(),
-            "expected version to start with a number, but no leading ASCII digits were found",
-        );
+        assert_eq!(result.unwrap_err(), ErrorKind::NoLeadingNumber.into());
     }
 
     #[test]
@@ -2291,24 +2281,35 @@ mod tests {
         assert!(p("1.2.3.*").unwrap().is_wildcard());
         assert_eq!(
             p("1.2.*.4.*").unwrap_err(),
-            "wildcards in versions must be at the end",
+            PatternErrorKind::WildcardNotTrailing.into(),
         );
         assert_eq!(
             p("1.0-dev1.*").unwrap_err(),
-            "after parsing 1.0.dev1, found \".*\" after it, which is not part of a valid version",
+            ErrorKind::UnexpectedEnd {
+                version: Version::new([1, 0]).with_dev(Some(1)),
+                remaining: ".*".to_string()
+            }
+            .into(),
         );
         assert_eq!(
             p("1.0a1.*").unwrap_err(),
-            "after parsing 1.0a1, found \".*\" after it, which is not part of a valid version",
+            ErrorKind::UnexpectedEnd {
+                version: Version::new([1, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                remaining: ".*".to_string()
+            }
+            .into(),
         );
         assert_eq!(
             p("1.0.post1.*").unwrap_err(),
-            "after parsing 1.0.post1, found \".*\" after it, which is not part of a valid version",
+            ErrorKind::UnexpectedEnd {
+                version: Version::new([1, 0]).with_post(Some(1)),
+                remaining: ".*".to_string()
+            }
+            .into(),
         );
         assert_eq!(
             p("1.0+lolwat.*").unwrap_err(),
-            "found a `.` indicating the start of a local component in a version, \
-             but did not find any alpha-numeric ASCII segment following the `.`",
+            ErrorKind::LocalEmpty { precursor: '.' }.into(),
         );
     }
 

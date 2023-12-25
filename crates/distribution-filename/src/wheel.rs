@@ -6,7 +6,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagPriority, Tags};
 use puffin_normalize::{InvalidNameError, PackageName};
 
@@ -217,7 +217,7 @@ pub enum WheelFilenameError {
     #[error("The wheel filename \"{0}\" is invalid: {1}")]
     InvalidWheelFileName(String, String),
     #[error("The wheel filename \"{0}\" has an invalid version part: {1}")]
-    InvalidVersion(String, String),
+    InvalidVersion(String, VersionParseError),
     #[error("The wheel filename \"{0}\" has an invalid package name")]
     InvalidPackageName(String, InvalidNameError),
 }

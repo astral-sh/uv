@@ -5,7 +5,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionParseError};
 use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,7 +116,7 @@ pub enum SourceDistFilenameError {
     #[error("Source distributions filenames must end with .zip or .tar.gz, not {0}")]
     InvalidExtension(String),
     #[error("Source distribution filename version section is invalid: {0}")]
-    InvalidVersion(String),
+    InvalidVersion(VersionParseError),
     #[error("Source distribution filename has an invalid package name: {0}")]
     InvalidPackageName(String, #[source] InvalidNameError),
 }

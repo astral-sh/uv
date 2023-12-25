@@ -14,7 +14,9 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::{version, Operator, OperatorParseError, Version, VersionPattern};
+use crate::{
+    version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
+};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -661,7 +663,7 @@ impl std::fmt::Display for VersionSpecifierParseError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ParseErrorKind {
     InvalidOperator(OperatorParseError),
-    InvalidVersion(String),
+    InvalidVersion(VersionPatternParseError),
     InvalidSpecifier(VersionSpecifierBuildError),
     MissingOperator,
     MissingVersion,
@@ -725,7 +727,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::LocalSegment;
+    use crate::{LocalSegment, PreRelease};
 
     use super::*;
 
@@ -1254,8 +1256,8 @@ mod tests {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
             result.unwrap_err().inner.err,
-            ParseErrorKind::InvalidVersion("wildcards in versions must be at the end".to_string())
-                .into()
+            ParseErrorKind::InvalidVersion(version::PatternErrorKind::WildcardNotTrailing.into())
+                .into(),
         );
     }
 
@@ -1415,14 +1417,14 @@ mod tests {
             (
                 "==1.0.*+5",
                 ParseErrorKind::InvalidVersion(
-                    "wildcards in versions must be at the end".to_string(),
+                    version::PatternErrorKind::WildcardNotTrailing.into(),
                 )
                 .into(),
             ),
             (
                 "!=1.0.*+deadbeef",
                 ParseErrorKind::InvalidVersion(
-                    "wildcards in versions must be at the end".to_string(),
+                    version::PatternErrorKind::WildcardNotTrailing.into(),
                 )
                 .into(),
             ),
@@ -1431,74 +1433,80 @@ mod tests {
             (
                 "==2.0a1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 2.0a1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=2.0a1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 2.0a1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "==2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 2.0.post1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_post(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 2.0.post1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_post(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "==2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 2.0.dev1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 2.0.dev1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "==1.0+5.*",
                 ParseErrorKind::InvalidVersion(
-                    "found a `.` indicating the start of a local component \
-                     in a version, but did not find any alpha-numeric ASCII \
-                     segment following the `.`"
-                        .to_string(),
+                    version::ErrorKind::LocalEmpty { precursor: '.' }.into(),
                 )
                 .into(),
             ),
             (
                 "!=1.0+deadbeef.*",
                 ParseErrorKind::InvalidVersion(
-                    "found a `.` indicating the start of a local component \
-                     in a version, but did not find any alpha-numeric ASCII \
-                     segment following the `.`"
-                        .to_string(),
+                    version::ErrorKind::LocalEmpty { precursor: '.' }.into(),
                 )
                 .into(),
             ),
@@ -1506,7 +1514,7 @@ mod tests {
             (
                 "==1.0.*.5",
                 ParseErrorKind::InvalidVersion(
-                    "wildcards in versions must be at the end".to_string(),
+                    version::PatternErrorKind::WildcardNotTrailing.into(),
                 )
                 .into(),
             ),
@@ -1519,18 +1527,22 @@ mod tests {
             (
                 "==1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 1.0.dev1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([1, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "after parsing 1.0.dev1, found \".*\" after it, \
-                     which is not part of a valid version"
-                        .to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([1, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
