@@ -204,11 +204,11 @@ impl InstallPlan {
                                 let cached_dist = CachedDirectUrlDist::from_url(
                                     wheel.filename,
                                     wheel.url,
-                                    cache_entry.path(),
+                                    cache_entry.into_path_buf(),
                                 );
 
                                 debug!("URL wheel requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist.clone()));
+                                local.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -225,11 +225,11 @@ impl InstallPlan {
                                 let cached_dist = CachedDirectUrlDist::from_url(
                                     wheel.filename,
                                     wheel.url,
-                                    cache_entry.path(),
+                                    cache_entry.into_path_buf(),
                                 );
 
                                 debug!("Path wheel requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist.clone()));
+                                local.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -244,7 +244,7 @@ impl InstallPlan {
                             if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist.clone()));
+                                local.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -260,7 +260,7 @@ impl InstallPlan {
                             if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Path source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist.clone()));
+                                local.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -277,7 +277,7 @@ impl InstallPlan {
                                 if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
                                     let cached_dist = wheel.into_url_dist(url.clone());
                                     debug!("Git source requirement already cached: {cached_dist}");
-                                    local.push(CachedDist::Url(cached_dist.clone()));
+                                    local.push(CachedDist::Url(cached_dist));
                                     continue;
                                 }
                             }
