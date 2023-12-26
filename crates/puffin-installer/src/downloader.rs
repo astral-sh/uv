@@ -152,7 +152,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Download, build, and unzip a single wheel.
-    #[instrument(skip_all, fields(name = %dist, url = dist.file().unwrap().url))]
+    #[instrument(skip_all, fields(name = %dist, size = ?dist.size(), url = dist.file().unwrap().url))]
     pub async fn get_wheel(
         &self,
         dist: Dist,
