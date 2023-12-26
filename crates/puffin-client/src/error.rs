@@ -93,7 +93,7 @@ pub enum Error {
     #[error("Invalid `Content-Type` header for {0}")]
     InvalidContentTypeHeader(Url, #[source] http::header::ToStrError),
 
-    #[error("Unsupported `Content-Type` \"{1}\" for {0}")]
+    #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
     UnsupportedMediaType(Url, String),
 }
 

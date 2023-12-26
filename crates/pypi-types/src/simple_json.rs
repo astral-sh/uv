@@ -83,5 +83,6 @@ impl Yanked {
 /// only support SHA 256 atm.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hashes {
+    // TODO(charlie): Hashes should be optional.
     pub sha256: String,
 }
