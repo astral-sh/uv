@@ -241,40 +241,22 @@ impl std::fmt::Display for OperatorParseError {
 /// ```
 #[derive(Clone)]
 pub struct Version {
-    /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
-    /// but you can increment it if you switched the versioning scheme.
-    epoch: u64,
-    /// The normal number part of the version
-    /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
-    /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
-    ///
-    /// Note that we drop the * placeholder by moving it to `Operator`
-    release: Vec<u64>,
-    /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
-    /// plus a number
-    ///
-    /// Note that whether this is Some influences the version
-    /// range matching since normally we exclude all prerelease versions
-    pre: Option<(PreRelease, u64)>,
-    /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
-    /// higher post version are preferred over lower post or none-post versions
-    post: Option<u64>,
-    /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
-    /// if any
-    dev: Option<u64>,
-    /// A [local version identifier](https://peps.python.org/pep-0440/#local-version-identifiers)
-    /// such as `+deadbeef` in `1.2.3+deadbeef`
-    ///
-    /// > They consist of a normal public version identifier (as defined in the previous section),
-    /// > along with an arbitrary “local version label”, separated from the public version
-    /// > identifier by a plus. Local version labels have no specific semantics assigned, but some
-    /// > syntactic restrictions are imposed.
-    local: Vec<LocalSegment>,
+    inner: VersionInner,
+}
+
+#[derive(Clone, Debug)]
+enum VersionInner {
+    Small { small: VersionSmall },
+    Full { full: VersionFull },
 }
 
 impl Version {
     /// Create a new version from an iterator of segments in the release part
     /// of a version.
+    ///
+    /// # Panics
+    ///
+    /// When the iterator yields no elements.
     #[inline]
     pub fn new<I, R>(release_numbers: I) -> Version
     where
@@ -282,12 +264,9 @@ impl Version {
         R: Borrow<u64>,
     {
         Version {
-            epoch: 0,
-            release: vec![],
-            pre: None,
-            post: None,
-            dev: None,
-            local: vec![],
+            inner: VersionInner::Small {
+                small: VersionSmall::new(),
+            },
         }
         .with_release(release_numbers)
     }
@@ -301,19 +280,19 @@ impl Version {
     /// Whether this is an alpha/beta/rc version
     #[inline]
     pub fn is_pre(&self) -> bool {
-        self.pre.is_some()
+        self.pre().is_some()
     }
 
     /// Whether this is a dev version
     #[inline]
     pub fn is_dev(&self) -> bool {
-        self.dev.is_some()
+        self.dev().is_some()
     }
 
     /// Whether this is a post version
     #[inline]
     pub fn is_post(&self) -> bool {
-        self.post.is_some()
+        self.post().is_some()
     }
 
     /// Whether this is a local version (e.g. `1.2.3+localsuffixesareweird`)
@@ -322,43 +301,61 @@ impl Version {
     /// [`Version::local`] is non-empty.
     #[inline]
     pub fn is_local(&self) -> bool {
-        !self.local.is_empty()
+        !self.local().is_empty()
     }
 
     /// Returns the epoch of this version.
     #[inline]
     pub fn epoch(&self) -> u64 {
-        self.epoch
+        match self.inner {
+            VersionInner::Small { ref small } => small.epoch(),
+            VersionInner::Full { ref full } => full.epoch,
+        }
     }
 
     /// Returns the release number part of the version.
     #[inline]
     pub fn release(&self) -> &[u64] {
-        &self.release
+        match self.inner {
+            VersionInner::Small { ref small } => small.release(),
+            VersionInner::Full { ref full, .. } => &full.release,
+        }
     }
 
     /// Returns the pre-relase part of this version, if it exists.
     #[inline]
     pub fn pre(&self) -> Option<(PreRelease, u64)> {
-        self.pre
+        match self.inner {
+            VersionInner::Small { ref small } => small.pre(),
+            VersionInner::Full { ref full } => full.pre,
+        }
     }
 
     /// Returns the post-release part of this version, if it exists.
     #[inline]
     pub fn post(&self) -> Option<u64> {
-        self.post
+        match self.inner {
+            VersionInner::Small { ref small } => small.post(),
+            VersionInner::Full { ref full } => full.post,
+        }
     }
 
     /// Returns the dev-release part of this version, if it exists.
     #[inline]
     pub fn dev(&self) -> Option<u64> {
-        self.dev
+        match self.inner {
+            VersionInner::Small { ref small } => small.dev(),
+            VersionInner::Full { ref full } => full.dev,
+        }
     }
 
     /// Returns the local segments in this version, if any exist.
     #[inline]
     pub fn local(&self) -> &[LocalSegment] {
-        &self.local
+        match self.inner {
+            VersionInner::Small { ref small } => small.local(),
+            VersionInner::Full { ref full } => &full.local,
+        }
     }
 
     /// Set the release numbers and return the updated version.
@@ -367,46 +364,110 @@ impl Version {
     /// the updated release numbers, but this is useful when one wants to
     /// preserve the other components of a version number while only changing
     /// the release numbers.
+    ///
+    /// # Panics
+    ///
+    /// When the iterator yields no elements.
     #[inline]
-    pub fn with_release<I, R>(self, release_numbers: I) -> Version
+    pub fn with_release<I, R>(mut self, release_numbers: I) -> Version
     where
         I: IntoIterator<Item = R>,
         R: Borrow<u64>,
     {
-        Version {
-            release: release_numbers.into_iter().map(|r| *r.borrow()).collect(),
-            ..self
+        self.clear_release();
+        for n in release_numbers {
+            self.push_release(*n.borrow());
+        }
+        assert!(
+            !self.release().is_empty(),
+            "release must have non-zero size"
+        );
+        self
+    }
+
+    /// Push the given release number into this version. It will become the
+    /// last number in the release component.
+    #[inline]
+    fn push_release(&mut self, n: u64) {
+        if let VersionInner::Small { ref mut small } = self.inner {
+            if small.push_release(n) {
+                return;
+            }
+        }
+        self.make_full().release.push(n);
+    }
+
+    /// Clears the release component of this version so that it has no numbers.
+    ///
+    /// Generally speaking, this empty state should not be exposed to callers
+    /// since all versions should have at least one release number.
+    #[inline]
+    fn clear_release(&mut self) {
+        match self.inner {
+            VersionInner::Small { ref mut small } => small.clear_release(),
+            VersionInner::Full { ref mut full } => {
+                full.release.clear();
+            }
         }
     }
 
     /// Set the epoch and return the updated version.
     #[inline]
-    pub fn with_epoch(self, epoch: u64) -> Version {
-        Version { epoch, ..self }
+    pub fn with_epoch(mut self, value: u64) -> Version {
+        if let VersionInner::Small { ref mut small } = self.inner {
+            if small.set_epoch(value) {
+                return self;
+            }
+        }
+        self.make_full().epoch = value;
+        self
     }
 
     /// Set the pre-release component and return the updated version.
     #[inline]
-    pub fn with_pre(self, pre: Option<(PreRelease, u64)>) -> Version {
-        Version { pre, ..self }
+    pub fn with_pre(mut self, value: Option<(PreRelease, u64)>) -> Version {
+        if let VersionInner::Small { ref mut small } = self.inner {
+            if small.set_pre(value) {
+                return self;
+            }
+        }
+        self.make_full().pre = value;
+        self
     }
 
     /// Set the post-release component and return the updated version.
     #[inline]
-    pub fn with_post(self, post: Option<u64>) -> Version {
-        Version { post, ..self }
+    pub fn with_post(mut self, value: Option<u64>) -> Version {
+        if let VersionInner::Small { ref mut small } = self.inner {
+            if small.set_post(value) {
+                return self;
+            }
+        }
+        self.make_full().post = value;
+        self
     }
 
     /// Set the dev-release component and return the updated version.
     #[inline]
-    pub fn with_dev(self, dev: Option<u64>) -> Version {
-        Version { dev, ..self }
+    pub fn with_dev(mut self, value: Option<u64>) -> Version {
+        if let VersionInner::Small { ref mut small } = self.inner {
+            if small.set_dev(value) {
+                return self;
+            }
+        }
+        self.make_full().dev = value;
+        self
     }
 
     /// Set the local segments and return the updated version.
     #[inline]
-    pub fn with_local(self, local: Vec<LocalSegment>) -> Version {
-        Version { local, ..self }
+    pub fn with_local(mut self, value: Vec<LocalSegment>) -> Version {
+        if value.is_empty() {
+            self.without_local()
+        } else {
+            self.make_full().local = value;
+            self
+        }
     }
 
     /// For PEP 440 specifier matching: "Except where specifically noted below,
@@ -414,11 +475,72 @@ impl Version {
     /// and local version labels MUST be ignored entirely when checking if
     /// candidate versions match a given version specifier."
     #[inline]
-    pub fn without_local(self) -> Version {
-        Version {
-            local: vec![],
-            ..self
+    pub fn without_local(mut self) -> Version {
+        // A "small" version is already guaranteed not to have a local
+        // component, so we only need to do anything if we have a "full"
+        // version.
+        if let VersionInner::Full { ref mut full } = self.inner {
+            full.local.clear();
         }
+        self
+    }
+
+    /// Convert this version to a "full" representation in-place and return a
+    /// mutable borrow to the full type.
+    fn make_full(&mut self) -> &mut VersionFull {
+        match self.inner {
+            VersionInner::Small { ref small } => {
+                let full = VersionFull {
+                    epoch: small.epoch(),
+                    release: small.release().to_vec(),
+                    pre: small.pre(),
+                    post: small.post(),
+                    dev: small.dev(),
+                    local: vec![],
+                };
+                *self = Version {
+                    inner: VersionInner::Full { full },
+                };
+            }
+            VersionInner::Full { .. } => {}
+        }
+        match self.inner {
+            VersionInner::Full { ref mut full } => full,
+            VersionInner::Small { .. } => unreachable!(),
+        }
+    }
+
+    /// Performs a "slow" but complete comparison between two versions.
+    ///
+    /// This comparison is done using only the public API of a `Version`, and
+    /// is thus independent of its specific representation. This is useful
+    /// to use when comparing two versions that aren't *both* the small
+    /// representation.
+    #[cold]
+    #[inline(never)]
+    fn cmp_slow(&self, other: &Version) -> Ordering {
+        match self.epoch().cmp(&other.epoch()) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
+        }
+
+        match compare_release(self.release(), other.release()) {
+            Ordering::Less => {
+                return Ordering::Less;
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                return Ordering::Greater;
+            }
+        }
+
+        // release is equal, so compare the other parts
+        sortable_tuple(self).cmp(&sortable_tuple(other))
     }
 }
 
@@ -448,33 +570,36 @@ impl Serialize for Version {
 /// Shows normalized version
 impl std::fmt::Display for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let epoch = if self.epoch == 0 {
+        let epoch = if self.epoch() == 0 {
             String::new()
         } else {
-            format!("{}!", self.epoch)
+            format!("{}!", self.epoch())
         };
         let release = self
-            .release
+            .release()
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join(".");
         let pre = self
-            .pre
+            .pre()
             .as_ref()
             .map(|(pre_kind, pre_version)| format!("{pre_kind}{pre_version}"))
             .unwrap_or_default();
         let post = self
-            .post
+            .post()
             .map(|post| format!(".post{post}"))
             .unwrap_or_default();
-        let dev = self.dev.map(|dev| format!(".dev{dev}")).unwrap_or_default();
-        let local = if self.local.is_empty() {
+        let dev = self
+            .dev()
+            .map(|dev| format!(".dev{dev}"))
+            .unwrap_or_default();
+        let local = if self.local().is_empty() {
             String::new()
         } else {
             format!(
                 "+{}",
-                self.local
+                self.local()
                     .iter()
                     .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>()
@@ -492,6 +617,7 @@ impl std::fmt::Debug for Version {
 }
 
 impl PartialEq<Self> for Version {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
@@ -501,20 +627,22 @@ impl Eq for Version {}
 
 impl Hash for Version {
     /// Custom implementation to ignoring trailing zero because `PartialEq` zero pads
+    #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.epoch.hash(state);
+        self.epoch().hash(state);
         // Skip trailing zeros
-        for i in self.release.iter().rev().skip_while(|x| **x == 0) {
+        for i in self.release().iter().rev().skip_while(|x| **x == 0) {
             i.hash(state);
         }
-        self.pre.hash(state);
-        self.dev.hash(state);
-        self.post.hash(state);
-        self.local.hash(state);
+        self.pre().hash(state);
+        self.dev().hash(state);
+        self.post().hash(state);
+        self.local().hash(state);
     }
 }
 
 impl PartialOrd<Self> for Version {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -524,29 +652,14 @@ impl Ord for Version {
     /// 1.0.dev456 < 1.0a1 < 1.0a2.dev456 < 1.0a12.dev456 < 1.0a12 < 1.0b1.dev456 < 1.0b2
     /// < 1.0b2.post345.dev456 < 1.0b2.post345 < 1.0b2-346 < 1.0c1.dev456 < 1.0c1 < 1.0rc2 < 1.0c3
     /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.epoch.cmp(&other.epoch) {
-            Ordering::Less => {
-                return Ordering::Less;
+        match (&self.inner, &other.inner) {
+            (VersionInner::Small { small: small1 }, VersionInner::Small { small: small2 }) => {
+                small1.repr.cmp(&small2.repr)
             }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Ordering::Greater;
-            }
+            _ => self.cmp_slow(other),
         }
-
-        match compare_release(&self.release, &other.release) {
-            Ordering::Less => {
-                return Ordering::Less;
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Ordering::Greater;
-            }
-        }
-
-        // release is equal, so compare the other parts
-        sortable_tuple(self).cmp(&sortable_tuple(other))
     }
 }
 
@@ -560,6 +673,329 @@ impl FromStr for Version {
     fn from_str(version: &str) -> Result<Self, Self::Err> {
         Parser::new(version.as_bytes()).parse()
     }
+}
+
+/// A "small" representation of a version.
+///
+/// This representation is used for a (very common) subset of versions: the
+/// set of all versions with ~small numbers and no local component. The
+/// representation is designed to be (somewhat) compact, but also laid out in
+/// a way that makes comparisons between two small versions equivalent to a
+/// simple `memcmp`.
+///
+/// The methods on this type encapsulate the representation. Since this type
+/// cannot represent the full range of all versions, setters on this type will
+/// return `false` if the value could not be stored. In this case, callers
+/// should generally convert a version into its "full" representation and then
+/// set the value on the full type.
+///
+/// # Representation
+///
+/// At time of writing, this representation supports versions that meet all of
+/// the following criteria:
+///
+/// * The epoch must be `0`.
+/// * The release portion must have 4 or fewer segments.
+/// * All release segments, except for the first, must be representable in a
+/// `u8`. The first segment must be representable in a `u16`. (This permits
+/// calendar versions, like `2023.03`, to be represented.)
+/// * There is *at most* one of the following components: pre, dev or post.
+/// * If there is a pre segment, then its numeric value is less than 64.
+/// * If there is a dev or post segment, then its value is less than u8::MAX.
+/// * There are zero "local" segments.
+///
+/// The above constraints were chosen as a balancing point between being able
+/// to represent all parts of a version in a very small amount of space,
+/// and for supporting as many versions in the wild as possible. There is,
+/// however, another constraint in play here: comparisons between two `Version`
+/// values. It turns out that we do a lot of them as part of resolution, and
+/// the cheaper we can make that, the better. This constraint pushes us
+/// toward using as little space as possible. Indeed, here, comparisons are
+/// implemented via `u64::cmp`.
+///
+/// We pack versions fitting the above constraints into a `u64` in such a way
+/// that it preserves the ordering between versions as prescribed in PEP 440.
+/// Namely:
+///
+/// * Bytes 6 and 7 correspond to the first release segment as a `u16`.
+/// * Bytes 5, 4 and 3 correspond to the second, third and fourth release
+/// segments, respectively.
+/// * Byte 2 corresponds to the post-release segment. If there is no
+/// post-release segment, then byte 2 is set to 0x00. This makes "no
+/// post-release" sort before "has post-release." The numeric value
+/// (constrained to be <u8::MAX) has 1 added to it so that 0x00 is reserved to
+/// indicate absence.
+/// * Byte 1 corresponds to the pre-release segment. If there is no pre-release
+/// segment, then byte 1 is set to 0xFF. This makes "no pre-release" sort
+/// after "has pre-release." The most significant two bits of byte 1 encode
+/// the type of pre-release (alpha, beta, rc) while the low 6 bits encode the
+/// pre-release numeric value.
+/// * Byte 0 corresponds to the dev-release segment. If there is no dev-release
+/// segment, then byte 0 is set to 0xFF. This makes "no dev-release" sort after
+/// "has dev-release." The dev-release value (constrainted to be <u8::MAX) is
+/// stored in byte 0 as-is.
+///
+/// The order of the encoding above is significant. For example, the
+/// post-release segment is encoded at a more significant byte in the `u64`
+/// than the pre-release segment because `1.2.3.post1 > 1.2.3rc9999`.
+///
+/// Notice also that nothing about the representation inherently prohibits
+/// storing any combination of pre, dev or post release components. We
+/// could absolutely store all three (assuming they fit into their various
+/// constraints outlined above). But, if we did that, a simple `u64::cmp` would
+/// no longer be correct. For example, `1.0.post456.dev34 < 1.0.post456`, but
+/// in the representation above, it would treat `1.0.post456.dev34` as greater
+/// than `1.0.post456`. To make comparisons cheap for multi-component versions
+/// like that, we'd need to use more space. Thankfully, such versions are
+/// incredibly rare. Virtually all versions have zero or one pre, dev or post
+/// release components.
+#[derive(Clone, Debug)]
+struct VersionSmall {
+    /// The representation discussed above.
+    repr: u64,
+    /// The `u64` numbers in the release component.
+    ///
+    /// These are *only* used to implement the public API `Version::release`
+    /// method. This is necessary in order to provide a `&[u64]` to the caller.
+    /// If we didn't need the public API, or could re-work it, then we could
+    /// get rid of this extra storage. (Which is indeed duplicative of what is
+    /// stored in `repr`.) Note that this uses `u64` not because it can store
+    /// bigger numbers than what's in `repr` (it can't), but so that it permits
+    /// us to return a `&[u64]`.
+    ///
+    /// I believe there is only one way to get rid of this extra storage:
+    /// change the public API so that it doesn't return a `&[u64]`. Instead,
+    /// we'd return a new type that conceptually represents a `&[u64]`, but may
+    /// use a different representation based on what kind of `Version` it came
+    /// from. The downside of this approach is that one loses the flexibility
+    /// of a simple `&[u64]`. (Which, at time of writing, is taken advantage of
+    /// in several places via slice patterns.) But, if we needed to change it,
+    /// we could do it without losing expressivity, but losing convenience.
+    release: [u64; 4],
+    /// The number of segments in the release component.
+    ///
+    /// Strictly speaking, this isn't necessary since `1.2` is considered
+    /// equivalent to `1.2.0.0`. But in practice it's nice to be able
+    /// to truncate the zero components. And always filling out to 4
+    /// places somewhat exposes internal details, since the "full" version
+    /// representation would not do that.
+    len: u8,
+}
+
+impl VersionSmall {
+    #[inline]
+    fn new() -> VersionSmall {
+        VersionSmall {
+            repr: 0x00000000_0000FFFF,
+            release: [0, 0, 0, 0],
+            len: 0,
+        }
+    }
+
+    #[inline]
+    fn epoch(&self) -> u64 {
+        0
+    }
+
+    #[inline]
+    fn set_epoch(&mut self, value: u64) -> bool {
+        if value != 0 {
+            return false;
+        }
+        true
+    }
+
+    #[inline]
+    fn release(&self) -> &[u64] {
+        &self.release[..usize::from(self.len)]
+    }
+
+    #[inline]
+    fn clear_release(&mut self) {
+        self.repr &= !0xFFFFFFFF_FF000000;
+        self.release = [0, 0, 0, 0];
+        self.len = 0;
+    }
+
+    #[inline]
+    fn push_release(&mut self, n: u64) -> bool {
+        if self.len == 0 {
+            if n > u64::from(u16::MAX) {
+                return false;
+            }
+            self.repr |= n << 48;
+            self.release[0] = n;
+            self.len = 1;
+            true
+        } else {
+            if n > u64::from(u8::MAX) {
+                return false;
+            }
+            if self.len >= 4 {
+                return false;
+            }
+            let shift = 48 - (usize::from(self.len) * 8);
+            self.repr |= n << shift;
+            self.release[usize::from(self.len)] = n;
+            self.len += 1;
+            true
+        }
+    }
+
+    #[inline]
+    fn post(&self) -> Option<u64> {
+        let v = (self.repr >> 16) & 0xFF;
+        if v == 0 {
+            None
+        } else {
+            Some(v - 1)
+        }
+    }
+
+    #[inline]
+    fn set_post(&mut self, value: Option<u64>) -> bool {
+        if value.is_some() && (self.pre().is_some() || self.dev().is_some()) {
+            return false;
+        }
+        match value {
+            None => {
+                self.repr &= !(0xFF << 16);
+            }
+            Some(number) => {
+                if number > 0b1111_1110 {
+                    return false;
+                }
+                self.repr &= !(0xFF << 16);
+                self.repr |= (number + 1) << 16;
+            }
+        }
+        true
+    }
+
+    #[inline]
+    fn pre(&self) -> Option<(PreRelease, u64)> {
+        let v = (self.repr >> 8) & 0xFF;
+        if v == 0xFF {
+            return None;
+        }
+        let number = v & 0b0011_1111;
+        let kind = match v >> 6 {
+            0 => PreRelease::Alpha,
+            1 => PreRelease::Beta,
+            2 => PreRelease::Rc,
+            _ => unreachable!(),
+        };
+        Some((kind, number))
+    }
+
+    #[inline]
+    fn set_pre(&mut self, value: Option<(PreRelease, u64)>) -> bool {
+        if value.is_some() && (self.post().is_some() || self.dev().is_some()) {
+            return false;
+        }
+        match value {
+            None => {
+                self.repr |= 0xFF << 8;
+            }
+            Some((kind, number)) => {
+                if number > 0b0011_1111 {
+                    return false;
+                }
+                let kind = match kind {
+                    PreRelease::Alpha => 0,
+                    PreRelease::Beta => 1,
+                    PreRelease::Rc => 2,
+                };
+                self.repr &= !(0xFF << 8);
+                self.repr |= ((kind << 6) | number) << 8;
+            }
+        }
+        true
+    }
+
+    #[inline]
+    fn dev(&self) -> Option<u64> {
+        let v = self.repr & 0xFF;
+        if v == 0xFF {
+            None
+        } else {
+            Some(v)
+        }
+    }
+
+    #[inline]
+    fn set_dev(&mut self, value: Option<u64>) -> bool {
+        if value.is_some() && (self.pre().is_some() || self.post().is_some()) {
+            return false;
+        }
+        match value {
+            None => {
+                self.repr |= 0xFF;
+            }
+            Some(number) => {
+                if number > 0b1111_1110 {
+                    return false;
+                }
+                self.repr &= !0xFF;
+                self.repr |= number;
+            }
+        }
+        true
+    }
+
+    #[inline]
+    fn local(&self) -> &[LocalSegment] {
+        // A "small" version is never used if the version has a non-zero number
+        // of local segments.
+        &[]
+    }
+}
+
+/// The "full" representation of a version.
+///
+/// This can represent all possible versions, but is a bit beefier because of
+/// it. It also uses some indirection for variable length data such as the
+/// release numbers and the local segments.
+///
+/// In general, the "full" representation is rarely used in practice since most
+/// versions will fit into the "small" representation.
+#[derive(Clone, Debug)]
+struct VersionFull {
+    /// The [versioning
+    /// epoch](https://peps.python.org/pep-0440/#version-epochs). Normally
+    /// just 0, but you can increment it if you switched the versioning
+    /// scheme.
+    epoch: u64,
+    /// The normal number part of the version (["final
+    /// release"](https://peps.python.org/pep-0440/#final-releases)), such
+    /// a `1.2.3` in `4!1.2.3-a8.post9.dev1`
+    ///
+    /// Note that we drop the * placeholder by moving it to `Operator`
+    release: Vec<u64>,
+    /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases),
+    /// i.e. alpha, beta or rc plus a number
+    ///
+    /// Note that whether this is Some influences the version range
+    /// matching since normally we exclude all prerelease versions
+    pre: Option<(PreRelease, u64)>,
+    /// The [Post release
+    /// version](https://peps.python.org/pep-0440/#post-releases), higher
+    /// post version are preferred over lower post or none-post versions
+    post: Option<u64>,
+    /// The [developmental
+    /// release](https://peps.python.org/pep-0440/#developmental-releases),
+    /// if any
+    dev: Option<u64>,
+    /// A [local version
+    /// identifier](https://peps.python.org/pep-0440/#local-version-identif
+    /// iers) such as `+deadbeef` in `1.2.3+deadbeef`
+    ///
+    /// > They consist of a normal public version identifier (as defined
+    /// > in the previous section), along with an arbitrary “local version
+    /// > label”, separated from the public version identifier by a plus.
+    /// > Local version labels have no specific semantics assigned, but
+    /// > some syntactic restrictions are imposed.
+    local: Vec<LocalSegment>,
 }
 
 /// A version number pattern.
@@ -821,14 +1257,14 @@ impl<'a> Parser<'a> {
     /// If the version string is not in the format of `w[.x[.y[.z]]]`, then
     /// this returns `None`.
     fn parse_fast(&self) -> Option<VersionPattern> {
-        let (mut prev_digit, mut cur, mut release, mut len) = (false, 0u64, [0u64; 4], 0);
+        let (mut prev_digit, mut cur, mut release, mut len) = (false, 0u8, [0u8; 4], 0u8);
         for &byte in self.v {
             if byte == b'.' {
                 if !prev_digit {
                     return None;
                 }
                 prev_digit = false;
-                *release.get_mut(len)? = cur;
+                *release.get_mut(usize::from(len))? = cur;
                 len += 1;
                 cur = 0;
             } else {
@@ -837,22 +1273,36 @@ impl<'a> Parser<'a> {
                     return None;
                 }
                 prev_digit = true;
-                cur = cur.checked_mul(10)?.checked_add(u64::from(digit))?;
+                cur = cur.checked_mul(10)?.checked_add(digit)?;
             }
         }
         if !prev_digit {
             return None;
         }
-        *release.get_mut(len)? = cur;
+        *release.get_mut(usize::from(len))? = cur;
         len += 1;
-        let version = Version {
-            epoch: 0,
-            release: release[..len].to_vec(),
-            pre: None,
-            post: None,
-            dev: None,
-            local: vec![],
+        let small = VersionSmall {
+            // Clippy warns about no-ops like `(0x00 << 16)`, but I
+            // think it makes the bit logic much clearer, and makes it
+            // explicit that nothing was forgotten.
+            #[allow(clippy::identity_op)]
+            repr: (u64::from(release[0]) << 48)
+                | (u64::from(release[1]) << 40)
+                | (u64::from(release[2]) << 32)
+                | (u64::from(release[3]) << 24)
+                | (0x00 << 16)
+                | (0xFF << 8)
+                | (0xFF << 0),
+            release: [
+                u64::from(release[0]),
+                u64::from(release[1]),
+                u64::from(release[2]),
+                u64::from(release[3]),
+            ],
+            len,
         };
+        let inner = VersionInner::Small { small };
+        let version = Version { inner };
         Some(VersionPattern {
             version,
             wildcard: false,
@@ -1080,14 +1530,12 @@ impl<'a> Parser<'a> {
             self.release.len() > 0,
             "version with no release numbers is invalid"
         );
-        let version = Version {
-            epoch: self.epoch,
-            release: self.release.into_numbers(),
-            pre: self.pre,
-            post: self.post,
-            dev: self.dev,
-            local: self.local,
-        };
+        let version = Version::new(self.release.as_slice())
+            .with_epoch(self.epoch)
+            .with_pre(self.pre)
+            .with_post(self.post)
+            .with_dev(self.dev)
+            .with_local(self.local);
         VersionPattern {
             version,
             wildcard: self.wildcard,
@@ -1233,17 +1681,14 @@ impl ReleaseNumbers {
 
     /// Returns the number of components in this release component.
     fn len(&self) -> usize {
-        match *self {
-            ReleaseNumbers::Inline { len, .. } => len,
-            ReleaseNumbers::Vec(ref vec) => vec.len(),
-        }
+        self.as_slice().len()
     }
 
-    /// Consume this component into a `Vec<u64>`.
-    fn into_numbers(self) -> Vec<u64> {
-        match self {
-            ReleaseNumbers::Inline { numbers, len } => numbers[..len].to_vec(),
-            ReleaseNumbers::Vec(vec) => vec,
+    /// Returns the release components as a slice.
+    fn as_slice(&self) -> &[u64] {
+        match *self {
+            ReleaseNumbers::Inline { ref numbers, len } => &numbers[..len],
+            ReleaseNumbers::Vec(ref vec) => vec,
         }
     }
 }
@@ -2714,6 +3159,47 @@ mod tests {
         assert_eq!(p("2!*"), ErrorKind::NoLeadingReleaseNumber.into());
     }
 
+    // Tests that the ordering between versions is correct.
+    //
+    // The ordering example used here was taken from PEP 440:
+    // https://packaging.python.org/en/latest/specifications/version-specifiers/#summary-of-permitted-suffixes-and-relative-ordering
+    #[test]
+    fn ordering() {
+        let versions = &[
+            "1.dev0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0.15",
+            "1.1.dev1",
+        ];
+        for pair in versions.windows(2) {
+            let less = pair[0].parse::<Version>().unwrap();
+            let greater = pair[1].parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+    }
+
     // Tests our bespoke u64 decimal integer parser.
     #[test]
     fn parse_number_u64() {
@@ -2786,7 +3272,7 @@ mod tests {
     }
 
     impl Version {
-        fn as_bloated_debug(&self) -> VersionBloatedDebug<'_> {
+        pub(crate) fn as_bloated_debug(&self) -> impl std::fmt::Debug + '_ {
             VersionBloatedDebug(self)
         }
     }

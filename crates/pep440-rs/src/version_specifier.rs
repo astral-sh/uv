@@ -1101,12 +1101,14 @@ mod tests {
             ("2.0.5", ">2.0dev"),
         ];
 
-        for (version, specifier) in pairs {
+        for (s_version, s_spec) in pairs {
+            let version = s_version.parse::<Version>().unwrap();
+            let spec = s_spec.parse::<VersionSpecifier>().unwrap();
             assert!(
-                VersionSpecifier::from_str(specifier)
-                    .unwrap()
-                    .contains(&Version::from_str(version).unwrap()),
-                "{version} {specifier}"
+                spec.contains(&version),
+                "{s_version} {s_spec}\nversion repr: {:?}\nspec version repr: {:?}",
+                version.as_bloated_debug(),
+                spec.version.as_bloated_debug(),
             );
         }
     }
