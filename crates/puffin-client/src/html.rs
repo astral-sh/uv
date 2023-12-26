@@ -15,7 +15,7 @@ pub(crate) struct SimpleHtml {
 impl SimpleHtml {
     /// Parse the list of [`File`]s from the simple HTML page returned by the given URL.
     pub(crate) fn parse(text: &str, url: &Url) -> Result<Self, Error> {
-        let dom = tl::parse(text, tl::ParserOptions::default()).unwrap();
+        let dom = tl::parse(text, tl::ParserOptions::default())?;
 
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
         // relative URLs should be resolved. The HTML spec requires that the `<base>` tag
@@ -49,7 +49,7 @@ impl SimpleHtml {
             return Ok(None);
         };
         let href = std::str::from_utf8(href.as_bytes())?;
-        let url = Url::parse(href)?;
+        let url = Url::parse(href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
         Ok(Some(url))
     }
 
@@ -89,7 +89,9 @@ impl SimpleHtml {
             .flatten()
             .ok_or_else(|| Error::MissingHref(base.clone()))?;
         let href = std::str::from_utf8(href.as_bytes())?;
-        let url = base.join(href)?;
+        let url = base
+            .join(href)
+            .map_err(|err| Error::UrlParse(href.to_string(), err))?;
 
         // Extract the filename from the body text, which MUST match that of
         // the final path component of the URL.
@@ -164,8 +166,11 @@ pub enum Error {
     #[error(transparent)]
     Utf8(#[from] std::str::Utf8Error),
 
+    #[error("Failed to parse URL: {0}")]
+    UrlParse(String, #[source] url::ParseError),
+
     #[error(transparent)]
-    UrlParse(#[from] url::ParseError),
+    HtmlParse(#[from] tl::ParseError),
 
     #[error("Missing href attribute on URL: {0}")]
     MissingHref(Url),
