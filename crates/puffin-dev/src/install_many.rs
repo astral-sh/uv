@@ -71,7 +71,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
 
     for (idx, requirements) in requirements.chunks(100).enumerate() {
         info!("Chunk {idx}");
-        install_chunk(
+        if let Err(err) = install_chunk(
             requirements,
             &build_dispatch,
             tags,
@@ -79,7 +79,13 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
             &venv,
             &index_urls,
         )
-        .await?;
+        .await
+        {
+            eprintln!("💥 Chunk {idx} failed");
+            for cause in err.chain() {
+                eprintln!("  Caused by: {cause}");
+            }
+        }
     }
 
     Ok(())
@@ -102,7 +108,9 @@ async fn install_chunk(
     for failure in &failures {
         info!("Failed to find wheel: {failure}");
     }
-    info!("Failed to find {} wheel(s)", failures.len());
+    if !failures.is_empty() {
+        info!("Failed to find {} wheel(s)", failures.len());
+    }
     let wheels_and_source_dist = resolution.len();
     let resolution = if build_dispatch.no_build() {
         let only_wheels: FxHashMap<_, _> = resolution
@@ -150,7 +158,9 @@ async fn install_chunk(
     for failure in &failures {
         info!("Failed to fetch wheel: {failure}");
     }
-    info!("Failed to fetch {} wheel(s)", failures.len());
+    if !failures.is_empty() {
+        info!("Failed to fetch {} wheel(s)", failures.len());
+    }
 
     let wheels: Vec<_> = wheels.into_iter().chain(cached).collect();
     puffin_installer::Installer::new(venv)

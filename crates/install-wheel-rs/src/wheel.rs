@@ -394,17 +394,18 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
     // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
     let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
 
-    let Some(wheel_version) = data.get("Wheel-Version").and_then(|wheel_versions| {
-        if let [wheel_version] = wheel_versions.as_slice() {
-            wheel_version.split_once('.')
-        } else {
-            None
-        }
-    }) else {
-        return Err(Error::InvalidWheel(
-            "Invalid Wheel-Version in WHEEL file".to_string(),
-        ));
-    };
+    // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
+    // like pip
+    let wheel_version = data
+        .get("Wheel-Version")
+        .and_then(|wheel_versions| wheel_versions.first());
+    let wheel_version = wheel_version
+        .and_then(|wheel_version| wheel_version.split_once('.'))
+        .ok_or_else(|| {
+            Error::InvalidWheel(format!(
+                "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
+            ))
+        })?;
     // pip has some test wheels that use that ancient version,
     // and technically we only need to check that the version is not higher
     if wheel_version == ("0", "1") {

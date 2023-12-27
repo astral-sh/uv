@@ -110,6 +110,13 @@ impl CachedDist {
             CachedDist::Url(dist) => dist.editable,
         }
     }
+
+    pub fn filename(&self) -> &WheelFilename {
+        match self {
+            CachedDist::Registry(dist) => &dist.filename,
+            CachedDist::Url(dist) => &dist.filename,
+        }
+    }
 }
 
 impl CachedDirectUrlDist {
