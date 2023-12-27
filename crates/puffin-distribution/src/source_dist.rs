@@ -231,9 +231,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
-                let url = Url::parse(&registry_source_dist.file.url).map_err(|err| {
-                    SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
-                })?;
+                let url = registry_source_dist
+                    .base
+                    .join_relative(&registry_source_dist.file.url)
+                    .map_err(|err| {
+                        SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
+                    })?;
 
                 // For registry source distributions, shard by package, then by SHA.
                 // Ex) `pypi/requests/a673187abc19fe6c`

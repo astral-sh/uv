@@ -28,7 +28,7 @@ use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, OnceMap};
-use pypi_types::Metadata21;
+use pypi_types::{BaseUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
@@ -44,7 +44,7 @@ use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 use crate::ResolutionOptions;
 
-type VersionMapResponse = Result<(IndexUrl, VersionMap), puffin_client::Error>;
+type VersionMapResponse = Result<(IndexUrl, BaseUrl, VersionMap), puffin_client::Error>;
 type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
 
 pub trait ResolverProvider: Send + Sync {
@@ -113,9 +113,10 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         Box::pin(
             self.client
                 .simple(package_name)
-                .map_ok(move |(index, metadata)| {
+                .map_ok(move |(index, base, metadata)| {
                     (
                         index,
+                        base,
                         VersionMap::from_metadata(
                             metadata,
                             package_name,
@@ -479,7 +480,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             let Some(entry) = self.index.packages.get(package_name) else {
                 continue;
             };
-            let (index, version_map) = entry.value();
+            let (index, base, version_map) = entry.value();
 
             // Try to find a compatible version. If there aren't any compatible versions,
             // short-circuit and return `None`.
@@ -490,7 +491,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             // Emit a request to fetch the metadata for this version.
             if self.index.distributions.register(&candidate.package_id()) {
-                let distribution = candidate.into_distribution(index.clone());
+                let distribution = candidate.into_distribution(index.clone(), base.clone());
                 request_sink.unbounded_send(Request::Dist(distribution))?;
             }
         }
@@ -553,7 +554,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await;
-                let (index, version_map) = entry.value();
+                let (index, base, version_map) = entry.value();
 
                 if let Some(extra) = extra {
                     debug!(
@@ -588,13 +589,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
-                pins.insert(&candidate, index);
+                pins.insert(&candidate, index, base);
 
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(&candidate.package_id()) {
-                    let distribution = candidate.into_distribution(index.clone());
+                    let distribution = candidate.into_distribution(index.clone(), base.clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
 
@@ -698,9 +699,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         while let Some(response) = response_stream.next().await {
             match response? {
-                Response::Package(package_name, index, version_map) => {
+                Response::Package(package_name, index, base, version_map) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index.packages.done(package_name, (index, version_map));
+                    self.index
+                        .packages
+                        .done(package_name, (index, base, version_map));
                 }
                 Response::Dist(Dist::Built(distribution), metadata, ..) => {
                     trace!("Received built distribution metadata for: {distribution}");
@@ -738,12 +741,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         match request {
             // Fetch package metadata from the registry.
             Request::Package(package_name) => {
-                let (index, metadata) = self
+                let (index, base, metadata) = self
                     .provider
                     .get_version_map(&package_name)
                     .await
                     .map_err(ResolveError::Client)?;
-                Ok(Response::Package(package_name, index, metadata))
+                Ok(Response::Package(package_name, index, base, metadata))
             }
 
             Request::Dist(dist) => {
@@ -848,7 +851,7 @@ enum Request {
 #[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, IndexUrl, VersionMap),
+    Package(PackageName, IndexUrl, BaseUrl, VersionMap),
     /// The returned metadata for a distribution.
     Dist(Dist, Metadata21, Option<Url>),
 }
@@ -858,7 +861,7 @@ enum Response {
 pub(crate) struct Index {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
-    pub(crate) packages: OnceMap<PackageName, (IndexUrl, VersionMap)>,
+    pub(crate) packages: OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
 
     /// A map from distribution SHA to metadata for that distribution.
     pub(crate) distributions: OnceMap<PackageId, Metadata21>,

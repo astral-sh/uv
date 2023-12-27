@@ -6,7 +6,7 @@ use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, IndexUrl, Resolution};
+use distribution_types::{Dist, File, Resolution};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagPriority, Tags};
@@ -53,12 +53,18 @@ impl<'a> DistFinder<'a> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
-                let (index, metadata) = self.client.simple(&requirement.name).await?;
+                let (index, base, metadata) = self.client.simple(&requirement.name).await?;
 
                 // Pick a version that satisfies the requirement.
-                let Some(distribution) = self.select(requirement, &index, metadata) else {
+                let Some(ParsedFile {
+                    name,
+                    version,
+                    file,
+                }) = self.select(requirement, metadata)
+                else {
                     return Err(ResolveError::NotFound(requirement.clone()));
                 };
+                let distribution = Dist::from_registry(name, version, file, index, base);
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&distribution);
@@ -103,15 +109,10 @@ impl<'a> DistFinder<'a> {
     }
 
     /// select a version that satisfies the requirement, preferring wheels to source distributions.
-    fn select(
-        &self,
-        requirement: &Requirement,
-        index: &IndexUrl,
-        metadata: SimpleMetadata,
-    ) -> Option<Dist> {
+    fn select(&self, requirement: &Requirement, metadata: SimpleMetadata) -> Option<ParsedFile> {
         let mut best_version: Option<Version> = None;
-        let mut best_wheel: Option<(Dist, TagPriority)> = None;
-        let mut best_sdist: Option<Dist> = None;
+        let mut best_wheel: Option<(ParsedFile, TagPriority)> = None;
+        let mut best_sdist: Option<ParsedFile> = None;
 
         for (version, files) in metadata.into_iter().rev() {
             // If we iterated past the first-compatible version, break.
@@ -151,7 +152,11 @@ impl<'a> DistFinder<'a> {
                         .map_or(true, |(.., existing)| priority > *existing)
                     {
                         best_wheel = Some((
-                            Dist::from_registry(wheel.name, wheel.version, file, index.clone()),
+                            ParsedFile {
+                                name: wheel.name,
+                                version: wheel.version,
+                                file,
+                            },
                             priority,
                         ));
                     }
@@ -177,18 +182,27 @@ impl<'a> DistFinder<'a> {
                     }
 
                     best_version = Some(sdist.version.clone());
-                    best_sdist = Some(Dist::from_registry(
-                        sdist.name,
-                        sdist.version,
+                    best_sdist = Some(ParsedFile {
+                        name: sdist.name,
+                        version: sdist.version,
                         file,
-                        index.clone(),
-                    ));
+                    });
                 }
             }
         }
 
         best_wheel.map_or(best_sdist, |(wheel, ..)| Some(wheel))
     }
+}
+
+#[derive(Debug)]
+struct ParsedFile {
+    /// The [`PackageName`] extracted from the [`File`].
+    name: PackageName,
+    /// The version extracted from the [`File`].
+    version: Version,
+    /// The underlying [`File`].
+    file: File,
 }
 
 pub trait Reporter: Send + Sync {
