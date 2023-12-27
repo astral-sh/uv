@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "has-dir"
+version = "0.1.0"
+description = ""
+authors = ["konstin <konstin@mailbox.org>"]
+readme = "README.md"
+packages = [
+    { include = "requirements" },
+]
+include = ["conflicting2"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,2 @@
+has_dir @ file://${PWD}/scripts/dir_file_conflict/has_dir/dist/has_dir-0.1.0-py3-none-any.whl
+has_file @ file://${PWD}/scripts/dir_file_conflict/has_file/dist/has_file-0.1.0-py3-none-any.whl
