@@ -19,9 +19,8 @@ static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.(\d|\*))+,$").unwrap());
-/// Ex) `>= '2.7'`
-static INVALID_QUOTES: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"((?:~=|==|!=|<=|>=|<|>|===) )*['"](\d(?:\.\d)*)['"]"#).unwrap());
+/// Ex) `>= '2.7'`, `>=3.6'`
+static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]"#).unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -45,7 +44,7 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     // Given `>=3.6,`, rewrite to `>=3.6`
     (&TRAILING_COMMA, r"${1}", "removing trailing comma"),
     // Given `>= '2.7'`, rewrite to `>= 2.7`
-    (&INVALID_QUOTES, r"${1}${2}", "removing invalid quotes"),
+    (&STRAY_QUOTES, r"", "removing stray quotes"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
@@ -281,6 +280,23 @@ mod tests {
                 .into();
         let expected: VersionSpecifiers =
             VersionSpecifiers::from_str(">=2.7,!=3.0.*,!=3.1.*,<3.4").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://pypi.org/simple/algoliasearch/?format=application/vnd.pypi.simple.v1+json>
+    /// <https://pypi.org/simple/okta/?format=application/vnd.pypi.simple.v1+json>
+    #[test]
+    fn stray_quote() {
+        let actual: VersionSpecifiers =
+            LenientVersionSpecifiers::from_str(">=2.7, !=3.0.*, !=3.1.*', !=3.2.*, !=3.3.*'")
+                .unwrap()
+                .into();
+        let expected: VersionSpecifiers =
+            VersionSpecifiers::from_str(">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*").unwrap();
+        assert_eq!(actual, expected);
+        let actual: VersionSpecifiers =
+            LenientVersionSpecifiers::from_str(">=3.6'").unwrap().into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.6").unwrap();
         assert_eq!(actual, expected);
     }
 }
