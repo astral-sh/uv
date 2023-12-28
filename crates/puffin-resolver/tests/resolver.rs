@@ -3,9 +3,7 @@
 //! Integration tests for the resolver. These tests rely on a live network connection, and hit
 //! `PyPI` directly.
 
-use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -51,45 +49,37 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    fn resolve<'a>(
-        &'a self,
-        _requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'a>> {
+    async fn resolve<'a>(&'a self, _requirements: &'a [Requirement]) -> Result<Resolution> {
         panic!("The test should not need to build source distributions")
     }
 
-    fn install<'a>(
+    async fn install<'a>(
         &'a self,
         _resolution: &'a Resolution,
         _venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+    ) -> Result<()> {
         panic!("The test should not need to build source distributions")
     }
 
-    fn setup_build<'a>(
+    async fn setup_build<'a>(
         &'a self,
         _source: &'a Path,
         _subdirectory: Option<&'a Path>,
         _package_id: &'a str,
         _build_kind: BuildKind,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a>> {
-        Box::pin(async { Ok(DummyBuilder) })
+    ) -> Result<Self::SourceDistBuilder> {
+        Ok(DummyBuilder)
     }
 }
 
 struct DummyBuilder;
 
 impl SourceBuildTrait for DummyBuilder {
-    fn metadata<'a>(
-        &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<PathBuf>>> + Send + 'a>> {
+    async fn metadata(&mut self) -> Result<Option<PathBuf>> {
         panic!("The test should not need to build source distributions")
     }
 
-    fn wheel<'a>(
-        &'a self,
-        _wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
+    async fn wheel<'a>(&'a self, _wheel_dir: &'a Path) -> Result<String> {
         panic!("The test should not need to build source distributions")
     }
 }

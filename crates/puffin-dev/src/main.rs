@@ -58,7 +58,7 @@ enum Cli {
     ResolveMany(ResolveManyArgs),
     InstallMany(InstallManyArgs),
     /// Resolve requirements passed on the CLI
-    ResolveCli(ResolveCliArgs),
+    Resolve(ResolveCliArgs),
     WheelMetadata(WheelMetadataArgs),
 }
 
@@ -75,7 +75,7 @@ async fn run() -> Result<()> {
         Cli::InstallMany(args) => {
             install_many::install_many(args).await?;
         }
-        Cli::ResolveCli(args) => {
+        Cli::Resolve(args) => {
             resolve_cli::resolve_cli(args).await?;
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,

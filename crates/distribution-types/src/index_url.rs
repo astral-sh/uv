@@ -105,3 +105,11 @@ impl<'a> IntoIterator for &'a IndexUrls {
         self.index.iter().chain(self.extra_index.iter())
     }
 }
+
+impl<'a> IndexUrls {
+    pub fn iter(
+        &'a self,
+    ) -> Chain<std::option::Iter<'a, IndexUrl>, std::slice::Iter<'a, IndexUrl>> {
+        self.into_iter()
+    }
+}
