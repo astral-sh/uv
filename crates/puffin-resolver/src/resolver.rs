@@ -1,7 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -52,7 +51,7 @@ pub trait ResolverProvider: Send + Sync {
     fn get_version_map<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> Pin<Box<dyn Future<Output = VersionMapResponse> + Send + 'io>>;
+    ) -> impl Future<Output = VersionMapResponse> + Send + 'io;
 
     /// Get the metadata for a distribution.
     ///
@@ -62,7 +61,7 @@ pub trait ResolverProvider: Send + Sync {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
-    ) -> Pin<Box<dyn Future<Output = WheelMetadataResponse> + Send + 'io>>;
+    ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -109,7 +108,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     fn get_version_map<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> Pin<Box<dyn Future<Output = VersionMapResponse> + Send + 'io>> {
+    ) -> impl Future<Output = VersionMapResponse> + Send + 'io {
         Box::pin(
             self.client
                 .simple(package_name)
@@ -134,7 +133,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
-    ) -> Pin<Box<dyn Future<Output = WheelMetadataResponse> + Send + 'io>> {
+    ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io {
         Box::pin(self.fetcher.get_or_build_wheel_metadata(dist))
     }
 

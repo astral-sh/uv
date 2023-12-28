@@ -8,7 +8,6 @@ use std::future::Future;
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -544,16 +543,14 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
-    fn metadata<'a>(
-        &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<PathBuf>>> + Send + 'a>> {
+    fn metadata(&mut self) -> impl Future<Output = anyhow::Result<Option<PathBuf>>> + Send {
         Box::pin(async { Ok(self.get_metadata_without_build().await?) })
     }
 
     fn wheel<'a>(
         &'a self,
         wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+    ) -> impl Future<Output = anyhow::Result<String>> + Send + 'a {
         Box::pin(async { Ok(self.build(wheel_dir).await?) })
     }
 }

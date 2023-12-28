@@ -4,7 +4,6 @@
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -86,7 +85,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'data>> {
+    ) -> impl Future<Output = Result<Resolution>> + Send + 'data {
         Box::pin(async {
             let markers = self.interpreter.markers();
             let tags = self.interpreter.tags()?;
@@ -119,7 +118,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'data>> {
+    ) -> impl Future<Output = Result<()>> + Send + 'data {
         Box::pin(async move {
             debug!(
                 "Installing in {} in {}",
@@ -223,7 +222,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         subdirectory: Option<&'data Path>,
         package_id: &'data str,
         build_kind: BuildKind,
-    ) -> Pin<Box<dyn Future<Output = Result<SourceBuild>> + Send + 'data>> {
+    ) -> impl Future<Output = Result<SourceBuild>> + Send + 'data {
         Box::pin(async move {
             if self.no_build {
                 bail!("Building source distributions is disabled");

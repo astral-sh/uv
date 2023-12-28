@@ -3,7 +3,6 @@
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 
 use anyhow::Result;
 
@@ -77,7 +76,7 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> Pin<Box<dyn Future<Output = Result<Resolution>> + Send + 'a>>;
+    ) -> impl Future<Output = Result<Resolution>> + Send + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base python as [`BuildContext::base_python`]
@@ -85,7 +84,7 @@ pub trait BuildContext {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a Virtualenv,
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+    ) -> impl Future<Output = Result<()>> + Send + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for
     /// `puffin_build::SourceBuild::setup`.
@@ -99,7 +98,7 @@ pub trait BuildContext {
         subdirectory: Option<&'a Path>,
         package_id: &'a str,
         build_kind: BuildKind,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a>>;
+    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a;
 }
 
 /// A wrapper for `puffin_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -113,19 +112,15 @@ pub trait SourceBuildTrait {
     ///
     /// Returns the metadata directory if we're having a PEP 517 build and the
     /// `prepare_metadata_for_build_wheel` hook exists
-    fn metadata<'a>(
-        &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<PathBuf>>> + Send + 'a>>;
+    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>> + Send;
 
     /// A wrapper for `puffin_build::SourceBuild::build`.
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
-    fn wheel<'a>(
-        &'a self,
-        wheel_dir: &'a Path,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>;
+    fn wheel<'a>(&'a self, wheel_dir: &'a Path)
+        -> impl Future<Output = Result<String>> + Send + 'a;
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
