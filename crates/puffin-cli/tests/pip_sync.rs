@@ -2475,3 +2475,43 @@ fn sync_editable_and_registry() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn incompatible_wheel() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let wheel_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let wheel = wheel_dir.child("foo-1.2.3-not-compatible-wheel.whl");
+    wheel.touch()?;
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("foo @ file://{}", wheel.path().display()))?;
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    let wheel_dir = wheel_dir.path().display().to_string();
+    filters.push((&wheel_dir, "[TEMP_DIR]"));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Failed to determine installation plan
+          Caused by: A path dependency is not compatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
+        "###);
+    });
+
+    Ok(())
+}
