@@ -13,7 +13,7 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{ResolvableFile, VersionMap};
 use crate::{Manifest, ResolutionOptions};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PreReleaseStrategy,
@@ -35,10 +35,22 @@ impl CandidateSelector {
             preferences: Preferences::from(manifest.preferences.as_slice()),
         }
     }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn resolution_strategy(&self) -> &ResolutionStrategy {
+        &self.resolution_strategy
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
+        &self.prerelease_strategy
+    }
 }
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Preferences(FxHashMap<PackageName, PubGrubVersion>);
 
 impl Preferences {

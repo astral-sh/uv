@@ -290,7 +290,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 resolution.map_err(|err| {
                     // Add version information to improve unsat error messages
                     if let ResolveError::NoSolution(err) = err {
-                        ResolveError::NoSolution(err.update_available_versions(&self.index.packages))
+                        ResolveError::NoSolution(err.with_available_versions(&self.index.packages).with_selector(self.selector.clone()))
                     } else {
                         err
                     }

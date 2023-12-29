@@ -18,7 +18,7 @@ pub enum ResolutionMode {
 
 /// Like [`ResolutionMode`], but with any additional information required to select a candidate,
 /// like the set of direct dependencies.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum ResolutionStrategy {
     /// Resolve the highest compatible version of each package.
     Highest,

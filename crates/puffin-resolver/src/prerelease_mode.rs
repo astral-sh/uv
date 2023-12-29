@@ -27,7 +27,7 @@ pub enum PreReleaseMode {
 
 /// Like [`PreReleaseMode`], but with any additional information required to select a candidate,
 /// like the set of direct dependencies.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum PreReleaseStrategy {
     /// Disallow all pre-release versions.
     Disallow,

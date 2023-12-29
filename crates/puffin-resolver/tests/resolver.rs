@@ -636,6 +636,33 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
     Ok(())
 }
 
+/// Resolve `msgraph-sdk==1.0.0`, which depends on `msgraph-core>=1.0.0a2`. The resolver should
+/// fail with a pre-release-centric hint.
+#[tokio::test]
+async fn msgraph_sdk() -> Result<()> {
+    colored::control::set_override(false);
+
+    let manifest = Manifest::simple(vec![Requirement::from_str("msgraph-sdk==1.0.0").unwrap()]);
+    let options = ResolutionOptions::new(
+        ResolutionMode::default(),
+        PreReleaseMode::default(),
+        Some(*EXCLUDE_NEWER),
+    );
+
+    let err = resolve(manifest, options, &MARKERS_311, &TAGS_311)
+        .await
+        .unwrap_err();
+
+    insta::assert_display_snapshot!(err, @r###"
+    Because there is no version of msgraph-core available matching >=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, msgraph-sdk==1.0.0 is forbidden.
+    And because root depends on msgraph-sdk==1.0.0, version solving failed.
+
+    hint: msgraph-core was requested with a pre-release marker (e.g., >=1.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    "###);
+
+    Ok(())
+}
+
 static MARKERS_311: Lazy<MarkerEnvironment> = Lazy::new(|| {
     MarkerEnvironment {
         implementation_name: "cpython".to_string(),
