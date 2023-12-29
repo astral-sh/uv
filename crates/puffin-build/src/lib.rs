@@ -4,7 +4,6 @@
 
 use std::env;
 use std::fmt::{Display, Formatter};
-use std::future::Future;
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
@@ -543,15 +542,12 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
-    fn metadata(&mut self) -> impl Future<Output = anyhow::Result<Option<PathBuf>>> + Send {
-        Box::pin(async { Ok(self.get_metadata_without_build().await?) })
+    async fn metadata(&mut self) -> anyhow::Result<Option<PathBuf>> {
+        Ok(self.get_metadata_without_build().await?)
     }
 
-    fn wheel<'a>(
-        &'a self,
-        wheel_dir: &'a Path,
-    ) -> impl Future<Output = anyhow::Result<String>> + Send + 'a {
-        Box::pin(async { Ok(self.build(wheel_dir).await?) })
+    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
+        Ok(self.build(wheel_dir).await?)
     }
 }
 

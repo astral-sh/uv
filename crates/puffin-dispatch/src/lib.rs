@@ -81,32 +81,28 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.no_build
     }
 
-    #[instrument(skip(self, requirements), fields(requirements = requirements.iter().map(ToString::to_string).join(", ")))]
-    fn resolve<'data>(
-        &'data self,
-        requirements: &'data [Requirement],
-    ) -> impl Future<Output = Result<Resolution>> + Send + 'data {
-        Box::pin(async {
-            let markers = self.interpreter.markers();
-            let tags = self.interpreter.tags()?;
-            let resolver = Resolver::new(
-                Manifest::simple(requirements.to_vec()),
-                self.options,
-                markers,
-                tags,
-                self.client,
-                self,
-            );
-            let graph = resolver.resolve().await.with_context(|| {
-                format!(
-                    "No solution found when resolving: {}",
-                    requirements.iter().map(ToString::to_string).join(", "),
-                )
-            })?;
-            Ok(Resolution::from(graph))
-        })
+    //#[instrument(skip(self, requirements), fields(requirements = requirements.iter().map(ToString::to_string).join(", ")))]
+    async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
+        let markers = self.interpreter.markers();
+        let tags = self.interpreter.tags()?;
+        let resolver = Resolver::new(
+            Manifest::simple(requirements.to_vec()),
+            self.options,
+            markers,
+            tags,
+            self.client,
+            self,
+        );
+        let graph = resolver.resolve().await.with_context(|| {
+            format!(
+                "No solution found when resolving: {}",
+                requirements.iter().map(ToString::to_string).join(", "),
+            )
+        })?;
+        Ok(Resolution::from(graph))
     }
 
+    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(
         skip(self, resolution, venv),
         fields(
@@ -119,7 +115,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         resolution: &'data Resolution,
         venv: &'data Virtualenv,
     ) -> impl Future<Output = Result<()>> + Send + 'data {
-        Box::pin(async move {
+        async move {
             debug!(
                 "Installing in {} in {}",
                 resolution
@@ -212,9 +208,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             }
 
             Ok(())
-        })
+        }
     }
 
+    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
     fn setup_build<'data>(
         &'data self,
@@ -223,7 +220,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         package_id: &'data str,
         build_kind: BuildKind,
     ) -> impl Future<Output = Result<SourceBuild>> + Send + 'data {
-        Box::pin(async move {
+        async move {
             if self.no_build {
                 bail!("Building source distributions is disabled");
             }
@@ -238,6 +235,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             )
             .await?;
             Ok(builder)
-        })
+        }
     }
 }
