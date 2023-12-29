@@ -109,32 +109,30 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         &'io self,
         package_name: &'io PackageName,
     ) -> impl Future<Output = VersionMapResponse> + Send + 'io {
-        Box::pin(
-            self.client
-                .simple(package_name)
-                .map_ok(move |(index, base, metadata)| {
-                    (
-                        index,
-                        base,
-                        VersionMap::from_metadata(
-                            metadata,
-                            package_name,
-                            self.tags,
-                            self.markers,
-                            self.build_context.interpreter(),
-                            &self.allowed_yanks,
-                            self.exclude_newer.as_ref(),
-                        ),
-                    )
-                }),
-        )
+        self.client
+            .simple(package_name)
+            .map_ok(move |(index, base, metadata)| {
+                (
+                    index,
+                    base,
+                    VersionMap::from_metadata(
+                        metadata,
+                        package_name,
+                        self.tags,
+                        self.markers,
+                        self.build_context.interpreter(),
+                        &self.allowed_yanks,
+                        self.exclude_newer.as_ref(),
+                    ),
+                )
+            })
     }
 
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io {
-        Box::pin(self.fetcher.get_or_build_wheel_metadata(dist))
+        self.fetcher.get_or_build_wheel_metadata(dist)
     }
 
     /// Set the [`puffin_distribution::Reporter`] to use for this installer.
