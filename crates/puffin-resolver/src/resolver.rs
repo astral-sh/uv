@@ -13,7 +13,7 @@ use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::select;
-use tracing::{debug, trace};
+use tracing::{debug, instrument, trace};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -302,6 +302,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     }
 
     /// Run the `PubGrub` solver.
+    #[instrument(skip_all)]
     async fn solve(
         &self,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, trace};
+use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -124,6 +124,7 @@ impl RegistryClient {
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the pypi json api approximately implements.
+    #[instrument("simple_api", skip_all, fields(package = %package_name))]
     pub async fn simple(
         &self,
         package_name: &PackageName,
@@ -156,36 +157,39 @@ impl RegistryClient {
                 .header("Accept-Encoding", "gzip")
                 .header("Accept", MediaType::accepts())
                 .build()?;
-            let parse_simple_response = |response: Response| async {
-                let content_type = response
-                    .headers()
-                    .get("content-type")
-                    .ok_or_else(|| Error::MissingContentType(url.clone()))?;
-                let content_type = content_type
-                    .to_str()
-                    .map_err(|err| Error::InvalidContentTypeHeader(url.clone(), err))?;
-                let media_type = content_type.split(';').next().unwrap_or(content_type);
-                let media_type = MediaType::from_str(media_type).ok_or_else(|| {
-                    Error::UnsupportedMediaType(url.clone(), media_type.to_string())
-                })?;
+            let parse_simple_response = |response: Response| {
+                async {
+                    let content_type = response
+                        .headers()
+                        .get("content-type")
+                        .ok_or_else(|| Error::MissingContentType(url.clone()))?;
+                    let content_type = content_type
+                        .to_str()
+                        .map_err(|err| Error::InvalidContentTypeHeader(url.clone(), err))?;
+                    let media_type = content_type.split(';').next().unwrap_or(content_type);
+                    let media_type = MediaType::from_str(media_type).ok_or_else(|| {
+                        Error::UnsupportedMediaType(url.clone(), media_type.to_string())
+                    })?;
 
-                match media_type {
-                    MediaType::Json => {
-                        let bytes = response.bytes().await?;
-                        let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
-                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
-                        let metadata = SimpleMetadata::from_files(data.files, package_name);
-                        let base = BaseUrl::from(url.clone());
-                        Ok((base, metadata))
-                    }
-                    MediaType::Html => {
-                        let text = response.text().await?;
-                        let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
-                            .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                        let metadata = SimpleMetadata::from_files(files, package_name);
-                        Ok((base, metadata))
+                    match media_type {
+                        MediaType::Json => {
+                            let bytes = response.bytes().await?;
+                            let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
+                                .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                            let metadata = SimpleMetadata::from_files(data.files, package_name);
+                            let base = BaseUrl::from(url.clone());
+                            Ok((base, metadata))
+                        }
+                        MediaType::Html => {
+                            let text = response.text().await?;
+                            let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
+                                .map_err(|err| Error::from_html_err(err, url.clone()))?;
+                            let metadata = SimpleMetadata::from_files(files, package_name);
+                            Ok((base, metadata))
+                        }
                     }
                 }
+                .instrument(info_span!("parse_simple_api", package = %package_name))
             };
             let result = self
                 .client
@@ -214,6 +218,7 @@ impl RegistryClient {
     /// 1. From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
+    #[instrument(skip(self))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => {
@@ -272,7 +277,10 @@ impl RegistryClient {
             );
 
             let response_callback = |response: Response| async {
-                Metadata21::parse(response.bytes().await?.as_ref())
+                let bytes = response.bytes().await?;
+
+                info_span!("parse_metadata21")
+                    .in_scope(|| Metadata21::parse(bytes.as_ref()))
                     .map_err(|err| Error::MetadataParseError(filename, url.to_string(), err))
             };
             let req = self.client.uncached().get(url.clone()).build()?;
@@ -309,19 +317,23 @@ impl RegistryClient {
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
         let client = self.client_raw.clone();
-        let read_metadata_from_initial_response = |response: Response| async {
-            let mut reader = AsyncHttpRangeReader::from_head_response(client, response).await?;
-            trace!("Getting metadata for {filename} by range request");
-            let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-            let metadata = Metadata21::parse(text.as_bytes())
-                .map_err(|err| Error::MetadataParseError(filename.clone(), url.to_string(), err))?;
-            Ok(metadata)
+        let read_metadata_range_request = |response: Response| {
+            async {
+                let mut reader = AsyncHttpRangeReader::from_head_response(client, response).await?;
+                trace!("Getting metadata for {filename} by range request");
+                let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
+                let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
+                    Error::MetadataParseError(filename.clone(), url.to_string(), err)
+                })?;
+                Ok(metadata)
+            }
+            .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
         let req = self.client.uncached().head(url.clone()).build()?;
         let result = self
             .client
-            .get_cached_with_callback(req, &cache_entry, read_metadata_from_initial_response)
+            .get_cached_with_callback(req, &cache_entry, read_metadata_range_request)
             .await
             .map_err(crate::Error::from);
 

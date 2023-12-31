@@ -9,7 +9,7 @@ use fs_err::tokio as fs;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
@@ -101,6 +101,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     }
 
     /// Either fetch the wheel or fetch and build the source distribution
+    #[instrument(skip(self))]
     pub async fn get_or_build_wheel(
         &self,
         dist: Dist,
@@ -252,6 +253,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// Returns the [`Metadata21`], along with a "precise" URL for the source distribution, if
     /// possible. For example, given a Git dependency with a reference to a branch or tag, return a
     /// URL with a precise reference to the current commit of that branch or tag.
+    #[instrument(skip(self))]
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,

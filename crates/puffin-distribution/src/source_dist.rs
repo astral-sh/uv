@@ -14,7 +14,7 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, warn};
+use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 use zip::result::ZipError;
 use zip::ZipArchive;
@@ -275,50 +275,53 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_entry = cache_shard.entry(METADATA);
 
-        let response_callback = |response| async {
-            // At this point, we're seeing a new or updated source distribution; delete all
-            // wheels, and rebuild.
-            match fs::remove_dir_all(&cache_entry.dir()).await {
-                Ok(()) => debug!("Cleared built wheels and metadata for {source_dist}"),
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-                Err(err) => return Err(err.into()),
-            }
-
-            debug!("Downloading and building source distribution: {source_dist}");
-            let task = self
-                .reporter
-                .as_ref()
-                .map(|reporter| reporter.on_build_start(source_dist));
-
-            // Download the source distribution.
-            let source_dist_entry = cache_shard.entry(filename);
-            let cache_dir = self
-                .persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
-                .await?;
-
-            // Build the source distribution.
-            let (disk_filename, wheel_filename, metadata) = self
-                .build_source_dist(source_dist, cache_dir, subdirectory, &cache_entry)
-                .await?;
-
-            if let Some(task) = task {
-                if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_build_complete(source_dist, task);
+        let download_and_build = |response| {
+            async {
+                // At this point, we're seeing a new or updated source distribution; delete all
+                // wheels, and rebuild.
+                match fs::remove_dir_all(&cache_entry.dir()).await {
+                    Ok(()) => debug!("Cleared built wheels and metadata for {source_dist}"),
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+                    Err(err) => return Err(err.into()),
                 }
-            }
 
-            Ok(Manifest::from_iter([(
-                wheel_filename,
-                DiskFilenameAndMetadata {
-                    disk_filename,
-                    metadata,
-                },
-            )]))
+                debug!("Downloading and building source distribution: {source_dist}");
+                let task = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_build_start(source_dist));
+
+                // Download the source distribution.
+                let source_dist_entry = cache_shard.entry(filename);
+                let cache_dir = self
+                    .persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
+                    .await?;
+
+                // Build the source distribution.
+                let (disk_filename, wheel_filename, metadata) = self
+                    .build_source_dist(source_dist, cache_dir, subdirectory, &cache_entry)
+                    .await?;
+
+                if let Some(task) = task {
+                    if let Some(reporter) = self.reporter.as_ref() {
+                        reporter.on_build_complete(source_dist, task);
+                    }
+                }
+
+                Ok(Manifest::from_iter([(
+                    wheel_filename,
+                    DiskFilenameAndMetadata {
+                        disk_filename,
+                        metadata,
+                    },
+                )]))
+            }
+            .instrument(info_span!("download_and_build", source_dist = %source_dist))
         };
         let req = self.cached_client.uncached().get(url.clone()).build()?;
         let manifest = self
             .cached_client
-            .get_cached_with_callback(req, &cache_entry, response_callback)
+            .get_cached_with_callback(req, &cache_entry, download_and_build)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -679,6 +682,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
+    #[instrument(skip_all, fields(dist = %dist))]
     async fn build_source_dist(
         &self,
         dist: &SourceDist,

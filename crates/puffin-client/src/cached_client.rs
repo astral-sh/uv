@@ -6,7 +6,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, trace, warn};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 
 use puffin_cache::CacheEntry;
 use puffin_fs::write_atomic;
@@ -86,6 +86,7 @@ impl CachedClient {
     /// response is passed through `response_callback` and only the result is cached and returned.
     /// The `response_callback` is allowed to make subsequent requests, e.g. through the uncached
     /// client.
+    #[instrument(skip_all)]
     pub async fn get_cached_with_callback<
         Payload: Serialize + DeserializeOwned,
         CallBackError,
@@ -101,8 +102,18 @@ impl CachedClient {
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
-        let cached = if let Ok(cached) = fs_err::tokio::read(cache_entry.path()).await {
-            match rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached) {
+        let read_span = info_span!("read_cache", file = %cache_entry.path().display());
+        let read_result = fs_err::tokio::read(cache_entry.path())
+            .instrument(read_span)
+            .await;
+        let cached = if let Ok(cached) = read_result {
+            let parse_span = info_span!(
+                "parse_cache",
+                path = %cache_entry.path().display()
+            );
+            let parse_result = parse_span
+                .in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached));
+            match parse_result {
                 Ok(data) => Some(data),
                 Err(err) => {
                     warn!(
@@ -119,16 +130,20 @@ impl CachedClient {
 
         let cached_response = self.send_cached(req, cached).await?;
 
+        let write_cache = info_span!("write_cache", file = %cache_entry.path().display());
         match cached_response {
             CachedResponse::FreshCache(data) => Ok(data),
             CachedResponse::NotModified(data_with_cache_policy) => {
-                write_atomic(
-                    cache_entry.path(),
-                    rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?,
-                )
+                async {
+                    let data =
+                        rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
+                    write_atomic(cache_entry.path(), data)
+                        .await
+                        .map_err(crate::Error::CacheWrite)?;
+                    Ok(data_with_cache_policy.data)
+                }
+                .instrument(write_cache)
                 .await
-                .map_err(crate::Error::CacheWrite)?;
-                Ok(data_with_cache_policy.data)
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
                 let data = response_callback(res)
@@ -136,15 +151,19 @@ impl CachedClient {
                     .map_err(|err| CachedClientError::Callback(err))?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
-                    fs_err::tokio::create_dir_all(cache_entry.dir())
-                        .await
-                        .map_err(crate::Error::CacheWrite)?;
-                    let data =
-                        rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
-                    write_atomic(cache_entry.path(), data)
-                        .await
-                        .map_err(crate::Error::CacheWrite)?;
-                    Ok(data_with_cache_policy.data)
+                    async {
+                        fs_err::tokio::create_dir_all(cache_entry.dir())
+                            .await
+                            .map_err(crate::Error::CacheWrite)?;
+                        let data = rmp_serde::to_vec(&data_with_cache_policy)
+                            .map_err(crate::Error::from)?;
+                        write_atomic(cache_entry.path(), data)
+                            .await
+                            .map_err(crate::Error::CacheWrite)?;
+                        Ok(data_with_cache_policy.data)
+                    }
+                    .instrument(write_cache)
+                    .await
                 } else {
                     Ok(data)
                 }
@@ -188,7 +207,12 @@ impl CachedClient {
                             .headers_mut()
                             .insert(header.0.clone(), header.1.clone());
                     }
-                    let res = self.0.execute(req).await?.error_for_status()?;
+                    let res = self
+                        .0
+                        .execute(req)
+                        .instrument(info_span!("revalidation_request", url = url.as_str()))
+                        .await?
+                        .error_for_status()?;
                     let mut converted_res = http::Response::new(());
                     *converted_res.status_mut() = res.status();
                     for header in res.headers() {
@@ -227,6 +251,7 @@ impl CachedClient {
         Ok(cached_response)
     }
 
+    #[instrument(skip_all, fields(url = req.url().as_str()))]
     async fn fresh_request<T: Serialize>(
         &self,
         req: Request,

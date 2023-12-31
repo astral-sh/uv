@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use tl::HTMLTag;
+use tracing::instrument;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
@@ -16,6 +17,7 @@ pub(crate) struct SimpleHtml {
 
 impl SimpleHtml {
     /// Parse the list of [`File`]s from the simple HTML page returned by the given URL.
+    #[instrument(skip(text))]
     pub(crate) fn parse(text: &str, url: &Url) -> Result<Self, Error> {
         let dom = tl::parse(text, tl::ParserOptions::default())?;
 
