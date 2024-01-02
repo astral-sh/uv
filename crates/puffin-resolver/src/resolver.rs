@@ -446,8 +446,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
-            PubGrubPackage::InstalledPython => {}
-            PubGrubPackage::TargetPython => {}
+            PubGrubPackage::Python => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
                 if index.packages.register(package_name) {
@@ -496,24 +495,21 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         return match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
-            PubGrubPackage::InstalledPython => {
-                let interpreter_version = self.interpreter.version();
-                let version = PubGrubVersion::from(interpreter_version.clone());
-                if range.contains(&version) {
-                    Ok(Some(version))
-                } else {
-                    Ok(None)
+            PubGrubPackage::Python => {
+                // The version used in the current Python interpreter.
+                let interpreter_version = PubGrubVersion::from(self.interpreter.version().clone());
+                if !range.contains(&interpreter_version) {
+                    return Ok(None);
                 }
-            }
 
-            PubGrubPackage::TargetPython => {
-                let marker_version = &self.markers.python_version.version;
-                let version = PubGrubVersion::from(marker_version.clone());
-                if range.contains(&version) {
-                    Ok(Some(version))
-                } else {
-                    Ok(None)
+                // The version against which we're resolving.
+                let marker_version =
+                    PubGrubVersion::from(self.markers.python_version.version.clone());
+                if !range.contains(&marker_version) {
+                    return Ok(None);
                 }
+
+                Ok(Some(marker_version))
             }
 
             PubGrubPackage::Package(package_name, extra, Some(url)) => {
@@ -664,13 +660,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 Ok(Dependencies::Known(constraints.into()))
             }
 
-            PubGrubPackage::InstalledPython => {
-                Ok(Dependencies::Known(DependencyConstraints::default()))
-            }
-
-            PubGrubPackage::TargetPython => {
-                Ok(Dependencies::Known(DependencyConstraints::default()))
-            }
+            PubGrubPackage::Python => Ok(Dependencies::Known(DependencyConstraints::default())),
 
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
@@ -706,9 +696,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         .fold_ok(Range::full(), |range, specifier| {
                             range.intersection(&specifier.into())
                         })?;
-
-                    constraints.insert(PubGrubPackage::InstalledPython, version.clone());
-                    constraints.insert(PubGrubPackage::TargetPython, version.clone());
+                    constraints.insert(PubGrubPackage::Python, version.clone());
                 }
 
                 // If a package has an extra, insert a constraint on the base package.
@@ -853,8 +841,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         if let Some(reporter) = self.reporter.as_ref() {
             match package {
                 PubGrubPackage::Root(_) => {}
-                PubGrubPackage::InstalledPython => {}
-                PubGrubPackage::TargetPython => {}
+                PubGrubPackage::Python => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                     reporter.on_progress(package_name, VersionOrUrl::Url(url));
                 }
