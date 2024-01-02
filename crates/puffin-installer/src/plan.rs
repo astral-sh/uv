@@ -194,7 +194,7 @@ impl InstallPlan {
                         Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
-                                    "A url dependency is not compatible with the current platform: {}",
+                                    "A URL dependency is incompatible with the current platform: {}",
                                     wheel.url
                                 );
                             }
@@ -222,7 +222,7 @@ impl InstallPlan {
                         Dist::Built(BuiltDist::Path(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
-                                    "A path dependency is not compatible with the current platform: {}",
+                                    "A path dependency is incompatible with the current platform: {}",
                                     wheel.path.display()
                                 );
                             }

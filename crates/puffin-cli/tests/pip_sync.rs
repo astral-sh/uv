@@ -2509,7 +2509,7 @@ fn incompatible_wheel() -> Result<()> {
 
         ----- stderr -----
         error: Failed to determine installation plan
-          Caused by: A path dependency is not compatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
+          Caused by: A path dependency is incompatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
         "###);
     });
 
