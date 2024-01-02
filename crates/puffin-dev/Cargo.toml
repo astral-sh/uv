@@ -18,6 +18,7 @@ distribution-filename = { path = "../distribution-filename" }
 distribution-types = { path = "../distribution-types" }
 gourgeist = { path = "../gourgeist" }
 install-wheel-rs = { path = "../install-wheel-rs" }
+pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }

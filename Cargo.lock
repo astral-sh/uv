@@ -2436,6 +2436,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.11.0",
  "mimalloc",
+ "pep440_rs 0.3.12",
  "pep508_rs",
  "petgraph",
  "platform-host",
