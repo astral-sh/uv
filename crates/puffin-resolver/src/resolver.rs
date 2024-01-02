@@ -7,6 +7,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
+use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
@@ -25,6 +26,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
+use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, OnceMap};
 use pypi_types::{BaseUrl, Metadata21};
@@ -35,8 +37,8 @@ use crate::manifest::Manifest;
 use crate::overrides::Overrides;
 use crate::pins::FilePins;
 use crate::pubgrub::{
-    PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubVersion,
-    MIN_VERSION,
+    PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubSpecifier,
+    PubGrubVersion, MIN_VERSION,
 };
 use crate::resolution::ResolutionGraph;
 use crate::version_map::VersionMap;
@@ -152,6 +154,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     overrides: Overrides,
     allowed_urls: AllowedUrls,
     markers: &'a MarkerEnvironment,
+    interpreter: &'a Interpreter,
     selector: CandidateSelector,
     index: Arc<Index>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
@@ -165,6 +168,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
+        interpreter: &'a Interpreter,
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
@@ -182,7 +186,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .chain(manifest.constraints.iter())
                 .collect(),
         );
-        Self::new_custom_io(manifest, options, markers, provider)
+        Self::new_custom_io(manifest, options, markers, interpreter, provider)
     }
 }
 
@@ -192,6 +196,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
+        interpreter: &'a Interpreter,
         provider: Provider,
     ) -> Self {
         let selector = CandidateSelector::for_resolution(&manifest, options);
@@ -245,6 +250,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             constraints: manifest.constraints,
             overrides: Overrides::from_requirements(manifest.overrides),
             markers,
+            interpreter,
             editables,
             reporter: None,
             provider,
@@ -440,6 +446,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
+            PubGrubPackage::InstalledPython => {}
+            PubGrubPackage::TargetPython => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
                 if index.packages.register(package_name) {
@@ -487,6 +495,26 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     ) -> Result<Option<PubGrubVersion>, ResolveError> {
         return match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
+
+            PubGrubPackage::InstalledPython => {
+                let interpreter_version = self.interpreter.version();
+                let version = PubGrubVersion::from(interpreter_version.clone());
+                if range.contains(&version) {
+                    Ok(Some(version))
+                } else {
+                    Ok(None)
+                }
+            }
+
+            PubGrubPackage::TargetPython => {
+                let marker_version = &self.markers.python_version.version;
+                let version = PubGrubVersion::from(marker_version.clone());
+                if range.contains(&version) {
+                    Ok(Some(version))
+                } else {
+                    Ok(None)
+                }
+            }
 
             PubGrubPackage::Package(package_name, extra, Some(url)) => {
                 if let Some(extra) = extra {
@@ -636,6 +664,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 Ok(Dependencies::Known(constraints.into()))
             }
 
+            PubGrubPackage::InstalledPython => {
+                Ok(Dependencies::Known(DependencyConstraints::default()))
+            }
+
+            PubGrubPackage::TargetPython => {
+                Ok(Dependencies::Known(DependencyConstraints::default()))
+            }
+
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
                 let dist = match url {
@@ -661,6 +697,21 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Self::visit_package(package, priorities, index, request_sink)?;
                 }
 
+                // If a package has a `requires_python` field, add a constraint on the target
+                // Python version.
+                if let Some(requires_python) = metadata.requires_python.as_ref() {
+                    let version = requires_python
+                        .iter()
+                        .map(PubGrubSpecifier::try_from)
+                        .fold_ok(Range::full(), |range, specifier| {
+                            range.intersection(&specifier.into())
+                        })?;
+
+                    constraints.insert(PubGrubPackage::InstalledPython, version.clone());
+                    constraints.insert(PubGrubPackage::TargetPython, version.clone());
+                }
+
+                // If a package has an extra, insert a constraint on the base package.
                 if extra.is_some() {
                     constraints.insert(
                         PubGrubPackage::Package(package_name.clone(), None, None),
@@ -802,6 +853,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         if let Some(reporter) = self.reporter.as_ref() {
             match package {
                 PubGrubPackage::Root(_) => {}
+                PubGrubPackage::InstalledPython => {}
+                PubGrubPackage::TargetPython => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                     reporter.on_progress(package_name, VersionOrUrl::Url(url));
                 }

@@ -13,7 +13,13 @@ use puffin_normalize::{ExtraName, PackageName};
 #[derive(Debug, Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash)]
 pub enum PubGrubPackage {
+    /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
+    /// The installed Python version.
+    InstalledPython,
+    /// The target Python version.
+    TargetPython,
+    /// A Python package.
     Package(
         PackageName,
         Option<ExtraName>,
@@ -80,6 +86,8 @@ impl std::fmt::Display for PubGrubPackage {
                     write!(f, "root")
                 }
             }
+            PubGrubPackage::InstalledPython => write!(f, "Python"),
+            PubGrubPackage::TargetPython => write!(f, "Python"),
             PubGrubPackage::Package(name, None, ..) => write!(f, "{name}"),
             PubGrubPackage::Package(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")

@@ -23,7 +23,7 @@ pub struct VersionMap(BTreeMap<PubGrubVersion, PrioritizedDistribution>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
-    #[instrument(skip_all, fields(package_name = %package_name))]
+    #[instrument(skip_all, fields(package_name = % package_name))]
     pub(crate) fn from_metadata(
         metadata: SimpleMetadata,
         package_name: &PackageName,
@@ -39,23 +39,6 @@ impl VersionMap {
         // Collect compatible distributions.
         for (version, files) in metadata {
             for (filename, file) in files.all() {
-                // Only add dists compatible with the python version. This is relevant for source
-                // distributions which give no other indication of their compatibility and wheels which
-                // may be tagged `py3-none-any` but have `requires-python: ">=3.9"`.
-                // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-                if let Some(requires_python) = file.requires_python.as_ref() {
-                    // The interpreter and marker version are often the same, but can differ. For
-                    // example, if the user is resolving against a target Python version passed in
-                    // via the command-line, that version will differ from the interpreter version.
-                    let interpreter_version = interpreter.version();
-                    let marker_version = &markers.python_version.version;
-                    if !requires_python.contains(interpreter_version)
-                        || !requires_python.contains(marker_version)
-                    {
-                        continue;
-                    }
-                }
-
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information
                 if let Some(exclude_newer) = exclude_newer {
@@ -84,10 +67,24 @@ impl VersionMap {
                     }
                 }
 
+                // When resolving, include `requires_python` when determining version compatibility.
+                let is_compatible = file
+                    .requires_python
+                    .as_ref()
+                    .map_or(true, |requires_python| {
+                        // The interpreter and marker version are often the same, but can differ.
+                        // For example, if the user is resolving against a target Python version
+                        // passed in via the command line, that version will differ from the
+                        // interpreter version.
+                        let interpreter_version = interpreter.version();
+                        let marker_version = &markers.python_version.version;
+                        requires_python.contains(interpreter_version)
+                            && requires_python.contains(marker_version)
+                    });
+
                 match filename {
                     DistFilename::WheelFilename(filename) => {
-                        let priority = filename.compatibility(tags);
-
+                        let priority = filename.compatibility(tags).filter(|_| is_compatible);
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
                                 entry.get_mut().insert_built(WheelFile(file), priority);
@@ -103,10 +100,15 @@ impl VersionMap {
                     DistFilename::SourceDistFilename(_) => {
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
-                                entry.get_mut().insert_source(SdistFile(file));
+                                entry
+                                    .get_mut()
+                                    .insert_source(SdistFile(file), is_compatible);
                             }
                             Entry::Vacant(entry) => {
-                                entry.insert(PrioritizedDistribution::from_source(SdistFile(file)));
+                                entry.insert(PrioritizedDistribution::from_source(
+                                    SdistFile(file),
+                                    is_compatible,
+                                ));
                             }
                         }
                     }
@@ -135,7 +137,9 @@ impl VersionMap {
 #[derive(Debug)]
 struct PrioritizedDistribution {
     /// An arbitrary source distribution for the package version.
-    source: Option<DistFile>,
+    compatible_source: Option<DistFile>,
+    /// An arbitrary source distribution for the package version.
+    incompatible_source: Option<DistFile>,
     /// The highest-priority, platform-compatible wheel for the package version.
     compatible_wheel: Option<(DistFile, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
@@ -147,13 +151,15 @@ impl PrioritizedDistribution {
     fn from_built(dist: WheelFile, priority: Option<TagPriority>) -> Self {
         if let Some(priority) = priority {
             Self {
-                source: None,
+                compatible_source: None,
+                incompatible_source: None,
                 compatible_wheel: Some((dist.into(), priority)),
                 incompatible_wheel: None,
             }
         } else {
             Self {
-                source: None,
+                compatible_source: None,
+                incompatible_source: None,
                 compatible_wheel: None,
                 incompatible_wheel: Some(dist.into()),
             }
@@ -161,11 +167,21 @@ impl PrioritizedDistribution {
     }
 
     /// Create a new [`PrioritizedDistribution`] from the given source distribution.
-    fn from_source(dist: SdistFile) -> Self {
-        Self {
-            source: Some(dist.into()),
-            compatible_wheel: None,
-            incompatible_wheel: None,
+    fn from_source(dist: SdistFile, is_compatible: bool) -> Self {
+        if is_compatible {
+            Self {
+                compatible_source: Some(dist.into()),
+                incompatible_source: None,
+                compatible_wheel: None,
+                incompatible_wheel: None,
+            }
+        } else {
+            Self {
+                compatible_source: None,
+                incompatible_source: Some(dist.into()),
+                compatible_wheel: None,
+                incompatible_wheel: None,
+            }
         }
     }
 
@@ -186,9 +202,13 @@ impl PrioritizedDistribution {
     }
 
     /// Insert the given source distribution into the [`PrioritizedDistribution`].
-    fn insert_source(&mut self, file: SdistFile) {
-        if self.source.is_none() {
-            self.source = Some(file.into());
+    fn insert_source(&mut self, file: SdistFile, is_compatible: bool) {
+        if is_compatible {
+            if self.compatible_source.is_none() {
+                self.compatible_source = Some(file.into());
+            }
+        } else if self.incompatible_source.is_none() {
+            self.incompatible_source = Some(file.into());
         }
     }
 
@@ -196,18 +216,25 @@ impl PrioritizedDistribution {
     fn get(&self) -> Option<ResolvableFile> {
         match (
             &self.compatible_wheel,
-            &self.source,
+            &self.compatible_source,
             &self.incompatible_wheel,
+            &self.incompatible_source,
         ) {
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, _)), _, _) => Some(ResolvableFile::CompatibleWheel(wheel)),
-            // If we have a source distribution and an incompatible wheel, return the wheel.
-            // We assume that all distributions have the same metadata for a given package version.
-            // If a source distribution exists, we assume we can build it, but using the wheel is
-            // faster.
-            (_, Some(sdist), Some(wheel)) => Some(ResolvableFile::IncompatibleWheel(sdist, wheel)),
-            // Otherwise, return the source distribution.
-            (_, Some(sdist), _) => Some(ResolvableFile::SourceDist(sdist)),
+            (Some((wheel, _)), _, _, _) => Some(ResolvableFile::CompatibleWheel(wheel)),
+            // If we have a compatible source distribution and an incompatible wheel, return the
+            // wheel. We assume that all distributions have the same metadata for a given package
+            // version. If a compatible source distribution exists, we assume we can build it, but
+            // using the wheel is faster.
+            (_, Some(sdist), Some(wheel), _) => {
+                Some(ResolvableFile::IncompatibleWheel(sdist, wheel))
+            }
+            // Otherwise, if we have a compatible source distribution, return it.
+            (_, Some(sdist), _, _) => Some(ResolvableFile::SourceDist(sdist)),
+            // Otherwise, if we have an incompatible source distribution, return it. We should
+            // ultimately reject it when resolving, since the incompatibility _must_ be due to a
+            // mismatch in Python version.
+            (_, _, _, Some(sdist)) => Some(ResolvableFile::SourceDist(sdist)),
             _ => None,
         }
     }

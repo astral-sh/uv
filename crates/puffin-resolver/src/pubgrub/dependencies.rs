@@ -206,6 +206,12 @@ fn merge_package(
         // Either package is `root`.
         (PubGrubPackage::Root(_), _) | (_, PubGrubPackage::Root(_)) => Ok(None),
 
+        // Either package is the installed Python.
+        (PubGrubPackage::InstalledPython, _) | (_, PubGrubPackage::InstalledPython) => Ok(None),
+
+        // Either package is the target Python.
+        (PubGrubPackage::TargetPython, _) | (_, PubGrubPackage::TargetPython) => Ok(None),
+
         // Left package has a URL. Propagate the URL.
         (PubGrubPackage::Package(name, extra, Some(url)), PubGrubPackage::Package(.., None)) => {
             Ok(Some(PubGrubPackage::Package(

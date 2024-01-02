@@ -134,7 +134,6 @@ impl<'a> DistFinder<'a> {
                 // This is relevant for source dists which give no other indication of their
                 // compatibility and wheels which may be tagged `py3-none-any` but
                 // have `requires-python: ">=3.9"`
-                // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
                 if !file
                     .requires_python
                     .as_ref()
@@ -170,7 +169,6 @@ impl<'a> DistFinder<'a> {
                     // This is relevant for source dists which give no other indication of their
                     // compatibility and wheels which may be tagged `py3-none-any` but
                     // have `requires-python: ">=3.9"`
-                    // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
                     if !file
                         .requires_python
                         .as_ref()

@@ -20,6 +20,8 @@ impl PubGrubPriorities {
     pub(crate) fn get(&self, package: &PubGrubPackage) -> Option<PubGrubPriority> {
         match package {
             PubGrubPackage::Root(_) => Some(Reverse(0)),
+            PubGrubPackage::InstalledPython => Some(Reverse(0)),
+            PubGrubPackage::TargetPython => Some(Reverse(0)),
             PubGrubPackage::Package(name, _, _) => self
                 .0
                 .get(name)

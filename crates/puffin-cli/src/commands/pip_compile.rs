@@ -207,8 +207,16 @@ pub(crate) async fn pip_compile(
     );
 
     // Resolve the dependencies.
-    let resolver = Resolver::new(manifest, options, &markers, tags, &client, &build_dispatch)
-        .with_reporter(ResolverReporter::from(printer));
+    let resolver = Resolver::new(
+        manifest,
+        options,
+        &markers,
+        &interpreter,
+        tags,
+        &client,
+        &build_dispatch,
+    )
+    .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {
             #[allow(clippy::print_stderr)]
