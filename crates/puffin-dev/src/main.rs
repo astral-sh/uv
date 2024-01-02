@@ -1,5 +1,6 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use std::io::IsTerminal;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -85,9 +86,14 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    if !std::io::stderr().is_terminal() {
+        colored::control::set_override(false);
+    }
+
     let indicatif_layer = IndicatifLayer::new();
-    let indicitif_compatible_writer_layer = tracing_subscriber::fmt::layer()
+    let indicatif_compatible_writer_layer = tracing_subscriber::fmt::layer()
         .with_writer(indicatif_layer.get_stderr_writer())
+        .with_ansi(std::io::stderr().is_terminal())
         .with_target(false);
     let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::builder()
@@ -97,7 +103,7 @@ async fn main() -> ExitCode {
     });
     tracing_subscriber::registry()
         .with(filter_layer)
-        .with(indicitif_compatible_writer_layer)
+        .with(indicatif_compatible_writer_layer)
         .with(indicatif_layer)
         .init();
 
