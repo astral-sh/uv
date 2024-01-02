@@ -8,7 +8,7 @@ use futures::StreamExt;
 use indicatif::ProgressStyle;
 use itertools::Itertools;
 use tokio::time::Instant;
-use tracing::{info, info_span, span, Level, Span};
+use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use distribution_types::IndexUrls;
@@ -97,8 +97,6 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
             let build_dispatch = build_dispatch.clone();
             let client = client.clone();
             async move {
-                let span = span!(Level::TRACE, "fetching");
-                let _enter = span.enter();
                 let start = Instant::now();
 
                 let requirement = if args.latest_version && requirement.version_or_url.is_none() {
@@ -120,7 +118,6 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                 };
 
                 let result = build_dispatch.resolve(&[requirement.clone()]).await;
-
                 (requirement.to_string(), start.elapsed(), result)
             }
         })

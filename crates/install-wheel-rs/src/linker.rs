@@ -6,7 +6,7 @@ use std::path::Path;
 use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::File;
-use tracing::{debug, span, Level};
+use tracing::{debug, info_span};
 
 use pypi_types::DirectUrl;
 
@@ -51,7 +51,7 @@ pub fn install_wheel(
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
     let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
 
-    let _my_span = span!(Level::DEBUG, "install_wheel", name);
+    let _my_span = info_span!("install_wheel", name);
 
     // We're going step by step though
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
