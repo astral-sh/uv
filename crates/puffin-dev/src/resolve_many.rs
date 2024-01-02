@@ -12,10 +12,11 @@ use tracing::{info, info_span, span, Level, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use distribution_types::IndexUrls;
-use pep508_rs::Requirement;
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{Requirement, VersionOrUrl};
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
@@ -31,11 +32,24 @@ pub(crate) struct ResolveManyArgs {
     /// cached wheels of already built source distributions will be reused.
     #[clap(long)]
     no_build: bool,
-    /// Run this many tasks in parallel
+    /// Run this many tasks in parallel.
     #[clap(long, default_value = "50")]
     num_tasks: usize,
+    /// Force the latest version when no version is given.
+    #[clap(long)]
+    latest_version: bool,
     #[command(flatten)]
     cache_args: CacheArgs,
+}
+
+/// Try to find the latest version of a package, ignoring error because we report them during resolution properly
+async fn find_latest_version(
+    client: RegistryClient,
+    package_name: &PackageName,
+) -> Option<Version> {
+    let (_, _, simple_metadata) = client.simple(package_name).await.ok()?;
+    let (version, _) = simple_metadata.into_iter().next()?;
+    Some(version.clone())
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
@@ -76,13 +90,34 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     header_span.pb_set_length(total as u64);
     let _header_span_enter = header_span.enter();
 
+    let client = RegistryClientBuilder::new(cache.clone()).build();
+
     let mut tasks = futures::stream::iter(requirements)
         .map(|requirement| {
             let build_dispatch = build_dispatch.clone();
+            let client = client.clone();
             async move {
                 let span = span!(Level::TRACE, "fetching");
                 let _enter = span.enter();
                 let start = Instant::now();
+
+                let requirement = if args.latest_version && requirement.version_or_url.is_none() {
+                    if let Some(version) = find_latest_version(client, &requirement.name).await {
+                        let equals_version = VersionOrUrl::VersionSpecifier(
+                            VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                        );
+                        Requirement {
+                            name: requirement.name,
+                            extras: requirement.extras,
+                            version_or_url: Some(equals_version),
+                            marker: None,
+                        }
+                    } else {
+                        requirement
+                    }
+                } else {
+                    requirement
+                };
 
                 let result = build_dispatch.resolve(&[requirement.clone()]).await;
 
@@ -107,13 +142,25 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                 success += 1;
             }
             Err(err) => {
+                let err_formatted =
+                    if err
+                        .source()
+                        .and_then(|err| err.source())
+                        .is_some_and(|err| {
+                            err.to_string() == "Building source distributions is disabled"
+                        })
+                    {
+                        "Building source distributions is disabled".to_string()
+                    } else {
+                        format!("{err:?}")
+                    };
                 info!(
-                    "Error for {} ({}/{}, {} ms):: {:?}",
+                    "Error for {} ({}/{}, {} ms): {}",
                     package,
                     success + errors.len(),
                     total,
                     duration.as_millis(),
-                    err,
+                    err_formatted
                 );
                 errors.push(package);
             }
