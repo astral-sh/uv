@@ -7,6 +7,7 @@ use pubgrub::report::{DerivationTree, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::borrow::Cow;
 
 use super::{PubGrubPackage, PubGrubVersion};
 
@@ -28,18 +29,18 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 format!("we are solving dependencies of {package} {version}")
             }
             External::NoVersions(package, set) => {
-                if set == &Range::full() {
+                let set = self.simplify_set(set, package);
+                if set.as_ref() == &Range::full() {
                     format!("there is no available version for {package}")
                 } else {
-                    let set = self.simplify_set(set, package);
                     format!("there is no version of {package} available matching {set}")
                 }
             }
             External::UnavailableDependencies(package, set) => {
-                if set == &Range::full() {
+                let set = self.simplify_set(set, package);
+                if set.as_ref() == &Range::full() {
                     format!("dependencies of {package} are unavailable")
                 } else {
-                    let set = self.simplify_set(set, package);
                     format!("dependencies of {package} at version {set} are unavailable")
                 }
             }
@@ -48,43 +49,43 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     if matches!(package, PubGrubPackage::Root(_)) {
                         format!("{package} dependencies are unusable: {reason}")
                     } else {
-                        if set == &Range::full() {
+                        let set = self.simplify_set(set, package);
+                        if set.as_ref() == &Range::full() {
                             format!("dependencies of {package} are unusable: {reason}")
                         } else {
-                            let set = self.simplify_set(set, package);
                             format!("dependencies of {package}{set} are unusable: {reason}",)
                         }
                     }
                 } else {
-                    if set == &Range::full() {
+                    let set = self.simplify_set(set, package);
+                    if set.as_ref() == &Range::full() {
                         format!("dependencies of {package} are unusable")
                     } else {
-                        let set = self.simplify_set(set, package);
                         format!("dependencies of {package}{set} are unusable")
                     }
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
-                if package_set == &Range::full() && dependency_set == &Range::full() {
+                let package_set = self.simplify_set(package_set, package);
+                let dependency_set = self.simplify_set(dependency_set, dependency);
+                if package_set.as_ref() == &Range::full()
+                    && dependency_set.as_ref() == &Range::full()
+                {
                     format!("{package} depends on {dependency}")
-                } else if package_set == &Range::full() {
-                    let dependency_set = self.simplify_set(dependency_set, dependency);
+                } else if package_set.as_ref() == &Range::full() {
                     format!("{package} depends on {dependency}{dependency_set}")
-                } else if dependency_set == &Range::full() {
+                } else if dependency_set.as_ref() == &Range::full() {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         format!("{package} depends on {dependency}")
                     } else {
-                        let package_set = self.simplify_set(package_set, package);
                         format!("{package}{package_set} depends on {dependency}")
                     }
                 } else {
-                    let dependency_set = self.simplify_set(dependency_set, dependency);
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         format!("{package} depends on {dependency}{dependency_set}")
                     } else {
-                        let package_set = self.simplify_set(package_set, package);
                         format!("{package}{package_set} depends on {dependency}{dependency_set}")
                     }
                 }
@@ -130,17 +131,16 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
 }
 
 impl PubGrubReportFormatter<'_> {
-    fn simplify_set(
+    fn simplify_set<'a>(
         &self,
-        set: &Range<PubGrubVersion>,
+        set: &'a Range<PubGrubVersion>,
         package: &PubGrubPackage,
-    ) -> Range<PubGrubVersion> {
-        set.simplify(
-            self.available_versions
-                .get(package)
-                .unwrap_or(&vec![])
-                .iter(),
-        )
+    ) -> Cow<'a, Range<PubGrubVersion>> {
+        if set == &Range::full() {
+            Cow::Borrowed(set)
+        } else {
+            Cow::Owned(set.simplify(self.available_versions.get(package).into_iter().flatten()))
+        }
     }
 }
 
