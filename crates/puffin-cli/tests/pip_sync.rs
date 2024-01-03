@@ -2490,7 +2490,7 @@ fn incompatible_wheel() -> Result<()> {
     requirements_txt.write_str(&format!("foo @ file://{}", wheel.path().display()))?;
 
     let mut filters = INSTA_FILTERS.to_vec();
-    let wheel_dir = wheel_dir.path().display().to_string();
+    let wheel_dir = wheel_dir.path().canonicalize()?.display().to_string();
     filters.push((&wheel_dir, "[TEMP_DIR]"));
 
     insta::with_settings!({
