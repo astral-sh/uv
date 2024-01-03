@@ -1,0 +1,50 @@
+
+#![cfg(all(feature = "python", feature = "pypi"))]
+
+/// {{generated_by}}
+
+use std::process::Command;
+
+use anyhow::Result;
+use insta_cmd::_macro_support::insta;
+use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+
+use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
+
+mod common;
+{{#scenarios}}
+
+/// {{name}}
+///
+/// {{description}}
+///
+/// {{prefix}}
+{{#tree}}
+/// {{.}}
+{{/tree}}
+#[test]
+fn {{normalized_name}}() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            {{#root.requires}}
+            .arg("{{prefix}}-{{.}}")
+            {{/root.requires}}
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"<snapshot>
+        "###);
+    });
+
+    Ok(())
+}
+{{/scenarios}}
