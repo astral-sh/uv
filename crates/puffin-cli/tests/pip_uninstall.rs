@@ -5,6 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
+use crate::common::create_venv_py312;
 use common::{BIN_NAME, INSTA_FILTERS};
 
 mod common;
@@ -279,6 +280,69 @@ fn uninstall() -> Result<()> {
         .current_dir(&temp_dir)
         .assert()
         .failure();
+
+    Ok(())
+}
+
+#[test]
+fn missing_record() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip-sync")
+        .arg("requirements.txt")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg("import markupsafe")
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    // Delete the RECORD file.
+    let dist_info = venv
+        .join("lib")
+        .join("python3.12")
+        .join("site-packages")
+        .join("MarkupSafe-2.1.3.dist-info");
+    std::fs::remove_file(dist_info.join("RECORD"))?;
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        "RECORD file not found at: .*/.venv",
+        "RECORD file not found at: [VENV_PATH]",
+    ));
+
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-uninstall")
+            .arg("MarkupSafe")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Cannot uninstall package; RECORD file not found at: [VENV_PATH]/lib/python3.12/site-packages/MarkupSafe-2.1.3.dist-info/RECORD
+        "###);
+    });
 
     Ok(())
 }
