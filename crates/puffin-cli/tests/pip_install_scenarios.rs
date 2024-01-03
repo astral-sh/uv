@@ -24,7 +24,7 @@ fn requires_package_does_not_exist() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-does-not-exist-e4666012")
+            .arg("requires-package-does-not-exist-59108293")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -36,7 +36,7 @@ fn requires_package_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Package `requires-package-does-not-exist-e4666012-a` was not found in the registry.
+        error: Package `requires-package-does-not-exist-59108293-a` was not found in the registry.
         "###);
     });
 
@@ -57,7 +57,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-exact-version-does-not-exist-c640da4b")
+            .arg("requires-exact-version-does-not-exist-bc5f5f6d")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -71,14 +71,14 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-exact-version-does-not-exist-c640da4b-a available matching
-              ==2.0.0 and requires-exact-version-does-not-exist-c640da4b==0.0.0
-              depends on requires-exact-version-does-not-exist-c640da4b-a==2.0.0,
-              requires-exact-version-does-not-exist-c640da4b==0.0.0 is forbidden.
+              requires-exact-version-does-not-exist-bc5f5f6d-a available matching
+              ==2.0.0 and requires-exact-version-does-not-exist-bc5f5f6d==0.0.0
+              depends on requires-exact-version-does-not-exist-bc5f5f6d-a==2.0.0,
+              requires-exact-version-does-not-exist-bc5f5f6d==0.0.0 is forbidden.
               And because there is no version of
-              requires-exact-version-does-not-exist-c640da4b
+              requires-exact-version-does-not-exist-bc5f5f6d
               available matching <0.0.0 | >0.0.0 and root depends on
-              requires-exact-version-does-not-exist-c640da4b, version solving failed.
+              requires-exact-version-does-not-exist-bc5f5f6d, version solving failed.
         "###);
     });
 
@@ -99,44 +99,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-greater-version-does-not-exist-ceb05782")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + requires-greater-version-does-not-exist-ceb05782==0.0.0
-         + requires-greater-version-does-not-exist-ceb05782-a==1.0.0
-        "###);
-    });
-
-    Ok(())
-}
-
-/// requires-less-version-does-not-exist
-///
-/// The user requires a version of `a`  less than `1.0.0` but only larger versions exist
-#[test]
-fn requires_less_version_does_not_exist() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
-
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
-            .arg("requires-less-version-does-not-exist-14de847d")
+            .arg("requires-greater-version-does-not-exist-670431f9")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -150,14 +113,57 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-less-version-does-not-exist-14de847d-a available matching
-              <2.0.0 and requires-less-version-does-not-exist-14de847d==0.0.0
-              depends on requires-less-version-does-not-exist-14de847d-a*,
-              requires-less-version-does-not-exist-14de847d==0.0.0 is forbidden.
+              requires-greater-version-does-not-exist-670431f9-a available matching
+              >1.0.0 and requires-greater-version-does-not-exist-670431f9==0.0.0
+              depends on requires-greater-version-does-not-exist-670431f9-a>1.0.0,
+              requires-greater-version-does-not-exist-670431f9==0.0.0 is forbidden.
               And because there is no version of
-              requires-less-version-does-not-exist-14de847d
+              requires-greater-version-does-not-exist-670431f9
               available matching <0.0.0 | >0.0.0 and root depends on
-              requires-less-version-does-not-exist-14de847d, version solving failed.
+              requires-greater-version-does-not-exist-670431f9, version solving
+              failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-less-version-does-not-exist
+///
+/// The user requires a version of `a` less than `1.0.0` but only larger versions exist
+#[test]
+fn requires_less_version_does_not_exist() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-less-version-does-not-exist-9a75991b")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of
+              requires-less-version-does-not-exist-9a75991b-a available matching
+              <2.0.0 and requires-less-version-does-not-exist-9a75991b==0.0.0
+              depends on requires-less-version-does-not-exist-9a75991b-a*,
+              requires-less-version-does-not-exist-9a75991b==0.0.0 is forbidden.
+              And because there is no version of
+              requires-less-version-does-not-exist-9a75991b
+              available matching <0.0.0 | >0.0.0 and root depends on
+              requires-less-version-does-not-exist-9a75991b, version solving failed.
         "###);
     });
 
@@ -166,7 +172,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 
 /// transitive-requires-package-does-not-exist
 ///
-/// The user requires package `a` but `a` package `b` which does not exist
+/// The user requires package `a` but `a` requires package `b` which does not exist
 #[test]
 fn transitive_requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -178,7 +184,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("transitive-requires-package-does-not-exist-15763ba4")
+            .arg("transitive-requires-package-does-not-exist-ca79eaa2")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -190,7 +196,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Package `transitive-requires-package-does-not-exist-15763ba4-b` was not found in the registry.
+        error: Package `transitive-requires-package-does-not-exist-ca79eaa2-b` was not found in the registry.
         "###);
     });
 
@@ -211,7 +217,7 @@ fn requires_direct_incompatible_versions() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-direct-incompatible-versions-3a64108d")
+            .arg("requires-direct-incompatible-versions-350bd4b0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -223,7 +229,7 @@ fn requires_direct_incompatible_versions() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Conflicting versions for `requires-direct-incompatible-versions-3a64108d-a`: `requires-direct-incompatible-versions-3a64108d-a==1.0.0` does not intersect with `requires-direct-incompatible-versions-3a64108d-a==2.0.0`
+        error: Conflicting versions for `requires-direct-incompatible-versions-350bd4b0-a`: `requires-direct-incompatible-versions-350bd4b0-a==1.0.0` does not intersect with `requires-direct-incompatible-versions-350bd4b0-a==2.0.0`
         "###);
     });
 
@@ -232,7 +238,7 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 
 /// requires-transitive-incompatible-with-root-version
 ///
-/// The user requires package `a` and `b` but `a` requires a different version of `b`
+/// The user requires packages `a` and `b` but `a` requires a different version of `b`
 #[test]
 fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -244,7 +250,7 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-incompatible-with-root-version-8af9847a")
+            .arg("requires-transitive-incompatible-with-root-version-3240dab1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -258,25 +264,25 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-transitive-incompatible-with-root-version-8af9847a-a
+              requires-transitive-incompatible-with-root-version-3240dab1-a
               available matching <1.0.0 | >1.0.0 and
-              requires-transitive-incompatible-with-root-version-8af9847a-a==1.0.0
+              requires-transitive-incompatible-with-root-version-3240dab1-a==1.0.0
               depends on
-              requires-transitive-incompatible-with-root-version-8af9847a-b==2.0.0,
-              requires-transitive-incompatible-with-root-version-8af9847a-a depends on
-              requires-transitive-incompatible-with-root-version-8af9847a-b==2.0.0.
+              requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0,
+              requires-transitive-incompatible-with-root-version-3240dab1-a depends on
+              requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0.
               And because
-              requires-transitive-incompatible-with-root-version-8af9847a==0.0.0
-              depends on requires-transitive-incompatible-with-root-version-8af9847a-a
-              and requires-transitive-incompatible-with-root-version-8af9847a==0.0.0
+              requires-transitive-incompatible-with-root-version-3240dab1==0.0.0
+              depends on requires-transitive-incompatible-with-root-version-3240dab1-a
+              and requires-transitive-incompatible-with-root-version-3240dab1==0.0.0
               depends on
-              requires-transitive-incompatible-with-root-version-8af9847a-b==1.0.0,
-              requires-transitive-incompatible-with-root-version-8af9847a==0.0.0 is
+              requires-transitive-incompatible-with-root-version-3240dab1-b==1.0.0,
+              requires-transitive-incompatible-with-root-version-3240dab1==0.0.0 is
               forbidden.
               And because there is no version of
-              requires-transitive-incompatible-with-root-version-8af9847a
+              requires-transitive-incompatible-with-root-version-3240dab1
               available matching <0.0.0 | >0.0.0 and root depends on
-              requires-transitive-incompatible-with-root-version-8af9847a, version
+              requires-transitive-incompatible-with-root-version-3240dab1, version
               solving failed.
         "###);
     });
@@ -298,7 +304,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-incompatible-with-transitive-cb77ed7e")
+            .arg("requires-transitive-incompatible-with-transitive-8329cfc0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -312,34 +318,34 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-transitive-incompatible-with-transitive-cb77ed7e-b
+              requires-transitive-incompatible-with-transitive-8329cfc0-b
               available matching <1.0.0 | >1.0.0 and
-              requires-transitive-incompatible-with-transitive-cb77ed7e-b==1.0.0
+              requires-transitive-incompatible-with-transitive-8329cfc0-b==1.0.0
               depends on
-              requires-transitive-incompatible-with-transitive-cb77ed7e-c==2.0.0,
-              requires-transitive-incompatible-with-transitive-cb77ed7e-b depends on
-              requires-transitive-incompatible-with-transitive-cb77ed7e-c==2.0.0.
+              requires-transitive-incompatible-with-transitive-8329cfc0-c==2.0.0,
+              requires-transitive-incompatible-with-transitive-8329cfc0-b depends on
+              requires-transitive-incompatible-with-transitive-8329cfc0-c==2.0.0.
               And because
-              requires-transitive-incompatible-with-transitive-cb77ed7e-a==1.0.0
+              requires-transitive-incompatible-with-transitive-8329cfc0-a==1.0.0
               depends on
-              requires-transitive-incompatible-with-transitive-cb77ed7e-c==1.0.0
+              requires-transitive-incompatible-with-transitive-8329cfc0-c==1.0.0
               and there is no version of
-              requires-transitive-incompatible-with-transitive-cb77ed7e-a
+              requires-transitive-incompatible-with-transitive-8329cfc0-a
               available matching <1.0.0 | >1.0.0,
-              requires-transitive-incompatible-with-transitive-cb77ed7e-b *,
-              requires-transitive-incompatible-with-transitive-cb77ed7e-a * are
+              requires-transitive-incompatible-with-transitive-8329cfc0-b *,
+              requires-transitive-incompatible-with-transitive-8329cfc0-a * are
               incompatible.
               And because
-              requires-transitive-incompatible-with-transitive-cb77ed7e==0.0.0
-              depends on requires-transitive-incompatible-with-transitive-cb77ed7e-b
-              and requires-transitive-incompatible-with-transitive-cb77ed7e==0.0.0
-              depends on requires-transitive-incompatible-with-transitive-cb77ed7e-a,
-              requires-transitive-incompatible-with-transitive-cb77ed7e==0.0.0 is
+              requires-transitive-incompatible-with-transitive-8329cfc0==0.0.0
+              depends on requires-transitive-incompatible-with-transitive-8329cfc0-b
+              and requires-transitive-incompatible-with-transitive-8329cfc0==0.0.0
+              depends on requires-transitive-incompatible-with-transitive-8329cfc0-a,
+              requires-transitive-incompatible-with-transitive-8329cfc0==0.0.0 is
               forbidden.
               And because there is no version of
-              requires-transitive-incompatible-with-transitive-cb77ed7e
+              requires-transitive-incompatible-with-transitive-8329cfc0
               available matching <0.0.0 | >0.0.0 and root depends on
-              requires-transitive-incompatible-with-transitive-cb77ed7e, version
+              requires-transitive-incompatible-with-transitive-8329cfc0, version
               solving failed.
         "###);
     });
