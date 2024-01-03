@@ -206,10 +206,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 .expect("This is a valid distribution");
 
             // Mock editable responses.
-            index.distributions.register(&dist.package_id());
-            index
-                .distributions
-                .done(dist.package_id(), metadata.clone());
+            let package_id = dist.package_id();
+            index.distributions.register(&package_id);
+            index.distributions.done(package_id, metadata.clone());
             editables.insert(
                 dist.name().clone(),
                 (editable_requirement.clone(), metadata.clone()),
@@ -488,7 +487,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             };
 
             // Emit a request to fetch the metadata for this version.
-            if self.index.distributions.register(&candidate.package_id()) {
+            if self
+                .index
+                .distributions
+                .register_owned(candidate.package_id())
+            {
                 let distribution = candidate.into_distribution(index.clone(), base.clone());
                 request_sink.unbounded_send(Request::Dist(distribution))?;
             }
@@ -592,7 +595,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(&candidate.package_id()) {
+                if self
+                    .index
+                    .distributions
+                    .register_owned(candidate.package_id())
+                {
                     let distribution = candidate.into_distribution(index.clone(), base.clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
