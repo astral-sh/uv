@@ -71,6 +71,13 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     {
         self.wait_map.get(key)
     }
+
+    /// Cancel all waiting tasks.
+    ///
+    /// Warning: waiting on tasks that have been canceled will cause the map to hang.
+    pub fn cancel_all(&self) {
+        self.wait_map.cancel_all();
+    }
 }
 
 impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {

@@ -24,3 +24,15 @@ pub(crate) struct Index {
     /// A map from source URL to precise URL.
     pub(crate) redirects: OnceMap<Url, Url>,
 }
+
+impl Index {
+    /// Cancel all waiting tasks.
+    ///
+    /// Warning: waiting on tasks that have been canceled will cause the index to hang.
+    pub(crate) fn cancel_all(&self) {
+        self.packages.cancel_all();
+        self.distributions.cancel_all();
+        self.incompatibilities.cancel_all();
+        self.redirects.cancel_all();
+    }
+}

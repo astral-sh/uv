@@ -202,7 +202,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             }
             resolution = resolve_fut => {
                 resolution.map_err(|err| {
-                    // Add version information to improve unsat error messages
+                    // Ensure that any waiting tasks are cancelled prior to accessing any of the
+                    // index entries.
+                    self.index.cancel_all();
+
+                    // Add version information to improve unsat error messages.
                     if let ResolveError::NoSolution(err) = err {
                         ResolveError::NoSolution(err.with_available_versions(&self.python_requirement, &self.index.packages).with_selector(self.selector.clone()))
                     } else {
