@@ -5,16 +5,15 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use pep508_rs::MarkerEnvironment;
 use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
-use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
 use pypi_types::Yanked;
 
 use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::pubgrub::PubGrubVersion;
+use crate::python_requirement::PythonRequirement;
 use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
@@ -23,13 +22,12 @@ pub struct VersionMap(BTreeMap<PubGrubVersion, PrioritizedDistribution>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
-    #[instrument(skip_all, fields(package_name = %package_name))]
+    #[instrument(skip_all, fields(package_name = % package_name))]
     pub(crate) fn from_metadata(
         metadata: SimpleMetadata,
         package_name: &PackageName,
         tags: &Tags,
-        markers: &MarkerEnvironment,
-        interpreter: &Interpreter,
+        python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
     ) -> Self {
@@ -39,23 +37,6 @@ impl VersionMap {
         // Collect compatible distributions.
         for (version, files) in metadata {
             for (filename, file) in files.all() {
-                // Only add dists compatible with the python version. This is relevant for source
-                // distributions which give no other indication of their compatibility and wheels which
-                // may be tagged `py3-none-any` but have `requires-python: ">=3.9"`.
-                // TODO(konstin): https://github.com/astral-sh/puffin/issues/406
-                if let Some(requires_python) = file.requires_python.as_ref() {
-                    // The interpreter and marker version are often the same, but can differ. For
-                    // example, if the user is resolving against a target Python version passed in
-                    // via the command-line, that version will differ from the interpreter version.
-                    let interpreter_version = interpreter.version();
-                    let marker_version = &markers.python_version.version;
-                    if !requires_python.contains(interpreter_version)
-                        || !requires_python.contains(marker_version)
-                    {
-                        continue;
-                    }
-                }
-
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information
                 if let Some(exclude_newer) = exclude_newer {
@@ -86,8 +67,17 @@ impl VersionMap {
 
                 match filename {
                     DistFilename::WheelFilename(filename) => {
-                        let priority = filename.compatibility(tags);
-
+                        // To be compatible, the wheel must both have compatible tags _and_ have a
+                        // compatible Python requirement.
+                        let priority = filename.compatibility(tags).filter(|_| {
+                            file.requires_python
+                                .as_ref()
+                                .map_or(true, |requires_python| {
+                                    python_requirement
+                                        .versions()
+                                        .all(|version| requires_python.contains(version))
+                                })
+                        });
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
                                 entry.get_mut().insert_built(WheelFile(file), priority);
@@ -201,12 +191,12 @@ impl PrioritizedDistribution {
         ) {
             // Prefer the highest-priority, platform-compatible wheel.
             (Some((wheel, _)), _, _) => Some(ResolvableFile::CompatibleWheel(wheel)),
-            // If we have a source distribution and an incompatible wheel, return the wheel.
-            // We assume that all distributions have the same metadata for a given package version.
-            // If a source distribution exists, we assume we can build it, but using the wheel is
-            // faster.
+            // If we have a compatible source distribution and an incompatible wheel, return the
+            // wheel. We assume that all distributions have the same metadata for a given package
+            // version. If a compatible source distribution exists, we assume we can build it, but
+            // using the wheel is faster.
             (_, Some(sdist), Some(wheel)) => Some(ResolvableFile::IncompatibleWheel(sdist, wheel)),
-            // Otherwise, return the source distribution.
+            // Otherwise, if we have a source distribution, return it.
             (_, Some(sdist), _) => Some(ResolvableFile::SourceDist(sdist)),
             _ => None,
         }

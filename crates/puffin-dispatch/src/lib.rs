@@ -81,7 +81,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.no_build
     }
 
-    //#[instrument(skip(self, requirements), fields(requirements = requirements.iter().map(ToString::to_string).join(", ")))]
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
@@ -89,6 +88,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             Manifest::simple(requirements.to_vec()),
             self.options,
             markers,
+            self.interpreter,
             tags,
             self.client,
             self,

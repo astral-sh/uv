@@ -669,8 +669,9 @@ fn compile_python_37() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of black available matching ==23.10.1 and
-              root depends on black==23.10.1, version solving failed.
+          ╰─▶ Because there is no version of Python available matching >=3.8 and
+              black==23.10.1 depends on Python>=3.8, black==23.10.1 is forbidden.
+              And because root depends on black==23.10.1, version solving failed.
         "###);
     });
 
@@ -1552,8 +1553,8 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of werkzeug available matching >=3.0.0 and
-              flask==3.0.0 depends on werkzeug>=3.0.0, flask==3.0.0 is forbidden.
+          ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there is no version
+              of werkzeug available matching >=3.0.0, flask==3.0.0 is forbidden.
               And because root depends on flask==3.0.0, version solving failed.
         "###);
     });

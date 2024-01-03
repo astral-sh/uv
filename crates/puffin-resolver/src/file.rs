@@ -62,6 +62,13 @@ impl DistFile {
             Self::Sdist(sdist) => sdist.filename.as_str(),
         }
     }
+
+    pub(crate) fn is_sdist(&self) -> bool {
+        match self {
+            Self::Wheel(_) => false,
+            Self::Sdist(_) => true,
+        }
+    }
 }
 
 impl From<DistFile> for File {

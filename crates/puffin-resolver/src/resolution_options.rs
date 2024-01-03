@@ -1,10 +1,10 @@
-use crate::{PreReleaseMode, ResolutionMode};
 use chrono::{DateTime, Utc};
+
+use crate::{PreReleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ResolutionOptions {
-    // TODO(konstin): These should be pub(crate) again
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PreReleaseMode,
     pub exclude_newer: Option<DateTime<Utc>>,

@@ -66,6 +66,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         Manifest::simple(args.requirements.clone()),
         ResolutionOptions::default(),
         venv.interpreter().markers(),
+        venv.interpreter(),
         tags,
         &client,
         &build_dispatch,

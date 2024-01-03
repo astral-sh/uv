@@ -21,7 +21,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::{
     BuiltEditable, Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages,
 };
-use puffin_interpreter::Virtualenv;
+use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
 use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
@@ -173,6 +173,7 @@ pub(crate) async fn pip_install(
         &editables,
         &site_packages,
         reinstall,
+        &interpreter,
         tags,
         markers,
         &client,
@@ -320,6 +321,7 @@ async fn resolve(
     editables: &[BuiltEditable],
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
+    interpreter: &Interpreter,
     tags: &Tags,
     markers: &MarkerEnvironment,
     client: &RegistryClient,
@@ -361,8 +363,16 @@ async fn resolve(
     );
 
     // Resolve the dependencies.
-    let resolver = Resolver::new(manifest, options, markers, tags, client, build_dispatch)
-        .with_reporter(ResolverReporter::from(printer));
+    let resolver = Resolver::new(
+        manifest,
+        options,
+        markers,
+        interpreter,
+        tags,
+        client,
+        build_dispatch,
+    )
+    .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
 
     let s = if resolution.len() == 1 { "" } else { "s" };

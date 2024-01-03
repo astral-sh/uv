@@ -91,17 +91,26 @@ async fn resolve(
     tags: &Tags,
 ) -> Result<ResolutionGraph> {
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
+    let interpreter = Interpreter::artificial(
+        Platform::current()?,
+        markers.clone(),
+        PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null"),
+    );
     let build_context = DummyContext {
         cache: Cache::temp()?,
-        interpreter: Interpreter::artificial(
-            Platform::current()?,
-            markers.clone(),
-            PathBuf::from("/dev/null"),
-            PathBuf::from("/dev/null"),
-            PathBuf::from("/dev/null"),
-        ),
+        interpreter: interpreter.clone(),
     };
-    let resolver = Resolver::new(manifest, options, markers, tags, &client, &build_context);
+    let resolver = Resolver::new(
+        manifest,
+        options,
+        markers,
+        &interpreter,
+        tags,
+        &client,
+        &build_context,
+    );
     Ok(resolver.resolve().await?)
 }
 
