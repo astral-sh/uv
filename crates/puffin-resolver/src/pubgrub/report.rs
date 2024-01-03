@@ -68,7 +68,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if package_set == &Range::full() && dependency_set == &Range::full() {
                     format!("{package} depends on {dependency}")
                 } else if package_set == &Range::full() {
-                    let dependency_set = self.simplify_set(dependency_set, package);
+                    let dependency_set = self.simplify_set(dependency_set, dependency);
                     format!("{package} depends on {dependency}{dependency_set}")
                 } else if dependency_set == &Range::full() {
                     if matches!(package, PubGrubPackage::Root(_)) {
@@ -79,7 +79,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         format!("{package}{package_set} depends on {dependency}")
                     }
                 } else {
-                    let dependency_set = self.simplify_set(dependency_set, package);
+                    let dependency_set = self.simplify_set(dependency_set, dependency);
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         format!("{package} depends on {dependency}{dependency_set}")
