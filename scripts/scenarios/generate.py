@@ -63,10 +63,8 @@ scenarios = json.loads(
     subprocess.check_output(
         [
             "packse",
-            "list",
+            "inspect",
             str(packse.__development_base_path__ / "scenarios"),
-            "--output-format",
-            "json",
         ],
     )
 )["scenarios"]
