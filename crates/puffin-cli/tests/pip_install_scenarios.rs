@@ -158,7 +158,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
           ╰─▶ Because there is no version of
               requires-less-version-does-not-exist-9a75991b-a available matching
               <2.0.0 and requires-less-version-does-not-exist-9a75991b==0.0.0
-              depends on requires-less-version-does-not-exist-9a75991b-a*,
+              depends on requires-less-version-does-not-exist-9a75991b-a<2.0.0,
               requires-less-version-does-not-exist-9a75991b==0.0.0 is forbidden.
               And because there is no version of
               requires-less-version-does-not-exist-9a75991b
@@ -263,20 +263,21 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of
-              requires-transitive-incompatible-with-root-version-3240dab1-a
-              available matching <1.0.0 | >1.0.0 and
+          ╰─▶ Because
               requires-transitive-incompatible-with-root-version-3240dab1-a==1.0.0
               depends on
-              requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0,
+              requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0
+              and there is no version of
+              requires-transitive-incompatible-with-root-version-3240dab1-a
+              available matching <1.0.0 | >1.0.0,
               requires-transitive-incompatible-with-root-version-3240dab1-a depends on
               requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0.
               And because
               requires-transitive-incompatible-with-root-version-3240dab1==0.0.0
-              depends on requires-transitive-incompatible-with-root-version-3240dab1-a
-              and requires-transitive-incompatible-with-root-version-3240dab1==0.0.0
               depends on
-              requires-transitive-incompatible-with-root-version-3240dab1-b==1.0.0,
+              requires-transitive-incompatible-with-root-version-3240dab1-b==1.0.0
+              and requires-transitive-incompatible-with-root-version-3240dab1==0.0.0
+              depends on requires-transitive-incompatible-with-root-version-3240dab1-a,
               requires-transitive-incompatible-with-root-version-3240dab1==0.0.0 is
               forbidden.
               And because there is no version of
