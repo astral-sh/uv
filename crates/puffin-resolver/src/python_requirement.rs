@@ -9,32 +9,29 @@ pub struct PythonRequirement<'a> {
     /// The target version of Python; that is, the version of Python for which we are resolving
     /// dependencies. This is typically the same as the installed version, but may be different
     /// when specifying an alternate Python version for the resolution.
-    target: Option<&'a Version>,
+    target: &'a Version,
 }
 
 impl<'a> PythonRequirement<'a> {
     pub fn new(interpreter: &'a Interpreter, markers: &'a MarkerEnvironment) -> Self {
-        let installed = interpreter.version();
-        let target = &markers.python_version.version;
         Self {
-            installed,
-            target: if installed == target {
-                None
-            } else {
-                Some(target)
-            },
+            installed: interpreter.version(),
+            target: &markers.python_version.version,
         }
     }
 
-    /// Return a version in the given range.
-    pub(crate) fn version(&self) -> &'a Version {
+    /// Return the installed version of Python.
+    pub(crate) fn installed(&self) -> &'a Version {
         self.installed
+    }
+
+    /// Return the target version of Python.
+    pub(crate) fn target(&self) -> &'a Version {
+        self.target
     }
 
     /// Returns an iterator over the versions of Python to consider when resolving dependencies.
     pub(crate) fn versions(&self) -> impl Iterator<Item = &'a Version> {
-        self.target
-            .into_iter()
-            .chain(std::iter::once(self.installed))
+        std::iter::once(self.installed).chain(std::iter::once(self.target))
     }
 }

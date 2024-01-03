@@ -2,6 +2,7 @@ use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
 use distribution_types::{Dist, DistributionMetadata, IndexUrl, Name};
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 use pypi_types::BaseUrl;
@@ -9,6 +10,7 @@ use pypi_types::BaseUrl;
 use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
+use crate::python_requirement::PythonRequirement;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{ResolvableFile, VersionMap};
 use crate::{Manifest, ResolutionOptions};
@@ -252,6 +254,30 @@ impl<'a> Candidate<'a> {
     /// Return the [`DistFile`] to use when installing the package.
     pub(crate) fn install(&self) -> &DistFile {
         self.file.install()
+    }
+
+    /// If the candidate doesn't the given requirement, return the version specifiers.
+    pub(crate) fn validate(&self, requirement: &PythonRequirement) -> Option<&VersionSpecifiers> {
+        // Validate against the _installed_ file. It's fine if the _resolved_ file is incompatible,
+        // since it could be an incompatible wheel. (If the resolved file is an incompatible source
+        // distribution, then the resolved and installed file will be the same anyway.)
+        let requires_python = self.install().requires_python.as_ref()?;
+
+        // If the candidate doesn't support the target Python version, return the failing version
+        // specifiers.
+        if !requires_python.contains(requirement.target()) {
+            return Some(requires_python);
+        }
+
+        // If the candidate is a source distribution, and doesn't support the installed Python
+        // version, return the failing version specifiers, since we won't be able to build it.
+        if self.install().is_sdist() {
+            if !requires_python.contains(requirement.installed()) {
+                return Some(requires_python);
+            }
+        }
+
+        None
     }
 
     /// Return the [`Dist`] to use when resolving the candidate.

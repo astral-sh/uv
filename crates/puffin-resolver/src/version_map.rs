@@ -68,7 +68,7 @@ impl VersionMap {
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         // To be compatible, the wheel must both have compatible tags _and_ have a
-                        // compatible Python version marker.
+                        // compatible Python requirement.
                         let priority = filename.compatibility(tags).filter(|_| {
                             file.requires_python
                                 .as_ref()

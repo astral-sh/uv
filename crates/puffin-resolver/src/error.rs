@@ -15,7 +15,10 @@ use puffin_traits::OnceMap;
 use pypi_types::BaseUrl;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::pubgrub::{PubGrubHints, PubGrubPackage, PubGrubReportFormatter, PubGrubVersion};
+use crate::pubgrub::{
+    PubGrubHints, PubGrubPackage, PubGrubPython, PubGrubReportFormatter, PubGrubVersion,
+};
+use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
 #[derive(Error, Debug)]
@@ -159,20 +162,36 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_available_versions(
         mut self,
+        python_requirement: &PythonRequirement,
         package_versions: &OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
     ) -> Self {
         let mut available_versions = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, ..) = package {
-                if let Some(entry) = package_versions.get(name) {
-                    let (_, _, version_map) = entry.value();
+            match package {
+                PubGrubPackage::Root(_) => {}
+                PubGrubPackage::Python(PubGrubPython::Installed) => {
                     available_versions.insert(
                         package.clone(),
-                        version_map
-                            .iter()
-                            .map(|(version, _)| version.clone())
-                            .collect(),
+                        vec![PubGrubVersion::from(python_requirement.installed().clone())],
                     );
+                }
+                PubGrubPackage::Python(PubGrubPython::Target) => {
+                    available_versions.insert(
+                        package.clone(),
+                        vec![PubGrubVersion::from(python_requirement.target().clone())],
+                    );
+                }
+                PubGrubPackage::Package(name, ..) => {
+                    if let Some(entry) = package_versions.get(name) {
+                        let (_, _, version_map) = entry.value();
+                        available_versions.insert(
+                            package.clone(),
+                            version_map
+                                .iter()
+                                .map(|(version, _)| version.clone())
+                                .collect(),
+                        );
+                    }
                 }
             }
         }

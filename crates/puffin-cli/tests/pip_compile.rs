@@ -670,7 +670,7 @@ fn compile_python_37() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of Python available matching >=3.8 and
-              black==23.10.1 depends on Python*, black==23.10.1 is forbidden.
+              black==23.10.1 depends on Python>=3.8, black==23.10.1 is forbidden.
               And because root depends on black==23.10.1, version solving failed.
         "###);
     });
