@@ -22,6 +22,7 @@ use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, SourceDist,
     VersionOrUrl,
 };
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
@@ -572,6 +573,20 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
+                // If the version is incompatible, short-circuit.
+                if let Some(requires_python) = candidate.resolve().requires_python.as_ref() {
+                    let interpreter_version = self.interpreter.version();
+                    let marker_version = &self.markers.python_version.version;
+                    if !requires_python.contains(interpreter_version)
+                        || !requires_python.contains(marker_version)
+                    {
+                        self.index
+                            .incompatibilities
+                            .done(candidate.package_id(), requires_python.clone());
+                        return Ok(Some(candidate.version().clone()));
+                    }
+                }
+
                 if let Some(extra) = extra {
                     debug!(
                         "Selecting: {}[{}]=={} ({})",
@@ -668,7 +683,25 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Some(url) => PubGrubDistribution::from_url(package_name, url),
                     None => PubGrubDistribution::from_registry(package_name, version),
                 };
-                let entry = self.index.distributions.wait(&dist.package_id()).await;
+                let package_id = dist.package_id();
+
+                // If the package is known to be incompatible, return the Python version as an
+                // incompatibility, and skip fetching the metadata.
+                if let Some(entry) = self.index.incompatibilities.get(&package_id) {
+                    let requires_python = entry.value();
+                    let version = requires_python
+                        .iter()
+                        .map(PubGrubSpecifier::try_from)
+                        .fold_ok(Range::full(), |range, specifier| {
+                            range.intersection(&specifier.into())
+                        })?;
+
+                    let mut constraints = DependencyConstraints::default();
+                    constraints.insert(PubGrubPackage::Python, version.clone());
+                    return Ok(Dependencies::Known(constraints));
+                }
+
+                let entry = self.index.distributions.wait(&package_id).await;
                 let metadata = entry.value();
 
                 let mut constraints = PubGrubDependencies::from_requirements(
@@ -805,6 +838,20 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
+                // If the version is incompatible, short-circuit.
+                if let Some(requires_python) = candidate.resolve().requires_python.as_ref() {
+                    let interpreter_version = self.interpreter.version();
+                    let marker_version = &self.markers.python_version.version;
+                    if !requires_python.contains(interpreter_version)
+                        || !requires_python.contains(marker_version)
+                    {
+                        self.index
+                            .incompatibilities
+                            .done(candidate.package_id(), requires_python.clone());
+                        return Ok(None);
+                    }
+                }
+
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(&candidate.package_id()) {
                     let dist = candidate.into_distribution(index.clone(), base.clone());
@@ -932,8 +979,11 @@ pub(crate) struct Index {
     /// came from.
     pub(crate) packages: OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
 
-    /// A map from distribution SHA to metadata for that distribution.
+    /// A map from package ID to metadata for that distribution.
     pub(crate) distributions: OnceMap<PackageId, Metadata21>,
+
+    /// A map from package ID to required Python version.
+    pub(crate) incompatibilities: OnceMap<PackageId, VersionSpecifiers>,
 
     /// A map from source URL to precise URL.
     pub(crate) redirects: OnceMap<Url, Url>,
