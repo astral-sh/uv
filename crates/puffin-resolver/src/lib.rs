@@ -18,6 +18,7 @@ mod overrides;
 mod pins;
 mod prerelease_mode;
 mod pubgrub;
+mod python_requirement;
 mod resolution;
 mod resolution_mode;
 mod resolution_options;

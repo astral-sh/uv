@@ -41,6 +41,7 @@ use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubSpecifier,
     PubGrubVersion, MIN_VERSION,
 };
+use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
@@ -76,9 +77,8 @@ pub trait ResolverProvider: Send + Sync {
 pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     client: &'a RegistryClient,
     fetcher: DistributionDatabase<'a, Context>,
-    build_context: &'a Context,
     tags: &'a Tags,
-    markers: &'a MarkerEnvironment,
+    python_requirement: PythonRequirement<'a>,
     exclude_newer: Option<DateTime<Utc>>,
     allowed_yanks: AllowedYanks,
 }
@@ -87,18 +87,16 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
     pub fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
-        build_context: &'a Context,
         tags: &'a Tags,
-        markers: &'a MarkerEnvironment,
+        python_requirement: PythonRequirement<'a>,
         exclude_newer: Option<DateTime<Utc>>,
         allowed_yanks: AllowedYanks,
     ) -> Self {
         Self {
             client,
             fetcher,
-            build_context,
             tags,
-            markers,
+            python_requirement,
             exclude_newer,
             allowed_yanks,
         }
@@ -122,8 +120,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                         metadata,
                         package_name,
                         self.tags,
-                        self.markers,
-                        self.build_context.interpreter(),
+                        &self.python_requirement,
                         &self.allowed_yanks,
                         self.exclude_newer.as_ref(),
                     ),
@@ -155,7 +152,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     overrides: Overrides,
     allowed_urls: AllowedUrls,
     markers: &'a MarkerEnvironment,
-    interpreter: &'a Interpreter,
+    python_requirement: PythonRequirement<'a>,
     selector: CandidateSelector,
     index: Arc<Index>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
@@ -177,9 +174,8 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         let provider = DefaultResolverProvider::new(
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
-            build_context,
             tags,
-            markers,
+            PythonRequirement::new(interpreter, markers),
             options.exclude_newer,
             manifest
                 .requirements
@@ -187,7 +183,13 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .chain(manifest.constraints.iter())
                 .collect(),
         );
-        Self::new_custom_io(manifest, options, markers, interpreter, provider)
+        Self::new_custom_io(
+            manifest,
+            options,
+            markers,
+            PythonRequirement::new(interpreter, markers),
+            provider,
+        )
     }
 }
 
@@ -197,7 +199,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
-        interpreter: &'a Interpreter,
+        python_requirement: PythonRequirement<'a>,
         provider: Provider,
     ) -> Self {
         let selector = CandidateSelector::for_resolution(&manifest, options);
@@ -251,7 +253,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             constraints: manifest.constraints,
             overrides: Overrides::from_requirements(manifest.overrides),
             markers,
-            interpreter,
+            python_requirement,
             editables,
             reporter: None,
             provider,
@@ -497,20 +499,15 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
             PubGrubPackage::Python => {
-                // The version used in the current Python interpreter.
-                let interpreter_version = PubGrubVersion::from(self.interpreter.version().clone());
-                if !range.contains(&interpreter_version) {
+                if self
+                    .python_requirement
+                    .versions()
+                    .any(|version| !range.contains(&PubGrubVersion::from(version.clone())))
+                {
                     return Ok(None);
                 }
-
-                // The version against which we're resolving.
-                let marker_version =
-                    PubGrubVersion::from(self.markers.python_version.version.clone());
-                if !range.contains(&marker_version) {
-                    return Ok(None);
-                }
-
-                Ok(Some(marker_version))
+                let version = PubGrubVersion::from(self.python_requirement.version().clone());
+                Ok(Some(version))
             }
 
             PubGrubPackage::Package(package_name, extra, Some(url)) => {
@@ -575,10 +572,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.resolve().requires_python.as_ref() {
-                    let interpreter_version = self.interpreter.version();
-                    let marker_version = &self.markers.python_version.version;
-                    if !requires_python.contains(interpreter_version)
-                        || !requires_python.contains(marker_version)
+                    if self
+                        .python_requirement
+                        .versions()
+                        .any(|version| !requires_python.contains(version))
                     {
                         self.index
                             .incompatibilities
@@ -838,19 +835,20 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                // If the version is incompatible, short-circuit.
-                if let Some(requires_python) = candidate.resolve().requires_python.as_ref() {
-                    let interpreter_version = self.interpreter.version();
-                    let marker_version = &self.markers.python_version.version;
-                    if !requires_python.contains(interpreter_version)
-                        || !requires_python.contains(marker_version)
-                    {
-                        self.index
-                            .incompatibilities
-                            .done(candidate.package_id(), requires_python.clone());
-                        return Ok(None);
-                    }
+            // If the version is incompatible, short-circuit.
+            if let Some(requires_python) = candidate.resolve().requires_python.as_ref() {
+                if self
+                    .python_requirement
+                    .versions()
+                    .any(|version| !requires_python.contains(version))
+                {
+                    self.index
+                        .incompatibilities
+                        .done(candidate.package_id(), requires_python.clone());
+                    return Ok(None);
                 }
+            }
+
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(&candidate.package_id()) {

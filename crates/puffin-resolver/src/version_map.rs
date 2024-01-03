@@ -5,16 +5,15 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use pep508_rs::MarkerEnvironment;
 use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
-use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
 use pypi_types::Yanked;
 
 use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::pubgrub::PubGrubVersion;
+use crate::python_requirement::PythonRequirement;
 use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
@@ -28,8 +27,7 @@ impl VersionMap {
         metadata: SimpleMetadata,
         package_name: &PackageName,
         tags: &Tags,
-        markers: &MarkerEnvironment,
-        interpreter: &Interpreter,
+        python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
     ) -> Self {
@@ -75,14 +73,9 @@ impl VersionMap {
                             file.requires_python
                                 .as_ref()
                                 .map_or(true, |requires_python| {
-                                    // The interpreter and marker version are often the same, but can differ.
-                                    // For example, if the user is resolving against a target Python version
-                                    // passed in via the command line, that version will differ from the
-                                    // interpreter version.
-                                    let interpreter_version = interpreter.version();
-                                    let marker_version = &markers.python_version.version;
-                                    requires_python.contains(interpreter_version)
-                                        && requires_python.contains(marker_version)
+                                    python_requirement
+                                        .versions()
+                                        .all(|version| requires_python.contains(version))
                                 })
                         });
                         match version_map.entry(version.clone().into()) {
