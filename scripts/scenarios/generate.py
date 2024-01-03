@@ -51,6 +51,6 @@ for index, scenario in enumerate(data["scenarios"]):
     if scenario["name"] == "example":
         data["scenarios"].pop(index)
 
-output = chevron_blue.render(template=TEMPLATE.read_text(), data=data)
+output = chevron_blue.render(template=TEMPLATE.read_text(), data=data, no_escape=True)
 
 print(output)

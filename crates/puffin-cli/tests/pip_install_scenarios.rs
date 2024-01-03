@@ -100,7 +100,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 ///
 /// requires-greater-version-does-not-exist-670431f9
 /// ├── root
-/// │   └── requires a&gt;1.0.0
+/// │   └── requires a>1.0.0
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
@@ -116,7 +116,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-greater-version-does-not-exist-670431f9-a&gt;1.0.0")
+            .arg("requires-greater-version-does-not-exist-670431f9-a>1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -124,14 +124,16 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: false
-        exit_code: 2
+        exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-        error: Failed to parse `requires-greater-version-does-not-exist-670431f9-a&gt;1.0.0`
-          Caused by: Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `&`
-        requires-greater-version-does-not-exist-670431f9-a&gt;1.0.0
-                                                          ^
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of
+              requires-greater-version-does-not-exist-670431f9-a
+              available matching >1.0.0 and root depends on
+              requires-greater-version-does-not-exist-670431f9-a>1.0.0, version
+              solving failed.
         "###);
     });
 
@@ -144,7 +146,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 ///
 /// requires-less-version-does-not-exist-9a75991b
 /// ├── root
-/// │   └── requires a&lt;2.0.0
+/// │   └── requires a<2.0.0
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-2.0.0
@@ -161,7 +163,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-less-version-does-not-exist-9a75991b-a&lt;2.0.0")
+            .arg("requires-less-version-does-not-exist-9a75991b-a<2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -169,14 +171,16 @@ fn requires_less_version_does_not_exist() -> Result<()> {
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: false
-        exit_code: 2
+        exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-        error: Failed to parse `requires-less-version-does-not-exist-9a75991b-a&lt;2.0.0`
-          Caused by: Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `&`
-        requires-less-version-does-not-exist-9a75991b-a&lt;2.0.0
-                                                       ^
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of
+              requires-less-version-does-not-exist-9a75991b-a
+              available matching <2.0.0 and root depends on
+              requires-less-version-does-not-exist-9a75991b-a<2.0.0, version solving
+              failed.
         "###);
     });
 
