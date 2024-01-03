@@ -1,0 +1,2 @@
+chevron-blue==0.2.1
+packse @ git+https://github.com/zanieb/packse
