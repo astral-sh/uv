@@ -217,7 +217,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 let staging = tempfile::tempdir_in(parent)?;
                 download.unzip(staging.path())?;
 
-                // Move the unzipped wheel into the cache,.
+                // Move the unzipped wheel into the cache.
                 if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
                     // If another thread already unpacked the wheel, we can ignore the error.
                     return if download.target().is_dir() {
