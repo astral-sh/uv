@@ -66,6 +66,7 @@ fn main() -> Result<(), Error> {
                 File::open(wheel)?,
                 &filename,
                 None,
+                None,
                 args.compile,
                 !args.skip_hashes,
                 &[],

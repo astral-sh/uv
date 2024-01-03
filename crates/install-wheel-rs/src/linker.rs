@@ -28,6 +28,7 @@ pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
     direct_url: Option<&DirectUrl>,
+    installer: Option<&str>,
     link_mode: LinkMode,
 ) -> Result<(), Error> {
     let root = location.venv_root();
@@ -112,6 +113,7 @@ pub fn install_wheel(
         &dist_info_prefix,
         true,
         direct_url,
+        installer,
         &mut record,
     )?;
 

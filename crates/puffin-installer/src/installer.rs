@@ -53,6 +53,7 @@ impl<'a> Installer<'a> {
                         .map(pypi_types::DirectUrl::try_from)
                         .transpose()?
                         .as_ref(),
+                    Some("puffin"),
                     self.link_mode,
                 )
                 .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
