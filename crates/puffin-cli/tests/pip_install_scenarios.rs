@@ -319,28 +319,28 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-transitive-incompatible-with-transitive-8329cfc0-b
+              requires-transitive-incompatible-with-transitive-8329cfc0-a
               available matching <1.0.0 | >1.0.0 and
-              requires-transitive-incompatible-with-transitive-8329cfc0-b==1.0.0
-              depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-c==2.0.0,
-              requires-transitive-incompatible-with-transitive-8329cfc0-b depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-c==2.0.0.
-              And because
               requires-transitive-incompatible-with-transitive-8329cfc0-a==1.0.0
               depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-c==1.0.0
+              requires-transitive-incompatible-with-transitive-8329cfc0-c==1.0.0,
+              requires-transitive-incompatible-with-transitive-8329cfc0-a depends on
+              requires-transitive-incompatible-with-transitive-8329cfc0-c==1.0.0.
+              And because
+              requires-transitive-incompatible-with-transitive-8329cfc0-b==1.0.0
+              depends on
+              requires-transitive-incompatible-with-transitive-8329cfc0-c==2.0.0
               and there is no version of
-              requires-transitive-incompatible-with-transitive-8329cfc0-a
+              requires-transitive-incompatible-with-transitive-8329cfc0-b
               available matching <1.0.0 | >1.0.0,
-              requires-transitive-incompatible-with-transitive-8329cfc0-b *,
-              requires-transitive-incompatible-with-transitive-8329cfc0-a * are
+              requires-transitive-incompatible-with-transitive-8329cfc0-a *,
+              requires-transitive-incompatible-with-transitive-8329cfc0-b * are
               incompatible.
               And because
               requires-transitive-incompatible-with-transitive-8329cfc0==0.0.0
-              depends on requires-transitive-incompatible-with-transitive-8329cfc0-b
+              depends on requires-transitive-incompatible-with-transitive-8329cfc0-a
               and requires-transitive-incompatible-with-transitive-8329cfc0==0.0.0
-              depends on requires-transitive-incompatible-with-transitive-8329cfc0-a,
+              depends on requires-transitive-incompatible-with-transitive-8329cfc0-b,
               requires-transitive-incompatible-with-transitive-8329cfc0==0.0.0 is
               forbidden.
               And because there is no version of
