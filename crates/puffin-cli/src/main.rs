@@ -70,15 +70,18 @@ enum Commands {
     PipInstall(PipInstallArgs),
     /// Uninstall packages from the current environment.
     PipUninstall(PipUninstallArgs),
+    /// Enumerate the installed packages in the current environment.
+    PipFreeze,
+    /// Create a virtual environment.
+    #[clap(alias = "virtualenv")]
+    Venv(VenvArgs),
     /// Clear the cache.
     Clean(CleanArgs),
-    /// Enumerate the installed packages in the current environment.
-    Freeze,
-    /// Create a virtual environment.
-    Venv(VenvArgs),
     /// Add a dependency to the workspace.
+    #[clap(hide = true)]
     Add(AddArgs),
     /// Remove a dependency from the workspace.
+    #[clap(hide = true)]
     Remove(RemoveArgs),
 }
 
@@ -535,7 +538,7 @@ async fn inner() -> Result<ExitStatus> {
             commands::pip_uninstall(&sources, cache, printer).await
         }
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
-        Commands::Freeze => commands::freeze(&cache, printer),
+        Commands::PipFreeze => commands::freeze(&cache, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),
