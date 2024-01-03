@@ -1,84 +1,234 @@
 # `puffin`
 
-An experimental Python packaging tool.
+An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
+replacement for `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
 
-## Motivation
+Puffin is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
 
-Puffin is an extremely fast (experimental) Python package resolver and installer, intended to
-replace `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
+## Highlights
 
-Puffin itself is not a complete "package manager", but rather a tool for locking dependencies
-(similar to `pip-compile`) and installing them (similar to `pip-sync`). Puffin can be used to
-generate a set of locked dependencies from a `requirements.txt` file, and then install those
-locked dependencies into a virtual environment.
+- ⚡️ 10-100x faster than `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
+- 💾 Disk-space efficient, with a global cache for dependency duplication and Copy-on-Write package
+  installation.
+- ⚖️ Drop-in parity with the `pip` and `pip-tools` APIs.
+- 🤝 Support for a wide range of familiar `pip` features, including: editable installs, Git
+  dependencies, direct URL dependencies, local dependencies, constraints, source distributions, HTML
+  and JSON indexes, and more.
+- 🐍 Installable via `pip`, `pipx`, etc. Puffin is a single static binary that can be installed
+  without installing Rust or even Python.
+- 🧪 Extensively tested: capable of resolving and installing the top 8,000 packages on PyPI.
 
-Puffin represents an intermediary goal in our pursuit of building a "Cargo for Python": a Python
-package manager that is extremely fast, reliable, and easy to use -- capable of replacing not only
-`pip`, but also `pipx`, `pip-tools`, `virtualenv`, `tox`, `setuptools`, and even `pyenv`, by way of
-managing the Python installation itself.
+## Getting Started
 
-Puffin's limited scope allows us to solve many of the low-level problems that are required to
-build such a package manager (like package installation) while shipping an immediately useful tool
-with a minimal barrier to adoption. Try it today in lieu of `pip` and `pip-tools`.
+Puffin is available as [`puffin`](https://pypi.org/project/puffin/) on PyPI:
 
-## Features
+```shell
+pip install puffin
+```
 
-- Extremely fast dependency resolution and installation: install dependencies in sub-second time.
-- Disk-space efficient: Puffin uses a global cache to deduplicate dependencies, and uses
-  Copy-on-Write on supported filesystems to reduce disk usage.
+To create a virtual environment with Puffin:
+
+```shell
+puffin venv  # Create a virtual environment at .venv.
+```
+
+To install a package into the virtual environment:
+
+```shell
+puffin pip-install flask                # Install Flask.
+puffin pip-install -r requirements.txt  # Install from a requirements file.
+puffin pip-install -e .                 # Install the current directory in editable mode.
+```
+
+To generate a set of locked dependencies from a requirements file:
+
+```shell
+puffin pip-compile requirements.in -o requirements.txt  # Generate a requirements.txt file.
+```
+
+To install a set of locked dependencies into the virtual environment:
+
+```shell
+puffin pip-sync requirements.txt  # Install from a requirements.txt file.
+```
+
+Puffin's `pip-install` and `pip-compile` commands supports many of the same command-line arguments
+as existing tools, including `-r requirements.txt`, `-c constraints.txt`, `-e .` (for editable
+installs), `--index-url`, and more.
+
+## Background & Roadmap
+
+Puffin is an extremely fast Python package resolver and installer, designed as a drop-in
+replacement for `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
+
+But Puffin itself is not a complete "package manager". Instead, it represents an intermediary goal
+in our pursuit of a "Cargo for Python": a Python package manager that is extremely fast, reliable,
+and easy to use — a single tool capable of unifying not only `pip` and `pip-tools`, but also `pipx`,
+`pip-tools`, `virtualenv`, `tox`, `setuptools`, `poetry`, `pyenv`, `rye`, and more.
+
+In the future, Puffin will be used as the foundation for such a tool: a single binary that
+bootstraps your Python installation and gives you everything you need to be productive with Python.
+
+In the meantime, though, Puffin's narrower scope allows us to solve many of the low-level problems
+that are required to build such a package manager (like package installation) while shipping an
+immediately useful tool with a minimal barrier to adoption. Try it today in lieu of `pip` and
+`pip-compile`.
 
 ## Limitations
 
-Puffin does not yet support:
-
-- Windows
-- Editable installs (`pip install -e ...`)
-- Package-less requirements (`pip install https://...`)
-- `--find-links`
-- ...
+Puffin does not yet support Windows ([#73](https://github.com/astral-sh/puffin/issues/73)).
 
 Like `pip-compile`, Puffin generates a platform-specific `requirements.txt` file (unlike, e.g.,
-`poetry`, which generates a platform-agnostic `poetry.lock` file). As such, Puffin's
-`requirements.txt` files are not portable across platforms and Python versions.
+`poetry` and `pdm`, which generate platform-agnostic `poetry.lock` and `pdm.lock` files). As such,
+Puffin's `requirements.txt` files may not be portable across platforms and Python versions.
 
-## Usage
+Finally, Puffin does not support the entire `pip` feature set. For example, Puffin does not
+support:
 
-To resolve a `requirements.in` file:
+- `--find-links`
+- `.egg` dependencies
+- Hash enforcement
+- ...
 
-```shell
-cargo run -p puffin-cli -- pip-compile requirements.in
-```
+## Advanced Usage
 
-To install from a resolved `requirements.txt` file:
+### Resolution strategy
 
-```shell
-cargo run -p puffin-cli -- pip-sync requirements.txt
-```
+By default, Puffin follows the standard Python dependency resolution strategy of preferring the
+latest compatible version of each package. For example, `puffin pip-install flask` will install the
+latest version of Flask (at time of writing: `3.0.0`).
 
-For more, see `cargo run -p puffin-cli -- --help`:
+However, Puffin's resolution strategy is parameterized, and can be configured to prefer the
+lowest compatible version of each package (`--resolution=lowest`), or even the lowest compatible
+version of any _direct_ dependencies (`--resolution=lowest-direct`), both of which can be useful
+for library authors looking to test their packages against the oldest supported versions of their
+dependencies.
+
+For example, given the following `requirements.in` file:
 
 ```text
-Usage: puffin [OPTIONS] <COMMAND>
-
-Commands:
-  pip-compile    Compile a `requirements.in` file to a `requirements.txt` file
-  pip-sync       Sync dependencies from a `requirements.txt` file
-  pip-uninstall  Uninstall packages from the current environment
-  clean          Clear the cache
-  freeze         Enumerate the installed packages in the current environment
-  venv           Create a virtual environment
-  add            Add a dependency to the workspace
-  remove         Remove a dependency from the workspace
-  help           Print this message or the help of the given subcommand(s)
-
-Options:
-  -q, --quiet                  Do not print any output
-  -v, --verbose                Use verbose output
-  -n, --no-cache               Avoid reading from or writing to the cache
-      --cache-dir <CACHE_DIR>  Path to the cache directory [env: PUFFIN_CACHE_DIR=]
-  -h, --help                   Print help
-  -V, --version                Print version
+flask>=2.0.0
 ```
+
+Then `puffin pip-compile requirements.in` would produce the following `requirements.txt` file:
+
+```text
+# This file was autogenerated by Puffin v0.0.1 via the following command:
+#    puffin pip-compile requirements.in
+blinker==1.7.0
+    # via flask
+click==8.1.7
+    # via flask
+flask==3.0.0
+itsdangerous==2.1.2
+    # via flask
+jinja2==3.1.2
+    # via flask
+markupsafe==2.1.3
+    # via
+    #   jinja2
+    #   werkzeug
+werkzeug==3.0.1
+    # via flask
+```
+
+However, `puffin pip-compile --resolution=lowest requirements.in` would produce:
+
+```text
+# This file was autogenerated by Puffin v0.0.1 via the following command:
+#    puffin pip-compile requirements.in --resolution=lowest
+click==7.1.2
+    # via flask
+flask==2.0.0
+itsdangerous==2.0.0
+    # via flask
+jinja2==3.0.0
+    # via flask
+markupsafe==2.0.0
+    # via jinja2
+werkzeug==2.0.0
+    # via flask
+```
+
+### Dependency caching
+
+Puffin uses aggressive caching to avoid re-downloading (and re-building dependencies) that have
+already been accessed.
+
+For dependencies that are downloaded via a registry (like PyPI) or a direct URL, Puffin respects
+HTTP caching headers.
+
+For Git dependencies, Puffin caches based on the fully-resolved Git commit hash (as such:
+`puffin pip-compile` will pin Git dependencies to a specific commit hash when outputting the
+resolved dependency set).
+
+For local path dependencies, Puffin caches based on the timestamp of the `setup.py` or
+`pyproject.toml` file.
+
+To clear the global cache, run `puffin clean`. To force Puffin to ignore cached data for all
+dependencies, run `puffin pip-install --reinstall ...`. To force Puffin to ignore cached data for
+a specific dependency, run, e.g., `puffin pip-install --reinstall-package flask ...`.
+
+### Pre-release handling
+
+By default, Puffin will accept pre-release versions during dependency resolution in two cases:
+
+1. If _all_ published versions of a package are pre-releases.
+2. If the package is a direct dependency, and its version markers include a pre-release specifier
+   (e.g., `flask>=2.0.0rc1`).
+
+If dependency resolution fails due to a transitive pre-release, Puffin will prompt the user to
+re-run with `--prerelease=allow`, to allow pre-releases for all dependencies. Alternatively, add
+the transitive dependency to your `requirements.in` file with a pre-release specifier (e.g.,
+`flask>=2.0.0rc1`) to allow pre-releases for that specific dependency.
+
+Pre-releases are notoriously difficult to model, and are a frequent source of bugs in other
+packaging tools. Puffin's pre-release handling is _intentionally_ limited and _intentionally_
+requires user intervention to opt in to pre-releases to ensure correctness, though pre-release
+handling will be revisited in future releases. 
+
+### Dependency overrides
+
+Historically, `pip` has supported "constraints" (`-c constraints.txt`), which allows users to
+narrow the set of acceptable versions for a given package.
+
+Puffin supports constraints, but also takes this concept further by allowing users to _override_ the
+acceptable versions of a package across the dependency tree via overrides (`-o overrides.txt`).
+
+In short, overrides allow the user to lie to the resolver by overriding the declared dependencies
+of a package. Overrides are a useful last resort for cases in which the user knows that a
+dependency is compatible with a newer version of a package than the package declares, but the
+package has not yet been updated to declare that compatibility.
+
+For example, if a transitive dependency declares `pydantic>1.0,<2.0`, but the user knows that
+the package is compatible with `pydantic>=2.0`, the user can override the declared dependency
+with `pydantic>=2.0` to allow the resolver to continue. While constraints are purely _additive_,
+and thus cannot _expand_ the set of acceptable versions for a package, overrides _can_ expand the
+set of acceptable versions for a package, providing an escape hatch for erroneous upper version
+bounds.
+
+### Multi-version resolution
+
+Puffin's `pip-compile` command produces a resolution that's known to be compatible with the
+current platform and Python version. Unlike Poetry, PDM, and other package managers, Puffin does
+not yet produce a machine-agnostic lockfile.
+
+However, Puffin _does_ support resolving for alternate Python versions via the `--python-version`
+flag. For example, if you're running Puffin on Python 3.9, but want to resolve for Python 3.8,
+you can run `puffin pip-compile --python-version=3.8 requirements.in` to produce a
+Python 3.8-compatible resolution.
+
+## Acknowledgements
+
+Puffin's dependency resolver uses [PubGrub](https://github.com/pubgrub-rs/pubgrub) under the hood.
+We're grateful to the PubGrub maintainers, especially [Jacob Finkelman](https://github.com/Eh2406),
+for their support.
+
+Puffin's Git implementation draws on details from [Cargo](https://github.com/rust-lang/cargo).
+
+Some of Puffin's optimizations are inspired by the great work we've seen in
+[Orogene](https://github.com/orogene/orogene) and [Bun](https://github.com/oven-sh/bun). We've also
+learned a lot from [Posy](https://github.com/njsmith/posy).
 
 ## License
 
