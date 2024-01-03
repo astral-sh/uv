@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
-use tracing::warn;
+use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
 use pep508_rs::MarkerEnvironment;
@@ -23,6 +23,7 @@ pub struct VersionMap(BTreeMap<PubGrubVersion, PrioritizedDistribution>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
+    #[instrument(skip_all, fields(package_name = %package_name))]
     pub(crate) fn from_metadata(
         metadata: SimpleMetadata,
         package_name: &PackageName,

@@ -13,7 +13,7 @@ use mailparse::MailHeaderMap;
 use rustc_hash::{FxHashMap, FxHashSet};
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
-use tracing::{debug, error, span, warn, Level};
+use tracing::{debug, error, instrument, warn};
 use walkdir::WalkDir;
 use zip::result::ZipError;
 use zip::write::FileOptions;
@@ -894,6 +894,7 @@ pub fn parse_key_value_file(
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all, fields(name = %filename.name))]
 pub fn install_wheel(
     location: &InstallLocation<LockedDir>,
     reader: impl Read + Seek,
@@ -907,7 +908,6 @@ pub fn install_wheel(
     sys_executable: impl AsRef<Path>,
 ) -> Result<String, Error> {
     let name = &filename.name;
-    let _my_span = span!(Level::DEBUG, "install_wheel", name = name.as_ref());
 
     let base_location = location.venv_root();
 

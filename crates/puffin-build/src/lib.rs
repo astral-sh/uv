@@ -24,7 +24,7 @@ use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::Mutex;
-use tracing::{debug, info_span, instrument};
+use tracing::{debug, info_span, instrument, Instrument};
 
 use pep508_rs::Requirement;
 use puffin_extract::extract_source;
@@ -390,11 +390,12 @@ impl SourceBuild {
         };
         let span = info_span!(
             "run_python_script",
-            name="prepare_metadata_for_build_wheel",
+            script="prepare_metadata_for_build_wheel",
             python_version = %self.venv.interpreter().version()
         );
-        let output = run_python_script(&self.venv, &script, &self.source_tree).await?;
-        drop(span);
+        let output = run_python_script(&self.venv, &script, &self.source_tree)
+            .instrument(span)
+            .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
@@ -432,7 +433,7 @@ impl SourceBuild {
     /// dir.
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
-    #[instrument(skip(self, wheel_dir), fields(package_id = self.package_id))]
+    #[instrument(skip_all, fields(package_id = self.package_id))]
     pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
@@ -452,10 +453,16 @@ impl SourceBuild {
             }
             // We checked earlier that setup.py exists.
             let python_interpreter = self.venv.python_executable();
+            let span = info_span!(
+                "run_python_script",
+                script="setup.py bdist_wheel",
+                python_version = %self.venv.interpreter().version()
+            );
             let output = Command::new(&python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
                 .current_dir(&self.source_tree)
                 .output()
+                .instrument(span)
                 .await
                 .map_err(|err| Error::CommandFailed(python_interpreter, err))?;
             if !output.status.success() {
@@ -508,11 +515,12 @@ impl SourceBuild {
         };
         let span = info_span!(
             "run_python_script",
-            name=format!("build_{}", self.build_kind),
+            script=format!("build_{}", self.build_kind),
             python_version = %self.venv.interpreter().version()
         );
-        let output = run_python_script(&self.venv, &script, &self.source_tree).await?;
-        drop(span);
+        let output = run_python_script(&self.venv, &script, &self.source_tree)
+            .instrument(span)
+            .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
@@ -585,11 +593,12 @@ async fn create_pep517_build_environment(
     };
     let span = info_span!(
         "get_requires_for_build_wheel",
-        name="build_wheel",
+        script="build_wheel",
         python_version = %venv.interpreter().version()
     );
-    let output = run_python_script(venv, &script, source_tree).await?;
-    drop(span);
+    let output = run_python_script(venv, &script, source_tree)
+        .instrument(span)
+        .await?;
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),

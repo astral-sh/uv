@@ -37,6 +37,15 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
         lock.insert(key.to_owned())
     }
 
+    /// Like [`OnceMap::register`], but takes ownership of the key.
+    pub fn register_owned(&self, key: K) -> bool {
+        let mut lock = self.started.lock().unwrap();
+        if lock.contains(&key) {
+            return false;
+        }
+        lock.insert(key)
+    }
+
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
         self.wait_map.insert(key, value);

@@ -61,7 +61,6 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Fetch, build, and unzip the distributions in parallel.
-    #[instrument(name = "download_distributions", skip_all, fields(total = distributions.len()))]
     pub fn download_stream<'stream>(
         &'stream self,
         distributions: Vec<Dist>,
@@ -81,6 +80,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Download, build, and unzip a set of downloaded wheels.
+    #[instrument(skip_all, fields(total = distributions.len()))]
     pub async fn download(
         &self,
         mut distributions: Vec<Dist>,
@@ -217,7 +217,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 let staging = tempfile::tempdir_in(parent)?;
                 download.unzip(staging.path())?;
 
-                // Move the unzipped wheel into the cache,.
+                // Move the unzipped wheel into the cache.
                 if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
                     // If another thread already unpacked the wheel, we can ignore the error.
                     return if download.target().is_dir() {
