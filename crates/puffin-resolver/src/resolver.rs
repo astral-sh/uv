@@ -852,7 +852,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(&candidate.package_id()) {
+                if self
+                    .index
+                    .distributions
+                    .register_owned(candidate.package_id())
+                {
                     let dist = candidate.into_distribution(index.clone(), base.clone());
                     drop(entry);
 
