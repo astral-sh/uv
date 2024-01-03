@@ -1,12 +1,10 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use std::future::Future;
 use std::sync::Arc;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use futures::channel::mpsc::UnboundedReceiver;
-use futures::{pin_mut, FutureExt, StreamExt, TryFutureExt};
+use futures::{pin_mut, FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
@@ -19,17 +17,15 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, SourceDist, VersionOrUrl,
 };
-use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
+use puffin_distribution::DistributionDatabase;
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
-use puffin_traits::{BuildContext, OnceMap};
+use puffin_traits::BuildContext;
 use pypi_types::{BaseUrl, Metadata21};
 
 use crate::candidate_selector::CandidateSelector;
@@ -43,107 +39,19 @@ use crate::pubgrub::{
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
+use crate::resolver::allowed_urls::AllowedUrls;
+use crate::resolver::index::Index;
+use crate::resolver::provider::DefaultResolverProvider;
+pub use crate::resolver::provider::ResolverProvider;
+use crate::resolver::reporter::Facade;
+pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::version_map::VersionMap;
-use crate::yanks::AllowedYanks;
 use crate::ResolutionOptions;
 
-type VersionMapResponse = Result<(IndexUrl, BaseUrl, VersionMap), puffin_client::Error>;
-type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
-
-pub trait ResolverProvider: Send + Sync {
-    /// Get the version map for a package.
-    fn get_version_map<'io>(
-        &'io self,
-        package_name: &'io PackageName,
-    ) -> impl Future<Output = VersionMapResponse> + Send + 'io;
-
-    /// Get the metadata for a distribution.
-    ///
-    /// For a wheel, this is done by querying it's (remote) metadata, for a source dist we
-    /// (fetch and) build the source distribution and return the metadata from the built
-    /// distribution.
-    fn get_or_build_wheel_metadata<'io>(
-        &'io self,
-        dist: &'io Dist,
-    ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io;
-
-    /// Set the [`Reporter`] to use for this installer.
-    #[must_use]
-    fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self;
-}
-
-/// The main IO backend for the resolver, which does cached requests network requests using the
-/// [`RegistryClient`] and [`DistributionDatabase`].
-pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
-    client: &'a RegistryClient,
-    fetcher: DistributionDatabase<'a, Context>,
-    tags: &'a Tags,
-    python_requirement: PythonRequirement<'a>,
-    exclude_newer: Option<DateTime<Utc>>,
-    allowed_yanks: AllowedYanks,
-}
-
-impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
-    pub fn new(
-        client: &'a RegistryClient,
-        fetcher: DistributionDatabase<'a, Context>,
-        tags: &'a Tags,
-        python_requirement: PythonRequirement<'a>,
-        exclude_newer: Option<DateTime<Utc>>,
-        allowed_yanks: AllowedYanks,
-    ) -> Self {
-        Self {
-            client,
-            fetcher,
-            tags,
-            python_requirement,
-            exclude_newer,
-            allowed_yanks,
-        }
-    }
-}
-
-impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
-    for DefaultResolverProvider<'a, Context>
-{
-    fn get_version_map<'io>(
-        &'io self,
-        package_name: &'io PackageName,
-    ) -> impl Future<Output = VersionMapResponse> + Send + 'io {
-        self.client
-            .simple(package_name)
-            .map_ok(move |(index, base, metadata)| {
-                (
-                    index,
-                    base,
-                    VersionMap::from_metadata(
-                        metadata,
-                        package_name,
-                        self.tags,
-                        &self.python_requirement,
-                        &self.allowed_yanks,
-                        self.exclude_newer.as_ref(),
-                    ),
-                )
-            })
-    }
-
-    fn get_or_build_wheel_metadata<'io>(
-        &'io self,
-        dist: &'io Dist,
-    ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io {
-        self.fetcher.get_or_build_wheel_metadata(dist)
-    }
-
-    /// Set the [`puffin_distribution::Reporter`] to use for this installer.
-    #[must_use]
-    fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self {
-        Self {
-            fetcher: self.fetcher.with_reporter(reporter),
-            ..self
-        }
-    }
-}
+mod allowed_urls;
+mod index;
+mod provider;
+mod reporter;
 
 pub struct Resolver<'a, Provider: ResolverProvider> {
     project: Option<PackageName>,
@@ -373,7 +281,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Pick the next compatible version.
             let version = match decision {
                 None => {
-                    debug!("No compatible version found for: {}", next);
+                    debug!("No compatible version found for: {next}");
 
                     let term_intersection = state
                         .partial_solution
@@ -909,51 +817,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     }
 }
 
-pub type BuildId = usize;
-
-pub trait Reporter: Send + Sync {
-    /// Callback to invoke when a dependency is resolved.
-    fn on_progress(&self, name: &PackageName, version: VersionOrUrl);
-
-    /// Callback to invoke when the resolution is complete.
-    fn on_complete(&self);
-
-    /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &SourceDist) -> usize;
-
-    /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &SourceDist, id: usize);
-
-    /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
-
-    /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
-}
-
-/// A facade for converting from [`Reporter`] to [`puffin_distribution::Reporter`].
-struct Facade {
-    reporter: Arc<dyn Reporter>,
-}
-
-impl puffin_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
-        self.reporter.on_build_start(dist)
-    }
-
-    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
-        self.reporter.on_build_complete(dist, id);
-    }
-
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        self.reporter.on_checkout_start(url, rev)
-    }
-
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index);
-    }
-}
-
 /// Fetch the metadata for an item
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -973,38 +836,6 @@ enum Response {
     Package(PackageName, IndexUrl, BaseUrl, VersionMap),
     /// The returned metadata for a distribution.
     Dist(Dist, Metadata21, Option<Url>),
-}
-
-/// In-memory index of package metadata.
-#[derive(Default)]
-pub(crate) struct Index {
-    /// A map from package name to the metadata for that package and the index where the metadata
-    /// came from.
-    pub(crate) packages: OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
-
-    /// A map from package ID to metadata for that distribution.
-    pub(crate) distributions: OnceMap<PackageId, Metadata21>,
-
-    /// A map from package ID to required Python version.
-    pub(crate) incompatibilities: OnceMap<PackageId, VersionSpecifiers>,
-
-    /// A map from source URL to precise URL.
-    pub(crate) redirects: OnceMap<Url, Url>,
-}
-
-#[derive(Debug, Default)]
-struct AllowedUrls(FxHashSet<cache_key::CanonicalUrl>);
-
-impl AllowedUrls {
-    fn contains(&self, url: &Url) -> bool {
-        self.0.contains(&cache_key::CanonicalUrl::new(url))
-    }
-}
-
-impl<'a> FromIterator<&'a Url> for AllowedUrls {
-    fn from_iter<T: IntoIterator<Item = &'a Url>>(iter: T) -> Self {
-        Self(iter.into_iter().map(cache_key::CanonicalUrl::new).collect())
-    }
 }
 
 /// An enum used by [`DependencyProvider`] that holds information about package dependencies.
