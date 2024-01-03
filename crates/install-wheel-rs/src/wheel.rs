@@ -819,6 +819,7 @@ pub(crate) fn extra_dist_info(
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
+    installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
     let dist_info_dir = PathBuf::from(format!("{dist_info_prefix}.dist-info"));
@@ -836,6 +837,14 @@ pub(crate) fn extra_dist_info(
             site_packages,
             &dist_info_dir.join("direct_url.json"),
             serde_json::to_string(direct_url)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(installer) = installer {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("INSTALLER"),
+            installer,
             record,
         )?;
     }
@@ -900,6 +909,7 @@ pub fn install_wheel(
     reader: impl Read + Seek,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
+    installer: Option<&str>,
     compile: bool,
     check_hashes: bool,
     // initially used to the console scripts, currently unused. Keeping it because we likely need
@@ -1022,6 +1032,7 @@ pub fn install_wheel(
         &dist_info_prefix,
         true,
         direct_url,
+        installer,
         &mut record,
     )?;
 
