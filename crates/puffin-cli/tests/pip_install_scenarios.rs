@@ -3,14 +3,14 @@
 /// DO NOT EDIT
 ///
 /// GENERATED WITH `./scripts/scenarios/update.py`
-/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/682bf4ff269f130f92bf35fdb58b6b27c94b579a/scenarios`
+/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/4ffd4ee25eb89fe078de15572bd609cf359a1997/scenarios`
 use std::process::Command;
 
 use anyhow::Result;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
@@ -28,7 +28,7 @@ mod common;
 fn requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -76,7 +76,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 fn requires_exact_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -128,7 +128,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 fn requires_greater_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -182,7 +182,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 fn requires_less_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -233,7 +233,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 fn transitive_requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -285,7 +285,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 fn requires_direct_incompatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -345,7 +345,7 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -414,7 +414,7 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
@@ -446,6 +446,371 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
           ╰─▶ Because there is no version of a available matching <1.0.0 | >1.0.0 and a==1.0.0 depends on c==1.0.0, a depends on c==1.0.0.
               And because b==1.0.0 depends on c==2.0.0 and there is no version of b available matching <1.0.0 | >1.0.0, a *, b * are incompatible.
               And because root depends on a and root depends on b, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-version-does-not-exist
+///
+/// The user requires a package which requires a Python version that does not exist
+///
+/// requires-python-version-does-not-exist-d1fc625b
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=4.0 (incompatible with environment)
+#[test]
+fn requires_python_version_does_not_exist() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-python-version-does-not-exist-d1fc625b-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-python-version-does-not-exist-d1fc625b-a==1.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of Python available matching >=4.0 and a==1.0.0 depends on Python>=4.0, a==1.0.0 is forbidden.
+              And because root depends on a==1.0.0, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-version-less-than-current
+///
+/// The user requires a package which requires a Python version less than the
+/// current version
+///
+/// requires-python-version-less-than-current-48bada28
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python<=3.8 (incompatible with environment)
+#[test]
+fn requires_python_version_less_than_current() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-python-version-less-than-current-48bada28-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-python-version-less-than-current-48bada28-a==1.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of Python available matching <=3.8 and a==1.0.0 depends on Python<=3.8, a==1.0.0 is forbidden.
+              And because root depends on a==1.0.0, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-version-greater-than-current
+///
+/// The user requires a package which requires a Python version greater than the
+/// current version
+///
+/// requires-python-version-greater-than-current-00f79f44
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=3.10 (incompatible with environment)
+#[test]
+fn requires_python_version_greater_than_current() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-python-version-greater-than-current-00f79f44-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-python-version-greater-than-current-00f79f44-a==1.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of Python available matching >=3.10 and a==1.0.0 depends on Python>=3.10, a==1.0.0 is forbidden.
+              And because root depends on a==1.0.0, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-version-greater-than-current-many
+///
+/// The user requires a package which has many versions which all require a Python
+/// version greater than the current version
+///
+/// requires-python-version-greater-than-current-many-b33dc0cb
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-2.0.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-2.1.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-2.2.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-2.3.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-2.4.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-2.5.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-3.0.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     ├── a-3.1.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     ├── a-3.2.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     ├── a-3.3.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     ├── a-3.4.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     └── a-3.5.0
+///         └── requires python>=3.11 (incompatible with environment)
+#[test]
+fn requires_python_version_greater_than_current_many() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-python-version-greater-than-current-many-b33dc0cb-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-python-version-greater-than-current-many-b33dc0cb-a==1.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of a available matching ==1.0.0 and root depends on a==1.0.0, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-version-greater-than-current-backtrack
+///
+/// The user requires a package where recent versions require a Python version
+/// greater than the current version, but an older version is compatible.
+///
+/// requires-python-version-greater-than-current-backtrack-d756219a
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-2.0.0
+/// │       ├── satisfied by a-3.0.0
+/// │       └── satisfied by a-4.0.0
+/// └── a
+///     ├── a-1.0.0
+///     │   └── requires python>=3.9
+///     ├── a-2.0.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-3.0.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     └── a-4.0.0
+///         └── requires python>=3.12 (incompatible with environment)
+#[test]
+fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-python-version-greater-than-current-backtrack-d756219a-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-python-version-greater-than-current-backtrack-d756219a-a")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-version-greater-than-current-excluded
+///
+/// The user requires a package where recent versions require a Python version
+/// greater than the current version, but an excluded older version is compatible.
+///
+/// requires-python-version-greater-than-current-excluded-7869d97e
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a>=2.0.0
+/// │       ├── satisfied by a-2.0.0
+/// │       ├── satisfied by a-3.0.0
+/// │       └── satisfied by a-4.0.0
+/// └── a
+///     ├── a-1.0.0
+///     │   └── requires python>=3.9
+///     ├── a-2.0.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-3.0.0
+///     │   └── requires python>=3.11 (incompatible with environment)
+///     └── a-4.0.0
+///         └── requires python>=3.12 (incompatible with environment)
+#[test]
+fn requires_python_version_greater_than_current_excluded() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-python-version-greater-than-current-excluded-7869d97e-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-python-version-greater-than-current-excluded-7869d97e-a>=2.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of Python available matching >=3.10, <3.11 and there is no version of Python available matching >=3.12, Python >=3.10, <3.11 | >=3.12 are incompatible.
+              And because there is no version of Python available matching >=3.11, <3.12, Python >=3.10 are incompatible.
+              And because a==2.0.0 depends on Python>=3.10 and there is no version of a available matching >2.0.0, <3.0.0 | >3.0.0, <4.0.0 | >4.0.0, a>=2.0.0, <3.0.0 is forbidden. (1)
+
+              Because there is no version of Python available matching >=3.11, <3.12 and there is no version of Python available matching >=3.12, Python >=3.11 are incompatible.
+              And because a==3.0.0 depends on Python>=3.11, a==3.0.0 is forbidden.
+              And because a>=2.0.0, <3.0.0 is forbidden (1), a>=2.0.0, <4.0.0 is forbidden. (2)
+
+              Because there is no version of Python available matching >=3.12 and a==4.0.0 depends on Python>=3.12, a==4.0.0 is forbidden.
+              And because a>=2.0.0, <4.0.0 is forbidden (2), a>=2.0.0 is forbidden.
+              And because root depends on a>=2.0.0, version solving failed.
         "###);
     });
 
