@@ -88,3 +88,5 @@ python = []
 pypi = []
 # Introduces a dependency on Git.
 git = []
+# Introduces a dependency on Maturin.
+maturin = []
