@@ -191,7 +191,7 @@ pub enum Error {
     UnsupportedHashAlgorithm(String),
 
     #[error("Invalid `requires-python` specifier: {0}")]
-    Pep440(#[source] pep440_rs::Pep440Error),
+    Pep440(#[source] pep440_rs::VersionSpecifiersParseError),
 }
 
 #[cfg(test)]

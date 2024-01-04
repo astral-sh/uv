@@ -702,7 +702,7 @@ fn parse_specifier(
     end: usize,
 ) -> Result<VersionSpecifier, Pep508Error> {
     VersionSpecifier::from_str(buffer).map_err(|err| Pep508Error {
-        message: Pep508ErrorSource::String(err),
+        message: Pep508ErrorSource::String(err.to_string()),
         start,
         len: end - start,
         input: cursor.to_string(),
@@ -1262,7 +1262,7 @@ mod tests {
         assert_err(
             r#"numpy >=1.1.*"#,
             indoc! {"
-                Operator >= must not be used in version ending with a star
+                Operator >= cannot be used with a wildcard version specifier
                 numpy >=1.1.*
                       ^^^^^^^"
             },
@@ -1442,7 +1442,7 @@ mod tests {
         assert_err(
             "name==",
             indoc! {"
-                Missing version
+                Unexpected end of version specifier, expected version
                 name==
                     ^^"
             },
@@ -1466,7 +1466,7 @@ mod tests {
         assert_err(
             "name >= 1.0 #",
             indoc! {"
-                Trailing `#` not allowed
+                Trailing `#` is not allowed
                 name >= 1.0 #
                      ^^^^^^^^"
             },

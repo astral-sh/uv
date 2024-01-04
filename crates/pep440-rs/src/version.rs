@@ -56,7 +56,7 @@ static VERSION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(&format!(r#"(?xi)^(?:\s*){VERSION_RE_INNER}(?:\s*)$"#)).unwrap());
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
-#[derive(Eq, PartialEq, Debug, Hash, Clone)]
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Operator {
     /// `== 1.2.3`
@@ -84,6 +84,41 @@ pub enum Operator {
     GreaterThan,
     /// `>=`
     GreaterThanEqual,
+}
+
+impl Operator {
+    /// Returns true if and only if this operator can be used in a version
+    /// specifier with a version containing a non-empty local segment.
+    ///
+    /// Specifically, this comes from the "Local version identifiers are
+    /// NOT permitted in this version specifier." phrasing in the version
+    /// specifiers [spec].
+    ///
+    /// [spec]: https://packaging.python.org/en/latest/specifications/version-specifiers/
+    pub(crate) fn is_local_compatible(&self) -> bool {
+        !matches!(
+            *self,
+            Operator::GreaterThan
+                | Operator::GreaterThanEqual
+                | Operator::LessThan
+                | Operator::LessThanEqual
+                | Operator::TildeEqual
+                | Operator::EqualStar
+                | Operator::NotEqualStar
+        )
+    }
+
+    /// Returns the wildcard version of this operator, if appropriate.
+    ///
+    /// This returns `None` when this operator doesn't have an analogous
+    /// wildcard operator.
+    pub(crate) fn to_star(self) -> Option<Operator> {
+        match self {
+            Operator::Equal => Some(Operator::EqualStar),
+            Operator::NotEqual => Some(Operator::NotEqualStar),
+            _ => None,
+        }
+    }
 }
 
 impl FromStr for Operator {
@@ -152,96 +187,67 @@ impl Operator {
     }
 }
 
-/// Optional prerelease modifier (alpha, beta or release candidate) appended to version
-///
-/// <https://peps.python.org/pep-0440/#pre-releases>
-#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
-#[cfg_attr(feature = "pyo3", pyclass)]
-pub enum PreRelease {
-    /// alpha prerelease
-    Alpha,
-    /// beta prerelease
-    Beta,
-    /// release candidate prerelease
-    Rc,
-}
-
-impl FromStr for PreRelease {
-    type Err = String;
-
-    fn from_str(prerelease: &str) -> Result<Self, Self::Err> {
-        match prerelease.to_lowercase().as_str() {
-            "a" | "alpha" => Ok(Self::Alpha),
-            "b" | "beta" => Ok(Self::Beta),
-            "c" | "rc" | "pre" | "preview" => Ok(Self::Rc),
-            _ => Err(format!(
-                "'{prerelease}' isn't recognized as alpha, beta or release candidate",
-            )),
-        }
-    }
-}
-
-impl std::fmt::Display for PreRelease {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Alpha => write!(f, "a"),
-            Self::Beta => write!(f, "b"),
-            Self::Rc => write!(f, "rc"),
-        }
-    }
-}
-
-/// A part of the [local version identifier](<https://peps.python.org/pep-0440/#local-version-identifiers>)
-///
-/// Local versions are a mess:
-///
-/// > Comparison and ordering of local versions considers each segment of the local version
-/// > (divided by a .) separately. If a segment consists entirely of ASCII digits then that section
-/// > should be considered an integer for comparison purposes and if a segment contains any ASCII
-/// > letters then that segment is compared lexicographically with case insensitivity. When
-/// > comparing a numeric and lexicographic segment, the numeric section always compares as greater
-/// > than the lexicographic segment. Additionally a local version with a great number of segments
-/// > will always compare as greater than a local version with fewer segments, as long as the
-/// > shorter local version’s segments match the beginning of the longer local version’s segments
-/// > exactly.
-///
-/// Luckily the default `Ord` implementation for `Vec<LocalSegment>` matches the PEP 440 rules.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum LocalSegment {
-    /// Not-parseable as integer segment of local version
-    String(String),
-    /// Inferred integer segment of local version
-    Number(u64),
-}
-
-impl std::fmt::Display for LocalSegment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::String(string) => write!(f, "{string}"),
-            Self::Number(number) => write!(f, "{number}"),
-        }
-    }
-}
-
-impl PartialOrd for LocalSegment {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl FromStr for LocalSegment {
-    /// This can be a never type when stabilized
-    type Err = ();
-
-    fn from_str(segment: &str) -> Result<Self, Self::Err> {
-        Ok(if let Ok(number) = segment.parse::<u64>() {
-            Self::Number(number)
-        } else {
-            // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
-            Self::String(segment.to_lowercase())
-        })
-    }
-}
+// NOTE: I did a little bit of experimentation to determine what most version
+// numbers actually look like. The idea here is that if we know what most look
+// like, then we can optimize our representation for the common case, while
+// falling back to something more complete for any cases that fall outside of
+// that.
+//
+// The experiment downloaded PyPI's distribution metadata from Google BigQuery,
+// and then counted the number of versions with various qualities:
+//
+//     total: 11264078
+//     release counts:
+//         01: 51204 (0.45%)
+//         02: 754520 (6.70%)
+//         03: 9757602 (86.63%)
+//         04: 527403 (4.68%)
+//         05: 77994 (0.69%)
+//         06: 91346 (0.81%)
+//         07: 1421 (0.01%)
+//         08: 205 (0.00%)
+//         09: 72 (0.00%)
+//         10: 2297 (0.02%)
+//         11: 5 (0.00%)
+//         12: 2 (0.00%)
+//         13: 4 (0.00%)
+//         20: 2 (0.00%)
+//         39: 1 (0.00%)
+//     JUST release counts:
+//         01: 48297 (0.43%)
+//         02: 604692 (5.37%)
+//         03: 8460917 (75.11%)
+//         04: 465354 (4.13%)
+//         05: 49293 (0.44%)
+//         06: 25909 (0.23%)
+//         07: 1413 (0.01%)
+//         08: 192 (0.00%)
+//         09: 72 (0.00%)
+//         10: 2292 (0.02%)
+//         11: 5 (0.00%)
+//         12: 2 (0.00%)
+//         13: 4 (0.00%)
+//         20: 2 (0.00%)
+//         39: 1 (0.00%)
+//     non-zero epochs: 1902 (0.02%)
+//     pre-releases: 752184 (6.68%)
+//     post-releases: 134383 (1.19%)
+//     dev-releases: 765099 (6.79%)
+//     locals: 1 (0.00%)
+//     fitsu8: 10388430 (92.23%)
+//     sweetspot: 10236089 (90.87%)
+//
+// The "JUST release counts" corresponds to versions that only have a release
+// component and nothing else. The "fitsu8" property indicates that all numbers
+// (except for local numeric segments) fit into `u8`. The "sweetspot" property
+// consists of any version number with no local part, 4 or fewer parts in the
+// release version and *all* numbers fit into a u8.
+//
+// This somewhat confirms what one might expect: the vast majority of versions
+// (75%) are precisely in the format of `x.y.z`. That is, a version with only a
+// release version of 3 components.
+//
+// ---AG
 
 /// A version number such as `1.2.3` or `4!5.6.7-a8.post9.dev0`.
 ///
@@ -288,29 +294,6 @@ pub struct Version {
     /// > identifier by a plus. Local version labels have no specific semantics assigned, but some
     /// > syntactic restrictions are imposed.
     local: Option<Vec<LocalSegment>>,
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for Version {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
-    }
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-#[cfg(feature = "serde")]
-impl Serialize for Version {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_str(self)
-    }
 }
 
 impl Version {
@@ -584,6 +567,29 @@ impl Version {
     }
 }
 
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Version {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(de::Error::custom)
+    }
+}
+
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
+#[cfg(feature = "serde")]
+impl Serialize for Version {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
 /// Shows normalized version
 impl std::fmt::Display for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -691,18 +697,6 @@ impl Ord for Version {
     }
 }
 
-impl Ord for LocalSegment {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // <https://peps.python.org/pep-0440/#local-version-identifiers>
-        match (self, other) {
-            (Self::Number(n1), Self::Number(n2)) => n1.cmp(n2),
-            (Self::String(s1), Self::String(s2)) => s1.cmp(s2),
-            (Self::Number(_), Self::String(_)) => Ordering::Greater,
-            (Self::String(_), Self::Number(_)) => Ordering::Less,
-        }
-    }
-}
-
 impl FromStr for Version {
     type Err = String;
 
@@ -726,6 +720,109 @@ impl FromStr for Version {
     }
 }
 
+/// Optional prerelease modifier (alpha, beta or release candidate) appended to version
+///
+/// <https://peps.python.org/pep-0440/#pre-releases>
+#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub enum PreRelease {
+    /// alpha prerelease
+    Alpha,
+    /// beta prerelease
+    Beta,
+    /// release candidate prerelease
+    Rc,
+}
+
+impl FromStr for PreRelease {
+    type Err = String;
+
+    fn from_str(prerelease: &str) -> Result<Self, Self::Err> {
+        match prerelease.to_lowercase().as_str() {
+            "a" | "alpha" => Ok(Self::Alpha),
+            "b" | "beta" => Ok(Self::Beta),
+            "c" | "rc" | "pre" | "preview" => Ok(Self::Rc),
+            _ => Err(format!(
+                "'{prerelease}' isn't recognized as alpha, beta or release candidate",
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for PreRelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Alpha => write!(f, "a"),
+            Self::Beta => write!(f, "b"),
+            Self::Rc => write!(f, "rc"),
+        }
+    }
+}
+
+/// A part of the [local version identifier](<https://peps.python.org/pep-0440/#local-version-identifiers>)
+///
+/// Local versions are a mess:
+///
+/// > Comparison and ordering of local versions considers each segment of the local version
+/// > (divided by a .) separately. If a segment consists entirely of ASCII digits then that section
+/// > should be considered an integer for comparison purposes and if a segment contains any ASCII
+/// > letters then that segment is compared lexicographically with case insensitivity. When
+/// > comparing a numeric and lexicographic segment, the numeric section always compares as greater
+/// > than the lexicographic segment. Additionally a local version with a great number of segments
+/// > will always compare as greater than a local version with fewer segments, as long as the
+/// > shorter local version’s segments match the beginning of the longer local version’s segments
+/// > exactly.
+///
+/// Luckily the default `Ord` implementation for `Vec<LocalSegment>` matches the PEP 440 rules.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum LocalSegment {
+    /// Not-parseable as integer segment of local version
+    String(String),
+    /// Inferred integer segment of local version
+    Number(u64),
+}
+
+impl std::fmt::Display for LocalSegment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::String(string) => write!(f, "{string}"),
+            Self::Number(number) => write!(f, "{number}"),
+        }
+    }
+}
+
+impl PartialOrd for LocalSegment {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl FromStr for LocalSegment {
+    /// This can be a never type when stabilized
+    type Err = ();
+
+    fn from_str(segment: &str) -> Result<Self, Self::Err> {
+        Ok(if let Ok(number) = segment.parse::<u64>() {
+            Self::Number(number)
+        } else {
+            // "and if a segment contains any ASCII letters then that segment is compared lexicographically with case insensitivity"
+            Self::String(segment.to_lowercase())
+        })
+    }
+}
+
+impl Ord for LocalSegment {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // <https://peps.python.org/pep-0440/#local-version-identifiers>
+        match (self, other) {
+            (Self::Number(n1), Self::Number(n2)) => n1.cmp(n2),
+            (Self::String(s1), Self::String(s2)) => s1.cmp(s2),
+            (Self::Number(_), Self::String(_)) => Ordering::Greater,
+            (Self::String(_), Self::Number(_)) => Ordering::Less,
+        }
+    }
+}
+
 /// Workaround for <https://github.com/PyO3/pyo3/pull/2786>
 #[cfg(feature = "pyo3")]
 #[derive(Clone, Debug)]
@@ -739,7 +836,7 @@ impl PyVersion {
     /// but you can increment it if you switched the versioning scheme.
     #[getter]
     pub fn epoch(&self) -> u64 {
-        self.0.epoch
+        self.0.epoch()
     }
     /// The normal number part of the version
     /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
@@ -748,7 +845,7 @@ impl PyVersion {
     /// Note that we drop the * placeholder by moving it to `Operator`
     #[getter]
     pub fn release(&self) -> Vec<u64> {
-        self.0.release.clone()
+        self.0.release().to_vec()
     }
     /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
@@ -757,35 +854,35 @@ impl PyVersion {
     /// range matching since normally we exclude all prerelease versions
     #[getter]
     pub fn pre(&self) -> Option<(PreRelease, u64)> {
-        self.0.pre
+        self.0.pre()
     }
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
     /// higher post version are preferred over lower post or none-post versions
     #[getter]
     pub fn post(&self) -> Option<u64> {
-        self.0.post
+        self.0.post()
     }
     /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
     /// if any
     #[getter]
     pub fn dev(&self) -> Option<u64> {
-        self.0.dev
+        self.0.dev()
     }
     /// The first item of release or 0 if unavailable.
     #[getter]
     #[allow(clippy::get_first)]
     pub fn major(&self) -> u64 {
-        self.0.release.get(0).copied().unwrap_or_default()
+        self.0.release().get(0).copied().unwrap_or_default()
     }
     /// The second item of release or 0 if unavailable.
     #[getter]
     pub fn minor(&self) -> u64 {
-        self.0.release.get(1).copied().unwrap_or_default()
+        self.0.release().get(1).copied().unwrap_or_default()
     }
     /// The third item of release or 0 if unavailable.
     #[getter]
     pub fn micro(&self) -> u64 {
-        self.0.release.get(2).copied().unwrap_or_default()
+        self.0.release().get(2).copied().unwrap_or_default()
     }
 
     /// Parses a PEP 440 version string
@@ -1310,7 +1407,9 @@ mod tests {
                 format!("Version `{version}` doesn't match PEP 440 rules")
             );
             assert_eq!(
-                VersionSpecifier::from_str(&format!("=={version}")).unwrap_err(),
+                VersionSpecifier::from_str(&format!("=={version}"))
+                    .unwrap_err()
+                    .to_string(),
                 format!("Version `{version}` doesn't match PEP 440 rules")
             );
         }
