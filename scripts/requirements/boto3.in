@@ -1,0 +1,16 @@
+# Works with python 3.12
+boto3>0.0.19
+urllib3
+botocore
+setuptools
+s3transfer
+wheel
+packaging
+idna
+pyyaml
+python-dateutil
+grpcio-status
+cryptography
+google-api-core
+pip
+numpy
