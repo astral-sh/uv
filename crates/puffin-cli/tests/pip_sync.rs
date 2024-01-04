@@ -6,7 +6,6 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use indoc::{formatdoc, indoc};
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
@@ -2216,6 +2215,7 @@ fn reinstall_git() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "maturin")]
 fn sync_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -2225,7 +2225,7 @@ fn sync_editable() -> Result<()> {
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&formatdoc! {r"
+    requirements_txt.write_str(&indoc::formatdoc! {r"
         boltons==23.1.1
         -e ../../scripts/editable-installs/maturin_editable
         numpy==1.26.2
@@ -2307,13 +2307,13 @@ fn sync_editable() -> Result<()> {
     // Make sure we have the right base case.
     let python_source_file =
         "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
-    let python_version_1 = indoc! {r"
+    let python_version_1 = indoc::indoc! {r"
         from .maturin_editable import *
         version = 1
    "};
     fs_err::write(python_source_file, python_version_1)?;
 
-    let command = indoc! {r#"
+    let command = indoc::indoc! {r#"
         from maturin_editable import sum_as_string, version
 
         assert version == 1, version
@@ -2322,13 +2322,13 @@ fn sync_editable() -> Result<()> {
     check_command(&venv, command, &temp_dir);
 
     // Edit the sources.
-    let python_version_2 = indoc! {r"
+    let python_version_2 = indoc::indoc! {r"
         from .maturin_editable import *
         version = 2
    "};
     fs_err::write(python_source_file, python_version_2)?;
 
-    let command = indoc! {r#"
+    let command = indoc::indoc! {r#"
         from maturin_editable import sum_as_string, version
         from pathlib import Path
 
@@ -2374,7 +2374,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     // Install the registry-based version of Black.
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
+    requirements_txt.write_str(indoc::indoc! {r"
         black
         "
     })?;
@@ -2419,7 +2419,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     // Install the editable version of Black. This should remove the registry-based version.
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
+    requirements_txt.write_str(indoc::indoc! {r"
         -e ../../scripts/editable-installs/black_editable
         "
     })?;
@@ -2460,7 +2460,7 @@ fn sync_editable_and_registry() -> Result<()> {
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
+    requirements_txt.write_str(indoc::indoc! {r"
         black
         "
     })?;
@@ -2496,7 +2496,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     // Re-install Black at a specific version. This should replace the editable version.
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
+    requirements_txt.write_str(indoc::indoc! {r"
         black==23.10.0
         "
     })?;
