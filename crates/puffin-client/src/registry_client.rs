@@ -136,8 +136,10 @@ impl RegistryClient {
         for index in &self.index_urls {
             // Format the URL for PyPI.
             let mut url: Url = index.clone().into();
-            url.path_segments_mut().unwrap().push(package_name.as_ref());
-            url.path_segments_mut().unwrap().push("");
+            url.path_segments_mut()
+                .unwrap()
+                .pop_if_empty()
+                .push(package_name.as_ref());
 
             trace!("Fetching metadata for {} from {}", package_name, url);
 
