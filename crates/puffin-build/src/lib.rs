@@ -34,9 +34,13 @@ use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r".*\.(c|c..|h|h..):\d+:\d+: fatal error: (?<header>.*\.(h|h..)): No such file or directory"
+        r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory",
     )
-        .unwrap()
+    .unwrap()
+});
+/// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
+static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
 });
 
 #[derive(Error, Debug)]
@@ -76,9 +80,15 @@ pub enum Error {
     },
 }
 
+#[derive(Debug)]
+pub enum MissingLibrary {
+    Header(String),
+    Linker(String),
+}
+
 #[derive(Debug, Error)]
 pub struct MissingHeaderCause {
-    header: String,
+    missing_library: MissingLibrary,
     // I've picked this over the better readable package name to make clear that you need to
     // look for the build dependencies of that version or git commit respectively
     package_id: String,
@@ -86,11 +96,23 @@ pub struct MissingHeaderCause {
 
 impl Display for MissingHeaderCause {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "This error likely indicates that you need to install a library that provides \"{}\" for {}",
-            self.header, self.package_id
-        )
+        match &self.missing_library {
+            MissingLibrary::Header(header) => {
+                write!(
+                    f,
+                    "This error likely indicates that you need to install a library that provides \"{}\" for {}",
+                    header, self.package_id
+                )
+            }
+            MissingLibrary::Linker(library) => {
+                write!(
+                    f,
+                    "This error likely indicates that you need to install the library that provides a shared library \
+                    for {library} for {package_id} (e.g. lib{library}-dev)",
+                    library=library, package_id=self.package_id
+                )
+            }
+        }
     }
 }
 
@@ -103,19 +125,28 @@ impl Error {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-        // In the cases i've seen it was the 5th last line (see test case), 10 seems like a
-        // reasonable cutoff
-        if let Some(header) =
-            stderr.lines().rev().take(10).find_map(|line| {
-                Some(MISSING_HEADER_RE.captures(line.trim())?["header"].to_string())
-            })
-        {
+        // In the cases i've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff
+        let missing_library = stderr.lines().rev().take(10).find_map(|line| {
+            if let Some((_, [header])) =
+                MISSING_HEADER_RE.captures(line.trim()).map(|c| c.extract())
+            {
+                Some(MissingLibrary::Header(header.to_string()))
+            } else if let Some((_, [library])) =
+                LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
+            {
+                Some(MissingLibrary::Linker(library.to_string()))
+            } else {
+                None
+            }
+        });
+
+        if let Some(missing_library) = missing_library {
             return Self::MissingHeader {
                 message,
                 stdout,
                 stderr,
                 missing_header_cause: MissingHeaderCause {
-                    header,
+                    missing_library,
                     package_id: package_id.into(),
                 },
             };
@@ -738,6 +769,48 @@ mod test {
         insta::assert_display_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @r###"This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for pygraphviz-1.11"###
+        );
+    }
+
+    #[test]
+    fn missing_linker_library() {
+        let output = Output {
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
+            stdout: Vec::new(),
+            stderr: indoc!(
+                r"
+                1099 |     n = strlen(p);
+                     |         ^~~~~~~~~
+               /usr/bin/ld: cannot find -lncurses: No such file or directory
+               collect2: error: ld returned 1 exit status
+               error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
+                "
+            )
+            .as_bytes()
+            .to_vec(),
+        };
+
+        let err = Error::from_command_output(
+            "Failed building wheel through setup.py".to_string(),
+            &output,
+            "pygraphviz-1.11",
+        );
+        assert!(matches!(err, Error::MissingHeader { .. }));
+        insta::assert_display_snapshot!(err, @r###"
+        Failed building wheel through setup.py:
+        --- stdout:
+
+        --- stderr:
+        1099 |     n = strlen(p);
+              |         ^~~~~~~~~
+        /usr/bin/ld: cannot find -lncurses: No such file or directory
+        collect2: error: ld returned 1 exit status
+        error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
+        ---
+        "###);
+        insta::assert_display_snapshot!(
+            std::error::Error::source(&err).unwrap(),
+            @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
         );
     }
 }
