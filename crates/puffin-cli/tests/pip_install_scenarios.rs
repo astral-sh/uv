@@ -3,7 +3,7 @@
 /// DO NOT EDIT
 ///
 /// GENERATED WITH `./scripts/scenarios/update.py`
-/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/4ffd4ee25eb89fe078de15572bd609cf359a1997/scenarios`
+/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/da1442c30804cc699275722b612f1847199d99ae/scenarios`
 use std::process::Command;
 
 use anyhow::Result;
@@ -13,6 +13,657 @@ use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 
 mod common;
+
+/// requires-package-only-prereleases
+///
+/// The user requires any version of package `a` which only has pre-release versions
+/// available.
+///
+/// requires-package-only-prereleases-11aca5f4
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_package_only_prereleases() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-package-only-prereleases-11aca5f4-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-only-prereleases-11aca5f4-a")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0a1
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-only-prereleases-in-range
+///
+/// The user requires a version of package `a` which only matches pre-release
+/// versions but they did not include a prerelease specifier.
+///
+/// requires-package-only-prereleases-in-range-bc409bd0
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a>0.1.0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-0.1.0
+///     │   └── requires python>=3.7
+///     └── a-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_package_only_prereleases_in_range() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-package-only-prereleases-in-range-bc409bd0-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-only-prereleases-in-range-bc409bd0-a>0.1.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of a available matching >0.1.0 and root depends on a>0.1.0, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-prerelease-and-final-any
+///
+/// The user requires any version of package `a` has a pre-release version available
+/// and an older non-prerelease version.
+///
+/// requires-package-prerelease-and-final-any-c18a46ab
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-0.1.0
+/// └── a
+///     ├── a-0.1.0
+///     │   └── requires python>=3.7
+///     └── a-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_package_prerelease_and_final_any() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-package-prerelease-and-final-any-c18a46ab-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-prerelease-and-final-any-c18a46ab-a")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==0.1.0
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-prerelease-specified-only-final-available
+///
+/// The user requires a version of `a` with a pre-release specifier and only final
+/// releases are available.
+///
+/// requires-package-prerelease-specified-only-final-available-909404f2
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a>=0.1.0a1
+/// │       ├── satisfied by a-0.1.0
+/// │       ├── satisfied by a-0.2.0
+/// │       └── satisfied by a-0.3.0
+/// └── a
+///     ├── a-0.1.0
+///     │   └── requires python>=3.7
+///     ├── a-0.2.0
+///     │   └── requires python>=3.7
+///     └── a-0.3.0
+///         └── requires python>=3.7
+#[test]
+fn requires_package_prerelease_specified_only_final_available() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-package-prerelease-specified-only-final-available-909404f2-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-prerelease-specified-only-final-available-909404f2-a>=0.1.0a1")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==0.3.0
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-prerelease-specified-only-prerelease-available
+///
+/// The user requires a version of `a` with a pre-release specifier and only pre-
+/// release releases are available.
+///
+/// requires-package-prerelease-specified-only-prerelease-available-5c9b204c
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a>=0.1.0a1
+/// │       ├── satisfied by a-0.1.0a1
+/// │       ├── satisfied by a-0.2.0a1
+/// │       └── satisfied by a-0.3.0a1
+/// └── a
+///     ├── a-0.1.0a1
+///     │   └── requires python>=3.7
+///     ├── a-0.2.0a1
+///     │   └── requires python>=3.7
+///     └── a-0.3.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_package_prerelease_specified_only_prerelease_available() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-package-prerelease-specified-only-prerelease-available-5c9b204c-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-prerelease-specified-only-prerelease-available-5c9b204c-a>=0.1.0a1")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==0.3.0a1
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-prerelease-specified-mixed-available
+///
+/// The user requires a version of `a` with a pre-release specifier and both pre-
+/// release and final releases are available.
+///
+/// requires-package-prerelease-specified-mixed-available-65974a95
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a>=0.1.0a1
+/// │       ├── satisfied by a-0.1.0
+/// │       ├── satisfied by a-0.2.0a1
+/// │       ├── satisfied by a-0.3.0
+/// │       └── satisfied by a-1.0.0a1
+/// └── a
+///     ├── a-0.1.0
+///     │   └── requires python>=3.7
+///     ├── a-0.2.0a1
+///     │   └── requires python>=3.7
+///     ├── a-0.3.0
+///     │   └── requires python>=3.7
+///     └── a-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-package-prerelease-specified-mixed-available-65974a95-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-prerelease-specified-mixed-available-65974a95-a>=0.1.0a1")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0a1
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-multiple-prereleases-kinds
+///
+/// The user requires `a` which has multiple prereleases available with different
+/// labels.
+///
+/// requires-package-multiple-prereleases-kinds-a37dce95
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a>=1.0.0a1
+/// │       ├── satisfied by a-1.0.0a1
+/// │       ├── satisfied by a-1.0.0b1
+/// │       └── satisfied by a-1.0.0rc1
+/// └── a
+///     ├── a-1.0.0a1
+///     │   └── requires python>=3.7
+///     ├── a-1.0.0b1
+///     │   └── requires python>=3.7
+///     └── a-1.0.0rc1
+///         └── requires python>=3.7
+#[test]
+fn requires_package_multiple_prereleases_kinds() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-package-multiple-prereleases-kinds-a37dce95-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-multiple-prereleases-kinds-a37dce95-a>=1.0.0a1")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0rc1
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-package-multiple-prereleases-numbers
+///
+/// The user requires `a` which has multiple alphas available.
+///
+/// requires-package-multiple-prereleases-numbers-4c3655b7
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a>=1.0.0a1
+/// │       ├── satisfied by a-1.0.0a1
+/// │       ├── satisfied by a-1.0.0a2
+/// │       └── satisfied by a-1.0.0a3
+/// └── a
+///     ├── a-1.0.0a1
+///     │   └── requires python>=3.7
+///     ├── a-1.0.0a2
+///     │   └── requires python>=3.7
+///     └── a-1.0.0a3
+///         └── requires python>=3.7
+#[test]
+fn requires_package_multiple_prereleases_numbers() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-package-multiple-prereleases-numbers-4c3655b7-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-package-multiple-prereleases-numbers-4c3655b7-a>=1.0.0a1")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0a3
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-transitive-package-only-prereleases
+///
+/// The user requires any version of package `a` which only has pre-release versions
+/// available.
+///
+/// requires-transitive-package-only-prereleases-2e76f091
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-0.1.0
+/// ├── a
+/// │   └── a-0.1.0
+/// │       ├── requires b
+/// │       │   └── unsatisfied: no matching version
+/// │       └── requires python>=3.7
+/// └── b
+///     └── b-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_transitive_package_only_prereleases() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-package-only-prereleases-2e76f091-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-transitive-package-only-prereleases-2e76f091-a")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + a==0.1.0
+         + b==1.0.0a1
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-transitive-package-only-prereleases-in-range
+///
+/// The user requires package `a` which has a dependency on a package which only
+/// matches pre-release versions but they did not include a prerelease specifier.
+///
+/// requires-transitive-package-only-prereleases-in-range-a25044b5
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-0.1.0
+/// ├── a
+/// │   └── a-0.1.0
+/// │       ├── requires b>0.1
+/// │       │   └── unsatisfied: no matching version
+/// │       └── requires python>=3.7
+/// └── b
+///     ├── b-0.1.0
+///     │   └── requires python>=3.7
+///     └── b-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-package-only-prereleases-in-range-a25044b5-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-transitive-package-only-prereleases-in-range-a25044b5-a")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of b available matching >0.1 and a==0.1.0 depends on b>0.1, a==0.1.0 is forbidden.
+              And because there is no version of a available matching <0.1.0 | >0.1.0 and root depends on a, version solving failed.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-transitive-package-only-prereleases-in-range-opt-in
+///
+/// The user requires package `a` which has a dependency on a package which only
+/// matches pre-release versions; the user has opted into allowing prereleases in
+/// `b` explicitly.
+///
+/// requires-transitive-package-only-prereleases-in-range-opt-in-a8f715bc
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-0.1.0
+/// │   └── requires b>0.0.0a1
+/// │       └── satisfied by b-0.1.0
+/// ├── a
+/// │   └── a-0.1.0
+/// │       ├── requires b>0.1
+/// │       │   └── unsatisfied: no matching version
+/// │       └── requires python>=3.7
+/// └── b
+///     ├── b-0.1.0
+///     │   └── requires python>=3.7
+///     └── b-1.0.0a1
+///         └── requires python>=3.7
+#[test]
+fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-package-only-prereleases-in-range-opt-in-a8f715bc-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-transitive-package-only-prereleases-in-range-opt-in-a8f715bc-a")
+            .arg("requires-transitive-package-only-prereleases-in-range-opt-in-a8f715bc-b>0.0.0a1")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + a==0.1.0
+         + b==1.0.0a1
+        "###);
+    });
+
+    Ok(())
+}
 
 /// requires-package-does-not-exist
 ///
