@@ -32,8 +32,12 @@ fn {{normalized_name}}() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"{{prefix}}-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
