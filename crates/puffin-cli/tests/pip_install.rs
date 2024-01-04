@@ -450,7 +450,7 @@ fn install_editable() -> Result<()> {
 
     let filters = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
         .chain(INSTA_FILTERS.to_vec())
-        .collect();
+        .collect::<Vec<_>>();
 
     // Install the editable package.
     insta::with_settings!({
