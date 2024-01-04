@@ -1,3 +1,4 @@
+use std::env;
 use std::fmt::Write;
 use std::path::Path;
 
@@ -58,6 +59,7 @@ pub(crate) async fn pip_install(
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
+                .wrap_lines(env::var("PUFFIN_NO_WRAP").map(|_| false).unwrap_or(true))
                 .build(),
         )
     }))?;

@@ -43,6 +43,7 @@ fn requires_package_does_not_exist() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 2
@@ -87,6 +88,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -94,11 +96,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of
-              a
-              available matching ==2.0.0 and root depends on
-              a==2.0.0, version solving
-              failed.
+          ╰─▶ Because there is no version of a available matching ==2.0.0 and root depends on a==2.0.0, version solving failed.
         "###);
     });
 
@@ -137,6 +135,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -144,11 +143,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of
-              a
-              available matching >1.0.0 and root depends on
-              a>1.0.0, version
-              solving failed.
+          ╰─▶ Because there is no version of a available matching >1.0.0 and root depends on a>1.0.0, version solving failed.
         "###);
     });
 
@@ -188,6 +183,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -195,11 +191,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of
-              a
-              available matching <2.0.0 and root depends on
-              a<2.0.0, version solving
-              failed.
+          ╰─▶ Because there is no version of a available matching <2.0.0 and root depends on a<2.0.0, version solving failed.
         "###);
     });
 
@@ -239,6 +231,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 2
@@ -287,6 +280,7 @@ fn requires_direct_incompatible_versions() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -294,10 +288,7 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting versions
-              for `a`:
-              `a==1.0.0` does not
-              intersect with `a==2.0.0`
+          ╰─▶ root dependencies are unusable: Conflicting versions for `a`: `a==1.0.0` does not intersect with `a==2.0.0`
         "###);
     });
 
@@ -346,6 +337,7 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -353,20 +345,8 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because
-              a==1.0.0
-              depends on
-              b==2.0.0
-              and there is no version of
-              a
-              available matching <1.0.0 | >1.0.0,
-              a depends on
-              b==2.0.0.
-              And because root depends on
-              b==1.0.0
-              and root depends on
-              a, version
-              solving failed.
+          ╰─▶ Because a==1.0.0 depends on b==2.0.0 and there is no version of a available matching <1.0.0 | >1.0.0, a depends on b==2.0.0.
+              And because root depends on b==1.0.0 and root depends on a, version solving failed.
         "###);
     });
 
@@ -419,6 +399,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -426,28 +407,9 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of
-              a
-              available matching <1.0.0 | >1.0.0 and
-              a==1.0.0
-              depends on
-              c==1.0.0,
-              a depends on
-              c==1.0.0.
-              And because
-              b==1.0.0
-              depends on
-              c==2.0.0
-              and there is no version of
-              b
-              available matching <1.0.0 | >1.0.0,
-              a *,
-              b * are
-              incompatible.
-              And because root depends on
-              a and root
-              depends on b,
-              version solving failed.
+          ╰─▶ Because there is no version of a available matching <1.0.0 | >1.0.0 and a==1.0.0 depends on c==1.0.0, a depends on c==1.0.0.
+              And because b==1.0.0 depends on c==2.0.0 and there is no version of b available matching <1.0.0 | >1.0.0, a *, b * are incompatible.
+              And because root depends on a and root depends on b, version solving failed.
         "###);
     });
 
