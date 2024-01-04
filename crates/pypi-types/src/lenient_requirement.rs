@@ -18,7 +18,7 @@ static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
-static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.(\d|\*))+,$").unwrap());
+static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",$").unwrap());
 /// Ex) `>= '2.7'`, `>=3.6'`
 static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]"#).unwrap());
 
@@ -297,6 +297,16 @@ mod tests {
         let actual: VersionSpecifiers =
             LenientVersionSpecifiers::from_str(">=3.6'").unwrap().into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.6").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://files.pythonhosted.org/packages/74/49/7349527cea7f708e7d3253ab6b32c9b5bdf84a57dde8fc265a33e6a4e662/boto3-1.2.0-py2.py3-none-any.whl>
+    #[test]
+    fn trailing_comma_after_quote() {
+        let actual: Requirement = LenientRequirement::from_str("botocore>=1.3.0,<1.4.0',")
+            .unwrap()
+            .into();
+        let expected: Requirement = Requirement::from_str("botocore>=1.3.0,<1.4.0").unwrap();
         assert_eq!(actual, expected);
     }
 }
