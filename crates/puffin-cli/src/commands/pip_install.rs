@@ -47,6 +47,7 @@ pub(crate) async fn pip_install(
     reinstall: &Reinstall,
     link_mode: LinkMode,
     no_build: bool,
+    strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: Cache,
     mut printer: Printer,
@@ -214,7 +215,9 @@ pub(crate) async fn pip_install(
     .await?;
 
     // Validate the environment.
-    validate(&resolution, &venv, printer)?;
+    if strict {
+        validate(&resolution, &venv, printer)?;
+    }
 
     Ok(ExitStatus::Success)
 }

@@ -1,4 +1,7 @@
+use std::fmt::Write;
+
 use anyhow::Result;
+use colored::Colorize;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -12,7 +15,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-pub(crate) fn freeze(cache: &Cache, _printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let python = Virtualenv::from_env(platform, cache)?;
@@ -30,6 +33,19 @@ pub(crate) fn freeze(cache: &Cache, _printer: Printer) -> Result<ExitStatus> {
         #[allow(clippy::print_stdout)]
         {
             println!("{dist}");
+        }
+    }
+
+    // Validate that the environment is consistent.
+    if strict {
+        for diagnostic in site_packages.diagnostics()? {
+            writeln!(
+                printer,
+                "{}{} {}",
+                "warning".yellow().bold(),
+                ":".bold(),
+                diagnostic.message().bold()
+            )?;
         }
     }
 
