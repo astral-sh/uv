@@ -1,4 +1,5 @@
 use std::hash::BuildHasherDefault;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
@@ -169,7 +170,13 @@ impl<'a> SitePackages<'a> {
             let distribution = &self.distributions[*index];
 
             // Determine the dependencies for the given package.
-            let metadata = distribution.metadata()?;
+            let Ok(metadata) = distribution.metadata() else {
+                diagnostics.push(Diagnostic::IncompletePackage {
+                    package: package.clone(),
+                    path: distribution.path().to_owned(),
+                });
+                continue;
+            };
 
             // Verify that the package is compatible with the current Python version.
             if let Some(requires_python) = metadata.requires_python.as_ref() {
@@ -243,7 +250,10 @@ impl<'a> SitePackages<'a> {
             };
 
             // Recurse into the dependencies.
-            requirements.extend(distribution.metadata()?.requires_dist);
+            let metadata = distribution
+                .metadata()
+                .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+            requirements.extend(metadata.requires_dist);
         }
 
         // Verify that all non-editable requirements are met.
@@ -291,7 +301,10 @@ impl<'a> SitePackages<'a> {
 
             // Recurse into the dependencies.
             if seen.insert(requirement) {
-                requirements.extend(distribution.metadata()?.requires_dist);
+                let metadata = distribution
+                    .metadata()
+                    .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+                requirements.extend(metadata.requires_dist);
             }
         }
 
@@ -310,6 +323,12 @@ impl IntoIterator for SitePackages<'_> {
 
 #[derive(Debug)]
 pub enum Diagnostic {
+    IncompletePackage {
+        /// The package that is missing metadata.
+        package: PackageName,
+        /// The path to the package.
+        path: PathBuf,
+    },
     IncompatiblePythonVersion {
         /// The package that requires a different version of Python.
         package: PackageName,
@@ -338,6 +357,9 @@ impl Diagnostic {
     /// Convert the diagnostic into a user-facing message.
     pub fn message(&self) -> String {
         match self {
+            Self::IncompletePackage { package, path } => format!(
+                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtual environment, or removing the package directory at: {}.", path.display(),
+            ),
             Self::IncompatiblePythonVersion {
                 package,
                 version,
@@ -364,6 +386,7 @@ impl Diagnostic {
     /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
     pub fn includes(&self, name: &PackageName) -> bool {
         match self {
+            Self::IncompletePackage { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {
