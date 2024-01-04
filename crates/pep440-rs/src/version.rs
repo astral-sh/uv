@@ -3,6 +3,7 @@ use std::{
     cmp::Ordering,
     hash::{Hash, Hasher},
     str::FromStr,
+    sync::Arc,
 };
 
 #[cfg(feature = "pyo3")]
@@ -241,7 +242,7 @@ impl std::fmt::Display for OperatorParseError {
 /// ```
 #[derive(Clone)]
 pub struct Version {
-    inner: VersionInner,
+    inner: Arc<VersionInner>,
 }
 
 #[derive(Clone, Debug)]
@@ -264,9 +265,9 @@ impl Version {
         R: Borrow<u64>,
     {
         Version {
-            inner: VersionInner::Small {
+            inner: Arc::new(VersionInner::Small {
                 small: VersionSmall::new(),
-            },
+            }),
         }
         .with_release(release_numbers)
     }
@@ -307,7 +308,7 @@ impl Version {
     /// Returns the epoch of this version.
     #[inline]
     pub fn epoch(&self) -> u64 {
-        match self.inner {
+        match *self.inner {
             VersionInner::Small { ref small } => small.epoch(),
             VersionInner::Full { ref full } => full.epoch,
         }
@@ -316,7 +317,7 @@ impl Version {
     /// Returns the release number part of the version.
     #[inline]
     pub fn release(&self) -> &[u64] {
-        match self.inner {
+        match *self.inner {
             VersionInner::Small { ref small } => small.release(),
             VersionInner::Full { ref full, .. } => &full.release,
         }
@@ -325,7 +326,7 @@ impl Version {
     /// Returns the pre-relase part of this version, if it exists.
     #[inline]
     pub fn pre(&self) -> Option<(PreRelease, u64)> {
-        match self.inner {
+        match *self.inner {
             VersionInner::Small { ref small } => small.pre(),
             VersionInner::Full { ref full } => full.pre,
         }
@@ -334,7 +335,7 @@ impl Version {
     /// Returns the post-release part of this version, if it exists.
     #[inline]
     pub fn post(&self) -> Option<u64> {
-        match self.inner {
+        match *self.inner {
             VersionInner::Small { ref small } => small.post(),
             VersionInner::Full { ref full } => full.post,
         }
@@ -343,7 +344,7 @@ impl Version {
     /// Returns the dev-release part of this version, if it exists.
     #[inline]
     pub fn dev(&self) -> Option<u64> {
-        match self.inner {
+        match *self.inner {
             VersionInner::Small { ref small } => small.dev(),
             VersionInner::Full { ref full } => full.dev,
         }
@@ -352,7 +353,7 @@ impl Version {
     /// Returns the local segments in this version, if any exist.
     #[inline]
     pub fn local(&self) -> &[LocalSegment] {
-        match self.inner {
+        match *self.inner {
             VersionInner::Small { ref small } => small.local(),
             VersionInner::Full { ref full } => &full.local,
         }
@@ -389,7 +390,7 @@ impl Version {
     /// last number in the release component.
     #[inline]
     fn push_release(&mut self, n: u64) {
-        if let VersionInner::Small { ref mut small } = self.inner {
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.push_release(n) {
                 return;
             }
@@ -403,7 +404,7 @@ impl Version {
     /// since all versions should have at least one release number.
     #[inline]
     fn clear_release(&mut self) {
-        match self.inner {
+        match Arc::make_mut(&mut self.inner) {
             VersionInner::Small { ref mut small } => small.clear_release(),
             VersionInner::Full { ref mut full } => {
                 full.release.clear();
@@ -414,7 +415,7 @@ impl Version {
     /// Set the epoch and return the updated version.
     #[inline]
     pub fn with_epoch(mut self, value: u64) -> Version {
-        if let VersionInner::Small { ref mut small } = self.inner {
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_epoch(value) {
                 return self;
             }
@@ -426,7 +427,7 @@ impl Version {
     /// Set the pre-release component and return the updated version.
     #[inline]
     pub fn with_pre(mut self, value: Option<(PreRelease, u64)>) -> Version {
-        if let VersionInner::Small { ref mut small } = self.inner {
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_pre(value) {
                 return self;
             }
@@ -438,7 +439,7 @@ impl Version {
     /// Set the post-release component and return the updated version.
     #[inline]
     pub fn with_post(mut self, value: Option<u64>) -> Version {
-        if let VersionInner::Small { ref mut small } = self.inner {
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_post(value) {
                 return self;
             }
@@ -450,7 +451,7 @@ impl Version {
     /// Set the dev-release component and return the updated version.
     #[inline]
     pub fn with_dev(mut self, value: Option<u64>) -> Version {
-        if let VersionInner::Small { ref mut small } = self.inner {
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_dev(value) {
                 return self;
             }
@@ -479,7 +480,7 @@ impl Version {
         // A "small" version is already guaranteed not to have a local
         // component, so we only need to do anything if we have a "full"
         // version.
-        if let VersionInner::Full { ref mut full } = self.inner {
+        if let VersionInner::Full { ref mut full } = Arc::make_mut(&mut self.inner) {
             full.local.clear();
         }
         self
@@ -488,23 +489,20 @@ impl Version {
     /// Convert this version to a "full" representation in-place and return a
     /// mutable borrow to the full type.
     fn make_full(&mut self) -> &mut VersionFull {
-        match self.inner {
-            VersionInner::Small { ref small } => {
-                let full = VersionFull {
-                    epoch: small.epoch(),
-                    release: small.release().to_vec(),
-                    pre: small.pre(),
-                    post: small.post(),
-                    dev: small.dev(),
-                    local: vec![],
-                };
-                *self = Version {
-                    inner: VersionInner::Full { full },
-                };
-            }
-            VersionInner::Full { .. } => {}
+        if let VersionInner::Small { ref small } = *self.inner {
+            let full = VersionFull {
+                epoch: small.epoch(),
+                release: small.release().to_vec(),
+                pre: small.pre(),
+                post: small.post(),
+                dev: small.dev(),
+                local: vec![],
+            };
+            *self = Version {
+                inner: Arc::new(VersionInner::Full { full }),
+            };
         }
-        match self.inner {
+        match Arc::make_mut(&mut self.inner) {
             VersionInner::Full { ref mut full } => full,
             VersionInner::Small { .. } => unreachable!(),
         }
@@ -654,7 +652,7 @@ impl Ord for Version {
     /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        match (&self.inner, &other.inner) {
+        match (&*self.inner, &*other.inner) {
             (VersionInner::Small { small: small1 }, VersionInner::Small { small: small2 }) => {
                 small1.repr.cmp(&small2.repr)
             }
@@ -1301,7 +1299,7 @@ impl<'a> Parser<'a> {
             ],
             len,
         };
-        let inner = VersionInner::Small { small };
+        let inner = Arc::new(VersionInner::Small { small });
         let version = Version { inner };
         Some(VersionPattern {
             version,
