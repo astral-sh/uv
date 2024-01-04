@@ -3,7 +3,7 @@
 /// DO NOT EDIT
 ///
 /// GENERATED WITH `./scripts/scenarios/update.py`
-/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/682bf4ff269f130f92bf35fdb58b6b27c94b579a/scenarios`
+/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/375658d79ef5f7012fb498861f90a561eb25436d/scenarios`
 use std::process::Command;
 
 use anyhow::Result;
@@ -28,8 +28,12 @@ fn requires_package_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-package-does-not-exist-59108293-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -45,7 +49,7 @@ fn requires_package_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Package `requires-package-does-not-exist-59108293-a` was not found in the registry.
+        error: Package `a` was not found in the registry.
         "###);
     });
 
@@ -68,8 +72,12 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-exact-version-does-not-exist-bc5f5f6d-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -87,9 +95,9 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-exact-version-does-not-exist-bc5f5f6d-a
+              a
               available matching ==2.0.0 and root depends on
-              requires-exact-version-does-not-exist-bc5f5f6d-a==2.0.0, version solving
+              a==2.0.0, version solving
               failed.
         "###);
     });
@@ -114,8 +122,12 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-greater-version-does-not-exist-670431f9-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -133,9 +145,9 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-greater-version-does-not-exist-670431f9-a
+              a
               available matching >1.0.0 and root depends on
-              requires-greater-version-does-not-exist-670431f9-a>1.0.0, version
+              a>1.0.0, version
               solving failed.
         "###);
     });
@@ -161,8 +173,12 @@ fn requires_less_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-less-version-does-not-exist-9a75991b-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -180,9 +196,9 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-less-version-does-not-exist-9a75991b-a
+              a
               available matching <2.0.0 and root depends on
-              requires-less-version-does-not-exist-9a75991b-a<2.0.0, version solving
+              a<2.0.0, version solving
               failed.
         "###);
     });
@@ -208,8 +224,12 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"transitive-requires-package-does-not-exist-ca79eaa2-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -225,7 +245,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Package `transitive-requires-package-does-not-exist-ca79eaa2-b` was not found in the registry.
+        error: Package `b` was not found in the registry.
         "###);
     });
 
@@ -251,8 +271,12 @@ fn requires_direct_incompatible_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"requires-direct-incompatible-versions-350bd4b0-", ""));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -271,9 +295,9 @@ fn requires_direct_incompatible_versions() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ root dependencies are unusable: Conflicting versions
-              for `requires-direct-incompatible-versions-350bd4b0-a`:
-              `requires-direct-incompatible-versions-350bd4b0-a==1.0.0` does not
-              intersect with `requires-direct-incompatible-versions-350bd4b0-a==2.0.0`
+              for `a`:
+              `a==1.0.0` does not
+              intersect with `a==2.0.0`
         "###);
     });
 
@@ -303,8 +327,15 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-incompatible-with-root-version-3240dab1-",
+        "",
+    ));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -323,18 +354,18 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because
-              requires-transitive-incompatible-with-root-version-3240dab1-a==1.0.0
+              a==1.0.0
               depends on
-              requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0
+              b==2.0.0
               and there is no version of
-              requires-transitive-incompatible-with-root-version-3240dab1-a
+              a
               available matching <1.0.0 | >1.0.0,
-              requires-transitive-incompatible-with-root-version-3240dab1-a depends on
-              requires-transitive-incompatible-with-root-version-3240dab1-b==2.0.0.
+              a depends on
+              b==2.0.0.
               And because root depends on
-              requires-transitive-incompatible-with-root-version-3240dab1-b==1.0.0
+              b==1.0.0
               and root depends on
-              requires-transitive-incompatible-with-root-version-3240dab1-a, version
+              a, version
               solving failed.
         "###);
     });
@@ -369,8 +400,15 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-incompatible-with-transitive-8329cfc0-",
+        "",
+    ));
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
@@ -389,26 +427,26 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of
-              requires-transitive-incompatible-with-transitive-8329cfc0-a
+              a
               available matching <1.0.0 | >1.0.0 and
-              requires-transitive-incompatible-with-transitive-8329cfc0-a==1.0.0
+              a==1.0.0
               depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-c==1.0.0,
-              requires-transitive-incompatible-with-transitive-8329cfc0-a depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-c==1.0.0.
+              c==1.0.0,
+              a depends on
+              c==1.0.0.
               And because
-              requires-transitive-incompatible-with-transitive-8329cfc0-b==1.0.0
+              b==1.0.0
               depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-c==2.0.0
+              c==2.0.0
               and there is no version of
-              requires-transitive-incompatible-with-transitive-8329cfc0-b
+              b
               available matching <1.0.0 | >1.0.0,
-              requires-transitive-incompatible-with-transitive-8329cfc0-a *,
-              requires-transitive-incompatible-with-transitive-8329cfc0-b * are
+              a *,
+              b * are
               incompatible.
               And because root depends on
-              requires-transitive-incompatible-with-transitive-8329cfc0-a and root
-              depends on requires-transitive-incompatible-with-transitive-8329cfc0-b,
+              a and root
+              depends on b,
               version solving failed.
         "###);
     });
