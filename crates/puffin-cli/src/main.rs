@@ -71,7 +71,7 @@ enum Commands {
     /// Uninstall packages from the current environment.
     PipUninstall(PipUninstallArgs),
     /// Enumerate the installed packages in the current environment.
-    PipFreeze,
+    PipFreeze(PipFreezeArgs),
     /// Create a virtual environment.
     #[clap(alias = "virtualenv")]
     Venv(VenvArgs),
@@ -235,6 +235,11 @@ struct PipSyncArgs {
     /// exit with an error.
     #[clap(long)]
     no_build: bool,
+
+    /// Validate the virtual environment after completing the installation, to detect packages with
+    /// missing dependencies or other issues.
+    #[clap(long)]
+    strict: bool,
 }
 
 #[derive(Args)]
@@ -327,6 +332,11 @@ struct PipInstallArgs {
     #[clap(long)]
     no_build: bool,
 
+    /// Validate the virtual environment after completing the installation, to detect packages with
+    /// missing dependencies or other issues.
+    #[clap(long)]
+    strict: bool,
+
     /// Try to resolve at a past time.
     ///
     /// This works by filtering out files with a more recent upload time, so if the index you use
@@ -355,6 +365,15 @@ struct PipUninstallArgs {
     /// Uninstall the editable package based on the provided local file path.
     #[clap(short, long, group = "sources")]
     editable: Vec<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+struct PipFreezeArgs {
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[clap(long)]
+    strict: bool,
 }
 
 #[derive(Args)]
@@ -477,6 +496,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.link_mode,
                 index_urls,
                 args.no_build,
+                args.strict,
                 cache,
                 printer,
             )
@@ -521,6 +541,7 @@ async fn inner() -> Result<ExitStatus> {
                 &reinstall,
                 args.link_mode,
                 args.no_build,
+                args.strict,
                 args.exclude_newer,
                 cache,
                 printer,
@@ -538,7 +559,7 @@ async fn inner() -> Result<ExitStatus> {
             commands::pip_uninstall(&sources, cache, printer).await
         }
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
-        Commands::PipFreeze => commands::freeze(&cache, printer),
+        Commands::PipFreeze(args) => commands::freeze(&cache, args.strict, printer),
         Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),

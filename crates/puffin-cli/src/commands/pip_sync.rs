@@ -31,6 +31,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     index_urls: IndexUrls,
     no_build: bool,
+    strict: bool,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -308,15 +309,17 @@ pub(crate) async fn pip_sync(
     }
 
     // Validate that the environment is consistent.
-    let site_packages = SitePackages::from_executable(&venv)?;
-    for diagnostic in site_packages.diagnostics()? {
-        writeln!(
-            printer,
-            "{}{} {}",
-            "warning".yellow().bold(),
-            ":".bold(),
-            diagnostic.message().bold()
-        )?;
+    if strict {
+        let site_packages = SitePackages::from_executable(&venv)?;
+        for diagnostic in site_packages.diagnostics()? {
+            writeln!(
+                printer,
+                "{}{} {}",
+                "warning".yellow().bold(),
+                ":".bold(),
+                diagnostic.message().bold()
+            )?;
+        }
     }
 
     Ok(ExitStatus::Success)
