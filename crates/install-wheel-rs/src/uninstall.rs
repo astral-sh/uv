@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
-use fs_err::File;
 use tracing::debug;
 
 use crate::{read_record_file, Error};
@@ -16,7 +15,14 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     };
 
     // Read the RECORD file.
-    let mut record_file = File::open(dist_info.join("RECORD"))?;
+    let record_path = dist_info.join("RECORD");
+    let mut record_file = match fs::File::open(&record_path) {
+        Ok(record_file) => record_file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingRecord(record_path));
+        }
+        Err(err) => return Err(err.into()),
+    };
     let record = read_record_file(&mut record_file)?;
 
     let mut file_count = 0usize;

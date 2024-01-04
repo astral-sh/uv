@@ -80,6 +80,8 @@ pub enum Error {
     DirectUrlJson(#[from] serde_json::Error),
     #[error("No .dist-info directory found")]
     MissingDistInfo,
+    #[error("Cannot uninstall package; RECORD file not found at: {0}")]
+    MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
     #[error("Invalid wheel size")]
