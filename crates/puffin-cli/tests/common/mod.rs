@@ -16,6 +16,12 @@ pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
 
 /// Create a virtual environment named `.venv` in a temporary directory.
 pub(crate) fn create_venv_py312(temp_dir: &TempDir, cache_dir: &TempDir) -> PathBuf {
+    create_venv(temp_dir, cache_dir, "python3.12")
+}
+
+/// Create a virtual environment named `.venv` in a temporary directory with the given
+/// Python version. Expected format for `python` is "python<version>".
+pub(crate) fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> PathBuf {
     let venv = temp_dir.child(".venv");
     Command::new(get_cargo_bin(BIN_NAME))
         .arg("venv")
@@ -23,7 +29,7 @@ pub(crate) fn create_venv_py312(temp_dir: &TempDir, cache_dir: &TempDir) -> Path
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--python")
-        .arg("python3.12")
+        .arg(python)
         .current_dir(temp_dir)
         .assert()
         .success();

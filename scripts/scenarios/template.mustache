@@ -13,7 +13,7 @@ use anyhow::Result;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 {{#scenarios}}
@@ -32,7 +32,7 @@ mod common;
 fn {{normalized_name}}() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "python{{environment.python}}");
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
