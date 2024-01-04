@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+PACKSE_COMMIT = "682bf4ff269f130f92bf35fdb58b6b27c94b579a"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATE = TOOL_ROOT / "template.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
@@ -77,18 +79,33 @@ if packse.__development_base_path__.name != "packse":
         stderr=subprocess.STDOUT,
     )
     subprocess.check_call(
-        ["git", "checkout"],
+        ["git", "checkout", PACKSE_COMMIT],
         cwd=PACKSE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.STDOUT,
     )
     scenarios_path = str(PACKSE / "scenarios")
+    commit = PACKSE_COMMIT
+
 else:
     print(
         f"Using scenarios in packse repository at {packse.__development_base_path__}",
         file=sys.stderr,
     )
     scenarios_path = str(packse.__development_base_path__ / "scenarios")
+
+    # Get the commit from the repository
+    commit = (
+        subprocess.check_output(
+            ["git", "show", "-s", "--format=%H", "HEAD"],
+            cwd=packse.__development_base_path__,
+        )
+        .decode()
+        .strip()
+    )
+
+    if commit != PACKSE_COMMIT:
+        print("WARNING: Expected commit {PACKSE_COMMIT!r} but found {commit!r}.")
 
 print("Loading scenario metadata...", file=sys.stderr)
 data = json.loads(
@@ -102,13 +119,6 @@ data = json.loads(
 )
 
 # Add generated metadata
-commit = (
-    subprocess.check_output(
-        ["git", "show", "-s", "--format=%H", "HEAD"], cwd=scenarios_path
-    )
-    .decode()
-    .strip()
-)
 data["generated_from"] = f"https://github.com/zanieb/packse/tree/{commit}/scenarios"
 data["generated_with"] = " ".join(sys.argv)
 

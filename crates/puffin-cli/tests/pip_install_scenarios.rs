@@ -3,7 +3,7 @@
 /// DO NOT EDIT
 ///
 /// GENERATED WITH `./scripts/scenarios/update.py`
-/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/375658d79ef5f7012fb498861f90a561eb25436d/scenarios`
+/// SCENARIOS FROM `https://github.com/zanieb/packse/tree/682bf4ff269f130f92bf35fdb58b6b27c94b579a/scenarios`
 use std::process::Command;
 
 use anyhow::Result;
@@ -18,7 +18,9 @@ mod common;
 ///
 /// The user requires any version of package `a` which does not exist.
 ///
-/// requires-package-does-not-exist-59108293
+/// requires-package-does-not-exist-bc7df012
+/// ├── environment
+/// │   └── python3.7
 /// └── root
 ///     └── requires a
 ///         └── unsatisfied: no versions for package
@@ -30,14 +32,14 @@ fn requires_package_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-does-not-exist-59108293-", ""));
+    filters.push((r"requires-package-does-not-exist-bc7df012-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-does-not-exist-59108293-a")
+            .arg("requires-package-does-not-exist-bc7df012-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -61,12 +63,15 @@ fn requires_package_does_not_exist() -> Result<()> {
 ///
 /// The user requires an exact version of package `a` but only other versions exist
 ///
-/// requires-exact-version-does-not-exist-bc5f5f6d
+/// requires-exact-version-does-not-exist-c275ce96
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   └── requires a==2.0.0
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0
+///         └── requires python>=3.7
 #[test]
 fn requires_exact_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -75,14 +80,14 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-exact-version-does-not-exist-bc5f5f6d-", ""));
+    filters.push((r"requires-exact-version-does-not-exist-c275ce96-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-exact-version-does-not-exist-bc5f5f6d-a==2.0.0")
+            .arg("requires-exact-version-does-not-exist-c275ce96-a==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -107,13 +112,17 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 ///
 /// The user requires a version of `a` greater than `1.0.0` but only smaller or equal versions exist
 ///
-/// requires-greater-version-does-not-exist-670431f9
+/// requires-greater-version-does-not-exist-d34821ba
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   └── requires a>1.0.0
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
+///     │   └── requires python>=3.7
 ///     └── a-1.0.0
+///         └── requires python>=3.7
 #[test]
 fn requires_greater_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -122,14 +131,14 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-greater-version-does-not-exist-670431f9-", ""));
+    filters.push((r"requires-greater-version-does-not-exist-d34821ba-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-greater-version-does-not-exist-670431f9-a>1.0.0")
+            .arg("requires-greater-version-does-not-exist-d34821ba-a>1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -154,14 +163,19 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 ///
 /// The user requires a version of `a` less than `1.0.0` but only larger versions exist
 ///
-/// requires-less-version-does-not-exist-9a75991b
+/// requires-less-version-does-not-exist-4088ec1b
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   └── requires a<2.0.0
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-2.0.0
+///     │   └── requires python>=3.7
 ///     ├── a-3.0.0
+///     │   └── requires python>=3.7
 ///     └── a-4.0.0
+///         └── requires python>=3.7
 #[test]
 fn requires_less_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -170,14 +184,14 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-less-version-does-not-exist-9a75991b-", ""));
+    filters.push((r"requires-less-version-does-not-exist-4088ec1b-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-less-version-does-not-exist-9a75991b-a<2.0.0")
+            .arg("requires-less-version-does-not-exist-4088ec1b-a<2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -202,14 +216,17 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 ///
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
-/// transitive-requires-package-does-not-exist-ca79eaa2
+/// transitive-requires-package-does-not-exist-63ca5a54
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires b
+///         ├── requires b
 ///             └── unsatisfied: no versions for package
+///         └── requires python>=3.7
 #[test]
 fn transitive_requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -218,14 +235,14 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-requires-package-does-not-exist-ca79eaa2-", ""));
+    filters.push((r"transitive-requires-package-does-not-exist-63ca5a54-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("transitive-requires-package-does-not-exist-ca79eaa2-a")
+            .arg("transitive-requires-package-does-not-exist-63ca5a54-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -249,7 +266,9 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 ///
 /// The user requires two incompatible, existing versions of package `a`
 ///
-/// requires-direct-incompatible-versions-350bd4b0
+/// requires-direct-incompatible-versions-1432ee4c
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   ├── requires a==1.0.0
 /// │   │   └── satisfied by a-1.0.0
@@ -257,7 +276,9 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// │       └── satisfied by a-2.0.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.7
 ///     └── a-2.0.0
+///         └── requires python>=3.7
 #[test]
 fn requires_direct_incompatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -266,15 +287,15 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-direct-incompatible-versions-350bd4b0-", ""));
+    filters.push((r"requires-direct-incompatible-versions-1432ee4c-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-direct-incompatible-versions-350bd4b0-a==1.0.0")
-            .arg("requires-direct-incompatible-versions-350bd4b0-a==2.0.0")
+            .arg("requires-direct-incompatible-versions-1432ee4c-a==1.0.0")
+            .arg("requires-direct-incompatible-versions-1432ee4c-a==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -299,7 +320,9 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 ///
 /// The user requires packages `a` and `b` but `a` requires a different version of `b`
 ///
-/// requires-transitive-incompatible-with-root-version-3240dab1
+/// requires-transitive-incompatible-with-root-version-b3c83bbd
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -307,11 +330,14 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires b==2.0.0
-/// │           └── satisfied by b-2.0.0
+/// │       ├── requires b==2.0.0
+/// │       │   └── satisfied by b-2.0.0
+/// │       └── requires python>=3.7
 /// └── b
 ///     ├── b-1.0.0
+///     │   └── requires python>=3.7
 ///     └── b-2.0.0
+///         └── requires python>=3.7
 #[test]
 fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -321,7 +347,7 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-incompatible-with-root-version-3240dab1-",
+        r"requires-transitive-incompatible-with-root-version-b3c83bbd-",
         "",
     ));
 
@@ -330,8 +356,8 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-incompatible-with-root-version-3240dab1-a")
-            .arg("requires-transitive-incompatible-with-root-version-3240dab1-b==1.0.0")
+            .arg("requires-transitive-incompatible-with-root-version-b3c83bbd-a")
+            .arg("requires-transitive-incompatible-with-root-version-b3c83bbd-b==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -345,8 +371,8 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because a==1.0.0 depends on b==2.0.0 and there is no version of a available matching <1.0.0 | >1.0.0, a depends on b==2.0.0.
-              And because root depends on b==1.0.0 and root depends on a, version solving failed.
+          ╰─▶ Because there is no version of a available matching <1.0.0 | >1.0.0 and a==1.0.0 depends on b==2.0.0, a depends on b==2.0.0.
+              And because root depends on a and root depends on b==1.0.0, version solving failed.
         "###);
     });
 
@@ -357,7 +383,9 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 ///
 /// The user requires package `a` and `b`; `a` and `b` require different versions of `c`
 ///
-/// requires-transitive-incompatible-with-transitive-8329cfc0
+/// requires-transitive-incompatible-with-transitive-a35362d1
+/// ├── environment
+/// │   └── python3.7
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -365,15 +393,19 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c==1.0.0
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c==1.0.0
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.7
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c==2.0.0
-/// │           └── satisfied by c-2.0.0
+/// │       ├── requires c==2.0.0
+/// │       │   └── satisfied by c-2.0.0
+/// │       └── requires python>=3.7
 /// └── c
 ///     ├── c-1.0.0
+///     │   └── requires python>=3.7
 ///     └── c-2.0.0
+///         └── requires python>=3.7
 #[test]
 fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -383,7 +415,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-incompatible-with-transitive-8329cfc0-",
+        r"requires-transitive-incompatible-with-transitive-a35362d1-",
         "",
     ));
 
@@ -392,8 +424,8 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-incompatible-with-transitive-8329cfc0-a")
-            .arg("requires-transitive-incompatible-with-transitive-8329cfc0-b")
+            .arg("requires-transitive-incompatible-with-transitive-a35362d1-a")
+            .arg("requires-transitive-incompatible-with-transitive-a35362d1-b")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
