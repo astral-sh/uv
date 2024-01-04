@@ -1589,4 +1589,64 @@ mod tests {
         assert_eq!(err.inner.start, 14);
         assert_eq!(err.inner.end, 18);
     }
+
+    /// Tests the human readable error messages generated from an invalid
+    /// sequence of version specifiers.
+    #[test]
+    fn error_message_version_specifiers_parse_error() {
+        let specs = ">=1.2.3, 5.4.3, >=3.4.5";
+        let err = VersionSpecifierParseError {
+            kind: Box::new(ParseErrorKind::MissingOperator),
+        };
+        let inner = Box::new(VersionSpecifiersParseErrorInner {
+            err,
+            line: specs.to_string(),
+            start: 8,
+            end: 14,
+        });
+        let err = VersionSpecifiersParseError { inner };
+        assert_eq!(err, VersionSpecifiers::from_str(specs).unwrap_err());
+        assert_eq!(
+            err.to_string(),
+            "\
+Failed to parse version: Unexpected end of version specifier, expected operator:
+>=1.2.3, 5.4.3, >=3.4.5
+        ^^^^^^
+"
+        );
+    }
+
+    /// Tests the human readable error messages generated when building an
+    /// invalid version specifier.
+    #[test]
+    fn error_message_version_specifier_build_error() {
+        let err = VersionSpecifierBuildError {
+            kind: Box::new(BuildErrorKind::CompatibleRelease),
+        };
+        let op = Operator::TildeEqual;
+        let v = Version::new([5]);
+        assert_eq!(err, VersionSpecifier::new(op, v, false).unwrap_err());
+        assert_eq!(
+            err.to_string(),
+            "The ~= operator requires at least two segments in the release version"
+        );
+    }
+
+    /// Tests the human readable error messages generated from parsing invalid
+    /// version specifier.
+    #[test]
+    fn error_message_version_specifier_parse_error() {
+        let err = VersionSpecifierParseError {
+            kind: Box::new(ParseErrorKind::InvalidSpecifier(
+                VersionSpecifierBuildError {
+                    kind: Box::new(BuildErrorKind::CompatibleRelease),
+                },
+            )),
+        };
+        assert_eq!(err, VersionSpecifier::from_str("~=5").unwrap_err());
+        assert_eq!(
+            err.to_string(),
+            "The ~= operator requires at least two segments in the release version"
+        );
+    }
 }
