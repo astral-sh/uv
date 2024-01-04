@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-use pep440_rs::VersionSpecifiers;
+use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
@@ -23,10 +23,11 @@ pub struct File {
     pub dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
     pub hashes: Hashes,
-    /// Note: Deserialized with [`LenientVersionSpecifiers`] since there are a number of invalid
-    /// versions on pypi
+    /// There are a number of invalid specifiers on pypi, so we first try to parse it into a [`VersionSpecifiers`]
+    /// according to spec (PEP 440), then a [`LenientVersionSpecifiers`] with fixup for some common problems and if this
+    /// still fails, we skip the file when creating a version map.
     #[serde(default, deserialize_with = "deserialize_version_specifiers_lenient")]
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
     pub size: Option<usize>,
     pub upload_time: Option<DateTime<Utc>>,
     pub url: String,
@@ -35,7 +36,7 @@ pub struct File {
 
 fn deserialize_version_specifiers_lenient<'de, D>(
     deserializer: D,
-) -> Result<Option<VersionSpecifiers>, D::Error>
+) -> Result<Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -43,8 +44,9 @@ where
     let Some(string) = maybe_string else {
         return Ok(None);
     };
-    let lenient = LenientVersionSpecifiers::from_str(&string).map_err(de::Error::custom)?;
-    Ok(Some(lenient.into()))
+    Ok(Some(
+        LenientVersionSpecifiers::from_str(&string).map(Into::into),
+    ))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use pep440_rs::VersionSpecifiers;
+use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pypi_types::{DistInfoMetadata, Hashes, Yanked};
 
 /// Internal analog to [`pypi_types::File`].
@@ -17,17 +17,20 @@ pub struct File {
     pub yanked: Option<Yanked>,
 }
 
-impl From<pypi_types::File> for File {
-    fn from(file: pypi_types::File) -> Self {
-        Self {
+impl TryFrom<pypi_types::File> for File {
+    type Error = VersionSpecifiersParseError;
+
+    /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
+    fn try_from(file: pypi_types::File) -> Result<Self, Self::Error> {
+        Ok(Self {
             dist_info_metadata: file.dist_info_metadata,
             filename: file.filename,
             hashes: file.hashes,
-            requires_python: file.requires_python,
+            requires_python: file.requires_python.transpose()?,
             size: file.size,
             upload_time: file.upload_time,
             url: file.url,
             yanked: file.yanked,
-        }
+        })
     }
 }

@@ -256,7 +256,7 @@ impl<'a> Candidate<'a> {
         self.file.install()
     }
 
-    /// If the candidate doesn't the given requirement, return the version specifiers.
+    /// If the candidate doesn't match the given requirement, return the version specifiers.
     pub(crate) fn validate(&self, requirement: &PythonRequirement) -> Option<&VersionSpecifiers> {
         // Validate against the _installed_ file. It's fine if the _resolved_ file is incompatible,
         // since it could be an incompatible wheel. (If the resolved file is an incompatible source

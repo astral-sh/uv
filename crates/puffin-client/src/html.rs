@@ -118,9 +118,7 @@ impl SimpleHtml {
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
-            let requires_python =
-                VersionSpecifiers::from_str(&requires_python).map_err(Error::Pep440)?;
-            Some(requires_python)
+            Some(VersionSpecifiers::from_str(&requires_python))
         } else {
             None
         };
