@@ -5,8 +5,9 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use crate::common::create_venv_py312;
 use common::{BIN_NAME, INSTA_FILTERS};
+
+use crate::common::create_venv_py312;
 
 mod common;
 
@@ -221,17 +222,7 @@ dependencies = ["flask==1.0.x"]
 fn uninstall() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -351,23 +342,13 @@ fn missing_record() -> Result<()> {
 fn uninstall_editable_by_name() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -422,22 +403,13 @@ fn uninstall_editable_by_name() -> Result<()> {
 fn uninstall_editable_by_path() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -492,22 +464,13 @@ fn uninstall_editable_by_path() -> Result<()> {
 fn uninstall_duplicate_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
