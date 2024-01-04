@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::iter;
 use std::path::Path;
 use std::process::Command;
 
@@ -447,8 +448,9 @@ fn install_editable() -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
+    let filters = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     // Install the editable package.
     insta::with_settings!({
@@ -583,8 +585,9 @@ fn install_editable_and_registry() -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
+    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     // Install the registry-based version of Black.
     insta::with_settings!({

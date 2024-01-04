@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::iter;
 use std::path::Path;
 use std::process::Command;
 
@@ -1050,8 +1051,9 @@ fn install_local_wheel() -> Result<()> {
     requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
@@ -1098,8 +1100,9 @@ fn install_local_source_distribution() -> Result<()> {
     requirements_txt.write_str(&format!("wheel @ file://{}", archive.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
@@ -1584,8 +1587,9 @@ fn install_path_source_dist_cached() -> Result<()> {
     requirements_txt.write_str(&format!("wheel @ file://{}", archive.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters.clone()
@@ -1707,8 +1711,9 @@ fn install_path_built_dist_cached() -> Result<()> {
     requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters.clone()
@@ -2556,9 +2561,10 @@ fn incompatible_wheel() -> Result<()> {
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!("foo @ file://{}", wheel.path().display()))?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
     let wheel_dir = wheel_dir.path().canonicalize()?.display().to_string();
-    filters.push((&wheel_dir, "[TEMP_DIR]"));
+    let filters: Vec<_> = iter::once((wheel_dir.as_str(), "[TEMP_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
