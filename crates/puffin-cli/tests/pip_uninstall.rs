@@ -1,3 +1,4 @@
+use std::iter;
 use std::process::Command;
 
 use anyhow::Result;
@@ -310,11 +311,12 @@ fn missing_record() -> Result<()> {
         .join("MarkupSafe-2.1.3.dist-info");
     std::fs::remove_file(dist_info.join("RECORD"))?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
+    let filters: Vec<_> = iter::once((
         "RECORD file not found at: .*/.venv",
         "RECORD file not found at: [VENV_PATH]",
-    ));
+    ))
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
 
     insta::with_settings!({
         filters => filters,
@@ -347,8 +349,9 @@ fn uninstall_editable_by_name() -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
+    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -408,8 +411,9 @@ fn uninstall_editable_by_path() -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
+    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -469,8 +473,9 @@ fn uninstall_duplicate_editable() -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"));
+    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;

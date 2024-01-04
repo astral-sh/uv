@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::iter;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -906,8 +907,9 @@ fn compile_git_https_dependency() -> Result<()> {
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git")?;
 
     // In addition to the standard filters, remove the `main` commit, which will change frequently.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"@(\d|\w){40}", "@[COMMIT]"));
+    let filters: Vec<_> = iter::once((r"@(\d|\w){40}", "@[COMMIT]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
@@ -2011,8 +2013,9 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
@@ -2072,8 +2075,9 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
     requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
@@ -2127,8 +2131,9 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
     requirements_in.write_str("flask @ file:///path/to/flask-3.0.0-py3-none-any.whl")?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"file://.*/", "file://[TEMP_DIR]/"));
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     insta::with_settings!({
         filters => filters
