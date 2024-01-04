@@ -110,7 +110,8 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
 /// requires-greater-version-does-not-exist
 ///
-/// The user requires a version of `a` greater than `1.0.0` but only smaller or equal versions exist
+/// The user requires a version of `a` greater than `1.0.0` but only smaller or
+/// equal versions exist
 ///
 /// requires-greater-version-does-not-exist-d34821ba
 /// ├── environment
@@ -161,7 +162,8 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 
 /// requires-less-version-does-not-exist
 ///
-/// The user requires a version of `a` less than `1.0.0` but only larger versions exist
+/// The user requires a version of `a` less than `1.0.0` but only larger versions
+/// exist
 ///
 /// requires-less-version-does-not-exist-4088ec1b
 /// ├── environment
@@ -318,7 +320,8 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 
 /// requires-transitive-incompatible-with-root-version
 ///
-/// The user requires packages `a` and `b` but `a` requires a different version of `b`
+/// The user requires packages `a` and `b` but `a` requires a different version of
+/// `b`
 ///
 /// requires-transitive-incompatible-with-root-version-b3c83bbd
 /// ├── environment
@@ -381,7 +384,8 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 
 /// requires-transitive-incompatible-with-transitive
 ///
-/// The user requires package `a` and `b`; `a` and `b` require different versions of `c`
+/// The user requires package `a` and `b`; `a` and `b` require different versions of
+/// `c`
 ///
 /// requires-transitive-incompatible-with-transitive-a35362d1
 /// ├── environment

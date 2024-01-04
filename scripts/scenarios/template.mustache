@@ -20,7 +20,9 @@ mod common;
 
 /// {{name}}
 ///
-/// {{description}}
+{{#description_lines}}
+/// {{.}}
+{{/description_lines}}
 ///
 /// {{prefix}}
 {{#tree}}
