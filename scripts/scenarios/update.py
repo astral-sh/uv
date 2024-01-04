@@ -20,6 +20,7 @@ import json
 import shutil
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 
@@ -131,6 +132,10 @@ for scenario in data["scenarios"]:
 for index, scenario in enumerate(data["scenarios"]):
     if scenario["name"] == "example":
         data["scenarios"].pop(index)
+
+# Wrap the description onto multiple lines
+for scenario in data["scenarios"]:
+    scenario["description_lines"] = textwrap.wrap(scenario["description"], width=80)
 
 # Render the template
 print("Rendering template...", file=sys.stderr)
