@@ -1755,7 +1755,7 @@ dependencies = [
 [[package]]
 name = "miette"
 version = "5.10.0"
-source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
+source = "git+https://github.com/zkat/miette.git?rev=b0744462adbbfbb6d845f382db36be883c7f3c45#b0744462adbbfbb6d845f382db36be883c7f3c45"
 dependencies = [
  "backtrace",
  "backtrace-ext",
@@ -1775,7 +1775,7 @@ dependencies = [
 [[package]]
 name = "miette-derive"
 version = "5.10.0"
-source = "git+https://github.com/zkat/miette.git?rev=fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6#fd77257cee0f5d03aa7dccb4ba8cbaa40c1a88c6"
+source = "git+https://github.com/zkat/miette.git?rev=b0744462adbbfbb6d845f382db36be883c7f3c45#b0744462adbbfbb6d845f382db36be883c7f3c45"
 dependencies = [
  "proc-macro2",
  "quote",

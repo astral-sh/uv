@@ -49,6 +49,7 @@ fn {{normalized_name}}() -> Result<()> {
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"<snapshot>
         "###);
     });
