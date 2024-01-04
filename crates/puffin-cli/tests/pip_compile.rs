@@ -2553,6 +2553,7 @@ fn preserve_env_var() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "maturin")]
 fn compile_editable() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;

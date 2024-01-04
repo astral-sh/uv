@@ -427,6 +427,7 @@ fn allow_incompatibilities() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "maturin")]
 fn install_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
