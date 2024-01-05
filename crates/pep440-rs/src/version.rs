@@ -2092,6 +2092,9 @@ impl<'source> FromPyObject<'source> for Version {
 /// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` ==
 /// `1.1` and `1.16` < `1.19`
 pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
+    if this.len() == other.len() {
+        return this.cmp(other);
+    }
     // "When comparing release segments with different numbers of components, the shorter segment
     // is padded out with additional zeros as necessary"
     for (this, other) in this.iter().chain(std::iter::repeat(&0)).zip(
