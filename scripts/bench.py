@@ -4,7 +4,7 @@ This script assumes that `pip`, `pip-tools`, `virtualenv`, and `hyperfine` are
 installed, and that a Puffin release builds exists at `./target/release/puffin`
 (relative to the repository root).
 
-Example usage: python bench.py -f requirements.in -t puffin -t pip-tools
+Example usage: python bench.py -t puffin -t pip-tools requirements.in
 """
 import abc
 import argparse
@@ -91,7 +91,7 @@ class Suite(abc.ABC):
 
 class PipTools(Suite):
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             output_file = os.path.join(temp_dir, "requirements.txt")
 
@@ -122,7 +122,7 @@ class PipTools(Suite):
             )
 
     def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             output_file = os.path.join(temp_dir, "requirements.txt")
 
@@ -152,7 +152,7 @@ class PipTools(Suite):
             )
 
     def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             venv_dir = os.path.join(temp_dir, ".venv")
 
@@ -182,7 +182,7 @@ class PipTools(Suite):
             )
 
     def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             venv_dir = os.path.join(temp_dir, ".venv")
 
@@ -214,7 +214,7 @@ class PipTools(Suite):
 
 class Puffin(Suite):
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             output_file = os.path.join(temp_dir, "requirements.txt")
 
@@ -252,7 +252,7 @@ class Puffin(Suite):
             )
 
     def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             output_file = os.path.join(temp_dir, "requirements.txt")
 
@@ -290,7 +290,7 @@ class Puffin(Suite):
             )
 
     def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             venv_dir = os.path.join(temp_dir, ".venv")
 
@@ -327,7 +327,7 @@ class Puffin(Suite):
             )
 
     def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.mkdtemp() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
             venv_dir = os.path.join(temp_dir, ".venv")
 
@@ -376,7 +376,7 @@ def main():
         description="Benchmark Puffin against other packaging tools."
     )
     parser.add_argument(
-        "-f", "--file", type=str, help="The file to read the dependencies from."
+        "file", type=str, help="The file to read the dependencies from."
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Print verbose output."
@@ -435,7 +435,7 @@ def main():
                 case Tool.PUFFIN:
                     suite = Puffin()
                 case _:
-                    raise ValueError(f"Unknown tool: {tool}")
+                    raise ValueError(f"Invalid tool: {tool}")
 
             suite.run_benchmark(benchmark, requirements_file, verbose=verbose)
 
