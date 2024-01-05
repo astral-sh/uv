@@ -98,6 +98,21 @@ Puffin's `requirements.txt` files may not be portable across platforms and Pytho
 
 ## Advanced Usage
 
+### Python discovery
+
+Puffin itself does not depend on Python, but it does need to locate a Python environment to (1)
+install dependencies into the environment, and (2) build source distributions.
+
+When running `pip-install` or `pip-sync`, Puffin will search for a Python environment in the
+following order:
+
+- An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
+- An activated Conda environment based on the `CONDA_PREFIX` environment variable.
+- A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
+
+If no Python environment is found, Puffin will prompt the user to create a virtual environment in
+the current directory.
+
 ### Dependency caching
 
 Puffin uses aggressive caching to avoid re-downloading (and re-building dependencies) that have
