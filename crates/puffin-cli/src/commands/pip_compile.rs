@@ -20,7 +20,7 @@ use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::Downloader;
-use puffin_interpreter::Virtualenv;
+use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver};
 use requirements_txt::EditableRequirement;
@@ -28,7 +28,6 @@ use requirements_txt::EditableRequirement;
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::python_version::PythonVersion;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -115,20 +114,19 @@ pub(crate) async fn pip_compile(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let interpreter = Interpreter::find(python_version.as_ref(), platform, &cache)?;
 
     debug!(
         "Using Python {} at {}",
-        venv.interpreter().markers().python_version,
-        venv.python_executable().display()
+        interpreter.markers().python_version,
+        interpreter.sys_executable().display()
     );
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter().clone();
-    let tags = venv.interpreter().tags()?;
+    let tags = interpreter.tags()?;
     let markers = python_version.map_or_else(
-        || Cow::Borrowed(venv.interpreter().markers()),
-        |python_version| Cow::Owned(python_version.markers(venv.interpreter().markers())),
+        || Cow::Borrowed(interpreter.markers()),
+        |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
     );
 
     // Instantiate a client.
@@ -142,7 +140,7 @@ pub(crate) async fn pip_compile(
         &cache,
         &interpreter,
         &index_urls,
-        venv.python_executable(),
+        interpreter.sys_executable().to_path_buf(),
         no_build,
     )
     .with_options(options);
@@ -170,7 +168,7 @@ pub(crate) async fn pip_compile(
         let downloader = Downloader::new(&cache, tags, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
-        let editable_wheel_dir = tempdir_in(venv.root())?;
+        let editable_wheel_dir = tempdir_in(cache.root())?;
         let editable_metadata: Vec<_> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await

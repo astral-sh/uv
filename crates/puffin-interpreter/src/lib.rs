@@ -5,11 +5,13 @@ use std::time::SystemTimeError;
 use thiserror::Error;
 
 pub use crate::interpreter::Interpreter;
+pub use crate::python_version::PythonVersion;
 pub use crate::virtual_env::Virtualenv;
 
 mod cfg;
 mod interpreter;
 mod python_platform;
+mod python_version;
 mod virtual_env;
 
 #[derive(Debug, Error)]
@@ -20,6 +22,8 @@ pub enum Error {
     BrokenVenv(PathBuf, PathBuf),
     #[error("Both VIRTUAL_ENV and CONDA_PREFIX are set. Please unset one of them.")]
     Conflict,
+    #[error("Could not find `{0}` in PATH")]
+    WhichNotFound(String, #[source] which::Error),
     #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `puffin venv` to create a virtual environment.")]
     NotFound,
     #[error(transparent)]

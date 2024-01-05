@@ -1,11 +1,12 @@
 use std::str::FromStr;
+
 use tracing::debug;
 
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 
 #[derive(Debug, Clone)]
-pub(crate) struct PythonVersion(StringVersion);
+pub struct PythonVersion(StringVersion);
 
 impl FromStr for PythonVersion {
     type Err = String;
@@ -65,7 +66,7 @@ impl PythonVersion {
     ///
     /// The returned [`MarkerEnvironment`] will preserve the base environment's platform markers,
     /// but override its Python version markers.
-    pub(crate) fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
+    pub fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
         let mut markers = base.clone();
 
         // Ex) `implementation_version == "3.12.0"`
@@ -80,5 +81,15 @@ impl PythonVersion {
         markers.python_version = self.0;
 
         markers
+    }
+
+    /// Return the major version of this Python version.
+    pub fn major(&self) -> u64 {
+        self.0.release()[0]
+    }
+
+    /// Return the minor version of this Python version.
+    pub fn minor(&self) -> u64 {
+        self.0.release()[1]
     }
 }
