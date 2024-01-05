@@ -6,16 +6,26 @@
 /// GENERATED WITH `{{generated_with}}`
 /// SCENARIOS FROM `{{generated_from}}`
 
-
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::Assert;
+use assert_cmd::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
 use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 
 mod common;
+
+fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg(command)
+        .current_dir(temp_dir)
+        .assert()
+}
 {{#scenarios}}
 
 /// {{name}}
@@ -55,6 +65,26 @@ fn {{normalized_name}}() -> Result<()> {
             .current_dir(&temp_dir), @r###"<snapshot>
         "###);
     });
+
+    {{#expected.explanation_lines}}
+    // {{.}}
+    {{/expected.explanation_lines}}
+    {{#expected.satisfiable}}
+    {{#expected.packages_list}}
+    assert_command(
+        &venv,
+        "import {{prefix_module}}_{{package_module}} as package; print(package.__version__, end='')",
+        &temp_dir
+    )
+    .success()
+    .stdout("{{version}}");
+    {{/expected.packages_list}}
+    {{/expected.satisfiable}}
+    {{^expected.satisfiable}}
+    {{#root.requires_packages}}
+    assert_command(&venv, "import {{prefix_module}}_{{package_module}}", &temp_dir).failure();
+    {{/root.requires_packages}}
+    {{/expected.satisfiable}}
 
     Ok(())
 }
