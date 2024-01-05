@@ -27,9 +27,9 @@ unscanny = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.75" }
+anyhow = { version = "1.0.79" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.34.0" }
-serde_json = { version = "1.0.108" }
-tempfile = { version = "3.8.1" }
-test-case = { version = "3.2.1" }
+serde_json = { version = "1.0.111" }
+tempfile = { version = "3.9.0" }
+test-case = { version = "3.3.1" }

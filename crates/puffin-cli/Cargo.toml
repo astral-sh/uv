@@ -70,16 +70,16 @@ which = { workspace = true }
 mimalloc = "0.1.39"
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = "0.5.0"
+tikv-jemallocator = "0.5.4"
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.12" }
-assert_fs = { version = "1.0.13" }
+assert_fs = { version = "1.1.0" }
 indoc = { version = "2.0.4" }
 insta-cmd = { version = "0.4.0" }
 insta = { version = "1.34.0", features = ["filters"] }
 predicates = { version = "3.0.4" }
-reqwest = { version = "0.11.22", features = ["blocking", "rustls"], default-features = false }
+reqwest = { version = "0.11.23", features = ["blocking", "rustls"], default-features = false }
 
 [features]
 # Introduces a dependency on a local Python installation.
