@@ -6,16 +6,48 @@
 /// GENERATED WITH `{{generated_with}}`
 /// SCENARIOS FROM `{{generated_from}}`
 
-
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::Assert;
+use assert_cmd::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
 use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 
 mod common;
+
+fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
+    Command::new(venv.join("bin").join("python"))
+        .arg("-c")
+        .arg(command)
+        .current_dir(temp_dir)
+        .assert()
+}
+
+fn assert_installed(
+    venv: &Path,
+    package: &'static str,
+    version: &'static str,
+    temp_dir: &Path,
+) {
+    assert_command(
+        venv,
+        format!(
+            "import {package} as package; print(package.__version__, end='')"
+        )
+        .as_str(),
+        temp_dir,
+    )
+    .success()
+    .stdout(version);
+}
+
+fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
+    assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
+}
 {{#scenarios}}
 
 /// {{name}}
@@ -46,6 +78,9 @@ fn {{normalized_name}}() -> Result<()> {
             {{#root.requires}}
             .arg("{{prefix}}-{{.}}")
             {{/root.requires}}
+            {{#environment.prereleases}}
+            .arg("--prerelease=allow")
+            {{/environment.prereleases}}
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -55,6 +90,25 @@ fn {{normalized_name}}() -> Result<()> {
             .current_dir(&temp_dir), @r###"<snapshot>
         "###);
     });
+
+    {{#expected.explanation_lines}}
+    // {{.}}
+    {{/expected.explanation_lines}}
+    {{#expected.satisfiable}}
+    {{#expected.packages_list}}
+    assert_installed(
+        &venv,
+        "{{prefix_module}}_{{package_module}}",
+        "{{version}}",
+        &temp_dir
+    );
+    {{/expected.packages_list}}
+    {{/expected.satisfiable}}
+    {{^expected.satisfiable}}
+    {{#root.requires_packages}}
+    assert_not_installed(&venv, "{{prefix_module}}_{{package_module}}", &temp_dir);
+    {{/root.requires_packages}}
+    {{/expected.satisfiable}}
 
     Ok(())
 }

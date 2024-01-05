@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import packaging.requirements
 from pathlib import Path
 
 
@@ -106,7 +107,7 @@ else:
     )
 
     if commit != PACKSE_COMMIT:
-        print("WARNING: Expected commit {PACKSE_COMMIT!r} but found {commit!r}.")
+        print(f"WARNING: Expected commit {PACKSE_COMMIT!r} but found {commit!r}.")
 
 print("Loading scenario metadata...", file=sys.stderr)
 data = json.loads(
@@ -136,6 +137,46 @@ for index, scenario in enumerate(data["scenarios"]):
 # Wrap the description onto multiple lines
 for scenario in data["scenarios"]:
     scenario["description_lines"] = textwrap.wrap(scenario["description"], width=80)
+
+
+# Wrap the expected explanation onto multiple lines
+for scenario in data["scenarios"]:
+    expected = scenario["expected"]
+    expected["explanation_lines"] = (
+        textwrap.wrap(expected["explanation"], width=80)
+        if expected["explanation"]
+        else []
+    )
+
+# Convert the expected packages into a list for rendering
+for scenario in data["scenarios"]:
+    expected = scenario["expected"]
+    expected["packages_list"] = []
+    for key, value in expected["packages"].items():
+        expected["packages_list"].append(
+            {
+                "package": key,
+                "version": value,
+                # Include a converted version of the package name to its Python module
+                "package_module": key.replace("-", "_"),
+            }
+        )
+
+
+# Convert the required packages into a list without versions
+for scenario in data["scenarios"]:
+    requires_packages = scenario["root"]["requires_packages"] = []
+    for requirement in scenario["root"]["requires"]:
+        package = packaging.requirements.Requirement(requirement).name
+        requires_packages.append(
+            {"package": package, "package_module": package.replace("-", "_")}
+        )
+
+
+# Include the Python module name of the prefix
+for scenario in data["scenarios"]:
+    scenario["prefix_module"] = scenario["prefix"].replace("-", "_")
+
 
 # Render the template
 print("Rendering template...", file=sys.stderr)
