@@ -20,7 +20,7 @@ pub enum Error {
     BrokenVenv(PathBuf, PathBuf),
     #[error("Both VIRTUAL_ENV and CONDA_PREFIX are set. Please unset one of them.")]
     Conflict,
-    #[error("Failed to locate a virtualenv or Conda environment (checked: VIRTUAL_ENV, CONDA_PREFIX, and .venv)")]
+    #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `puffin venv` to create a virtual environment.")]
     NotFound,
     #[error(transparent)]
     Io(#[from] io::Error),
