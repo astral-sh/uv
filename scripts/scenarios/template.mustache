@@ -26,6 +26,28 @@ fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
         .current_dir(temp_dir)
         .assert()
 }
+
+fn assert_installed(
+    venv: &Path,
+    package: &'static str,
+    version: &'static str,
+    temp_dir: &Path,
+) {
+    assert_command(
+        venv,
+        format!(
+            "import {package} as package; print(package.__version__, end='')"
+        )
+        .as_str(),
+        temp_dir,
+    )
+    .success()
+    .stdout(version);
+}
+
+fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
+    assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
+}
 {{#scenarios}}
 
 /// {{name}}
@@ -56,6 +78,9 @@ fn {{normalized_name}}() -> Result<()> {
             {{#root.requires}}
             .arg("{{prefix}}-{{.}}")
             {{/root.requires}}
+            {{#environment.prereleases}}
+            .arg("--prerelease=allow")
+            {{/environment.prereleases}}
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -71,18 +96,17 @@ fn {{normalized_name}}() -> Result<()> {
     {{/expected.explanation_lines}}
     {{#expected.satisfiable}}
     {{#expected.packages_list}}
-    assert_command(
+    assert_installed(
         &venv,
-        "import {{prefix_module}}_{{package_module}} as package; print(package.__version__, end='')",
+        "{{prefix_module}}_{{package_module}}",
+        "{{version}}",
         &temp_dir
-    )
-    .success()
-    .stdout("{{version}}");
+    );
     {{/expected.packages_list}}
     {{/expected.satisfiable}}
     {{^expected.satisfiable}}
     {{#root.requires_packages}}
-    assert_command(&venv, "import {{prefix_module}}_{{package_module}}", &temp_dir).failure();
+    assert_not_installed(&venv, "{{prefix_module}}_{{package_module}}", &temp_dir);
     {{/root.requires_packages}}
     {{/expected.satisfiable}}
 

@@ -25,6 +25,20 @@ fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
         .assert()
 }
 
+fn assert_installed(venv: &Path, package: &'static str, version: &'static str, temp_dir: &Path) {
+    assert_command(
+        venv,
+        format!("import {package} as package; print(package.__version__, end='')").as_str(),
+        temp_dir,
+    )
+    .success()
+    .stdout(version);
+}
+
+fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
+    assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
+}
+
 /// requires-package-only-prereleases
 ///
 /// The user requires any version of package `a` which only has pre-release versions
@@ -76,13 +90,12 @@ fn requires_package_only_prereleases() -> Result<()> {
 
     // Since there are only pre-release versions of `a` available, it should be
     // installed even though the user did not include a pre-release specifier.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_only_prereleases_5829a64d_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0a1");
+        "requires_package_only_prereleases_5829a64d_a",
+        "1.0.0a1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -138,12 +151,11 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
 
     // Since there are stable versions of `a` available, pre-release versions should
     // not be selected without explicit opt-in.
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_package_only_prereleases_in_range_2b0594c8_a",
+        "requires_package_only_prereleases_in_range_2b0594c8_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -184,6 +196,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
             .arg("requires-package-only-prereleases-in-range-global-opt-in-51f94da2-a>0.1.0")
+            .arg("--prerelease=allow")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -191,23 +204,24 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
-        success: false
-        exit_code: 1
+        success: true
+        exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
-          × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of a available matching >0.1.0 and root depends on a>0.1.0, version solving failed.
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0a1
         "###);
     });
 
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_only_prereleases_in_range_global_opt_in_51f94da2_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0a1");
+        "requires_package_only_prereleases_in_range_global_opt_in_51f94da2_a",
+        "1.0.0a1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -265,13 +279,12 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 
     // Since the user did not provide a pre-release specifier, the older stable version
     // should be selected.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_prerelease_and_final_any_66989e88_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("0.1.0");
+        "requires_package_prerelease_and_final_any_66989e88_a",
+        "0.1.0",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -335,13 +348,12 @@ fn requires_package_prerelease_specified_only_final_available() -> Result<()> {
     });
 
     // The latest stable version should be selected.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_prerelease_specified_only_final_available_8c3e26d4_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("0.3.0");
+        "requires_package_prerelease_specified_only_final_available_8c3e26d4_a",
+        "0.3.0",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -405,13 +417,12 @@ fn requires_package_prerelease_specified_only_prerelease_available() -> Result<(
     });
 
     // The latest pre-release version should be selected.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_prerelease_specified_only_prerelease_available_fa8a64e0_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("0.3.0a1");
+        "requires_package_prerelease_specified_only_prerelease_available_fa8a64e0_a",
+        "0.3.0a1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -479,13 +490,12 @@ fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
 
     // Since the user provided a pre-release specifier, the latest pre-release version
     // should be selected.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_prerelease_specified_mixed_available_caf5dd1a_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0a1");
+        "requires_package_prerelease_specified_mixed_available_caf5dd1a_a",
+        "1.0.0a1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -546,13 +556,12 @@ fn requires_package_multiple_prereleases_kinds() -> Result<()> {
     });
 
     // Release candidates should be the highest precedence pre-release kind.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_multiple_prereleases_kinds_08c2f99b_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0rc1");
+        "requires_package_multiple_prereleases_kinds_08c2f99b_a",
+        "1.0.0rc1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -615,13 +624,12 @@ fn requires_package_multiple_prereleases_numbers() -> Result<()> {
     });
 
     // The latest alpha version should be selected.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_package_multiple_prereleases_numbers_4cf7acef_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0a3");
+        "requires_package_multiple_prereleases_numbers_4cf7acef_a",
+        "1.0.0a3",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -686,20 +694,18 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
 
     // Since there are only pre-release versions of `b` available, it should be
     // selected even though the user did not opt-in to pre-releases.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_transitive_package_only_prereleases_fa02005e_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("0.1.0");
-    assert_command(
+        "requires_transitive_package_only_prereleases_fa02005e_a",
+        "0.1.0",
+        &temp_dir,
+    );
+    assert_installed(
         &venv,
-        "import requires_transitive_package_only_prereleases_fa02005e_b as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0a1");
+        "requires_transitive_package_only_prereleases_fa02005e_b",
+        "1.0.0a1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -765,12 +771,11 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
     // Since there are stable versions of `b` available, the pre-release version should
     // not be selected without explicit opt-in. The available version is excluded by
     // the range requested by the user.
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_transitive_package_only_prereleases_in_range_4800779d_a",
+        "requires_transitive_package_only_prereleases_in_range_4800779d_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -841,20 +846,18 @@ fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> 
 
     // Since the user included a dependency on `b` with a pre-release specifier, a pre-
     // release version can be selected.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_transitive_package_only_prereleases_in_range_opt_in_4ca10c42_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("0.1.0");
-    assert_command(
+        "requires_transitive_package_only_prereleases_in_range_opt_in_4ca10c42_a",
+        "0.1.0",
+        &temp_dir,
+    );
+    assert_installed(
         &venv,
-        "import requires_transitive_package_only_prereleases_in_range_opt_in_4ca10c42_b as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0a1");
+        "requires_transitive_package_only_prereleases_in_range_opt_in_4ca10c42_b",
+        "1.0.0a1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -928,18 +931,16 @@ fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_transitive_prerelease_and_stable_dependency_31b546ef_a",
+        "requires_transitive_prerelease_and_stable_dependency_31b546ef_a",
         &temp_dir,
-    )
-    .failure();
-    assert_command(
+    );
+    assert_not_installed(
         &venv,
-        "import requires_transitive_prerelease_and_stable_dependency_31b546ef_b",
+        "requires_transitive_prerelease_and_stable_dependency_31b546ef_b",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1019,27 +1020,24 @@ fn requires_transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     });
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0");
-    assert_command(
+        "requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_a",
+        "1.0.0",
+        &temp_dir,
+    );
+    assert_installed(
         &venv,
-        "import requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_b as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0");
-    assert_command(
+        "requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_b",
+        "1.0.0",
+        &temp_dir,
+    );
+    assert_installed(
         &venv,
-        "import requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_c as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("2.0.0b1");
+        "requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_c",
+        "2.0.0b1",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -1086,12 +1084,11 @@ fn requires_package_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_package_does_not_exist_57cd4136_a",
+        "requires_package_does_not_exist_57cd4136_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1142,12 +1139,11 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_exact_version_does_not_exist_eaa03067_a",
+        "requires_exact_version_does_not_exist_eaa03067_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1201,12 +1197,11 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_greater_version_does_not_exist_6e8e01df_a",
+        "requires_greater_version_does_not_exist_6e8e01df_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1262,12 +1257,11 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_less_version_does_not_exist_e45cec3c_a",
+        "requires_less_version_does_not_exist_e45cec3c_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1319,12 +1313,11 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import transitive_requires_package_does_not_exist_aca2796a_a",
+        "transitive_requires_package_does_not_exist_aca2796a_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1380,18 +1373,16 @@ fn requires_direct_incompatible_versions() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_direct_incompatible_versions_063ec9d3_a",
+        "requires_direct_incompatible_versions_063ec9d3_a",
         &temp_dir,
-    )
-    .failure();
-    assert_command(
+    );
+    assert_not_installed(
         &venv,
-        "import requires_direct_incompatible_versions_063ec9d3_a",
+        "requires_direct_incompatible_versions_063ec9d3_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1457,18 +1448,16 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_transitive_incompatible_with_root_version_638350f3_a",
+        "requires_transitive_incompatible_with_root_version_638350f3_a",
         &temp_dir,
-    )
-    .failure();
-    assert_command(
+    );
+    assert_not_installed(
         &venv,
-        "import requires_transitive_incompatible_with_root_version_638350f3_b",
+        "requires_transitive_incompatible_with_root_version_638350f3_b",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1540,18 +1529,16 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_transitive_incompatible_with_transitive_9b595175_a",
+        "requires_transitive_incompatible_with_transitive_9b595175_a",
         &temp_dir,
-    )
-    .failure();
-    assert_command(
+    );
+    assert_not_installed(
         &venv,
-        "import requires_transitive_incompatible_with_transitive_9b595175_b",
+        "requires_transitive_incompatible_with_transitive_9b595175_b",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1603,12 +1590,11 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_python_version_does_not_exist_0825b69c_a",
+        "requires_python_version_does_not_exist_0825b69c_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1661,12 +1647,11 @@ fn requires_python_version_less_than_current() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_python_version_less_than_current_f9296b84_a",
+        "requires_python_version_less_than_current_f9296b84_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1722,12 +1707,11 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_python_version_greater_than_current_a11d5394_a",
+        "requires_python_version_greater_than_current_a11d5394_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1804,12 +1788,11 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_python_version_greater_than_current_many_02dc550c_a",
+        "requires_python_version_greater_than_current_many_02dc550c_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
@@ -1875,13 +1858,12 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_installed(
         &venv,
-        "import requires_python_version_greater_than_current_backtrack_ef060cef_a as package; print(package.__version__, end='')",
-        &temp_dir
-    )
-    .success()
-    .stdout("1.0.0");
+        "requires_python_version_greater_than_current_backtrack_ef060cef_a",
+        "1.0.0",
+        &temp_dir,
+    );
 
     Ok(())
 }
@@ -1954,12 +1936,11 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         "###);
     });
 
-    assert_command(
+    assert_not_installed(
         &venv,
-        "import requires_python_version_greater_than_current_excluded_1bde0c18_a",
+        "requires_python_version_greater_than_current_excluded_1bde0c18_a",
         &temp_dir,
-    )
-    .failure();
+    );
 
     Ok(())
 }
