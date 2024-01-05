@@ -1,20 +1,41 @@
 #!/usr/bin/env python3
-#
-# Generates and updates snapshot test cases from packse scenarios.
-#
-# Usage:
-#
-#     $ ./scripts/scenarios/update.py
-#
-# Requirements:
-#
-#   Requires `packse` and `chevron-blue`.
-#
-#     $ pip install -r scripts/scenarios/requirements.txt
-#
-#   Also supports a local, editable requirement on `packse`.
-#
-#   Uses `git`, `rustfmt`, and `cargo insta test` requirements from the project.
+"""
+Generates and updates snapshot test cases from packse scenarios.
+
+Usage:
+
+    Regenerate the scenario test file:
+    
+        $ ./scripts/scenarios/update.py
+
+    Scenarios are pinned to a specific commit. Change the `PACKSE_COMMIT` constant to update them.
+
+    Scenarios can be developed locally with the following workflow:
+
+        Install the local version of packse
+
+        $ pip install -e <path to packse>
+
+        From the packse repository, build and publish the scenarios to a local index
+
+        $ packse index up --bg
+        $ packse build scenarios/*
+        $ packse publish dist/* --index-url http://localhost:3141/packages/local --anonymous
+
+        Override the default PyPI index for Puffin and update the scenarios
+
+        $ PUFFIN_INDEX_URL="http://localhost:3141/packages/all/+simple" ./scripts/scenarios/update.py
+
+Requirements:
+
+    Requires `packse` and `chevron-blue`.
+
+        $ pip install -r scripts/scenarios/requirements.txt
+
+    Also supports a local, editable requirement on `packse`.
+
+    Uses `git`, `rustfmt`, and `cargo insta test` requirements from the project.
+"""
 
 import json
 import shutil
