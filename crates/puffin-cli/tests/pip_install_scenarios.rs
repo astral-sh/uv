@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/83f5c66b6fb7cc9d121cdf02bcedf9403cb66daf/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/ede563fa122773e5d07d43a03598da8241f6c3a2/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -53,7 +53,6 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_only_prereleases() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -114,9 +113,7 @@ fn requires_package_only_prereleases() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_only_prereleases_in_range() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -175,9 +172,7 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -240,9 +235,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 /// │       └── satisfied by a-0.1.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_prerelease_and_final_any() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -305,11 +298,8 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 /// │       └── satisfied by a-0.3.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.7
 ///     ├── a-0.2.0
-///     │   └── requires python>=3.7
 ///     └── a-0.3.0
-///         └── requires python>=3.7
 #[test]
 fn requires_package_prerelease_specified_only_final_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -374,11 +364,8 @@ fn requires_package_prerelease_specified_only_final_available() -> Result<()> {
 /// │       └── satisfied by a-0.3.0a1
 /// └── a
 ///     ├── a-0.1.0a1
-///     │   └── requires python>=3.7
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.7
 ///     └── a-0.3.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_prerelease_specified_only_prerelease_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -444,13 +431,9 @@ fn requires_package_prerelease_specified_only_prerelease_available() -> Result<(
 /// │       └── satisfied by a-1.0.0a1
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.7
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.7
 ///     ├── a-0.3.0
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -516,11 +499,8 @@ fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
 /// │       └── satisfied by a-1.0.0rc1
 /// └── a
 ///     ├── a-1.0.0a1
-///     │   └── requires python>=3.7
 ///     ├── a-1.0.0b1
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0rc1
-///         └── requires python>=3.7
 #[test]
 fn requires_package_multiple_prereleases_kinds() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -581,11 +561,8 @@ fn requires_package_multiple_prereleases_kinds() -> Result<()> {
 /// │       └── satisfied by a-1.0.0a3
 /// └── a
 ///     ├── a-1.0.0a1
-///     │   └── requires python>=3.7
 ///     ├── a-1.0.0a2
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0a3
-///         └── requires python>=3.7
 #[test]
 fn requires_package_multiple_prereleases_numbers() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -650,10 +627,8 @@ fn requires_package_multiple_prereleases_numbers() -> Result<()> {
 /// │   └── a-0.1.0
 /// │       ├── requires b
 /// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.7
 /// └── b
 ///     └── b-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_package_only_prereleases() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -726,12 +701,9 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
 /// │   └── a-0.1.0
 /// │       ├── requires b>0.1
 /// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.7
 /// └── b
 ///     ├── b-0.1.0
-///     │   └── requires python>=3.7
 ///     └── b-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -799,12 +771,9 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
 /// │   └── a-0.1.0
 /// │       ├── requires b>0.1
 /// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.7
 /// └── b
 ///     ├── b-0.1.0
-///     │   └── requires python>=3.7
 ///     └── b-1.0.0a1
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -880,17 +849,13 @@ fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> 
 /// │   └── a-1.0.0
 /// │       ├── requires c==2.0.0b1
 /// │       │   └── satisfied by c-2.0.0b1
-/// │       └── requires python>=3.7
 /// ├── b
 /// │   └── b-1.0.0
 /// │       ├── requires c>=1.0.0,<=3.0.0
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.7
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.7
 ///     └── c-2.0.0b1
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -967,17 +932,13 @@ fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// │   └── a-1.0.0
 /// │       ├── requires c==2.0.0b1
 /// │       │   └── satisfied by c-2.0.0b1
-/// │       └── requires python>=3.7
 /// ├── b
 /// │   └── b-1.0.0
 /// │       ├── requires c>=1.0.0,<=3.0.0
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.7
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.7
 ///     └── c-2.0.0b1
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1068,51 +1029,30 @@ fn requires_transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// │       │   ├── satisfied by c-2.0.0b7
 /// │       │   ├── satisfied by c-2.0.0b8
 /// │       │   └── satisfied by c-2.0.0b9
-/// │       └── requires python>=3.7
 /// ├── b
 /// │   └── b-1.0.0
 /// │       ├── requires c>=1.0.0,<=3.0.0
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.7
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a1
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a2
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a3
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a4
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a5
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a6
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a7
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a8
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a9
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b1
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b2
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b3
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b4
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b5
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b6
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b7
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b8
-///     │   └── requires python>=3.7
 ///     └── c-2.0.0b9
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1189,51 +1129,30 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
 /// │   └── a-1.0.0
 /// │       ├── requires c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5
 /// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.7
 /// ├── b
 /// │   └── b-1.0.0
 /// │       ├── requires c>=1.0.0,<=3.0.0
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.7
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a1
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a2
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a3
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a4
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a5
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a6
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a7
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a8
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0a9
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b1
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b2
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b3
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b4
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b5
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b6
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b7
-///     │   └── requires python>=3.7
 ///     ├── c-2.0.0b8
-///     │   └── requires python>=3.7
 ///     └── c-2.0.0b9
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1353,7 +1272,6 @@ fn requires_package_does_not_exist() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.7
 #[test]
 fn requires_exact_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1409,9 +1327,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.7
 ///     └── a-1.0.0
-///         └── requires python>=3.7
 #[test]
 fn requires_greater_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1467,11 +1383,8 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-2.0.0
-///     │   └── requires python>=3.7
 ///     ├── a-3.0.0
-///     │   └── requires python>=3.7
 ///     └── a-4.0.0
-///         └── requires python>=3.7
 #[test]
 fn requires_less_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1528,7 +1441,6 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 ///     └── a-1.0.0
 ///         ├── requires b
 ///             └── unsatisfied: no versions for package
-///         └── requires python>=3.7
 #[test]
 fn transitive_requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1584,9 +1496,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// │       └── satisfied by a-2.0.0
 /// └── a
 ///     ├── a-1.0.0
-///     │   └── requires python>=3.7
 ///     └── a-2.0.0
-///         └── requires python>=3.7
 #[test]
 fn requires_direct_incompatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1652,12 +1562,9 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 /// │   └── a-1.0.0
 /// │       ├── requires b==2.0.0
 /// │       │   └── satisfied by b-2.0.0
-/// │       └── requires python>=3.7
 /// └── b
 ///     ├── b-1.0.0
-///     │   └── requires python>=3.7
 ///     └── b-2.0.0
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_incompatible_with_root_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1727,17 +1634,13 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 /// │   └── a-1.0.0
 /// │       ├── requires c==1.0.0
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.7
 /// ├── b
 /// │   └── b-1.0.0
 /// │       ├── requires c==2.0.0
 /// │       │   └── satisfied by c-2.0.0
-/// │       └── requires python>=3.7
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.7
 ///     └── c-2.0.0
-///         └── requires python>=3.7
 #[test]
 fn requires_transitive_incompatible_with_transitive() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1803,7 +1706,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=4.0 (incompatible with environment)
+///         └── incompatible requires-python >=4.0
 #[test]
 fn requires_python_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1860,7 +1763,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python<=3.8 (incompatible with environment)
+///         └── incompatible requires-python <=3.8
 #[test]
 fn requires_python_version_less_than_current() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1917,7 +1820,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.10 (incompatible with environment)
+///         └── incompatible requires-python >=3.10
 #[test]
 fn requires_python_version_greater_than_current() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1977,29 +1880,29 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-2.0.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-2.1.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-2.2.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-2.3.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-2.4.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-2.5.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-3.0.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     ├── a-3.1.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     ├── a-3.2.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     ├── a-3.3.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     ├── a-3.4.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     └── a-3.5.0
-///         └── requires python>=3.11 (incompatible with environment)
+///         └── incompatible requires-python >=3.11
 #[test]
 fn requires_python_version_greater_than_current_many() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2061,13 +1964,12 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 /// │       └── satisfied by a-4.0.0
 /// └── a
 ///     ├── a-1.0.0
-///     │   └── requires python>=3.9
 ///     ├── a-2.0.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-3.0.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     └── a-4.0.0
-///         └── requires python>=3.12 (incompatible with environment)
+///         └── incompatible requires-python >=3.12
 #[test]
 fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2131,13 +2033,12 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 /// │       └── satisfied by a-4.0.0
 /// └── a
 ///     ├── a-1.0.0
-///     │   └── requires python>=3.9
 ///     ├── a-2.0.0
-///     │   └── requires python>=3.10 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.10
 ///     ├── a-3.0.0
-///     │   └── requires python>=3.11 (incompatible with environment)
+///     │   └── incompatible requires-python >=3.11
 ///     └── a-4.0.0
-///         └── requires python>=3.12 (incompatible with environment)
+///         └── incompatible requires-python >=3.12
 #[test]
 fn requires_python_version_greater_than_current_excluded() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
