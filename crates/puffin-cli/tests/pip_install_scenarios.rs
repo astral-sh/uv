@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/ede563fa122773e5d07d43a03598da8241f6c3a2/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/bb6ed35ad77701ab7d966962b2b33589f755b2d6/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -42,10 +42,10 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 
 /// requires-package-only-prereleases
 ///
-/// The user requires any version of package `a` which only has pre-release versions
+/// The user requires any version of package `a` which only has prerelease versions
 /// available.
 ///
-/// requires-package-only-prereleases-5829a64d
+/// requires-package-only-prereleases-a8b21d15
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -61,14 +61,14 @@ fn requires_package_only_prereleases() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-only-prereleases-5829a64d-", ""));
+    filters.push((r"requires-package-only-prereleases-a8b21d15-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-only-prereleases-5829a64d-a")
+            .arg("requires-package-only-prereleases-a8b21d15-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -88,11 +88,11 @@ fn requires_package_only_prereleases() -> Result<()> {
         "###);
     });
 
-    // Since there are only pre-release versions of `a` available, it should be
-    // installed even though the user did not include a pre-release specifier.
+    // Since there are only prerelease versions of `a` available, it should be
+    // installed even though the user did not include a prerelease specifier.
     assert_installed(
         &venv,
-        "requires_package_only_prereleases_5829a64d_a",
+        "requires_package_only_prereleases_a8b21d15_a",
         "1.0.0a1",
         &temp_dir,
     );
@@ -102,10 +102,10 @@ fn requires_package_only_prereleases() -> Result<()> {
 
 /// requires-package-only-prereleases-in-range
 ///
-/// The user requires a version of package `a` which only matches pre-release
+/// The user requires a version of package `a` which only matches prerelease
 /// versions but they did not include a prerelease specifier.
 ///
-/// requires-package-only-prereleases-in-range-2b0594c8
+/// requires-package-only-prereleases-in-range-b4df71d2
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -122,14 +122,14 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-only-prereleases-in-range-2b0594c8-", ""));
+    filters.push((r"requires-package-only-prereleases-in-range-b4df71d2-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-only-prereleases-in-range-2b0594c8-a>0.1.0")
+            .arg("requires-package-only-prereleases-in-range-b4df71d2-a>0.1.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -147,11 +147,11 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
         "###);
     });
 
-    // Since there are stable versions of `a` available, pre-release versions should
-    // not be selected without explicit opt-in.
+    // Since there are stable versions of `a` available, prerelease versions should not
+    // be selected without explicit opt-in.
     assert_not_installed(
         &venv,
-        "requires_package_only_prereleases_in_range_2b0594c8_a",
+        "requires_package_only_prereleases_in_range_b4df71d2_a",
         &temp_dir,
     );
 
@@ -160,9 +160,9 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
 
 /// requires-package-only-prereleases-in-range-global-opt-in
 ///
-/// The user requires a version of package `a` which only matches pre-release
+/// The user requires a version of package `a` which only matches prerelease
 /// versions. They did not include a prerelease specifier for the package, but they
-/// opted into pre-releases globally.
+/// opted into prereleases globally.
 ///
 /// requires-package-only-prereleases-in-range-global-opt-in-51f94da2
 /// ├── environment
@@ -224,10 +224,10 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 
 /// requires-package-prerelease-and-final-any
 ///
-/// The user requires any version of package `a` has a pre-release version available
+/// The user requires any version of package `a` has a prerelease version available
 /// and an older non-prerelease version.
 ///
-/// requires-package-prerelease-and-final-any-66989e88
+/// requires-package-prerelease-and-final-any-eebe53a6
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -244,14 +244,14 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-prerelease-and-final-any-66989e88-", ""));
+    filters.push((r"requires-package-prerelease-and-final-any-eebe53a6-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-prerelease-and-final-any-66989e88-a")
+            .arg("requires-package-prerelease-and-final-any-eebe53a6-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -271,11 +271,11 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
         "###);
     });
 
-    // Since the user did not provide a pre-release specifier, the older stable version
+    // Since the user did not provide a prerelease specifier, the older stable version
     // should be selected.
     assert_installed(
         &venv,
-        "requires_package_prerelease_and_final_any_66989e88_a",
+        "requires_package_prerelease_and_final_any_eebe53a6_a",
         "0.1.0",
         &temp_dir,
     );
@@ -285,7 +285,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 
 /// requires-package-prerelease-specified-only-final-available
 ///
-/// The user requires a version of `a` with a pre-release specifier and only stable
+/// The user requires a version of `a` with a prerelease specifier and only stable
 /// releases are available.
 ///
 /// requires-package-prerelease-specified-only-final-available-8c3e26d4
@@ -351,10 +351,10 @@ fn requires_package_prerelease_specified_only_final_available() -> Result<()> {
 
 /// requires-package-prerelease-specified-only-prerelease-available
 ///
-/// The user requires a version of `a` with a pre-release specifier and only pre-
-/// release releases are available.
+/// The user requires a version of `a` with a prerelease specifier and only
+/// prerelease releases are available.
 ///
-/// requires-package-prerelease-specified-only-prerelease-available-fa8a64e0
+/// requires-package-prerelease-specified-only-prerelease-available-b91b9892
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -375,7 +375,7 @@ fn requires_package_prerelease_specified_only_prerelease_available() -> Result<(
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-package-prerelease-specified-only-prerelease-available-fa8a64e0-",
+        r"requires-package-prerelease-specified-only-prerelease-available-b91b9892-",
         "",
     ));
 
@@ -384,7 +384,7 @@ fn requires_package_prerelease_specified_only_prerelease_available() -> Result<(
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-prerelease-specified-only-prerelease-available-fa8a64e0-a>=0.1.0a1")
+            .arg("requires-package-prerelease-specified-only-prerelease-available-b91b9892-a>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -404,10 +404,10 @@ fn requires_package_prerelease_specified_only_prerelease_available() -> Result<(
         "###);
     });
 
-    // The latest pre-release version should be selected.
+    // The latest prerelease version should be selected.
     assert_installed(
         &venv,
-        "requires_package_prerelease_specified_only_prerelease_available_fa8a64e0_a",
+        "requires_package_prerelease_specified_only_prerelease_available_b91b9892_a",
         "0.3.0a1",
         &temp_dir,
     );
@@ -417,10 +417,10 @@ fn requires_package_prerelease_specified_only_prerelease_available() -> Result<(
 
 /// requires-package-prerelease-specified-mixed-available
 ///
-/// The user requires a version of `a` with a pre-release specifier and both pre-
-/// release and stable releases are available.
+/// The user requires a version of `a` with a prerelease specifier and both
+/// prerelease and stable releases are available.
 ///
-/// requires-package-prerelease-specified-mixed-available-caf5dd1a
+/// requires-package-prerelease-specified-mixed-available-48b383b8
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -443,7 +443,7 @@ fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-package-prerelease-specified-mixed-available-caf5dd1a-",
+        r"requires-package-prerelease-specified-mixed-available-48b383b8-",
         "",
     ));
 
@@ -452,7 +452,7 @@ fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-prerelease-specified-mixed-available-caf5dd1a-a>=0.1.0a1")
+            .arg("requires-package-prerelease-specified-mixed-available-48b383b8-a>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -472,11 +472,11 @@ fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
         "###);
     });
 
-    // Since the user provided a pre-release specifier, the latest pre-release version
+    // Since the user provided a prerelease specifier, the latest prerelease version
     // should be selected.
     assert_installed(
         &venv,
-        "requires_package_prerelease_specified_mixed_available_caf5dd1a_a",
+        "requires_package_prerelease_specified_mixed_available_48b383b8_a",
         "1.0.0a1",
         &temp_dir,
     );
@@ -489,7 +489,7 @@ fn requires_package_prerelease_specified_mixed_available() -> Result<()> {
 /// The user requires `a` which has multiple prereleases available with different
 /// labels.
 ///
-/// requires-package-multiple-prereleases-kinds-08c2f99b
+/// requires-package-multiple-prereleases-kinds-91b38a0e
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -509,14 +509,14 @@ fn requires_package_multiple_prereleases_kinds() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-multiple-prereleases-kinds-08c2f99b-", ""));
+    filters.push((r"requires-package-multiple-prereleases-kinds-91b38a0e-", ""));
 
     insta::with_settings!({
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-package-multiple-prereleases-kinds-08c2f99b-a>=1.0.0a1")
+            .arg("requires-package-multiple-prereleases-kinds-91b38a0e-a>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -536,10 +536,10 @@ fn requires_package_multiple_prereleases_kinds() -> Result<()> {
         "###);
     });
 
-    // Release candidates should be the highest precedence pre-release kind.
+    // Release candidates should be the highest precedence prerelease kind.
     assert_installed(
         &venv,
-        "requires_package_multiple_prereleases_kinds_08c2f99b_a",
+        "requires_package_multiple_prereleases_kinds_91b38a0e_a",
         "1.0.0rc1",
         &temp_dir,
     );
@@ -615,9 +615,9 @@ fn requires_package_multiple_prereleases_numbers() -> Result<()> {
 /// requires-transitive-package-only-prereleases
 ///
 /// The user requires any version of package `a` which requires `b` which only has
-/// pre-release versions available.
+/// prerelease versions available.
 ///
-/// requires-transitive-package-only-prereleases-fa02005e
+/// requires-transitive-package-only-prereleases-6e20b294
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -625,8 +625,8 @@ fn requires_package_multiple_prereleases_numbers() -> Result<()> {
 /// │       └── satisfied by a-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b
-/// │       │   └── unsatisfied: no matching version
+/// │       └── requires b
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     └── b-1.0.0a1
 #[test]
@@ -638,7 +638,7 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-package-only-prereleases-fa02005e-",
+        r"requires-transitive-package-only-prereleases-6e20b294-",
         "",
     ));
 
@@ -647,7 +647,7 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-package-only-prereleases-fa02005e-a")
+            .arg("requires-transitive-package-only-prereleases-6e20b294-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -668,17 +668,17 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
         "###);
     });
 
-    // Since there are only pre-release versions of `b` available, it should be
-    // selected even though the user did not opt-in to pre-releases.
+    // Since there are only prerelease versions of `b` available, it should be selected
+    // even though the user did not opt-in to prereleases.
     assert_installed(
         &venv,
-        "requires_transitive_package_only_prereleases_fa02005e_a",
+        "requires_transitive_package_only_prereleases_6e20b294_a",
         "0.1.0",
         &temp_dir,
     );
     assert_installed(
         &venv,
-        "requires_transitive_package_only_prereleases_fa02005e_b",
+        "requires_transitive_package_only_prereleases_6e20b294_b",
         "1.0.0a1",
         &temp_dir,
     );
@@ -689,9 +689,9 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
 /// requires-transitive-package-only-prereleases-in-range
 ///
 /// The user requires package `a` which has a dependency on a package which only
-/// matches pre-release versions but they did not include a pre-release specifier.
+/// matches prerelease versions but they did not include a prerelease specifier.
 ///
-/// requires-transitive-package-only-prereleases-in-range-4800779d
+/// requires-transitive-package-only-prereleases-in-range-848f2c77
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -699,8 +699,8 @@ fn requires_transitive_package_only_prereleases() -> Result<()> {
 /// │       └── satisfied by a-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b>0.1
-/// │       │   └── unsatisfied: no matching version
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-0.1.0
 ///     └── b-1.0.0a1
@@ -713,7 +713,7 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-package-only-prereleases-in-range-4800779d-",
+        r"requires-transitive-package-only-prereleases-in-range-848f2c77-",
         "",
     ));
 
@@ -722,7 +722,7 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-package-only-prereleases-in-range-4800779d-a")
+            .arg("requires-transitive-package-only-prereleases-in-range-848f2c77-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -741,12 +741,12 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
         "###);
     });
 
-    // Since there are stable versions of `b` available, the pre-release version should
+    // Since there are stable versions of `b` available, the prerelease version should
     // not be selected without explicit opt-in. The available version is excluded by
     // the range requested by the user.
     assert_not_installed(
         &venv,
-        "requires_transitive_package_only_prereleases_in_range_4800779d_a",
+        "requires_transitive_package_only_prereleases_in_range_848f2c77_a",
         &temp_dir,
     );
 
@@ -756,10 +756,10 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
 /// requires-transitive-package-only-prereleases-in-range-opt-in
 ///
 /// The user requires package `a` which has a dependency on a package which only
-/// matches pre-release versions; the user has opted into allowing prereleases in
-/// `b` explicitly.
+/// matches prerelease versions; the user has opted into allowing prereleases in `b`
+/// explicitly.
 ///
-/// requires-transitive-package-only-prereleases-in-range-opt-in-4ca10c42
+/// requires-transitive-package-only-prereleases-in-range-opt-in-1d2fc5a9
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -769,8 +769,8 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
 /// │       └── satisfied by b-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b>0.1
-/// │       │   └── unsatisfied: no matching version
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-0.1.0
 ///     └── b-1.0.0a1
@@ -783,7 +783,7 @@ fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> 
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-package-only-prereleases-in-range-opt-in-4ca10c42-",
+        r"requires-transitive-package-only-prereleases-in-range-opt-in-1d2fc5a9-",
         "",
     ));
 
@@ -792,8 +792,8 @@ fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> 
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-package-only-prereleases-in-range-opt-in-4ca10c42-a")
-            .arg("requires-transitive-package-only-prereleases-in-range-opt-in-4ca10c42-b>0.0.0a1")
+            .arg("requires-transitive-package-only-prereleases-in-range-opt-in-1d2fc5a9-a")
+            .arg("requires-transitive-package-only-prereleases-in-range-opt-in-1d2fc5a9-b>0.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -814,17 +814,17 @@ fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> 
         "###);
     });
 
-    // Since the user included a dependency on `b` with a pre-release specifier, a pre-
-    // release version can be selected.
+    // Since the user included a dependency on `b` with a prerelease specifier, a
+    // prerelease version can be selected.
     assert_installed(
         &venv,
-        "requires_transitive_package_only_prereleases_in_range_opt_in_4ca10c42_a",
+        "requires_transitive_package_only_prereleases_in_range_opt_in_1d2fc5a9_a",
         "0.1.0",
         &temp_dir,
     );
     assert_installed(
         &venv,
-        "requires_transitive_package_only_prereleases_in_range_opt_in_4ca10c42_b",
+        "requires_transitive_package_only_prereleases_in_range_opt_in_1d2fc5a9_b",
         "1.0.0a1",
         &temp_dir,
     );
@@ -847,12 +847,12 @@ fn requires_transitive_package_only_prereleases_in_range_opt_in() -> Result<()> 
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==2.0.0b1
-/// │       │   └── satisfied by c-2.0.0b1
+/// │       └── requires c==2.0.0b1
+/// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c>=1.0.0,<=3.0.0
-/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
 ///     └── c-2.0.0b1
@@ -930,12 +930,12 @@ fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// │       └── satisfied by c-2.0.0b1
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==2.0.0b1
-/// │       │   └── satisfied by c-2.0.0b1
+/// │       └── requires c==2.0.0b1
+/// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c>=1.0.0,<=3.0.0
-/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
 ///     └── c-2.0.0b1
@@ -1009,7 +1009,7 @@ fn requires_transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
-/// requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a
+/// requires-transitive-prerelease-and-stable-dependency-many-versions-3258056f
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1019,20 +1019,20 @@ fn requires_transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c>=2.0.0b1
-/// │       │   ├── satisfied by c-2.0.0b1
-/// │       │   ├── satisfied by c-2.0.0b2
-/// │       │   ├── satisfied by c-2.0.0b3
-/// │       │   ├── satisfied by c-2.0.0b4
-/// │       │   ├── satisfied by c-2.0.0b5
-/// │       │   ├── satisfied by c-2.0.0b6
-/// │       │   ├── satisfied by c-2.0.0b7
-/// │       │   ├── satisfied by c-2.0.0b8
-/// │       │   └── satisfied by c-2.0.0b9
+/// │       └── requires c>=2.0.0b1
+/// │           ├── satisfied by c-2.0.0b1
+/// │           ├── satisfied by c-2.0.0b2
+/// │           ├── satisfied by c-2.0.0b3
+/// │           ├── satisfied by c-2.0.0b4
+/// │           ├── satisfied by c-2.0.0b5
+/// │           ├── satisfied by c-2.0.0b6
+/// │           ├── satisfied by c-2.0.0b7
+/// │           ├── satisfied by c-2.0.0b8
+/// │           └── satisfied by c-2.0.0b9
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c>=1.0.0,<=3.0.0
-/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
 ///     ├── c-2.0.0a1
@@ -1062,7 +1062,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a-",
+        r"requires-transitive-prerelease-and-stable-dependency-many-versions-3258056f-",
         "",
     ));
 
@@ -1071,8 +1071,8 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a-a")
-            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a-b")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-3258056f-a")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-3258056f-b")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1095,16 +1095,15 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
         "###);
     });
 
-    // Since the user did not explicitly opt-in to a pre-release, it cannot be
-    // selected.
+    // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     assert_not_installed(
         &venv,
-        "requires_transitive_prerelease_and_stable_dependency_many_versions_260cdf7a_a",
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_3258056f_a",
         &temp_dir,
     );
     assert_not_installed(
         &venv,
-        "requires_transitive_prerelease_and_stable_dependency_many_versions_260cdf7a_b",
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_3258056f_b",
         &temp_dir,
     );
 
@@ -1117,7 +1116,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
 /// only be satisfied by a prerelease. There are many prerelease versions and some
 /// are excluded.
 ///
-/// requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9
+/// requires-transitive-prerelease-and-stable-dependency-many-versions-holes-293fcbc7
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1127,12 +1126,12 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5
-/// │       │   └── unsatisfied: no matching version
+/// │       └── requires c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5
+/// │           └── unsatisfied: no matching version
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c>=1.0.0,<=3.0.0
-/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
 ///     ├── c-2.0.0a1
@@ -1162,7 +1161,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
     // In addition to the standard filters, remove the scenario prefix
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9-",
+        r"requires-transitive-prerelease-and-stable-dependency-many-versions-holes-293fcbc7-",
         "",
     ));
 
@@ -1171,8 +1170,8 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip-install")
-            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9-a")
-            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9-b")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-holes-293fcbc7-a")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-holes-293fcbc7-b")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1193,16 +1192,15 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
         "###);
     });
 
-    // Since the user did not explicitly opt-in to a pre-release, it cannot be
-    // selected.
+    // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     assert_not_installed(
         &venv,
-        "requires_transitive_prerelease_and_stable_dependency_many_versions_holes_28a344b9_a",
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_holes_293fcbc7_a",
         &temp_dir,
     );
     assert_not_installed(
         &venv,
-        "requires_transitive_prerelease_and_stable_dependency_many_versions_holes_28a344b9_b",
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_holes_293fcbc7_b",
         &temp_dir,
     );
 
@@ -1439,7 +1437,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         ├── requires b
+///         └── requires b
 ///             └── unsatisfied: no versions for package
 #[test]
 fn transitive_requires_package_does_not_exist() -> Result<()> {
@@ -1560,8 +1558,8 @@ fn requires_direct_incompatible_versions() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b==2.0.0
-/// │       │   └── satisfied by b-2.0.0
+/// │       └── requires b==2.0.0
+/// │           └── satisfied by b-2.0.0
 /// └── b
 ///     ├── b-1.0.0
 ///     └── b-2.0.0
@@ -1632,12 +1630,12 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==1.0.0
-/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires c==1.0.0
+/// │           └── satisfied by c-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c==2.0.0
-/// │       │   └── satisfied by c-2.0.0
+/// │       └── requires c==2.0.0
+/// │           └── satisfied by c-2.0.0
 /// └── c
 ///     ├── c-1.0.0
 ///     └── c-2.0.0
@@ -1706,7 +1704,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── incompatible requires-python >=4.0
+///         └── requires python>=4.0 (incompatible with environment)
 #[test]
 fn requires_python_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1763,7 +1761,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── incompatible requires-python <=3.8
+///         └── requires python<=3.8 (incompatible with environment)
 #[test]
 fn requires_python_version_less_than_current() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1820,7 +1818,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── incompatible requires-python >=3.10
+///         └── requires python>=3.10 (incompatible with environment)
 #[test]
 fn requires_python_version_greater_than_current() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1880,29 +1878,29 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-2.0.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-2.1.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-2.2.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-2.3.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-2.4.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-2.5.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-3.0.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     ├── a-3.1.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     ├── a-3.2.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     ├── a-3.3.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     ├── a-3.4.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     └── a-3.5.0
-///         └── incompatible requires-python >=3.11
+///         └── requires python>=3.11 (incompatible with environment)
 #[test]
 fn requires_python_version_greater_than_current_many() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1965,11 +1963,11 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 /// └── a
 ///     ├── a-1.0.0
 ///     ├── a-2.0.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-3.0.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     └── a-4.0.0
-///         └── incompatible requires-python >=3.12
+///         └── requires python>=3.12 (incompatible with environment)
 #[test]
 fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2034,11 +2032,11 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 /// └── a
 ///     ├── a-1.0.0
 ///     ├── a-2.0.0
-///     │   └── incompatible requires-python >=3.10
+///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-3.0.0
-///     │   └── incompatible requires-python >=3.11
+///     │   └── requires python>=3.11 (incompatible with environment)
 ///     └── a-4.0.0
-///         └── incompatible requires-python >=3.12
+///         └── requires python>=3.12 (incompatible with environment)
 #[test]
 fn requires_python_version_greater_than_current_excluded() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
