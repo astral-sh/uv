@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/bb6ed35ad77701ab7d966962b2b33589f755b2d6/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/8826f9740703779911d0fcd6eba8d56af0eb3adb/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -38,6 +38,384 @@ fn assert_installed(venv: &Path, package: &'static str, version: &'static str, t
 
 fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
     assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
+}
+
+/// excluded-only-version
+///
+/// Only one version of the requested package is available, but the user has banned
+/// that version.
+///
+/// excluded-only-version-7a9ed79c
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a!=1.0.0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.0.0
+#[test]
+fn excluded_only_version() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"excluded-only-version-7a9ed79c-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("excluded-only-version-7a9ed79c-a!=1.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of a available matching <1.0.0 | >1.0.0 and root depends on a<1.0.0 | >1.0.0, version solving failed.
+        "###);
+    });
+
+    // Only `a==1.0.0` is available but the user excluded it.
+    assert_not_installed(&venv, "excluded_only_version_7a9ed79c_a", &temp_dir);
+
+    Ok(())
+}
+
+/// excluded-only-compatible-version
+///
+/// Only one version of the requested package `a` is compatible, but the user has
+/// banned that version.
+///
+/// excluded-only-compatible-version-d28c9e3c
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a!=2.0.0
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-3.0.0
+/// │   └── requires b>=2.0.0,<3.0.0
+/// │       └── satisfied by b-2.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   ├── a-2.0.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   └── a-3.0.0
+/// │       └── requires b==3.0.0
+/// │           └── satisfied by b-3.0.0
+/// └── b
+///     ├── b-1.0.0
+///     ├── b-2.0.0
+///     └── b-3.0.0
+#[test]
+fn excluded_only_compatible_version() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"excluded-only-compatible-version-d28c9e3c-", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("excluded-only-compatible-version-d28c9e3c-a!=2.0.0")
+            .arg("excluded-only-compatible-version-d28c9e3c-b>=2.0.0,<3.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of a available matching <1.0.0 | >1.0.0, <2.0.0 | >2.0.0, <3.0.0 | >3.0.0 and a==1.0.0 depends on b==1.0.0, a<2.0.0 depends on b==1.0.0.
+              And because a==3.0.0 depends on b==3.0.0, a<2.0.0 | >2.0.0 depends on b<=1.0.0 | >=3.0.0.
+              And because root depends on b>=2.0.0, <3.0.0 and root depends on a<2.0.0 | >2.0.0, version solving failed.
+        "###);
+    });
+
+    // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
+    // incompatible versions of `b`. The user has excluded that version of `a` so
+    // resolution fails.
+    assert_not_installed(
+        &venv,
+        "excluded_only_compatible_version_d28c9e3c_a",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "excluded_only_compatible_version_d28c9e3c_b",
+        &temp_dir,
+    );
+
+    Ok(())
+}
+
+/// dependency-excludes-range-of-compatible-versions
+///
+/// There is a range of compatible versions for the requested package `a`, but
+/// another dependency `c` excludes that range.
+///
+/// dependency-excludes-range-of-compatible-versions-2023222f
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   ├── satisfied by a-2.0.0
+/// │   │   ├── satisfied by a-2.1.0
+/// │   │   ├── satisfied by a-2.2.0
+/// │   │   ├── satisfied by a-2.3.0
+/// │   │   └── satisfied by a-3.0.0
+/// │   ├── requires b>=2.0.0,<3.0.0
+/// │   │   └── satisfied by b-2.0.0
+/// │   └── requires c
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   ├── a-2.0.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   ├── a-2.1.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   ├── a-2.2.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   ├── a-2.3.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   └── a-3.0.0
+/// │       └── requires b==3.0.0
+/// │           └── satisfied by b-3.0.0
+/// ├── b
+/// │   ├── b-1.0.0
+/// │   ├── b-2.0.0
+/// │   └── b-3.0.0
+/// └── c
+///     ├── c-1.0.0
+///     │   └── requires a<2.0.0
+///     │       └── satisfied by a-1.0.0
+///     └── c-2.0.0
+///         └── requires a>=3.0.0
+///             └── satisfied by a-3.0.0
+#[test]
+fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"dependency-excludes-range-of-compatible-versions-2023222f-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("dependency-excludes-range-of-compatible-versions-2023222f-a")
+            .arg("dependency-excludes-range-of-compatible-versions-2023222f-b>=2.0.0,<3.0.0")
+            .arg("dependency-excludes-range-of-compatible-versions-2023222f-c")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of a available matching <1.0.0 | >1.0.0, <2.0.0 | >3.0.0 and a==1.0.0 depends on b==1.0.0, a<2.0.0 depends on b==1.0.0. (1)
+
+              Because there is no version of c available matching <1.0.0 | >1.0.0, <2.0.0 | >2.0.0 and c==1.0.0 depends on a<2.0.0, c<2.0.0 depends on a<2.0.0.
+              And because c==2.0.0 depends on a>=3.0.0, c depends on a<2.0.0 | >=3.0.0.
+              And because a<2.0.0 depends on b==1.0.0 (1), a Not ( ==3.0.0 ), c *, b Not ( ==1.0.0 ) are incompatible.
+              And because a==3.0.0 depends on b==3.0.0, c depends on b<=1.0.0 | >=3.0.0.
+              And because root depends on c and root depends on b>=2.0.0, <3.0.0, version solving failed.
+        "###);
+    });
+
+    // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
+    // require incompatible versions of `b`, but all available versions of `c` exclude
+    // that range of `a` so resolution fails.
+    assert_not_installed(
+        &venv,
+        "dependency_excludes_range_of_compatible_versions_2023222f_a",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "dependency_excludes_range_of_compatible_versions_2023222f_b",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "dependency_excludes_range_of_compatible_versions_2023222f_c",
+        &temp_dir,
+    );
+
+    Ok(())
+}
+
+/// dependency-excludes-non-contiguous-range-of-compatible-versions
+///
+/// There is a non-contiguous range of compatible versions for the requested package
+/// `a`, but another dependency `c` excludes the range. This is the same as
+/// `dependency-excludes-range-of-compatible-versions` but some of the versions of
+/// `a` are incompatible for another reason e.g. dependency on non-existant package
+/// `d`.
+///
+/// dependency-excludes-non-contiguous-range-of-compatible-versions-aece4208
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   ├── satisfied by a-2.0.0
+/// │   │   ├── satisfied by a-2.1.0
+/// │   │   ├── satisfied by a-2.2.0
+/// │   │   ├── satisfied by a-2.3.0
+/// │   │   ├── satisfied by a-2.4.0
+/// │   │   └── satisfied by a-3.0.0
+/// │   ├── requires b>=2.0.0,<3.0.0
+/// │   │   └── satisfied by b-2.0.0
+/// │   └── requires c
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   ├── a-2.0.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   ├── a-2.1.0
+/// │   │   ├── requires b==2.0.0
+/// │   │   │   └── satisfied by b-2.0.0
+/// │   │   └── requires d
+/// │   │       └── unsatisfied: no versions for package
+/// │   ├── a-2.2.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   ├── a-2.3.0
+/// │   │   ├── requires b==2.0.0
+/// │   │   │   └── satisfied by b-2.0.0
+/// │   │   └── requires d
+/// │   │       └── unsatisfied: no versions for package
+/// │   ├── a-2.4.0
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
+/// │   └── a-3.0.0
+/// │       └── requires b==3.0.0
+/// │           └── satisfied by b-3.0.0
+/// ├── b
+/// │   ├── b-1.0.0
+/// │   ├── b-2.0.0
+/// │   └── b-3.0.0
+/// └── c
+///     ├── c-1.0.0
+///     │   └── requires a<2.0.0
+///     │       └── satisfied by a-1.0.0
+///     └── c-2.0.0
+///         └── requires a>=3.0.0
+///             └── satisfied by a-3.0.0
+#[test]
+fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"dependency-excludes-non-contiguous-range-of-compatible-versions-aece4208-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-aece4208-a")
+            .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-aece4208-b>=2.0.0,<3.0.0")
+            .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-aece4208-c")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because a==1.0.0 depends on b==1.0.0 and there is no version of a available matching <1.0.0 | >1.0.0, <2.0.0 | >3.0.0, a<2.0.0 depends on b==1.0.0.
+              And because a==3.0.0 depends on b==3.0.0, a<2.0.0 | >=3.0.0 depends on b<=1.0.0 | >=3.0.0. (1)
+
+              Because there is no version of c available matching <1.0.0 | >1.0.0, <2.0.0 | >2.0.0 and c==1.0.0 depends on a<2.0.0, c<2.0.0 depends on a<2.0.0.
+              And because c==2.0.0 depends on a>=3.0.0, c depends on a<2.0.0 | >=3.0.0.
+              And because a<2.0.0 | >=3.0.0 depends on b<=1.0.0 | >=3.0.0 (1), c depends on b<=1.0.0 | >=3.0.0.
+              And because root depends on b>=2.0.0, <3.0.0 and root depends on c, version solving failed.
+        "###);
+    });
+
+    // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
+    // require incompatible versions of `b`, but all available versions of `c` exclude
+    // that range of `a` so resolution fails.
+    assert_not_installed(
+        &venv,
+        "dependency_excludes_non_contiguous_range_of_compatible_versions_aece4208_a",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "dependency_excludes_non_contiguous_range_of_compatible_versions_aece4208_b",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "dependency_excludes_non_contiguous_range_of_compatible_versions_aece4208_c",
+        &temp_dir,
+    );
+
+    Ok(())
 }
 
 /// requires-package-only-prereleases
