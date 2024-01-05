@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/c448e24b336f3699407c50ed7a07b9b7442cb1a5/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/83f5c66b6fb7cc9d121cdf02bcedf9403cb66daf/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -1037,6 +1037,253 @@ fn requires_transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
         &venv,
         "requires_transitive_prerelease_and_stable_dependency_opt_in_dd00a87f_c",
         "2.0.0b1",
+        &temp_dir,
+    );
+
+    Ok(())
+}
+
+/// requires-transitive-prerelease-and-stable-dependency-many-versions
+///
+/// A transitive dependency has both a prerelease and a stable selector, but can
+/// only be satisfied by a prerelease. There are many prerelease versions.
+///
+/// requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires c>=2.0.0b1
+/// │       │   ├── satisfied by c-2.0.0b1
+/// │       │   ├── satisfied by c-2.0.0b2
+/// │       │   ├── satisfied by c-2.0.0b3
+/// │       │   ├── satisfied by c-2.0.0b4
+/// │       │   ├── satisfied by c-2.0.0b5
+/// │       │   ├── satisfied by c-2.0.0b6
+/// │       │   ├── satisfied by c-2.0.0b7
+/// │       │   ├── satisfied by c-2.0.0b8
+/// │       │   └── satisfied by c-2.0.0b9
+/// │       └── requires python>=3.7
+/// ├── b
+/// │   └── b-1.0.0
+/// │       ├── requires c>=1.0.0,<=3.0.0
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.7
+/// └── c
+///     ├── c-1.0.0
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a1
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a2
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a3
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a4
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a5
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a6
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a7
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a8
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a9
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b1
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b2
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b3
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b4
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b5
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b6
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b7
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b8
+///     │   └── requires python>=3.7
+///     └── c-2.0.0b9
+///         └── requires python>=3.7
+#[test]
+fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a-a")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-260cdf7a-b")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of b available matching <1.0.0 | >1.0.0 and b==1.0.0 depends on c, b depends on c.
+              And because there is no version of c available matching >=2.0.0b1, b depends on c<2.0.0b1.
+              And because a==1.0.0 depends on c>=2.0.0b1 and there is no version of a available matching <1.0.0 | >1.0.0, b *, a * are incompatible.
+              And because root depends on b and root depends on a, version solving failed.
+
+              hint: c was requested with a pre-release marker (e.g., >=2.0.0b1, <=3.0.0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+        "###);
+    });
+
+    // Since the user did not explicitly opt-in to a pre-release, it cannot be
+    // selected.
+    assert_not_installed(
+        &venv,
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_260cdf7a_a",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_260cdf7a_b",
+        &temp_dir,
+    );
+
+    Ok(())
+}
+
+/// requires-transitive-prerelease-and-stable-dependency-many-versions-holes
+///
+/// A transitive dependency has both a prerelease and a stable selector, but can
+/// only be satisfied by a prerelease. There are many prerelease versions and some
+/// are excluded.
+///
+/// requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5
+/// │       │   └── unsatisfied: no matching version
+/// │       └── requires python>=3.7
+/// ├── b
+/// │   └── b-1.0.0
+/// │       ├── requires c>=1.0.0,<=3.0.0
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.7
+/// └── c
+///     ├── c-1.0.0
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a1
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a2
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a3
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a4
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a5
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a6
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a7
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a8
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0a9
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b1
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b2
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b3
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b4
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b5
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b6
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b7
+///     │   └── requires python>=3.7
+///     ├── c-2.0.0b8
+///     │   └── requires python>=3.7
+///     └── c-2.0.0b9
+///         └── requires python>=3.7
+#[test]
+fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario prefix
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((
+        r"requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9-",
+        "",
+    ));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-install")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9-a")
+            .arg("requires-transitive-prerelease-and-stable-dependency-many-versions-holes-28a344b9-b")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there is no version of c available matching >1.0.0, <2.0.0a5 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5 and a==1.0.0 depends on c>1.0.0, <2.0.0a5 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5, a==1.0.0 is forbidden.
+              And because there is no version of a available matching <1.0.0 | >1.0.0 and root depends on a, version solving failed.
+
+              hint: c was requested with a pre-release marker (e.g., >1.0.0, <2.0.0a5 | >2.0.0a5, <2.0.0a6 | >2.0.0a6, <2.0.0a7 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5), but pre-releases weren't enabled (try: `--prerelease=allow`)
+        "###);
+    });
+
+    // Since the user did not explicitly opt-in to a pre-release, it cannot be
+    // selected.
+    assert_not_installed(
+        &venv,
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_holes_28a344b9_a",
+        &temp_dir,
+    );
+    assert_not_installed(
+        &venv,
+        "requires_transitive_prerelease_and_stable_dependency_many_versions_holes_28a344b9_b",
         &temp_dir,
     );
 

@@ -46,7 +46,7 @@ import packaging.requirements
 from pathlib import Path
 
 
-PACKSE_COMMIT = "c448e24b336f3699407c50ed7a07b9b7442cb1a5"
+PACKSE_COMMIT = "83f5c66b6fb7cc9d121cdf02bcedf9403cb66daf"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATE = TOOL_ROOT / "template.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
