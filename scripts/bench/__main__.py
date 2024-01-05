@@ -1,10 +1,20 @@
 """Benchmark Puffin against other packaging tools.
 
-This script assumes that `pip`, `pip-tools`, `virtualenv`, and `hyperfine` are
+This script assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and `hyperfine` are
 installed, and that a Puffin release builds exists at `./target/release/puffin`
 (relative to the repository root).
 
-Example usage: python bench.py -t puffin -t pip-tools requirements.in
+This script assumes that Python 3.10 is installed.
+
+To set up the required environment, run:
+
+    cargo build --release
+    ./target/release/puffin venv
+    ./target/release/puffin pip-sync ./scripts/requirements.txt
+
+Example usage:
+
+    python -m scripts.bench -t puffin -t pip-tools requirements.in
 """
 import abc
 import argparse
@@ -15,6 +25,10 @@ import shlex
 import subprocess
 import tempfile
 
+import tomli
+import tomli_w
+from packaging.requirements import Requirement
+
 WARMUP = 3
 MIN_RUNS = 10
 
@@ -24,6 +38,7 @@ class Tool(enum.Enum):
 
     PIP_TOOLS = "pip-tools"
     PUFFIN = "puffin"
+    POETRY = "poetry"
 
 
 class Benchmark(enum.Enum):
@@ -364,6 +379,231 @@ class Puffin(Suite):
             )
 
 
+class Poetry(Suite):
+    def init(self, requirements_file: str, *, working_dir: str) -> None:
+        """Initialize a Poetry project from a requirements file."""
+        # Parse all dependencies from the requirements file.
+        with open(requirements_file) as fp:
+            requirements = [
+                Requirement(line) for line in fp if not line.startswith("#")
+            ]
+
+        # Create a Poetry project.
+        subprocess.check_call(
+            [
+                "poetry",
+                "init",
+                "--name",
+                "bench",
+                "--no-interaction",
+                "--python",
+                ">=3.10",
+            ],
+            cwd=working_dir,
+        )
+
+        # Parse the pyproject.toml.
+        with open(os.path.join(working_dir, "pyproject.toml"), "rb") as fp:
+            pyproject = tomli.load(fp)
+
+        # Add the dependencies to the pyproject.toml.
+        pyproject["tool"]["poetry"]["dependencies"].update(
+            {
+                str(requirement.name): str(requirement.specifier)
+                if requirement.specifier
+                else "*"
+                for requirement in requirements
+            }
+        )
+
+        with open(os.path.join(working_dir, "pyproject.toml"), "wb") as fp:
+            tomli_w.dump(pyproject, fp)
+
+    def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.init(requirements_file, working_dir=temp_dir)
+
+            poetry_lock = os.path.join(temp_dir, "poetry.lock")
+            config_dir = os.path.join(temp_dir, "config", "pypoetry")
+            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
+            data_dir = os.path.join(temp_dir, "data", "pypoetry")
+
+            subprocess.check_call(
+                [
+                    "hyperfine",
+                    *(["--show-output"] if verbose else []),
+                    "--command-name",
+                    f"{Tool.POETRY.value} ({Benchmark.RESOLVE_COLD.value})",
+                    "--warmup",
+                    str(WARMUP),
+                    "--min-runs",
+                    str(MIN_RUNS),
+                    "--prepare",
+                    (
+                        f"rm -rf {config_dir} && "
+                        f"rm -rf {cache_dir} && "
+                        f"rm -rf {data_dir} &&"
+                        f"rm -rf {poetry_lock}"
+                    ),
+                    shlex.join(
+                        [
+                            f"POETRY_CONFIG_DIR={config_dir}",
+                            f"POETRY_CACHE_DIR={cache_dir}",
+                            f"POETRY_DATA_DIR={data_dir}",
+                            "poetry",
+                            "lock",
+                        ]
+                    ),
+                ],
+                cwd=temp_dir,
+            )
+
+    def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.init(requirements_file, working_dir=temp_dir)
+
+            poetry_lock = os.path.join(temp_dir, "poetry.lock")
+            config_dir = os.path.join(temp_dir, "config", "pypoetry")
+            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
+            data_dir = os.path.join(temp_dir, "data", "pypoetry")
+
+            subprocess.check_call(
+                [
+                    "hyperfine",
+                    *(["--show-output"] if verbose else []),
+                    "--command-name",
+                    f"{Tool.POETRY.value} ({Benchmark.RESOLVE_WARM.value})",
+                    "--warmup",
+                    str(WARMUP),
+                    "--min-runs",
+                    str(MIN_RUNS),
+                    "--prepare",
+                    f"rm -rf {poetry_lock}",
+                    shlex.join(
+                        [
+                            f"POETRY_CONFIG_DIR={config_dir}",
+                            f"POETRY_CACHE_DIR={cache_dir}",
+                            f"POETRY_DATA_DIR={data_dir}",
+                            "poetry",
+                            "lock",
+                        ]
+                    ),
+                ],
+                cwd=temp_dir,
+            )
+
+    def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.init(requirements_file, working_dir=temp_dir)
+
+            poetry_lock = os.path.join(temp_dir, "poetry.lock")
+            assert not os.path.exists(
+                poetry_lock
+            ), f"Lock file already exists at: {poetry_lock}"
+
+            # Run a resolution, to ensure that the lock file exists.
+            subprocess.check_call(
+                ["poetry", "lock"],
+                cwd=temp_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            assert os.path.exists(
+                poetry_lock
+            ), f"Lock file doesn't exist at: {poetry_lock}"
+
+            config_dir = os.path.join(temp_dir, "config", "pypoetry")
+            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
+            data_dir = os.path.join(temp_dir, "data", "pypoetry")
+            venv_dir = os.path.join(temp_dir, ".venv")
+
+            subprocess.check_call(
+                [
+                    "hyperfine",
+                    *(["--show-output"] if verbose else []),
+                    "--command-name",
+                    f"{Tool.POETRY.value} ({Benchmark.INSTALL_COLD.value})",
+                    "--warmup",
+                    str(WARMUP),
+                    "--min-runs",
+                    str(MIN_RUNS),
+                    "--prepare",
+                    (
+                        f"rm -rf {config_dir} && "
+                        f"rm -rf {cache_dir} && "
+                        f"rm -rf {data_dir} &&"
+                        f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+                    ),
+                    shlex.join(
+                        [
+                            f"POETRY_CONFIG_DIR={config_dir}",
+                            f"POETRY_CACHE_DIR={cache_dir}",
+                            f"POETRY_DATA_DIR={data_dir}",
+                            f"VIRTUAL_ENV={venv_dir}",
+                            "poetry",
+                            "install",
+                            "--no-root",
+                            "--sync",
+                        ]
+                    ),
+                ],
+                cwd=temp_dir,
+            )
+
+    def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.init(requirements_file, working_dir=temp_dir)
+
+            poetry_lock = os.path.join(temp_dir, "poetry.lock")
+            assert not os.path.exists(
+                poetry_lock
+            ), f"Lock file already exists at: {poetry_lock}"
+
+            # Run a resolution, to ensure that the lock file exists.
+            subprocess.check_call(
+                ["poetry", "lock"],
+                cwd=temp_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            assert os.path.exists(
+                poetry_lock
+            ), f"Lock file doesn't exist at: {poetry_lock}"
+
+            config_dir = os.path.join(temp_dir, "config", "pypoetry")
+            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
+            data_dir = os.path.join(temp_dir, "data", "pypoetry")
+            venv_dir = os.path.join(temp_dir, ".venv")
+
+            subprocess.check_call(
+                [
+                    "hyperfine",
+                    *(["--show-output"] if verbose else []),
+                    "--command-name",
+                    f"{Tool.POETRY.value} ({Benchmark.INSTALL_WARM.value})",
+                    "--warmup",
+                    str(WARMUP),
+                    "--min-runs",
+                    str(MIN_RUNS),
+                    "--prepare",
+                    f"virtualenv --clear -p 3.10 {venv_dir} --no-seed",
+                    shlex.join(
+                        [
+                            f"POETRY_CONFIG_DIR={config_dir}",
+                            f"POETRY_CACHE_DIR={cache_dir}",
+                            f"POETRY_DATA_DIR={data_dir}",
+                            f"VIRTUAL_ENV={venv_dir}",
+                            "poetry",
+                            "install",
+                            "--no-root",
+                            "--sync",
+                        ]
+                    ),
+                ],
+                cwd=temp_dir,
+            )
+
+
 def main():
     """Run the benchmark."""
     logging.basicConfig(
@@ -376,7 +616,12 @@ def main():
         description="Benchmark Puffin against other packaging tools."
     )
     parser.add_argument(
-        "file", type=str, help="The file to read the dependencies from."
+        "file",
+        type=str,
+        help=(
+            "The file to read the dependencies from (typically: `requirements.in` "
+            "(for resolution) or `requirements.txt` (for installation))."
+        ),
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Print verbose output."
@@ -413,6 +658,9 @@ def main():
         else list(Benchmark)
     )
 
+    if not os.path.exists(requirements_file):
+        raise ValueError(f"File not found: {requirements_file}")
+
     logging.info(
         "Benchmarks: {}".format(
             ", ".join([benchmark.value for benchmark in benchmarks])
@@ -434,6 +682,8 @@ def main():
                     suite = PipTools()
                 case Tool.PUFFIN:
                     suite = Puffin()
+                case Tool.POETRY:
+                    suite = Poetry()
                 case _:
                     raise ValueError(f"Invalid tool: {tool}")
 
