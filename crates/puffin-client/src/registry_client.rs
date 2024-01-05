@@ -407,7 +407,7 @@ pub async fn read_metadata_async(
             .entries()
             .iter()
             .enumerate()
-            .filter_map(|(idx, e)| Some((idx, e.entry().filename().as_str().ok()?))),
+            .filter_map(|(idx, e)| Some((idx, e.filename().as_str().ok()?))),
     )?;
 
     // Read the contents of the METADATA file

@@ -13,81 +13,81 @@ authors = ["Astral Software Inc. <hey@astral.sh>"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-anstream = { version = "0.6.4" }
-anyhow = { version = "1.0.75" }
+anstream = { version = "0.6.5" }
+anyhow = { version = "1.0.79" }
 async_http_range_reader = { git = "https://github.com/baszalmstra/async_http_range_reader", rev = "8dab2c08ac864fec1df014465264f9a7c8eae905" }
-async_zip = { version = "0.0.15", features = ["tokio", "deflate"] }
+async_zip = { version = "0.0.16", features = ["tokio", "deflate"] }
 bitflags = { version = "2.4.1" }
 bytesize = { version = "1.3.0" }
-cachedir = { version = "0.3.0" }
+cachedir = { version = "0.3.1" }
 camino = { version = "1.1.6", features = ["serde1"] }
-cargo-util = { version = "0.2.6" }
+cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
-clap = { version = "4.4.7" }
-colored = { version = "2.0.4" }
-configparser = { version = "3.0.2" }
+clap = { version = "4.4.13" }
+colored = { version = "2.1.0" }
+configparser = { version = "3.0.4" }
 csv = { version = "1.3.0" }
-data-encoding = { version = "2.4.0" }
+data-encoding = { version = "2.5.0" }
 derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
 dirs = { version = "5.0.1" }
 flate2 = { version = "1.0.28" }
-fs-err = { version = "2.9.0" }
+fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
-futures = { version = "0.3.29" }
+futures = { version = "0.3.30" }
 git2 = { version = "0.18.1" }
 glob = { version = "0.3.1" }
-goblin = { version = "0.7.1" }
+goblin = { version = "0.8.0" }
 hex = { version = "0.4.3" }
 html-escape = { version = "0.2.13" }
-http = { version = "0.2.9" }
-http-cache-semantics = { version = "1.0.1" }
+http = { version = "0.2.11" }
+http-cache-semantics = { version = "1.0.2" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
-itertools = { version = "0.11.0" }
+itertools = { version = "0.12.0" }
 mailparse = { version = "0.14.0" }
 # For additional textwrap options: https://github.com/zkat/miette/pull/321, https://github.com/zkat/miette/pull/328
 miette =  { git = "https://github.com/zkat/miette.git", rev = "b0744462adbbfbb6d845f382db36be883c7f3c45" }
-once_cell = { version = "1.18.0" }
+once_cell = { version = "1.19.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
 pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "78b8add6942766e5fb070bbda1de570e93d6399f" }
-pyo3 = { version = "0.20.0" }
+pyo3 = { version = "0.20.2" }
 pyo3-log = { version = "0.9.0"}
-pyproject-toml = { version = "0.8.0" }
+pyproject-toml = { version = "0.8.1" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 # For correct IO error handling: https://github.com/cargo-bins/reflink-copy/pull/51
-reflink-copy = { git = "https://github.com/cargo-bins/reflink-copy", rev = "7dffdccc4d4152cdc0a460b3ba8e77dd84ad74df" }
+reflink-copy = { version = "0.1.14" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.11.22", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls"] }
+reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls"] }
 reqwest-middleware = { version = "0.2.4" }
 reqwest-retry = { version = "0.3.0" }
-rfc2047-decoder = { version = "1.0.1" }
+rfc2047-decoder = { version = "1.0.2" }
 rmp-serde = { version = "1.1.2" }
 rustc-hash = { version = "1.1.0" }
 seahash = { version = "4.1.0" }
-serde = { version = "1.0.190" }
-serde_json = { version = "1.0.108" }
+serde = { version = "1.0.194" }
+serde_json = { version = "1.0.111" }
 sha2 = { version = "0.10.8" }
 tar = { version = "0.4.40" }
-target-lexicon = { version = "0.12.12" }
-tempfile = { version = "3.8.1" }
+target-lexicon = { version = "0.12.13" }
+tempfile = { version = "3.9.0" }
 textwrap = { version = "0.15.2" }
-thiserror = { version = "1.0.50" }
+thiserror = { version = "1.0.56" }
 tl = { version = "0.7.7" }
-tokio = { version = "1.33.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
 tokio-util = { version = "0.7.10", features = ["compat"] }
-toml = { version = "0.8.6" }
-toml_edit = { version = "0.20.7" }
+toml = { version = "0.8.8" }
+toml_edit = { version = "0.21.0" }
 tracing = { version = "0.1.40" }
-tracing-indicatif = { version = "0.3.5" }
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-tracing-tree = { version = "0.2.5" }
+tracing-indicatif = { version = "0.3.6" }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-tree = { version = "0.3.0" }
 unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
-url = { version = "2.4.1" }
+url = { version = "2.5.0" }
 waitmap = { version = "1.1.0" }
 walkdir = { version = "2.4.0" }
 which = { version = "5.0.0" }

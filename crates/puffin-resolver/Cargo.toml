@@ -62,7 +62,7 @@ zip = { workspace = true }
 gourgeist = { path = "../gourgeist" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
-once_cell = { version = "1.18.0" }
+once_cell = { version = "1.19.0" }
 insta = { version = "1.34.0" }
 
 [features]

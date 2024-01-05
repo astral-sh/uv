@@ -72,13 +72,13 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .entries()
             .iter()
             .enumerate()
-            .filter_map(|(idx, e)| Some(((idx, e), e.entry().filename().as_str().ok()?))),
+            .filter_map(|(idx, e)| Some(((idx, e), e.filename().as_str().ok()?))),
     )?;
 
     let offset = metadata_entry.header_offset();
-    let size = metadata_entry.entry().compressed_size()
+    let size = metadata_entry.compressed_size()
         + 30 // Header size in bytes
-        + metadata_entry.entry().filename().as_bytes().len() as u64;
+        + metadata_entry.filename().as_bytes().len() as u64;
 
     // The zip archive uses as BufReader which reads in chunks of 8192. To ensure we prefetch
     // enough data we round the size up to the nearest multiple of the buffer size.
