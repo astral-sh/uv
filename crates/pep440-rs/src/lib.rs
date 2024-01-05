@@ -12,10 +12,6 @@
 //! assert!(version_specifiers.iter().all(|specifier| specifier.contains(&version)));
 //! ```
 //!
-//! One thing that's a bit awkward about the API is that there's two kinds of
-//! [Version]: One that doesn't allow stars (i.e. a package version), and one that does
-//! (i.e. a version in a specifier), but they both use the same struct.
-//!
 //! The error handling and diagnostics is a bit overdone because this my parser-and-diagnostics
 //! learning project (which kinda failed because the byte based regex crate and char-based
 //! diagnostics don't mix well)
@@ -43,7 +39,10 @@
 #![deny(missing_docs)]
 
 pub use {
-    version::{LocalSegment, Operator, PreRelease, Version},
+    version::{
+        LocalSegment, Operator, OperatorParseError, PreRelease, Version, VersionParseError,
+        VersionPattern, VersionPatternParseError,
+    },
     version_specifier::{
         parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,
     },

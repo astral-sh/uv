@@ -14,7 +14,9 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "pyo3")]
 use crate::version::PyVersion;
-use crate::{version, Operator, Version};
+use crate::{
+    version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
+};
 
 /// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
 ///
@@ -323,11 +325,12 @@ impl VersionSpecifier {
     /// parameter indicates a trailing `.*`, to differentiate between `1.1.*` and `1.1`
     pub fn new(
         operator: Operator,
-        version: Version,
-        star: bool,
+        version_pattern: VersionPattern,
     ) -> Result<Self, VersionSpecifierBuildError> {
+        let star = version_pattern.is_wildcard();
+        let version = version_pattern.into_version();
         // "Local version identifiers are NOT permitted in this version specifier."
-        if version.local().is_some() && !operator.is_local_compatible() {
+        if version.is_local() && !operator.is_local_compatible() {
             return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
         }
 
@@ -391,7 +394,7 @@ impl VersionSpecifier {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking
         // if candidate versions match a given version specifier."
-        let (this, other) = if self.version.local().is_some() {
+        let (this, other) = if !self.version.local().is_empty() {
             (self.version.clone(), version.clone())
         } else {
             // self is already without local
@@ -524,10 +527,9 @@ impl FromStr for VersionSpecifier {
         if version.is_empty() {
             return Err(ParseErrorKind::MissingVersion.into());
         }
-        let (version, star) =
-            Version::from_str_star(version).map_err(ParseErrorKind::InvalidVersion)?;
-        let version_specifier = VersionSpecifier::new(operator, version, star)
-            .map_err(ParseErrorKind::InvalidSpecifier)?;
+        let vpat = version.parse().map_err(ParseErrorKind::InvalidVersion)?;
+        let version_specifier =
+            VersionSpecifier::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
             return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
@@ -565,7 +567,6 @@ impl std::fmt::Display for VersionSpecifierBuildError {
                 let local = version
                     .local()
                     .iter()
-                    .flat_map(|segments| segments.iter())
                     .map(|segment| segment.to_string())
                     .collect::<Vec<String>>()
                     .join(".");
@@ -661,8 +662,8 @@ impl std::fmt::Display for VersionSpecifierParseError {
 /// specifier from a string.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ParseErrorKind {
-    InvalidOperator(String),
-    InvalidVersion(String),
+    InvalidOperator(OperatorParseError),
+    InvalidVersion(VersionPatternParseError),
     InvalidSpecifier(VersionSpecifierBuildError),
     MissingOperator,
     MissingVersion,
@@ -726,7 +727,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::LocalSegment;
+    use crate::{LocalSegment, PreRelease};
 
     use super::*;
 
@@ -1100,12 +1101,14 @@ mod tests {
             ("2.0.5", ">2.0dev"),
         ];
 
-        for (version, specifier) in pairs {
+        for (s_version, s_spec) in pairs {
+            let version = s_version.parse::<Version>().unwrap();
+            let spec = s_spec.parse::<VersionSpecifier>().unwrap();
             assert!(
-                VersionSpecifier::from_str(specifier)
-                    .unwrap()
-                    .contains(&Version::from_str(version).unwrap()),
-                "{version} {specifier}"
+                spec.contains(&version),
+                "{s_version} {s_spec}\nversion repr: {:?}\nspec version repr: {:?}",
+                version.as_bloated_debug(),
+                spec.version.as_bloated_debug(),
             );
         }
     }
@@ -1255,10 +1258,8 @@ mod tests {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
             result.unwrap_err().inner.err,
-            ParseErrorKind::InvalidVersion(
-                "Version `0.9.*.1` doesn't match PEP 440 rules".to_string()
-            )
-            .into()
+            ParseErrorKind::InvalidVersion(version::PatternErrorKind::WildcardNotTrailing.into())
+                .into(),
         );
     }
 
@@ -1295,10 +1296,9 @@ mod tests {
             // Invalid operator
             (
                 "=>2.0",
-                ParseErrorKind::InvalidOperator(
-                    "No such comparison operator '=>', must be one of ~= == != <= >= < > ==="
-                        .to_string(),
-                )
+                ParseErrorKind::InvalidOperator(OperatorParseError {
+                    got: "=>".to_string(),
+                })
                 .into(),
             ),
             // Version-less specifier
@@ -1419,14 +1419,14 @@ mod tests {
             (
                 "==1.0.*+5",
                 ParseErrorKind::InvalidVersion(
-                    "Version `1.0.*+5` doesn't match PEP 440 rules".to_string(),
+                    version::PatternErrorKind::WildcardNotTrailing.into(),
                 )
                 .into(),
             ),
             (
                 "!=1.0.*+deadbeef",
                 ParseErrorKind::InvalidVersion(
-                    "Version `1.0.*+deadbeef` doesn't match PEP 440 rules".to_string(),
+                    version::PatternErrorKind::WildcardNotTrailing.into(),
                 )
                 .into(),
             ),
@@ -1435,56 +1435,80 @@ mod tests {
             (
                 "==2.0a1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=2.0a1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a prerelease version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "==2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a post version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_post(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=2.0.post1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a post version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_post(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "==2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=2.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([2, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "==1.0+5.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a local version".to_string(),
+                    version::ErrorKind::LocalEmpty { precursor: '.' }.into(),
                 )
                 .into(),
             ),
             (
                 "!=1.0+deadbeef.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a local version".to_string(),
+                    version::ErrorKind::LocalEmpty { precursor: '.' }.into(),
                 )
                 .into(),
             ),
@@ -1492,7 +1516,7 @@ mod tests {
             (
                 "==1.0.*.5",
                 ParseErrorKind::InvalidVersion(
-                    "Version `1.0.*.5` doesn't match PEP 440 rules".to_string(),
+                    version::PatternErrorKind::WildcardNotTrailing.into(),
                 )
                 .into(),
             ),
@@ -1505,14 +1529,22 @@ mod tests {
             (
                 "==1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([1, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
             (
                 "!=1.0.dev1.*",
                 ParseErrorKind::InvalidVersion(
-                    "You can't have both a trailing `.*` and a dev version".to_string(),
+                    version::ErrorKind::UnexpectedEnd {
+                        version: Version::new([1, 0]).with_dev(Some(1)),
+                        remaining: ".*".to_string(),
+                    }
+                    .into(),
                 )
                 .into(),
             ),
@@ -1625,7 +1657,8 @@ Failed to parse version: Unexpected end of version specifier, expected operator:
         };
         let op = Operator::TildeEqual;
         let v = Version::new([5]);
-        assert_eq!(err, VersionSpecifier::new(op, v, false).unwrap_err());
+        let vpat = VersionPattern::verbatim(v);
+        assert_eq!(err, VersionSpecifier::new(op, vpat).unwrap_err());
         assert_eq!(
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"

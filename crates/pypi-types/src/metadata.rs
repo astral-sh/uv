@@ -7,7 +7,7 @@ use mailparse::{MailHeaderMap, MailParseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use pep440_rs::{Version, VersionSpecifiers, VersionSpecifiersParseError};
+use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
 use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
 
@@ -60,7 +60,7 @@ pub enum Error {
     MultipleMetadataFiles(Vec<String>),
     /// Invalid Version
     #[error("invalid version: {0}")]
-    Pep440VersionError(String),
+    Pep440VersionError(VersionParseError),
     /// Invalid VersionSpecifier
     #[error(transparent)]
     Pep440Error(#[from] VersionSpecifiersParseError),

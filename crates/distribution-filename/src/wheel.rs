@@ -6,7 +6,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagPriority, Tags};
 use puffin_normalize::{InvalidNameError, PackageName};
 
@@ -217,7 +217,7 @@ pub enum WheelFilenameError {
     #[error("The wheel filename \"{0}\" is invalid: {1}")]
     InvalidWheelFileName(String, String),
     #[error("The wheel filename \"{0}\" has an invalid version part: {1}")]
-    InvalidVersion(String, String),
+    InvalidVersion(String, VersionParseError),
     #[error("The wheel filename \"{0}\" has an invalid package name")]
     InvalidPackageName(String, InvalidNameError),
 }
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn err_invalid_version() {
         let err = WheelFilename::from_str("foo-x.y.z-python-abi-platform.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: Version `x.y.z` doesn't match PEP 440 rules"###);
+        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: expected version to start with a number, but no leading ASCII digits were found"###);
     }
 
     #[test]

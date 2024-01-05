@@ -701,7 +701,7 @@ fn compile_python_invalid_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': Version `3.7.x` doesn't match PEP 440 rules
+        error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': after parsing 3.7, found ".x" after it, which is not part of a valid version
 
         For more information, try '--help'.
         "###);
