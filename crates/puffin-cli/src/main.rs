@@ -10,12 +10,12 @@ use colored::Colorize;
 use distribution_types::{IndexUrl, IndexUrls};
 use puffin_cache::{Cache, CacheArgs};
 use puffin_installer::Reinstall;
+use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus};
-use crate::python_version::PythonVersion;
 use crate::requirements::RequirementsSource;
 
 #[cfg(target_os = "windows")]
@@ -37,7 +37,6 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod commands;
 mod logging;
 mod printer;
-mod python_version;
 mod requirements;
 
 #[derive(Parser)]
@@ -179,7 +178,7 @@ struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the most recent known patch version for that minor version
     /// is assumed. For example, `3.7` is mapped to `3.7.17`.
-    #[arg(long, short, value_enum)]
+    #[arg(long, short)]
     python_version: Option<PythonVersion>,
 
     /// Try to resolve at a past time.

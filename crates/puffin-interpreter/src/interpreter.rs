@@ -15,7 +15,8 @@ use puffin_cache::{Cache, CacheBucket, CachedByTimestamp};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
-use crate::Error;
+use crate::virtual_env::detect_virtual_env;
+use crate::{Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -34,9 +35,14 @@ impl Interpreter {
         let info = InterpreterQueryResult::query_cached(executable, cache)?;
         debug_assert!(
             info.base_prefix == info.base_exec_prefix,
-            "Not a venv python: {}, prefix: {}",
+            "Not a virtual environment (Python: {}, prefix: {})",
             executable.display(),
             info.base_prefix.display()
+        );
+        debug_assert!(
+            info.sys_executable.is_absolute(),
+            "`sys.executable` is not an absolute python; Python installation is broken: {}",
+            info.sys_executable.display()
         );
 
         Ok(Self {
@@ -73,6 +79,67 @@ impl Interpreter {
         Self {
             base_prefix,
             ..self
+        }
+    }
+
+    /// Detect the python interpreter to use.
+    ///
+    /// Note that `python_version` is a preference here, not a requirement.
+    ///
+    /// We check, in order:
+    /// * `VIRTUAL_ENV` and `CONDA_PREFIX`
+    /// * A `.venv` folder
+    /// * If a python version is given: `pythonx.y` (TODO(konstin): `py -x.y` on windows),
+    /// * `python3` (unix) or `python.exe` (windows)
+    pub fn find(
+        python_version: Option<&PythonVersion>,
+        platform: Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let platform = PythonPlatform::from(platform);
+        if let Some(venv) = detect_virtual_env(&platform)? {
+            let executable = platform.venv_python(venv);
+            let interpreter = Self::query(&executable, platform.0, cache)?;
+            return Ok(interpreter);
+        };
+
+        #[cfg(unix)]
+        {
+            if let Some(python_version) = python_version {
+                let requested = format!(
+                    "python{}.{}",
+                    python_version.major(),
+                    python_version.minor()
+                );
+                if let Ok(executable) = which::which(&requested) {
+                    debug!("Resolved {requested} to {}", executable.display());
+                    let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+                    return Ok(interpreter);
+                }
+            }
+
+            let executable = which::which("python3")
+                .map_err(|err| Error::WhichNotFound("python3".to_string(), err))?;
+            debug!("Resolved python3 to {}", executable.display());
+            let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+            Ok(interpreter)
+        }
+
+        #[cfg(windows)]
+        {
+            if let Some(python_version) = python_version {
+                compile_error!("Implement me")
+            }
+
+            let executable = which::which("python.exe")
+                .map_err(|err| Error::WhichNotFound("python.exe".to_string(), err))?;
+            let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+            Ok(interpreter)
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            compile_error!("only unix (like mac and linux) and windows are supported")
         }
     }
 

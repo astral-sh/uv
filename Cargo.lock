@@ -2624,6 +2624,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "which",
 ]
 
 [[package]]
