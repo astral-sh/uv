@@ -37,8 +37,30 @@ class Tool(enum.Enum):
     """Enumeration of the tools to benchmark."""
 
     PIP_TOOLS = "pip-tools"
-    PUFFIN = "puffin"
+    """`pip-sync` and `pip-compile`, from the `pip-tools` package."""
+
     POETRY = "poetry"
+    """The `poetry` package manager."""
+
+    PUFFIN = "puffin"
+    """A Puffin release build, assumed to be located at `./target/release/puffin`."""
+
+    BASELINE = "baseline"
+    """A Puffin release build, assumed to be located at `./target/release/baseline`.
+
+    Used to benchmark Puffin against itself by comparing Puffin's `main` branch (or any
+    other baseline branch) against a development branch.
+
+    This is useful for testing the impact of changes to Puffin via the following
+    workflow:
+    
+    - Checkout the `main` branch (or any other baseline branch)
+    - Run: `cargo build --release`
+    - Run: `mv ./target/release/puffin ./target/release/baseline`
+    - Checkout a development branch
+    - Run: `cargo build --release`
+    - Run: `python bench.py -t puffin -t baseline requirements.in`
+    """
 
 
 class Benchmark(enum.Enum):
@@ -228,6 +250,14 @@ class PipTools(Suite):
 
 
 class Puffin(Suite):
+    def __init__(self, *, binary: str) -> None:
+        """Initialize a Puffin benchmark.
+
+        Args:
+            binary (str): The name of the Puffin binary, within `./target/release`.
+        """
+        self.binary = binary
+
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
@@ -238,7 +268,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.RESOLVE_COLD.value})",
+                    f"{self.binary} ({Benchmark.RESOLVE_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -253,7 +283,7 @@ class Puffin(Suite):
                                 ),
                                 "target",
                                 "release",
-                                "puffin",
+                                self.binary,
                             ),
                             "pip-compile",
                             os.path.abspath(requirements_file),
@@ -276,7 +306,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.RESOLVE_WARM.value})",
+                    f"{self.binary} ({Benchmark.RESOLVE_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -291,7 +321,7 @@ class Puffin(Suite):
                                 ),
                                 "target",
                                 "release",
-                                "puffin",
+                                self.binary,
                             ),
                             "pip-compile",
                             os.path.abspath(requirements_file),
@@ -314,7 +344,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.INSTALL_COLD.value})",
+                    f"{self.binary} ({Benchmark.INSTALL_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -330,7 +360,7 @@ class Puffin(Suite):
                                 ),
                                 "target",
                                 "release",
-                                "puffin",
+                                self.binary,
                             ),
                             "pip-sync",
                             os.path.abspath(requirements_file),
@@ -351,7 +381,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.INSTALL_WARM.value})",
+                    f"{self.binary} ({Benchmark.INSTALL_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -367,7 +397,7 @@ class Puffin(Suite):
                                 ),
                                 "target",
                                 "release",
-                                "puffin",
+                                self.binary,
                             ),
                             "pip-sync",
                             os.path.abspath(requirements_file),
@@ -645,9 +675,26 @@ def main():
 
     args = parser.parse_args()
 
-    requirements_file = os.path.abspath(args.file)
     verbose = args.verbose
-    tools = [Tool(tool) for tool in args.tool] if args.tool is not None else list(Tool)
+
+    requirements_file = os.path.abspath(args.file)
+    if not os.path.exists(requirements_file):
+        raise ValueError(f"File not found: {requirements_file}")
+
+    # Determine the tools to benchmark, based on user input. If no tools were specified,
+    # default to the most common choices.
+    tools = (
+        [Tool(tool) for tool in args.tool]
+        if args.tool is not None
+        else [
+            Tool.PIP_TOOLS,
+            Tool.POETRY,
+            Tool.PUFFIN,
+        ]
+    )
+
+    # Determine the benchmarks to run, based on user input. If no benchmarks were
+    # specified, infer an appropriate set based on the file extension.
     benchmarks = (
         [Benchmark(benchmark) for benchmark in args.benchmark]
         if args.benchmark is not None
@@ -657,9 +704,6 @@ def main():
         if requirements_file.endswith(".txt")
         else list(Benchmark)
     )
-
-    if not os.path.exists(requirements_file):
-        raise ValueError(f"File not found: {requirements_file}")
 
     logging.info(
         "Benchmarks: {}".format(
@@ -680,10 +724,12 @@ def main():
             match tool:
                 case Tool.PIP_TOOLS:
                     suite = PipTools()
-                case Tool.PUFFIN:
-                    suite = Puffin()
                 case Tool.POETRY:
                     suite = Poetry()
+                case Tool.PUFFIN:
+                    suite = Puffin(binary="puffin")
+                case Tool.BASELINE:
+                    suite = Puffin(binary="baseline")
                 case _:
                     raise ValueError(f"Invalid tool: {tool}")
 
