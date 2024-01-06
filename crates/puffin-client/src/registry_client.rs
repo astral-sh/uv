@@ -32,7 +32,6 @@ use crate::{CachedClient, CachedClientError, Error};
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
-    proxy: Url,
     retries: u32,
     cache: Cache,
 }
@@ -41,7 +40,6 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
-            proxy: Url::parse("https://pypi-metadata.ruff.rs").unwrap(),
             cache,
             retries: 3,
         }
@@ -52,12 +50,6 @@ impl RegistryClientBuilder {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
-        self
-    }
-
-    #[must_use]
-    pub fn proxy(mut self, proxy: Url) -> Self {
-        self.proxy = proxy;
         self
     }
 
