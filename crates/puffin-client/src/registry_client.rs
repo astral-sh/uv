@@ -93,20 +93,21 @@ impl RegistryClientBuilder {
 }
 
 /// A client for fetching packages from a `PyPI`-compatible index.
-// TODO(konstin): Clean up the clients once we moved everything to common caching.
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
-    pub(crate) index_urls: IndexUrls,
-    pub(crate) client: CachedClient,
+    index_urls: IndexUrls,
+    /// The underlying HTTP client.
+    client: CachedClient,
     /// Don't use this client, it only exists because `async_http_range_reader` needs
     /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
-    pub(crate) client_raw: Client,
+    client_raw: Client,
     /// Used for the remote wheel METADATA cache
-    pub(crate) cache: Cache,
+    cache: Cache,
 }
 
 impl RegistryClient {
+    /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
         &self.client
     }
