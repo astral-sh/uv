@@ -32,13 +32,11 @@ import os.path
 import shlex
 import subprocess
 import tempfile
+import typing
 
 import tomli
 import tomli_w
 from packaging.requirements import Requirement
-
-WARMUP = 3
-MIN_RUNS = 10
 
 
 class Benchmark(enum.Enum):
@@ -50,29 +48,84 @@ class Benchmark(enum.Enum):
     INSTALL_WARM = "install-warm"
 
 
+class Command(typing.NamedTuple):
+    name: str
+    """The name of the command to benchmark."""
+
+    prepare: str
+    """The command to run before each benchmark run."""
+
+    command: list[str]
+    """The command to benchmark."""
+
+
+class Hyperfine(typing.NamedTuple):
+    commands: list[Command]
+    """The commands to benchmark."""
+
+    warmup: int
+    """The number of warmup runs to perform."""
+
+    min_runs: int
+    """The minimum number of runs to perform."""
+
+    verbose: bool
+    """Whether to print verbose output."""
+
+    def run(self) -> None:
+        """Run the benchmark using `hyperfine`."""
+        args = ["hyperfine"]
+
+        # Preamble: benchmark-wide setup.
+        if self.verbose:
+            args.append("--show-output")
+        args.append("--warmup")
+        args.append(str(self.warmup))
+        args.append("--min-runs")
+        args.append(str(self.min_runs))
+
+        # Add all command names,
+        for command in self.commands:
+            args.append("--command-name")
+            args.append(command.name)
+
+        # Add all prepare statements.
+        for command in self.commands:
+            args.append("--prepare")
+            args.append(command.prepare)
+
+        # Add all commands.
+        for command in self.commands:
+            args.append(shlex.join(command.command))
+
+        subprocess.check_call(args)
+
+
 class Suite(abc.ABC):
     """Abstract base class for packaging tools."""
 
-    def run_benchmark(
+    def command(
         self,
         benchmark: Benchmark,
         requirements_file: str,
         *,
-        verbose: bool,
-    ) -> None:
-        """Run a benchmark for a given tool."""
+        cwd: str,
+    ) -> Command | None:
+        """Generate a command to benchmark a given tool."""
         match benchmark:
             case Benchmark.RESOLVE_COLD:
-                self.resolve_cold(requirements_file, verbose=verbose)
+                return self.resolve_cold(requirements_file, cwd=cwd)
             case Benchmark.RESOLVE_WARM:
-                self.resolve_warm(requirements_file, verbose=verbose)
+                return self.resolve_warm(requirements_file, cwd=cwd)
             case Benchmark.INSTALL_COLD:
-                self.install_cold(requirements_file, verbose=verbose)
+                return self.install_cold(requirements_file, cwd=cwd)
             case Benchmark.INSTALL_WARM:
-                self.install_warm(requirements_file, verbose=verbose)
+                return self.install_warm(requirements_file, cwd=cwd)
+            case _:
+                raise ValueError(f"Invalid benchmark: {benchmark}")
 
     @abc.abstractmethod
-    def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         """Resolve a set of dependencies using pip-tools, from a cold cache.
 
         The resolution is performed from scratch, i.e., without an existing lock file,
@@ -80,7 +133,7 @@ class Suite(abc.ABC):
         """
 
     @abc.abstractmethod
-    def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
         """Resolve a set of dependencies using pip-tools, from a warm cache.
 
         The resolution is performed from scratch, i.e., without an existing lock file;
@@ -88,7 +141,7 @@ class Suite(abc.ABC):
         """
 
     @abc.abstractmethod
-    def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         """Install a set of dependencies using pip-tools, from a cold cache.
 
         The virtual environment is recreated before each run, and the cache directory
@@ -96,7 +149,7 @@ class Suite(abc.ABC):
         """
 
     @abc.abstractmethod
-    def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
         """Install a set of dependencies using pip-tools, from a cold cache.
 
         The virtual environment is recreated before each run, and the cache directory
@@ -109,71 +162,45 @@ class PipCompile(Suite):
         self.name = path or "pip-compile"
         self.path = path or "pip-compile"
 
-    def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            output_file = os.path.join(temp_dir, "requirements.txt")
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "requirements.txt")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -rf {temp_dir} && rm -f {output_file}",
-                    shlex.join(
-                        [
-                            self.path,
-                            os.path.abspath(requirements_file),
-                            "--cache-dir",
-                            cache_dir,
-                            "--output-file",
-                            output_file,
-                            "--rebuild",
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=f"rm -rf {cwd} && rm -f {output_file}",
+            command=[
+                self.path,
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+                "--rebuild",
+            ],
+        )
 
-    def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            output_file = os.path.join(temp_dir, "requirements.txt")
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "requirements.txt")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -f {output_file}",
-                    shlex.join(
-                        [
-                            self.path,
-                            os.path.abspath(requirements_file),
-                            "--cache-dir",
-                            cache_dir,
-                            "--output-file",
-                            output_file,
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
+            prepare=f"rm -f {output_file}",
+            command=[
+                self.path,
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
 
-    def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
-    def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
 
@@ -182,71 +209,45 @@ class PipSync(Suite):
         self.name = path or "pip-sync"
         self.path = path or "pip-sync"
 
-    def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
-    def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
-    def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            venv_dir = os.path.join(temp_dir, ".venv")
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        venv_dir = os.path.join(cwd, ".venv")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
-                    shlex.join(
-                        [
-                            self.path,
-                            os.path.abspath(requirements_file),
-                            "--pip-args",
-                            f"--cache-dir {cache_dir}",
-                            "--python-executable",
-                            os.path.join(venv_dir, "bin", "python"),
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
+            command=[
+                self.path,
+                os.path.abspath(requirements_file),
+                "--pip-args",
+                f"--cache-dir {cache_dir}",
+                "--python-executable",
+                os.path.join(venv_dir, "bin", "python"),
+            ],
+        )
 
-    def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            venv_dir = os.path.join(temp_dir, ".venv")
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        venv_dir = os.path.join(cwd, ".venv")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"virtualenv --clear -p 3.10 {venv_dir}",
-                    shlex.join(
-                        [
-                            self.path,
-                            os.path.abspath(requirements_file),
-                            "--pip-args",
-                            f"--cache-dir {cache_dir}",
-                            "--python-executable",
-                            os.path.join(venv_dir, "bin", "python"),
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
+            prepare=f"virtualenv --clear -p 3.10 {venv_dir}",
+            command=[
+                self.path,
+                os.path.abspath(requirements_file),
+                "--pip-args",
+                f"--cache-dir {cache_dir}",
+                "--python-executable",
+                os.path.join(venv_dir, "bin", "python"),
+            ],
+        )
 
 
 class Poetry(Suite):
@@ -254,7 +255,7 @@ class Poetry(Suite):
         self.name = path or "poetry"
         self.path = path or "poetry"
 
-    def setup(self, requirements_file: str, *, working_dir: str) -> None:
+    def setup(self, requirements_file: str, *, cwd: str) -> None:
         """Initialize a Poetry project from a requirements file."""
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
@@ -273,11 +274,11 @@ class Poetry(Suite):
                 "--python",
                 ">=3.10",
             ],
-            cwd=working_dir,
+            cwd=cwd,
         )
 
         # Parse the pyproject.toml.
-        with open(os.path.join(working_dir, "pyproject.toml"), "rb") as fp:
+        with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
             pyproject = tomli.load(fp)
 
         # Add the dependencies to the pyproject.toml.
@@ -290,199 +291,145 @@ class Poetry(Suite):
             }
         )
 
-        with open(os.path.join(working_dir, "pyproject.toml"), "wb") as fp:
+        with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
 
-    def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self.setup(requirements_file, working_dir=temp_dir)
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
 
-            poetry_lock = os.path.join(temp_dir, "poetry.lock")
-            config_dir = os.path.join(temp_dir, "config", "pypoetry")
-            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
-            data_dir = os.path.join(temp_dir, "data", "pypoetry")
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        config_dir = os.path.join(cwd, "config", "pypoetry")
+        cache_dir = os.path.join(cwd, "cache", "pypoetry")
+        data_dir = os.path.join(cwd, "data", "pypoetry")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    (
-                        f"rm -rf {config_dir} && "
-                        f"rm -rf {cache_dir} && "
-                        f"rm -rf {data_dir} &&"
-                        f"rm -rf {poetry_lock}"
-                    ),
-                    shlex.join(
-                        [
-                            f"POETRY_CONFIG_DIR={config_dir}",
-                            f"POETRY_CACHE_DIR={cache_dir}",
-                            f"POETRY_DATA_DIR={data_dir}",
-                            self.path,
-                            "lock",
-                        ]
-                    ),
-                ],
-                cwd=temp_dir,
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=(
+                f"rm -rf {config_dir} && "
+                f"rm -rf {cache_dir} && "
+                f"rm -rf {data_dir} &&"
+                f"rm -rf {poetry_lock}"
+            ),
+            command=[
+                f"POETRY_CONFIG_DIR={config_dir}",
+                f"POETRY_CACHE_DIR={cache_dir}",
+                f"POETRY_DATA_DIR={data_dir}",
+                self.path,
+                "lock",
+                "--directory",
+                cwd,
+            ],
+        )
 
-    def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self.setup(requirements_file, working_dir=temp_dir)
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
 
-            poetry_lock = os.path.join(temp_dir, "poetry.lock")
-            config_dir = os.path.join(temp_dir, "config", "pypoetry")
-            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
-            data_dir = os.path.join(temp_dir, "data", "pypoetry")
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        config_dir = os.path.join(cwd, "config", "pypoetry")
+        cache_dir = os.path.join(cwd, "cache", "pypoetry")
+        data_dir = os.path.join(cwd, "data", "pypoetry")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -rf {poetry_lock}",
-                    shlex.join(
-                        [
-                            f"POETRY_CONFIG_DIR={config_dir}",
-                            f"POETRY_CACHE_DIR={cache_dir}",
-                            f"POETRY_DATA_DIR={data_dir}",
-                            self.path,
-                            "lock",
-                        ]
-                    ),
-                ],
-                cwd=temp_dir,
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
+            prepare=f"rm -f {poetry_lock}",
+            command=[
+                f"POETRY_CONFIG_DIR={config_dir}",
+                f"POETRY_CACHE_DIR={cache_dir}",
+                f"POETRY_DATA_DIR={data_dir}",
+                self.path,
+                "lock",
+                "--directory",
+                cwd,
+            ],
+        )
 
-    def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self.setup(requirements_file, working_dir=temp_dir)
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
 
-            poetry_lock = os.path.join(temp_dir, "poetry.lock")
-            assert not os.path.exists(
-                poetry_lock
-            ), f"Lock file already exists at: {poetry_lock}"
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        assert not os.path.exists(
+            poetry_lock
+        ), f"Lock file already exists at: {poetry_lock}"
 
-            # Run a resolution, to ensure that the lock file exists.
-            subprocess.check_call(
-                [self.path, "lock"],
-                cwd=temp_dir,
-                **(
-                    {}
-                    if verbose
-                    else {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-                ),
-            )
-            assert os.path.exists(
-                poetry_lock
-            ), f"Lock file doesn't exist at: {poetry_lock}"
+        # Run a resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
 
-            config_dir = os.path.join(temp_dir, "config", "pypoetry")
-            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
-            data_dir = os.path.join(temp_dir, "data", "pypoetry")
-            venv_dir = os.path.join(temp_dir, ".venv")
+        config_dir = os.path.join(cwd, "config", "pypoetry")
+        cache_dir = os.path.join(cwd, "cache", "pypoetry")
+        data_dir = os.path.join(cwd, "data", "pypoetry")
+        venv_dir = os.path.join(cwd, ".venv")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    (
-                        f"rm -rf {config_dir} && "
-                        f"rm -rf {cache_dir} && "
-                        f"rm -rf {data_dir} &&"
-                        f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
-                    ),
-                    shlex.join(
-                        [
-                            f"POETRY_CONFIG_DIR={config_dir}",
-                            f"POETRY_CACHE_DIR={cache_dir}",
-                            f"POETRY_DATA_DIR={data_dir}",
-                            f"VIRTUAL_ENV={venv_dir}",
-                            self.path,
-                            "install",
-                            "--no-root",
-                            "--sync",
-                        ]
-                    ),
-                ],
-                cwd=temp_dir,
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=(
+                f"rm -rf {config_dir} && "
+                f"rm -rf {cache_dir} && "
+                f"rm -rf {data_dir} &&"
+                f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+            ),
+            command=[
+                f"POETRY_CONFIG_DIR={config_dir}",
+                f"POETRY_CACHE_DIR={cache_dir}",
+                f"POETRY_DATA_DIR={data_dir}",
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "install",
+                "--no-root",
+                "--sync",
+                "--directory",
+                cwd,
+            ],
+        )
 
-    def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self.setup(requirements_file, working_dir=temp_dir)
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
 
-            poetry_lock = os.path.join(temp_dir, "poetry.lock")
-            assert not os.path.exists(
-                poetry_lock
-            ), f"Lock file already exists at: {poetry_lock}"
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        assert not os.path.exists(
+            poetry_lock
+        ), f"Lock file already exists at: {poetry_lock}"
 
-            # Run a resolution, to ensure that the lock file exists.
-            subprocess.check_call(
-                [self.path, "lock"],
-                cwd=temp_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            assert os.path.exists(
-                poetry_lock
-            ), f"Lock file doesn't exist at: {poetry_lock}"
+        # Run a resolution, to ensure that the lock file exists.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
 
-            config_dir = os.path.join(temp_dir, "config", "pypoetry")
-            cache_dir = os.path.join(temp_dir, "cache", "pypoetry")
-            data_dir = os.path.join(temp_dir, "data", "pypoetry")
-            venv_dir = os.path.join(temp_dir, ".venv")
+        config_dir = os.path.join(cwd, "config", "pypoetry")
+        cache_dir = os.path.join(cwd, "cache", "pypoetry")
+        data_dir = os.path.join(cwd, "data", "pypoetry")
+        venv_dir = os.path.join(cwd, ".venv")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"virtualenv --clear -p 3.10 {venv_dir} --no-seed",
-                    shlex.join(
-                        [
-                            f"POETRY_CONFIG_DIR={config_dir}",
-                            f"POETRY_CACHE_DIR={cache_dir}",
-                            f"POETRY_DATA_DIR={data_dir}",
-                            f"VIRTUAL_ENV={venv_dir}",
-                            self.path,
-                            "install",
-                            "--no-root",
-                            "--sync",
-                        ]
-                    ),
-                ],
-                cwd=temp_dir,
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
+            prepare=f"virtualenv --clear -p 3.10 {venv_dir}",
+            command=[
+                f"POETRY_CONFIG_DIR={config_dir}",
+                f"POETRY_CACHE_DIR={cache_dir}",
+                f"POETRY_DATA_DIR={data_dir}",
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "install",
+                "--no-root",
+                "--sync",
+                "--directory",
+                cwd,
+            ],
+        )
 
 
 class Puffin(Suite):
-    def __init__(self, *, path: str | None = None) -> None:
+    def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a Puffin benchmark."""
         self.name = path or "puffin"
         self.path = path or os.path.join(
@@ -494,127 +441,75 @@ class Puffin(Suite):
             "puffin",
         )
 
-    def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            output_file = os.path.join(temp_dir, "requirements.txt")
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "requirements.txt")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -rf {temp_dir} && rm -f {output_file}",
-                    shlex.join(
-                        [
-                            self.path,
-                            "pip-compile",
-                            os.path.abspath(requirements_file),
-                            "--cache-dir",
-                            cache_dir,
-                            "--output-file",
-                            output_file,
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=f"rm -rf {cwd} && rm -f {output_file}",
+            command=[
+                self.path,
+                "pip-compile",
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
 
-    def resolve_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            output_file = os.path.join(temp_dir, "requirements.txt")
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "requirements.txt")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -f {output_file}",
-                    shlex.join(
-                        [
-                            self.path,
-                            "pip-compile",
-                            os.path.abspath(requirements_file),
-                            "--cache-dir",
-                            cache_dir,
-                            "--output-file",
-                            output_file,
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
+            prepare=f"rm -f {output_file}",
+            command=[
+                self.path,
+                "pip-compile",
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
 
-    def install_cold(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            venv_dir = os.path.join(temp_dir, ".venv")
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        venv_dir = os.path.join(cwd, ".venv")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
-                    shlex.join(
-                        [
-                            f"VIRTUAL_ENV={venv_dir}",
-                            self.path,
-                            "pip-sync",
-                            os.path.abspath(requirements_file),
-                            "--cache-dir",
-                            cache_dir,
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
+            command=[
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "pip-sync",
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+            ],
+        )
 
-    def install_warm(self, requirements_file: str, *, verbose: bool) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache_dir = os.path.join(temp_dir, ".cache")
-            venv_dir = os.path.join(temp_dir, ".venv")
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        venv_dir = os.path.join(cwd, ".venv")
 
-            subprocess.check_call(
-                [
-                    "hyperfine",
-                    *(["--show-output"] if verbose else []),
-                    "--command-name",
-                    f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-                    "--warmup",
-                    str(WARMUP),
-                    "--min-runs",
-                    str(MIN_RUNS),
-                    "--prepare",
-                    f"virtualenv --clear -p 3.10 {venv_dir}",
-                    shlex.join(
-                        [
-                            f"VIRTUAL_ENV={venv_dir}",
-                            self.path,
-                            "pip-sync",
-                            os.path.abspath(requirements_file),
-                            "--cache-dir",
-                            cache_dir,
-                        ]
-                    ),
-                ]
-            )
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
+            prepare=f"virtualenv --clear -p 3.10 {venv_dir}",
+            command=[
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "pip-sync",
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+            ],
+        )
 
 
 def main():
@@ -638,6 +533,18 @@ def main():
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Print verbose output."
+    )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        help="The number of warmup runs to perform.",
+        default=3,
+    )
+    parser.add_argument(
+        "--min-runs",
+        type=int,
+        help="The minimum number of runs to perform.",
+        default=10,
     )
     parser.add_argument(
         "--benchmark",
@@ -695,6 +602,8 @@ def main():
     args = parser.parse_args()
 
     verbose = args.verbose
+    warmup = args.warmup
+    min_runs = args.min_runs
 
     requirements_file = os.path.abspath(args.file)
     if not os.path.exists(requirements_file):
@@ -747,9 +656,27 @@ def main():
             logging.info(line.rstrip())
     logging.info("```")
 
-    for benchmark in benchmarks:
-        for suite in suites:
-            suite.run_benchmark(benchmark, requirements_file, verbose=verbose)
+    with tempfile.TemporaryDirectory() as cwd:
+        for benchmark in benchmarks:
+            # Generate the benchmark command for each tool.
+            commands = [
+                command
+                for suite in suites
+                if (
+                    command := suite.command(
+                        benchmark, requirements_file, cwd=tempfile.mkdtemp(dir=cwd)
+                    )
+                )
+            ]
+
+            if commands:
+                hyperfine = Hyperfine(
+                    commands=commands,
+                    warmup=warmup,
+                    min_runs=min_runs,
+                    verbose=verbose,
+                )
+                hyperfine.run()
 
 
 if __name__ == "__main__":
