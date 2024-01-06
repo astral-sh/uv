@@ -134,7 +134,7 @@ impl RegistryClient {
                 .pop_if_empty()
                 .push(package_name.as_ref());
 
-            trace!("Fetching metadata for {} from {}", package_name, url);
+            trace!("Fetching metadata for {package_name} from {url}");
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Simple,
@@ -142,7 +142,7 @@ impl RegistryClient {
                     IndexUrl::Pypi => "pypi".to_string(),
                     IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
                 }),
-                format!("{}.msgpack", package_name.as_ref()),
+                format!("{package_name}.msgpack"),
             );
 
             let simple_request = self
@@ -263,7 +263,7 @@ impl RegistryClient {
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{}.metadata", url))?;
+            let url = Url::parse(&format!("{url}.metadata"))?;
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
