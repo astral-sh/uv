@@ -14,14 +14,14 @@ To set up the required environment, run:
 
 Example usage:
 
-    python -m scripts.bench --tool puffin --tool pip-compile requirements.in
+    python -m scripts.bench --puffin --pip-compile requirements.in
 
-Tools can be repeated and accompanied by a binary to benchmark multiple versions of the
-same tool, as in:
+Multiple versions of Puffin can be benchmarked by specifying the path to the binary for
+each build, as in:
 
     python -m scripts.bench \
-        --tool puffin --path ./target/release/puffin \
-        --tool puffin --path ./target/release/baseline \
+        --puffin-path ./target/release/puffin \
+        --puffin-path ./target/release/baseline \
         requirements.in
 """
 import abc
@@ -32,7 +32,6 @@ import os.path
 import shlex
 import subprocess
 import tempfile
-from itertools import zip_longest
 
 import tomli
 import tomli_w
@@ -40,22 +39,6 @@ from packaging.requirements import Requirement
 
 WARMUP = 3
 MIN_RUNS = 10
-
-
-class Tool(enum.Enum):
-    """Enumeration of the tools to benchmark."""
-
-    PIP_SYNC = "pip-sync"
-    """`pip-sync`, from the `pip-tools` package."""
-
-    PIP_COMPILE = "pip-compile"
-    """`pip-compile`, from the `pip-tools` package."""
-
-    POETRY = "poetry"
-    """The `poetry` package manager."""
-
-    PUFFIN = "puffin"
-    """A Puffin release build, assumed to be located at `./target/release/puffin`."""
 
 
 class Benchmark(enum.Enum):
@@ -123,7 +106,7 @@ class Suite(abc.ABC):
 
 class PipCompile(Suite):
     def __init__(self, path: str | None = None) -> None:
-        self.name = path or Tool.PIP_COMPILE.value
+        self.name = path or "pip-compile"
         self.path = path or "pip-compile"
 
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
@@ -196,7 +179,7 @@ class PipCompile(Suite):
 
 class PipSync(Suite):
     def __init__(self, path: str | None = None) -> None:
-        self.name = path or Tool.PIP_SYNC.value
+        self.name = path or "pip-sync"
         self.path = path or "pip-sync"
 
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
@@ -268,7 +251,7 @@ class PipSync(Suite):
 
 class Poetry(Suite):
     def __init__(self, path: str | None = None) -> None:
-        self.name = path or Tool.POETRY.value
+        self.name = path or "poetry"
         self.path = path or "poetry"
 
     def setup(self, requirements_file: str, *, working_dir: str) -> None:
@@ -276,7 +259,7 @@ class Poetry(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line) for line in fp if not line.startswith("#")
+                Requirement(line) for line in fp if not line.lstrip().startswith("#")
             ]
 
         # Create a Poetry project.
@@ -396,8 +379,11 @@ class Poetry(Suite):
             subprocess.check_call(
                 [self.path, "lock"],
                 cwd=temp_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                **(
+                    {}
+                    if verbose
+                    else {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+                ),
             )
             assert os.path.exists(
                 poetry_lock
@@ -498,7 +484,7 @@ class Poetry(Suite):
 class Puffin(Suite):
     def __init__(self, *, path: str | None = None) -> None:
         """Initialize a Puffin benchmark."""
-        self.name = path or Tool.PUFFIN.value
+        self.name = path or "puffin"
         self.path = path or os.path.join(
             os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -654,26 +640,55 @@ def main():
         "--verbose", "-v", action="store_true", help="Print verbose output."
     )
     parser.add_argument(
-        "--tool",
-        "-t",
-        type=str,
-        help="The tool(s) to benchmark (typically, `puffin`, `pip-tools` or `poetry`).",
-        choices=[tool.value for tool in Tool],
-        action="append",
-    )
-    parser.add_argument(
-        "--path",
-        "-p",
-        type=str,
-        help="Optionally, the path to the path, for each tool provided with `--tool`.",
-        action="append",
-    )
-    parser.add_argument(
         "--benchmark",
         "-b",
         type=str,
         help="The benchmark(s) to run.",
         choices=[benchmark.value for benchmark in Benchmark],
+        action="append",
+    )
+    parser.add_argument(
+        "--pip-sync",
+        help="Whether to benchmark `pip-sync` (requires `pip-tools` to be installed).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--pip-compile",
+        help="Whether to benchmark `pip-compile` (requires `pip-tools` to be installed).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--poetry",
+        help="Whether to benchmark Poetry (requires Poetry to be installed).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--puffin",
+        help="Whether to benchmark Puffin (assumes a Puffin binary exists at `./target/release/puffin`).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--pip-sync-path",
+        type=str,
+        help="Path(s) to the `pip-sync` binary to benchmark.",
+        action="append",
+    )
+    parser.add_argument(
+        "--pip-compile-path",
+        type=str,
+        help="Path(s) to the `pip-compile` binary to benchmark.",
+        action="append",
+    )
+    parser.add_argument(
+        "--poetry-path",
+        type=str,
+        help="Path(s) to the Poetry binary to benchmark.",
+        action="append",
+    )
+    parser.add_argument(
+        "--puffin-path",
+        type=str,
+        help="Path(s) to the Puffin binary to benchmark.",
         action="append",
     )
 
@@ -685,11 +700,33 @@ def main():
     if not os.path.exists(requirements_file):
         raise ValueError(f"File not found: {requirements_file}")
 
-    # Determine the tools to benchmark, based on user input.
-    tools = [Tool(tool) for tool in args.tool] if args.tool is not None else list(Tool)
+    # Determine the tools to benchmark, based on the user-provided arguments.
+    suites = []
+    if args.pip_sync:
+        suites.append(PipSync())
+    if args.pip_compile:
+        suites.append(PipCompile())
+    if args.poetry:
+        suites.append(Poetry())
+    if args.puffin:
+        suites.append(Puffin())
+    for path in args.pip_sync_path or []:
+        suites.append(PipSync(path=path))
+    for path in args.pip_compile_path or []:
+        suites.append(PipCompile(path=path))
+    for path in args.poetry_path or []:
+        suites.append(Poetry(path=path))
+    for path in args.puffin_path or []:
+        suites.append(Puffin(path=path))
 
-    # If paths were specified, apply them to the tools.
-    paths = args.path or []
+    # If no tools were specified, benchmark all tools.
+    if not suites:
+        suites = [
+            PipSync(),
+            PipCompile(),
+            Poetry(),
+            Puffin(),
+        ]
 
     # Determine the benchmarks to run, based on user input. If no benchmarks were
     # specified, infer an appropriate set based on the file extension.
@@ -711,19 +748,7 @@ def main():
     logging.info("```")
 
     for benchmark in benchmarks:
-        for tool, path in zip_longest(tools, paths):
-            match tool:
-                case Tool.PIP_COMPILE:
-                    suite = PipCompile(path=path)
-                case Tool.PIP_SYNC:
-                    suite = PipSync(path=path)
-                case Tool.PUFFIN:
-                    suite = Puffin(path=path)
-                case Tool.POETRY:
-                    suite = Poetry(path=path)
-                case _:
-                    raise ValueError(f"Invalid tool: {tool}")
-
+        for suite in suites:
             suite.run_benchmark(benchmark, requirements_file, verbose=verbose)
 
 
