@@ -15,6 +15,14 @@ To set up the required environment, run:
 Example usage:
 
     python -m scripts.bench -t puffin -t pip-tools requirements.in
+
+Tools can be repeated and accompanied by a binary to benchmark multiple versions of the
+same tool, as in:
+
+    python -m scripts.bench \
+        -t puffin -p ./target/release/puffin \
+        -t puffin -p ./target/release/baseline \
+        requirements.in
 """
 import abc
 import argparse
@@ -24,6 +32,7 @@ import os.path
 import shlex
 import subprocess
 import tempfile
+from itertools import zip_longest
 
 import tomli
 import tomli_w
@@ -37,8 +46,13 @@ class Tool(enum.Enum):
     """Enumeration of the tools to benchmark."""
 
     PIP_TOOLS = "pip-tools"
-    PUFFIN = "puffin"
+    """`pip-sync` and `pip-compile`, from the `pip-tools` package."""
+
     POETRY = "poetry"
+    """The `poetry` package manager."""
+
+    PUFFIN = "puffin"
+    """A Puffin release build, assumed to be located at `./target/release/puffin`."""
 
 
 class Benchmark(enum.Enum):
@@ -105,6 +119,9 @@ class Suite(abc.ABC):
 
 
 class PipTools(Suite):
+    def __init__(self, path: str | None = None) -> None:
+        self.path = path
+
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
@@ -115,7 +132,7 @@ class PipTools(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PIP_TOOLS.value} ({Benchmark.RESOLVE_COLD.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.RESOLVE_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -124,7 +141,7 @@ class PipTools(Suite):
                     f"rm -rf {temp_dir} && rm -f {output_file}",
                     shlex.join(
                         [
-                            "pip-compile",
+                            self.path or "pip-compile",
                             os.path.abspath(requirements_file),
                             "--cache-dir",
                             cache_dir,
@@ -146,7 +163,7 @@ class PipTools(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PIP_TOOLS.value} ({Benchmark.RESOLVE_WARM.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.RESOLVE_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -155,7 +172,7 @@ class PipTools(Suite):
                     f"rm -f {output_file}",
                     shlex.join(
                         [
-                            "pip-compile",
+                            self.path or "pip-compile",
                             os.path.abspath(requirements_file),
                             "--cache-dir",
                             cache_dir,
@@ -176,7 +193,7 @@ class PipTools(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PIP_TOOLS.value} ({Benchmark.INSTALL_COLD.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.INSTALL_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -185,7 +202,7 @@ class PipTools(Suite):
                     f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
                     shlex.join(
                         [
-                            "pip-sync",
+                            self.path or "pip-sync",
                             os.path.abspath(requirements_file),
                             "--pip-args",
                             f"--cache-dir {cache_dir}",
@@ -206,7 +223,7 @@ class PipTools(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PIP_TOOLS.value} ({Benchmark.INSTALL_WARM.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.INSTALL_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -215,7 +232,7 @@ class PipTools(Suite):
                     f"virtualenv --clear -p 3.10 {venv_dir}",
                     shlex.join(
                         [
-                            "pip-sync",
+                            self.path or "pip-sync",
                             os.path.abspath(requirements_file),
                             "--pip-args",
                             f"--cache-dir {cache_dir}",
@@ -228,6 +245,10 @@ class PipTools(Suite):
 
 
 class Puffin(Suite):
+    def __init__(self, *, path: str | None = None) -> None:
+        """Initialize a Puffin benchmark."""
+        self.path = path
+
     def resolve_cold(self, requirements_file: str, *, verbose: bool) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             cache_dir = os.path.join(temp_dir, ".cache")
@@ -238,7 +259,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.RESOLVE_COLD.value})",
+                    f"{self.path or Tool.PUFFIN.value} ({Benchmark.RESOLVE_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -247,9 +268,12 @@ class Puffin(Suite):
                     f"rm -rf {temp_dir} && rm -f {output_file}",
                     shlex.join(
                         [
-                            os.path.join(
+                            self.path
+                            or os.path.join(
                                 os.path.dirname(
-                                    os.path.dirname(os.path.abspath(__file__))
+                                    os.path.dirname(
+                                        os.path.dirname(os.path.abspath(__file__))
+                                    )
                                 ),
                                 "target",
                                 "release",
@@ -276,7 +300,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.RESOLVE_WARM.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.RESOLVE_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -285,9 +309,12 @@ class Puffin(Suite):
                     f"rm -f {output_file}",
                     shlex.join(
                         [
-                            os.path.join(
+                            self.path
+                            or os.path.join(
                                 os.path.dirname(
-                                    os.path.dirname(os.path.abspath(__file__))
+                                    os.path.dirname(
+                                        os.path.dirname(os.path.abspath(__file__))
+                                    )
                                 ),
                                 "target",
                                 "release",
@@ -314,7 +341,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.INSTALL_COLD.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.INSTALL_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -324,9 +351,12 @@ class Puffin(Suite):
                     shlex.join(
                         [
                             f"VIRTUAL_ENV={venv_dir}",
-                            os.path.join(
+                            self.path
+                            or os.path.join(
                                 os.path.dirname(
-                                    os.path.dirname(os.path.abspath(__file__))
+                                    os.path.dirname(
+                                        os.path.dirname(os.path.abspath(__file__))
+                                    )
                                 ),
                                 "target",
                                 "release",
@@ -351,7 +381,7 @@ class Puffin(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.PUFFIN.value} ({Benchmark.INSTALL_WARM.value})",
+                    f"{self.path or Tool.PIP_TOOLS.value} ({Benchmark.INSTALL_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -361,9 +391,12 @@ class Puffin(Suite):
                     shlex.join(
                         [
                             f"VIRTUAL_ENV={venv_dir}",
-                            os.path.join(
+                            self.path
+                            or os.path.join(
                                 os.path.dirname(
-                                    os.path.dirname(os.path.abspath(__file__))
+                                    os.path.dirname(
+                                        os.path.dirname(os.path.abspath(__file__))
+                                    )
                                 ),
                                 "target",
                                 "release",
@@ -380,6 +413,9 @@ class Puffin(Suite):
 
 
 class Poetry(Suite):
+    def __init__(self, path: str | None = None) -> None:
+        self.path = path
+
     def init(self, requirements_file: str, *, working_dir: str) -> None:
         """Initialize a Poetry project from a requirements file."""
         # Parse all dependencies from the requirements file.
@@ -391,7 +427,7 @@ class Poetry(Suite):
         # Create a Poetry project.
         subprocess.check_call(
             [
-                "poetry",
+                self.path or "poetry",
                 "init",
                 "--name",
                 "bench",
@@ -433,7 +469,7 @@ class Poetry(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.POETRY.value} ({Benchmark.RESOLVE_COLD.value})",
+                    f"{self.path or Tool.POETRY.value} ({Benchmark.RESOLVE_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -450,7 +486,7 @@ class Poetry(Suite):
                             f"POETRY_CONFIG_DIR={config_dir}",
                             f"POETRY_CACHE_DIR={cache_dir}",
                             f"POETRY_DATA_DIR={data_dir}",
-                            "poetry",
+                            self.path or "poetry",
                             "lock",
                         ]
                     ),
@@ -472,7 +508,7 @@ class Poetry(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.POETRY.value} ({Benchmark.RESOLVE_WARM.value})",
+                    f"{self.path or Tool.POETRY.value} ({Benchmark.RESOLVE_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -484,7 +520,7 @@ class Poetry(Suite):
                             f"POETRY_CONFIG_DIR={config_dir}",
                             f"POETRY_CACHE_DIR={cache_dir}",
                             f"POETRY_DATA_DIR={data_dir}",
-                            "poetry",
+                            self.path or "poetry",
                             "lock",
                         ]
                     ),
@@ -503,7 +539,7 @@ class Poetry(Suite):
 
             # Run a resolution, to ensure that the lock file exists.
             subprocess.check_call(
-                ["poetry", "lock"],
+                [self.path or "poetry", "lock"],
                 cwd=temp_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -522,7 +558,7 @@ class Poetry(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.POETRY.value} ({Benchmark.INSTALL_COLD.value})",
+                    f"{self.path or Tool.POETRY.value} ({Benchmark.INSTALL_COLD.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -540,7 +576,7 @@ class Poetry(Suite):
                             f"POETRY_CACHE_DIR={cache_dir}",
                             f"POETRY_DATA_DIR={data_dir}",
                             f"VIRTUAL_ENV={venv_dir}",
-                            "poetry",
+                            self.path or "poetry",
                             "install",
                             "--no-root",
                             "--sync",
@@ -561,7 +597,7 @@ class Poetry(Suite):
 
             # Run a resolution, to ensure that the lock file exists.
             subprocess.check_call(
-                ["poetry", "lock"],
+                [self.path or "poetry", "lock"],
                 cwd=temp_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -580,7 +616,7 @@ class Poetry(Suite):
                     "hyperfine",
                     *(["--show-output"] if verbose else []),
                     "--command-name",
-                    f"{Tool.POETRY.value} ({Benchmark.INSTALL_WARM.value})",
+                    f"{self.path or Tool.POETRY.value} ({Benchmark.INSTALL_WARM.value})",
                     "--warmup",
                     str(WARMUP),
                     "--min-runs",
@@ -593,7 +629,7 @@ class Poetry(Suite):
                             f"POETRY_CACHE_DIR={cache_dir}",
                             f"POETRY_DATA_DIR={data_dir}",
                             f"VIRTUAL_ENV={venv_dir}",
-                            "poetry",
+                            self.path or "poetry",
                             "install",
                             "--no-root",
                             "--sync",
@@ -630,8 +666,15 @@ def main():
         "--tool",
         "-t",
         type=str,
-        help="The tool(s) to benchmark.",
+        help="The tool(s) to benchmark (typically, `puffin`, `pip-tools` or `poetry`).",
         choices=[tool.value for tool in Tool],
+        action="append",
+    )
+    parser.add_argument(
+        "--path",
+        "-p",
+        type=str,
+        help="Optionally, the path to the path, for each tool provided with `--tool`.",
         action="append",
     )
     parser.add_argument(
@@ -645,9 +688,14 @@ def main():
 
     args = parser.parse_args()
 
-    requirements_file = os.path.abspath(args.file)
     verbose = args.verbose
-    tools = [Tool(tool) for tool in args.tool] if args.tool is not None else list(Tool)
+
+    requirements_file = os.path.abspath(args.file)
+    if not os.path.exists(requirements_file):
+        raise ValueError(f"File not found: {requirements_file}")
+
+    # Determine the benchmarks to run, based on user input. If no benchmarks were
+    # specified, infer an appropriate set based on the file extension.
     benchmarks = (
         [Benchmark(benchmark) for benchmark in args.benchmark]
         if args.benchmark is not None
@@ -658,15 +706,12 @@ def main():
         else list(Benchmark)
     )
 
-    if not os.path.exists(requirements_file):
-        raise ValueError(f"File not found: {requirements_file}")
+    # Determine the tools to benchmark, based on user input. If no tools were specified,
+    # default to the most common choices.
+    tools = [Tool(tool) for tool in args.tool] if args.tool is not None else list(Tool)
 
-    logging.info(
-        "Benchmarks: {}".format(
-            ", ".join([benchmark.value for benchmark in benchmarks])
-        )
-    )
-    logging.info("Tools: {}".format(", ".join([tool.value for tool in tools])))
+    # If paths were specified, apply them to the tools.
+    paths = args.path or []
 
     logging.info("Reading requirements from: {}".format(requirements_file))
     logging.info("```")
@@ -676,14 +721,14 @@ def main():
     logging.info("```")
 
     for benchmark in benchmarks:
-        for tool in tools:
+        for tool, path in zip_longest(tools, paths):
             match tool:
                 case Tool.PIP_TOOLS:
-                    suite = PipTools()
+                    suite = PipTools(path=path)
                 case Tool.PUFFIN:
-                    suite = Puffin()
+                    suite = Puffin(path=path)
                 case Tool.POETRY:
-                    suite = Poetry()
+                    suite = Poetry(path=path)
                 case _:
                     raise ValueError(f"Invalid tool: {tool}")
 
