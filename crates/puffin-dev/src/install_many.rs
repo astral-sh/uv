@@ -2,6 +2,7 @@ use std::iter::Iterator;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use anstream::eprintln;
 use anyhow::{Context, Result};
 use clap::Parser;
 use futures::StreamExt;

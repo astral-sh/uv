@@ -21,6 +21,7 @@ platform-host = { path = "../platform-host" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 
+anstream = { workspace = true }
 camino = { workspace = true }
 clap = { workspace = true }
 fs-err = { workspace = true }
