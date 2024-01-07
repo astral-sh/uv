@@ -14,6 +14,6 @@ workspace = true
 
 [dependencies]
 anstream = { workspace = true }
-colored = { workspace = true }
 once_cell = { workspace = true }
+owo-colors = { workspace = true }
 rustc-hash = { workspace = true }

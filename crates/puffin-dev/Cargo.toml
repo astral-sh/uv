@@ -38,11 +38,11 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-colored = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
+owo-colors = { workspace = true }
 petgraph = { workspace = true }
 rustc-hash = { workspace = true }
 tempfile = { workspace = true }
@@ -50,11 +50,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
-which = { workspace = true }
 url = { workspace = true }
+which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-mimalloc = "0.1.39"
+mimalloc = { version = "0.1.39" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = "0.5.4"
+tikv-jemallocator = { version = "0.5.4" }

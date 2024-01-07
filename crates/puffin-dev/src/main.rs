@@ -7,7 +7,7 @@ use std::time::Instant;
 use anstream::eprintln;
 use anyhow::Result;
 use clap::Parser;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use tracing::debug;
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::layer::SubscriberExt;

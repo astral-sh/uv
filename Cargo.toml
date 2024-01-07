@@ -24,7 +24,6 @@ camino = { version = "1.1.6", features = ["serde1"] }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
 clap = { version = "4.4.13" }
-colored = { version = "2.1.0" }
 configparser = { version = "3.0.4" }
 csv = { version = "1.3.0" }
 data-encoding = { version = "2.5.0" }
@@ -49,6 +48,7 @@ mailparse = { version = "0.14.0" }
 # For additional textwrap options: https://github.com/zkat/miette/pull/321, https://github.com/zkat/miette/pull/328
 miette =  { git = "https://github.com/zkat/miette.git", rev = "b0744462adbbfbb6d845f382db36be883c7f3c45" }
 once_cell = { version = "1.19.0" }
+owo-colors = { version = "3.5.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }

@@ -2,9 +2,9 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use colored::Colorize;
 use fs_err as fs;
 use miette::{Diagnostic, IntoDiagnostic};
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use platform_host::Platform;
@@ -84,14 +84,14 @@ fn venv_impl(
         printer,
         "Using Python {} at {}",
         interpreter.version(),
-        format!("{}", interpreter.sys_executable().display()).cyan()
+        interpreter.sys_executable().display().cyan()
     )
     .into_diagnostic()?;
 
     writeln!(
         printer,
         "Creating virtual environment at: {}",
-        format!("{}", path.display()).cyan()
+        path.display().cyan()
     )
     .into_diagnostic()?;
 

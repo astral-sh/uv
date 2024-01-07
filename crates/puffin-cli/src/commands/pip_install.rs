@@ -4,8 +4,8 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use colored::Colorize;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
 use tracing::debug;
 
