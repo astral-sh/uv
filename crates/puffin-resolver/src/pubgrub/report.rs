@@ -131,6 +131,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
 }
 
 impl PubGrubReportFormatter<'_> {
+    /// Simplify a [`Range`] of versions using the available versions for a package.
     fn simplify_set<'a>(
         &self,
         set: &'a Range<PubGrubVersion>,
@@ -142,20 +143,17 @@ impl PubGrubReportFormatter<'_> {
             Cow::Owned(set.simplify(self.available_versions.get(package).into_iter().flatten()))
         }
     }
-}
 
-/// A set of hints to help users resolve errors by providing additional context or modifying
-/// their requirements.
-#[derive(Debug, Default)]
-pub(crate) struct PubGrubHints(FxHashSet<PubGrubHint>);
-
-impl PubGrubHints {
-    /// Create a set of hints from a derivation tree.
-    pub(crate) fn from_derivation_tree(
+    /// Generate the [`PubGrubHints`] for a derivation tree.
+    ///
+    /// The [`PubGrubHints`] help users resolve errors by providing additional context or modifying
+    /// their requirements.
+    pub(crate) fn hints(
+        &self,
         derivation_tree: &DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
         selector: &CandidateSelector,
-    ) -> Self {
-        let mut hints = Self::default();
+    ) -> FxHashSet<PubGrubHint> {
+        let mut hints = FxHashSet::default();
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::NoVersions(package, set) => {
@@ -185,7 +183,7 @@ impl PubGrubHints {
                         if !allowed_prerelease {
                             hints.insert(PubGrubHint::NoVersionsWithPreRelease {
                                 package: package.clone(),
-                                range: set.clone(),
+                                range: self.simplify_set(set, package).into_owned(),
                             });
                         }
                     }
@@ -196,26 +194,11 @@ impl PubGrubHints {
                 External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {
-                hints.extend(Self::from_derivation_tree(&derived.cause1, selector));
-                hints.extend(Self::from_derivation_tree(&derived.cause2, selector));
+                hints.extend(self.hints(&derived.cause1, selector));
+                hints.extend(self.hints(&derived.cause2, selector));
             }
         }
         hints
-    }
-
-    /// Iterate over the hints in the set.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &PubGrubHint> {
-        self.0.iter()
-    }
-
-    /// Insert a hint into the set.
-    fn insert(&mut self, hint: PubGrubHint) -> bool {
-        self.0.insert(hint)
-    }
-
-    /// Extend the set with another set of hints.
-    fn extend(&mut self, hints: Self) {
-        self.0.extend(hints.0);
     }
 }
 

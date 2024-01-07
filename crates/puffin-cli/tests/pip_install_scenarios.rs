@@ -1469,7 +1469,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
               And because a==1.0.0 depends on c>=2.0.0b1 and there is no version of a available matching <1.0.0 | >1.0.0, b *, a * are incompatible.
               And because root depends on b and root depends on a, version solving failed.
 
-              hint: c was requested with a pre-release marker (e.g., >=2.0.0b1, <=3.0.0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+              hint: c was requested with a pre-release marker (e.g., >=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
@@ -1566,7 +1566,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
           ╰─▶ Because there is no version of c available matching >1.0.0, <2.0.0a5 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5 and a==1.0.0 depends on c>1.0.0, <2.0.0a5 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5, a==1.0.0 is forbidden.
               And because there is no version of a available matching <1.0.0 | >1.0.0 and root depends on a, version solving failed.
 
-              hint: c was requested with a pre-release marker (e.g., >1.0.0, <2.0.0a5 | >2.0.0a5, <2.0.0a6 | >2.0.0a6, <2.0.0a7 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5), but pre-releases weren't enabled (try: `--prerelease=allow`)
+              hint: c was requested with a pre-release marker (e.g., >1.0.0, <2.0.0a5 | >2.0.0a7, <2.0.0b1 | >2.0.0b1, <2.0.0b5), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
