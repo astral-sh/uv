@@ -4,6 +4,7 @@ use std::io::IsTerminal;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use anstream::eprintln;
 use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
@@ -46,7 +47,7 @@ mod wheel_metadata;
 enum Cli {
     /// Build a source distribution into a wheel
     Build(BuildArgs),
-    /// Resolve many requirements independently in parallel and report failures and sucesses.
+    /// Resolve many requirements independently in parallel and report failures and successes.
     ///
     /// Run `scripts/popular_packages/pypi_8k_downloads.sh` once, then
     /// ```bash
@@ -86,10 +87,6 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    if !std::io::stderr().is_terminal() {
-        colored::control::set_override(false);
-    }
-
     let indicatif_layer = IndicatifLayer::new();
     let indicatif_compatible_writer_layer = tracing_subscriber::fmt::layer()
         .with_writer(indicatif_layer.get_stderr_writer())

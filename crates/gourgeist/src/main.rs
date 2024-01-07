@@ -2,6 +2,7 @@ use std::error::Error;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use anstream::eprintln;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use tracing::info;

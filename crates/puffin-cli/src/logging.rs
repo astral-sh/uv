@@ -1,4 +1,3 @@
-use std::io::IsTerminal;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -22,10 +21,6 @@ pub(crate) enum Level {
 /// environment variable) along with the formatting of the output. For example, [`Level::Verbose`]
 /// includes targets and timestamps, along with all `puffin=debug` messages by default.
 pub(crate) fn setup_logging(level: Level) {
-    if !std::io::stderr().is_terminal() {
-        colored::control::set_override(false);
-    }
-
     match level {
         Level::Default => {
             // Show nothing, but allow `RUST_LOG` to override.

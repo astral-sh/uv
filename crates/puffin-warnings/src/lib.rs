@@ -3,7 +3,11 @@ use std::sync::Mutex;
 
 // macro hygiene: The user might not have direct dependencies on those crates
 #[doc(hidden)]
+pub use anstream;
+
+#[doc(hidden)]
 pub use colored;
+
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
 
@@ -19,6 +23,7 @@ pub fn enable() {
 #[macro_export]
 macro_rules! warn_user {
     ($($arg:tt)*) => {
+        use $crate::anstream::eprintln;
         use $crate::colored::Colorize;
 
         if $crate::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
@@ -36,6 +41,7 @@ pub static WARNINGS: Lazy<Mutex<FxHashSet<String>>> = Lazy::new(Mutex::default);
 #[macro_export]
 macro_rules! warn_user_once {
     ($($arg:tt)*) => {
+        use $crate::anstream::eprintln;
         use $crate::colored::Colorize;
 
         if $crate::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {

@@ -1170,6 +1170,7 @@ dependencies = [
 name = "gourgeist"
 version = "0.0.4"
 dependencies = [
+ "anstream",
  "camino",
  "clap",
  "fs-err",
@@ -2699,6 +2700,7 @@ dependencies = [
 name = "puffin-warnings"
 version = "0.0.1"
 dependencies = [
+ "anstream",
  "colored",
  "once_cell",
  "rustc-hash",

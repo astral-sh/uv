@@ -116,8 +116,6 @@ async fn resolve(
 
 #[tokio::test]
 async fn black() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=23.9.1").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -146,8 +144,6 @@ async fn black() -> Result<()> {
 
 #[tokio::test]
 async fn black_colorama() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![
         Requirement::from_str("black[colorama]<=23.9.1").unwrap()
     ]);
@@ -180,8 +176,6 @@ async fn black_colorama() -> Result<()> {
 /// Resolve Black with an invalid extra. The resolver should ignore the extra.
 #[tokio::test]
 async fn black_tensorboard() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![
         Requirement::from_str("black[tensorboard]<=23.9.1").unwrap()
     ]);
@@ -212,8 +206,6 @@ async fn black_tensorboard() -> Result<()> {
 
 #[tokio::test]
 async fn black_python_310() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=23.9.1").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -248,8 +240,6 @@ async fn black_python_310() -> Result<()> {
 /// respected.
 #[tokio::test]
 async fn black_mypy_extensions() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions<0.4.4").unwrap()],
@@ -287,8 +277,6 @@ async fn black_mypy_extensions() -> Result<()> {
 /// ignored when resolving constraints.
 #[tokio::test]
 async fn black_mypy_extensions_extra() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap()],
@@ -326,8 +314,6 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 /// introduce new dependencies.
 #[tokio::test]
 async fn black_flake8() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![Requirement::from_str("flake8<1").unwrap()],
@@ -363,8 +349,6 @@ async fn black_flake8() -> Result<()> {
 
 #[tokio::test]
 async fn black_lowest() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("black>21").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::Lowest,
@@ -393,8 +377,6 @@ async fn black_lowest() -> Result<()> {
 
 #[tokio::test]
 async fn black_lowest_direct() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("black>21").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::LowestDirect,
@@ -423,8 +405,6 @@ async fn black_lowest_direct() -> Result<()> {
 
 #[tokio::test]
 async fn black_respect_preference() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
@@ -460,8 +440,6 @@ async fn black_respect_preference() -> Result<()> {
 
 #[tokio::test]
 async fn black_ignore_preference() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
         vec![],
@@ -497,8 +475,6 @@ async fn black_ignore_preference() -> Result<()> {
 
 #[tokio::test]
 async fn black_disallow_prerelease() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=20.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -517,8 +493,6 @@ async fn black_disallow_prerelease() -> Result<()> {
 
 #[tokio::test]
 async fn black_allow_prerelease_if_necessary() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=20.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -537,8 +511,6 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
 
 #[tokio::test]
 async fn pylint_disallow_prerelease() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("pylint==2.3.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -563,8 +535,6 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 
 #[tokio::test]
 async fn pylint_allow_prerelease() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("pylint==2.3.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),
@@ -589,8 +559,6 @@ async fn pylint_allow_prerelease() -> Result<()> {
 
 #[tokio::test]
 async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![
         Requirement::from_str("pylint==2.3.0").unwrap(),
         Requirement::from_str("isort>=5.0.0").unwrap(),
@@ -618,8 +586,6 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 
 #[tokio::test]
 async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![
         Requirement::from_str("pylint==2.3.0").unwrap(),
         Requirement::from_str("isort>=5.0.0b").unwrap(),
@@ -649,8 +615,6 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
 /// fail with a pre-release-centric hint.
 #[tokio::test]
 async fn msgraph_sdk() -> Result<()> {
-    colored::control::set_override(false);
-
     let manifest = Manifest::simple(vec![Requirement::from_str("msgraph-sdk==1.0.0").unwrap()]);
     let options = ResolutionOptions::new(
         ResolutionMode::default(),

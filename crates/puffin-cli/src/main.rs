@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 
+use anstream::eprintln;
 use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};

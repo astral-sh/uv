@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+anstream = { workspace = true }
 colored = { workspace = true }
 once_cell = { workspace = true }
 rustc-hash = { workspace = true }
