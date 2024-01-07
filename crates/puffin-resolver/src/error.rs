@@ -15,9 +15,7 @@ use puffin_traits::OnceMap;
 use pypi_types::BaseUrl;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::pubgrub::{
-    PubGrubHints, PubGrubPackage, PubGrubPython, PubGrubReportFormatter, PubGrubVersion,
-};
+use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter, PubGrubVersion};
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
@@ -146,7 +144,7 @@ impl std::fmt::Display for NoSolutionError {
 
         // Include any additional hints.
         if let Some(selector) = &self.selector {
-            for hint in PubGrubHints::from_derivation_tree(&self.derivation_tree, selector).iter() {
+            for hint in formatter.hints(&self.derivation_tree, selector) {
                 write!(f, "\n\n{hint}")?;
             }
         }
