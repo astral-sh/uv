@@ -1,5 +1,6 @@
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use tracing::instrument;
 
 use distribution_types::CachedDist;
 use puffin_interpreter::Virtualenv;
@@ -36,6 +37,7 @@ impl<'a> Installer<'a> {
     }
 
     /// Install a set of wheels into a Python virtual environment.
+    #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub fn install(self, wheels: &[CachedDist]) -> Result<()> {
         tokio::task::block_in_place(|| {
             wheels.par_iter().try_for_each(|wheel| {
