@@ -38,10 +38,10 @@ impl<'a> SitePackages<'a> {
         for entry in fs::read_dir(venv.site_packages())? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
-                let Some(dist_info) =
-                    InstalledDist::try_from_path(&entry.path()).with_context(|| {
-                        format!("Failed to read metadata: from {}", entry.path().display())
-                    })?
+                let path = entry.path();
+
+                let Some(dist_info) = InstalledDist::try_from_path(&path)
+                    .with_context(|| format!("Failed to read metadata: from {}", path.display()))?
                 else {
                     continue;
                 };
@@ -55,7 +55,7 @@ impl<'a> SitePackages<'a> {
                         "Found duplicate package in environment: {} ({} vs. {})",
                         existing.name(),
                         existing.path().display(),
-                        entry.path().display()
+                        path.display()
                     );
                 }
 
@@ -67,7 +67,7 @@ impl<'a> SitePackages<'a> {
                             "Found duplicate editable in environment: {} ({} vs. {})",
                             existing.name(),
                             existing.path().display(),
-                            entry.path().display()
+                            path.display()
                         );
                     }
                 }
