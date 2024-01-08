@@ -49,7 +49,7 @@ impl BuiltWheelMetadata {
         cache_entry: &CacheEntry,
     ) -> Self {
         Self {
-            path: cache_entry.dir().join(&cached_dist.disk_filename),
+            path: cache_entry.dir().join(cached_dist.disk_filename),
             target: cache_entry.dir().join(filename.stem()),
             filename,
         }

@@ -313,53 +313,31 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<Metadata21, SourceDistError> {
         let cache_entry = cache_shard.entry(METADATA);
 
-        let download_and_build = |response| {
+        let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution; delete all
-                // wheels, and rebuild.
+                // wheels, and redownload.
                 match fs::remove_dir_all(&cache_entry.dir()).await {
                     Ok(()) => debug!("Cleared built wheels and metadata for {source_dist}"),
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
                     Err(err) => return Err(err.into()),
                 }
 
-                debug!("Downloading and building source distribution: {source_dist}");
-                let task = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| reporter.on_build_start(source_dist));
+                debug!("Downloading source distribution: {source_dist}");
 
                 // Download the source distribution.
                 let source_dist_entry = cache_shard.entry(filename);
-                let cache_dir = self
-                    .persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
+                self.persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
                     .await?;
 
-                // Build the source distribution.
-                let (disk_filename, wheel_filename, metadata) = self
-                    .build_source_dist(source_dist, cache_dir, subdirectory, &cache_entry)
-                    .await?;
-
-                if let Some(task) = task {
-                    if let Some(reporter) = self.reporter.as_ref() {
-                        reporter.on_build_complete(source_dist, task);
-                    }
-                }
-
-                Ok(Manifest::from_iter([(
-                    wheel_filename,
-                    DiskFilenameAndMetadata {
-                        disk_filename,
-                        metadata,
-                    },
-                )]))
+                Ok(Manifest::default())
             }
-            .instrument(info_span!("download_and_build", source_dist = %source_dist))
+            .instrument(info_span!("download", source_dist = %source_dist))
         };
         let req = self.cached_client.uncached().get(url.clone()).build()?;
         let manifest = self
             .cached_client
-            .get_cached_with_callback(req, &cache_entry, download_and_build)
+            .get_cached_with_callback(req, &cache_entry, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -371,26 +349,14 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Ok(metadata.clone());
         }
 
-        // Start by downloading the source distribution.
-        let response = self
-            .cached_client
-            .uncached()
-            .get(url.clone())
-            .send()
-            .await
-            .map_err(puffin_client::Error::RequestMiddlewareError)?;
-
+        // Otherwise, we either need to build the metadata or the wheel.
         let source_dist_entry = cache_shard.entry(filename);
-        let cache_dir = self
-            .persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
-            .await?;
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_source_dist_metadata(source_dist, &cache_dir, subdirectory)
+            .build_source_dist_metadata(source_dist, source_dist_entry.path(), subdirectory)
             .await?
         {
-            // Store the metadata for this build along with all the other builds.
             if let Ok(cached) = fs::read(cache_entry.path()).await {
                 let mut cached = rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
 
@@ -410,7 +376,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Build the source distribution.
         let (disk_filename, wheel_filename, metadata) = self
-            .build_source_dist(source_dist, cache_dir, subdirectory, &cache_entry)
+            .build_source_dist(
+                source_dist,
+                source_dist_entry.path(),
+                subdirectory,
+                &cache_entry,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -418,11 +389,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 reporter.on_build_complete(source_dist, task);
             }
         }
-
-        let cached_data = DiskFilenameAndMetadata {
-            disk_filename: disk_filename.clone(),
-            metadata: metadata.clone(),
-        };
 
         // Not elegant that we have to read again here, but also not too relevant given that we
         // have to build a source dist next.
@@ -433,9 +399,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             // must be correct.
             let mut cached = rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
 
-            cached
-                .data
-                .insert_wheel(wheel_filename.clone(), cached_data.clone());
+            cached.data.insert_wheel(
+                wheel_filename.clone(),
+                DiskFilenameAndMetadata {
+                    disk_filename: disk_filename.clone(),
+                    metadata: metadata.clone(),
+                },
+            );
             write_atomic(cache_entry.path(), rmp_serde::to_vec(&cached)?).await?;
         };
 

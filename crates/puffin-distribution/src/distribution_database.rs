@@ -268,10 +268,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         match dist {
             Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
             Dist::Source(source_dist) => {
-                // Optimization: Skip source dist download when we must not build them anyway
-                if self.build_context.no_build() {
-                    return Err(DistributionDatabaseError::NoBuild);
-                }
+                // // Optimization: Skip source dist download when we must not build them anyway
+                // if self.build_context.no_build() {
+                //     return Err(DistributionDatabaseError::NoBuild);
+                // }
 
                 let lock = self.locks.acquire(dist).await;
                 let _guard = lock.lock().await;
