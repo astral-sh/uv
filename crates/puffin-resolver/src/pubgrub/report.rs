@@ -33,9 +33,9 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
             External::NoVersions(package, set) => {
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {
-                    format!("there is no available version for {package}")
+                    format!("there are no versions of {package}")
                 } else {
-                    format!("there is no available version matching {package}{set}")
+                    format!("there are no versions of {package}{set}")
                 }
             }
             External::UnavailableDependencies(package, set) => {

@@ -670,8 +670,8 @@ fn compile_python_37() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no available version matching Python>=3.8 and
-              black==23.10.1 depends on Python>=3.8, black==23.10.1 is forbidden.
+          ╰─▶ Because there are no versions of Python>=3.8 and black==23.10.1 depends
+              on Python>=3.8, black==23.10.1 is forbidden.
               And because root depends on black==23.10.1, version solving failed.
         "###);
     });
@@ -1405,8 +1405,8 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no available version matching werkzeug==3.0.0 and root
-              depends on werkzeug==3.0.0, version solving failed.
+          ╰─▶ Because there are no versions of werkzeug==3.0.0 and root depends on
+              werkzeug==3.0.0, version solving failed.
         "###);
     });
 
@@ -1555,8 +1555,8 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there is no
-              available version matching werkzeug>=3.0.0, flask==3.0.0 is forbidden.
+          ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there are no
+              versions of werkzeug>=3.0.0, flask==3.0.0 is forbidden.
               And because root depends on flask==3.0.0, version solving failed.
         "###);
     });
@@ -1899,8 +1899,8 @@ dependencies = ["django==300.1.4"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no available version matching django==300.1.4 and
-              my-project depends on django==300.1.4, version solving failed.
+          ╰─▶ Because there are no versions of django==300.1.4 and my-project depends
+              on django==300.1.4, version solving failed.
         "###);
     });
 
@@ -2225,8 +2225,8 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no available version matching attrs>20.3.0, <21.2.0 and
-              root depends on attrs>20.3.0, <21.2.0, version solving failed.
+          ╰─▶ Because there are no versions of attrs>20.3.0, <21.2.0 and root depends
+              on attrs>20.3.0, <21.2.0, version solving failed.
         "###);
     });
 

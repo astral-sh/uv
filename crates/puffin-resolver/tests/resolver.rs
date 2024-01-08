@@ -493,7 +493,7 @@ async fn black_disallow_prerelease() -> Result<()> {
         .await
         .unwrap_err();
 
-    assert_snapshot!(err, @"Because there is no available version matching black<=20.0 and root depends on black<=20.0, version solving failed.");
+    assert_snapshot!(err, @"Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.");
 
     Ok(())
 }
@@ -511,7 +511,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         .await
         .unwrap_err();
 
-    assert_snapshot!(err, @"Because there is no available version matching black<=20.0 and root depends on black<=20.0, version solving failed.");
+    assert_snapshot!(err, @"Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.");
 
     Ok(())
 }
@@ -634,7 +634,7 @@ async fn msgraph_sdk() -> Result<()> {
         .unwrap_err();
 
     assert_snapshot!(err, @r###"
-    Because there is no available version matching msgraph-core>=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, msgraph-sdk==1.0.0 is forbidden.
+    Because there are no versions of msgraph-core>=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, msgraph-sdk==1.0.0 is forbidden.
     And because root depends on msgraph-sdk==1.0.0, version solving failed.
 
     hint: msgraph-core was requested with a pre-release marker (e.g., >=1.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)
