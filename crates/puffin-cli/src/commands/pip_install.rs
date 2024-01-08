@@ -2,6 +2,7 @@ use std::env;
 use std::fmt::Write;
 use std::path::Path;
 
+use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
