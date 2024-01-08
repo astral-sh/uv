@@ -10,7 +10,7 @@ use futures::TryStreamExt;
 use reqwest::Response;
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{debug, info_span, instrument, Instrument, warn};
 use url::Url;
 use zip::ZipArchive;
 
@@ -21,18 +21,18 @@ use distribution_types::{
 };
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
-use puffin_cache::{CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, WheelCache};
+use puffin_cache::{CacheBucket, CachedByTimestamp, CacheEntry, CacheShard, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
-use puffin_fs::{write_atomic, LockedFile};
+use puffin_fs::{LockedFile, write_atomic};
 use puffin_git::{Fetch, GitSource};
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 use pypi_types::Metadata21;
 
+use crate::Reporter;
 use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 pub use crate::source::error::SourceDistError;
 use crate::source::manifest::{DiskFilenameAndMetadata, Manifest};
-use crate::Reporter;
 
 mod built_wheel_metadata;
 mod error;
@@ -69,6 +69,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
     }
 
+    /// Download and build a [`SourceDist`].
     pub async fn download_and_build(
         &self,
         source_dist: &SourceDist,
@@ -127,6 +128,27 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         Ok(built_wheel_metadata)
+    }
+
+    /// Download a [`SourceDist`] and determine its metadata. This typically involves building the
+    /// source distribution into a wheel; however, some build backends support determining the
+    /// metadata without building the source distribution.
+    pub async fn download_and_build_metadata(
+        &self,
+        source_dist: &SourceDist,
+    ) -> Result<Metadata21, SourceDistError> {
+        let metadata = match &source_dist {
+            SourceDist::DirectUrl(direct_url_source_dist) => {
+                todo!("Direct URL source distributions are not yet supported")
+            }
+            SourceDist::Registry(registry_source_dist) => {
+                todo!("Registry source distributions are not yet supported")
+            }
+            SourceDist::Git(git_source_dist) => todo!("Git source distributions are not yet supported"),
+            SourceDist::Path(path_source_dist) => self.path_metadata(source_dist, path_source_dist).await?,
+        };
+
+        Ok(metadata)
     }
 
     /// Build a source distribution from a remote URL.
@@ -329,6 +351,105 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             filename,
             metadata,
         })
+    }
+
+    /// Build source distribution metadata from a local path.
+    async fn path_metadata(
+        &self,
+        source_dist: &SourceDist,
+        path_source_dist: &PathSourceDist,
+    ) -> Result<Metadata21, SourceDistError> {
+        let cache_entry = self.build_context.cache().entry(
+            CacheBucket::BuiltWheels,
+            WheelCache::Path(&path_source_dist.url)
+                .remote_wheel_dir(path_source_dist.name().as_ref()),
+            METADATA,
+        );
+
+        // Determine the last-modified time of the source distribution.
+        let file_metadata = fs_err::metadata(&path_source_dist.path)?;
+        let modified = if file_metadata.is_file() {
+            // `modified()` is infallible on windows and unix (i.e., all platforms we support).
+            file_metadata.modified()?
+        } else {
+            if let Some(metadata) = path_source_dist
+                .path
+                .join("pyproject.toml")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                metadata.modified()?
+            } else if let Some(metadata) = path_source_dist
+                .path
+                .join("setup.py")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                metadata.modified()?
+            } else {
+                return Err(SourceDistError::DirWithoutEntrypoint);
+            }
+        };
+
+        // Read the existing metadata from the cache.
+        let mut manifest = Self::read_fresh_metadata(&cache_entry, modified)
+            .await?
+            .unwrap_or_default();
+
+        // If the cache contains a compatible wheel, return it.
+        if let Some(built_wheel) =
+            BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
+        {
+            return Ok(built_wheel.metadata);
+        }
+
+        // If the backend supports `prepare_metadata_for_build_wheel`, use it.
+        if let Some(metadata) = self.build_source_dist_metadata(source_dist, &path_source_dist.path, None).await?
+        {
+            return Ok(metadata);
+        }
+
+        // Otherwise, we need to build a wheel.
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source_dist));
+
+        let (disk_filename, filename, metadata) = self
+            .build_source_dist(source_dist, &path_source_dist.path, None, &cache_entry)
+            .await?;
+
+        if metadata.name != path_source_dist.name {
+            return Err(SourceDistError::NameMismatch {
+                metadata: metadata.name,
+                given: path_source_dist.name.clone(),
+            });
+        }
+
+        // Store the metadata for this build along with all the other builds.
+        manifest.insert(
+            filename.clone(),
+            DiskFilenameAndMetadata {
+                disk_filename: disk_filename.clone(),
+                metadata: metadata.clone(),
+            },
+        );
+        let cached = CachedByTimestamp {
+            timestamp: modified,
+            data: manifest,
+        };
+        let data = rmp_serde::to_vec(&cached)?;
+        write_atomic(cache_entry.path(), data).await?;
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source_dist, task);
+            }
+        }
+
+        Ok(metadata)
     }
 
     /// Build a source distribution from a Git repository.
@@ -555,6 +676,42 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         debug!("Finished building: {dist}");
         Ok((disk_filename, filename, metadata))
     }
+
+    /// Build the metadata for a source distribution.
+    #[instrument(skip_all, fields(dist = %dist))]
+    async fn build_source_dist_metadata(
+        &self,
+        dist: &SourceDist,
+        source_dist: &Path,
+        subdirectory: Option<&Path>,
+    ) -> Result<Option<Metadata21>, SourceDistError> {
+        debug!("Preparing metadata for: {dist}");
+
+        // Build the metadata.
+        let dist_info = self
+            .build_context
+            .setup_build(
+                source_dist,
+                subdirectory,
+                &dist.to_string(),
+                BuildKind::Wheel,
+            )
+            .await
+            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?
+            .metadata()
+            .await
+            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?;
+
+        let Some(dist_info) = dist_info else {
+            return Ok(None);
+        };
+        debug!("Prepared metadata for: {dist}");
+
+        // Read the metadata from disk.
+        let metadata = fs::read(dist_info.join("METADATA")).await?;
+        Ok(Some(Metadata21::parse(&metadata)?))
+    }
+
 
     /// Build a single directory into an editable wheel
     pub async fn build_editable(

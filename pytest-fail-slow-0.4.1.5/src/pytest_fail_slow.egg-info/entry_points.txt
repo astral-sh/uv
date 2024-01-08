@@ -1,0 +1,2 @@
+[pytest11]
+fail-slow = pytest_fail_slow

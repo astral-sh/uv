@@ -13,3 +13,4 @@ mod locks;
 mod reporter;
 mod source;
 mod unzip;
+mod manifest;

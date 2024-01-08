@@ -102,7 +102,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         Ok(Resolution::from(graph))
     }
 
-    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(
         skip(self, resolution, venv),
         fields(
@@ -211,7 +210,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         }
     }
 
-    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
     fn setup_build<'data>(
         &'data self,
@@ -224,7 +222,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             if self.no_build {
                 bail!("Building source distributions is disabled");
             }
-            let mut builder = SourceBuild::setup(
+            let builder = SourceBuild::setup(
                 source,
                 subdirectory,
                 self.interpreter,
@@ -235,10 +233,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             )
             .await?;
 
-            if let Ok(Some(path)) = builder.get_metadata_without_build().await {
-                println!("package_id: {:?}", package_id);
-                println!("Metadata: {:?}", path);
-            }
+            // if let Ok(Some(path)) = builder.get_metadata_without_build().await {
+            //     println!("package_id: {:?} -> {:?}", package_id, path.display());
+            // }
 
             Ok(builder)
         }

@@ -402,8 +402,8 @@ impl SourceBuild {
             return Ok(Some(metadata_dir.clone()));
         }
 
-        let metadata_directory = self.temp_dir.path().join("metadata_directory");
-        fs::create_dir(&metadata_directory)?;
+        let metadata_directory = Path::new("/Users/crmarsh/workspace/puffin").join("metadata_directory");
+        fs::create_dir_all(&metadata_directory)?;
 
         debug!(
             "Calling `{}.prepare_metadata_for_build_wheel()`",
