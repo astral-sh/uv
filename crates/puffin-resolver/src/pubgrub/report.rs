@@ -1,13 +1,15 @@
-use crate::candidate_selector::CandidateSelector;
-use crate::prerelease_mode::PreReleaseStrategy;
-use colored::Colorize;
+use std::borrow::Cow;
+
 use derivative::Derivative;
+use owo_colors::OwoColorize;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::borrow::Cow;
+
+use crate::candidate_selector::CandidateSelector;
+use crate::prerelease_mode::PreReleaseStrategy;
 
 use super::{PubGrubPackage, PubGrubVersion};
 
@@ -223,8 +225,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    format!("{package}").bold(),
-                    format!("{range}").bold(),
+                    package.bold(),
+                    range.bold()
                 )
             }
         }

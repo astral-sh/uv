@@ -6,7 +6,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
-use colored::Colorize;
+use owo_colors::OwoColorize;
 
 use distribution_types::{IndexUrl, IndexUrls};
 use puffin_cache::{Cache, CacheArgs};
