@@ -895,7 +895,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
-    #[instrument(skip_all, fields(dist = % dist))]
+    #[instrument(skip_all, fields(dist = %dist))]
     async fn build_source_dist(
         &self,
         dist: &SourceDist,
@@ -934,7 +934,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 
     /// Build the metadata for a source distribution.
-    #[instrument(skip_all, fields(dist = % dist))]
+    #[instrument(skip_all, fields(dist = %dist))]
     async fn build_source_dist_metadata(
         &self,
         dist: &SourceDist,

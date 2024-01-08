@@ -10,7 +10,6 @@ mod download;
 mod error;
 mod index;
 mod locks;
-mod manifest;
 mod reporter;
 mod source;
 mod unzip;

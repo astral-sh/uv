@@ -1,7 +1,0 @@
-include CHANGELOG.* CONTRIBUTORS.* LICENSE tox.ini
-include rp-version
-graft src
-graft docs
-prune docs/_build
-graft test
-global-exclude *.py[cod]
