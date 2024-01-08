@@ -265,10 +265,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             )
             .await?;
 
-        if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_build_complete(source_dist, task);
-            }
+        if &metadata.name != source_dist.name() {
+            return Err(SourceDistError::NameMismatch {
+                metadata: metadata.name,
+                given: source_dist.name().clone(),
+            });
         }
 
         let cached_data = DiskFilenameAndMetadata {
@@ -290,6 +291,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .insert_wheel(wheel_filename.clone(), cached_data.clone());
             write_atomic(cache_entry.path(), rmp_serde::to_vec(&cached)?).await?;
         };
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source_dist, task);
+            }
+        }
 
         Ok(BuiltWheelMetadata::from_cached(
             wheel_filename,
@@ -357,6 +364,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .build_source_dist_metadata(source_dist, source_dist_entry.path(), subdirectory)
             .await?
         {
+            if &metadata.name != source_dist.name() {
+                return Err(SourceDistError::NameMismatch {
+                    metadata: metadata.name,
+                    given: source_dist.name().clone(),
+                });
+            }
+
             if let Ok(cached) = fs::read(cache_entry.path()).await {
                 let mut cached = rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
 
@@ -384,10 +398,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             )
             .await?;
 
-        if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_build_complete(source_dist, task);
-            }
+        if &metadata.name != source_dist.name() {
+            return Err(SourceDistError::NameMismatch {
+                metadata: metadata.name,
+                given: source_dist.name().clone(),
+            });
         }
 
         // Not elegant that we have to read again here, but also not too relevant given that we
@@ -408,6 +423,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             );
             write_atomic(cache_entry.path(), rmp_serde::to_vec(&cached)?).await?;
         };
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source_dist, task);
+            }
+        }
 
         Ok(metadata)
     }
@@ -570,6 +591,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .build_source_dist_metadata(source_dist, &path_source_dist.path, None)
             .await?
         {
+            if metadata.name != path_source_dist.name {
+                return Err(SourceDistError::NameMismatch {
+                    metadata: metadata.name,
+                    given: path_source_dist.name.clone(),
+                });
+            }
+
             // Store the metadata for this build along with all the other builds.
             manifest.set_metadata(metadata.clone());
             let cached = CachedByTimestamp {
@@ -732,6 +760,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .build_source_dist_metadata(source_dist, fetch.path(), subdirectory.as_deref())
             .await?
         {
+            if metadata.name != git_source_dist.name {
+                return Err(SourceDistError::NameMismatch {
+                    metadata: metadata.name,
+                    given: git_source_dist.name.clone(),
+                });
+            }
+
             // Store the metadata for this build along with all the other builds.
             manifest.set_metadata(metadata.clone());
             let data = rmp_serde::to_vec(&manifest)?;
@@ -895,7 +930,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
-    #[instrument(skip_all, fields(dist = %dist))]
+    #[instrument(skip_all, fields(dist = % dist))]
     async fn build_source_dist(
         &self,
         dist: &SourceDist,
@@ -934,7 +969,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 
     /// Build the metadata for a source distribution.
-    #[instrument(skip_all, fields(dist = %dist))]
+    #[instrument(skip_all, fields(dist = % dist))]
     async fn build_source_dist_metadata(
         &self,
         dist: &SourceDist,
