@@ -35,7 +35,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if set.as_ref() == &Range::full() {
                     format!("there is no available version for {package}")
                 } else {
-                    format!("there is no version of {package} available matching {set}")
+                    format!("there is no available version matching {package}{set}")
                 }
             }
             External::UnavailableDependencies(package, set) => {
@@ -43,7 +43,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if set.as_ref() == &Range::full() {
                     format!("dependencies of {package} are unavailable")
                 } else {
-                    format!("dependencies of {package} at version {set} are unavailable")
+                    format!("dependencies of {package}{set} are unavailable")
                 }
             }
             External::UnusableDependencies(package, set, reason) => {

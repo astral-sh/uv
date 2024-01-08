@@ -77,7 +77,7 @@ fn no_solution() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of flask available matching >3.0.0 and
+      ╰─▶ Because there is no available version matching flask>3.0.0 and
           flask==3.0.0 depends on werkzeug>=3.0.0, flask>=3.0.0 depends on
           werkzeug>=3.0.0.
           And because root depends on flask>=3.0.0 and root depends on
