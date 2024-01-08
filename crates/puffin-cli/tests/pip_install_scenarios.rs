@@ -262,7 +262,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
               Because there is no version of c available matching <1.0.0 | >1.0.0, <2.0.0 | >2.0.0 and c==1.0.0 depends on a<2.0.0, c<2.0.0 depends on a<2.0.0.
               And because c==2.0.0 depends on a>=3.0.0, c depends on a<2.0.0 | >=3.0.0.
-              And because a<2.0.0 depends on b==1.0.0 (1), a Not ( ==3.0.0 ), c *, b Not ( ==1.0.0 ) are incompatible.
+              And because a<2.0.0 depends on b==1.0.0 (1), a!=3.0.0, c*, b!=1.0.0 are incompatible.
               And because a==3.0.0 depends on b==3.0.0, c depends on b<=1.0.0 | >=3.0.0.
               And because root depends on c and root depends on b>=2.0.0, <3.0.0, version solving failed.
         "###);
@@ -1466,7 +1466,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of b available matching <1.0.0 | >1.0.0 and b==1.0.0 depends on c, b depends on c.
               And because there is no version of c available matching >=2.0.0b1, b depends on c<2.0.0b1.
-              And because a==1.0.0 depends on c>=2.0.0b1 and there is no version of a available matching <1.0.0 | >1.0.0, b *, a * are incompatible.
+              And because a==1.0.0 depends on c>=2.0.0b1 and there is no version of a available matching <1.0.0 | >1.0.0, b*, a* are incompatible.
               And because root depends on b and root depends on a, version solving failed.
 
               hint: c was requested with a pre-release marker (e.g., >=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -2051,7 +2051,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of b available matching <1.0.0 | >1.0.0 and b==1.0.0 depends on c==2.0.0, b depends on c==2.0.0.
-              And because a==1.0.0 depends on c==1.0.0 and there is no version of a available matching <1.0.0 | >1.0.0, a *, b * are incompatible.
+              And because a==1.0.0 depends on c==1.0.0 and there is no version of a available matching <1.0.0 | >1.0.0, a*, b* are incompatible.
               And because root depends on b and root depends on a, version solving failed.
         "###);
     });
@@ -2447,11 +2447,11 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of Python available matching >=3.10, <3.11 and there is no version of Python available matching >=3.12, Python >=3.10, <3.11 | >=3.12 are incompatible.
-              And because there is no version of Python available matching >=3.11, <3.12, Python >=3.10 are incompatible.
+          ╰─▶ Because there is no version of Python available matching >=3.10, <3.11 and there is no version of Python available matching >=3.12, Python>=3.10, <3.11 | >=3.12 are incompatible.
+              And because there is no version of Python available matching >=3.11, <3.12, Python>=3.10 are incompatible.
               And because a==2.0.0 depends on Python>=3.10 and there is no version of a available matching >2.0.0, <3.0.0 | >3.0.0, <4.0.0 | >4.0.0, a>=2.0.0, <3.0.0 is forbidden. (1)
 
-              Because there is no version of Python available matching >=3.11, <3.12 and there is no version of Python available matching >=3.12, Python >=3.11 are incompatible.
+              Because there is no version of Python available matching >=3.11, <3.12 and there is no version of Python available matching >=3.12, Python>=3.11 are incompatible.
               And because a==3.0.0 depends on Python>=3.11, a==3.0.0 is forbidden.
               And because a>=2.0.0, <3.0.0 is forbidden (1), a>=2.0.0, <4.0.0 is forbidden. (2)
 

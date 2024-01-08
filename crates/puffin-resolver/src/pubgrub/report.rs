@@ -125,7 +125,10 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 &External::FromDependencyOf((*p2).clone(), r2.clone(), (*p1).clone(), r1.clone()),
             ),
             slice => {
-                let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{p} {t}")).collect();
+                let str_terms: Vec<_> = slice
+                    .iter()
+                    .map(|(p, t)| format!("{p}{}", PubGrubTerm::from_term((*t).clone())))
+                    .collect();
                 str_terms.join(", ") + " are incompatible"
             }
         }
@@ -230,5 +233,31 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
         }
+    }
+}
+
+/// A derivative of the [Term] type with custom formatting.
+struct PubGrubTerm {
+    inner: Term<Range<PubGrubVersion>>,
+}
+
+impl std::fmt::Display for PubGrubTerm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.inner {
+            Term::Positive(set) => write!(f, "{set}"),
+            Term::Negative(set) => {
+                if let Some(version) = set.as_singleton() {
+                    write!(f, "!={version}")
+                } else {
+                    write!(f, "!( {set} )")
+                }
+            }
+        }
+    }
+}
+
+impl PubGrubTerm {
+    fn from_term(term: Term<Range<PubGrubVersion>>) -> PubGrubTerm {
+        PubGrubTerm { inner: term }
     }
 }
