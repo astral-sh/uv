@@ -9,13 +9,6 @@ use pypi_types::Metadata21;
 pub(crate) struct Manifest(FxHashMap<WheelFilename, DiskFilenameAndMetadata>);
 
 impl Manifest {
-    /// Initialize a [`Manifest`] from an iterator over entries.
-    pub(crate) fn from_iter(
-        iter: impl IntoIterator<Item = (WheelFilename, DiskFilenameAndMetadata)>,
-    ) -> Self {
-        Self(iter.into_iter().collect())
-    }
-
     /// Find a compatible wheel in the cache.
     pub(crate) fn find_compatible(
         &self,
