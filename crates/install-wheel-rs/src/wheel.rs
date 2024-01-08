@@ -87,9 +87,8 @@ fn parse_scripts<R: Read + Seek>(
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = format!("{dist_info_dir}/entry_points.txt");
     let entry_points_mapping = match archive.by_name(&entry_points_path) {
-        Ok(mut file) => {
-            let mut ini_text = String::new();
-            file.read_to_string(&mut ini_text)?;
+        Ok(file) => {
+            let ini_text = std::io::read_to_string(file)?;
             Ini::new_cs()
                 .read(ini_text)
                 .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?
@@ -961,11 +960,10 @@ pub fn install_wheel(
     // > 1.a Parse distribution-1.0.dist-info/WHEEL.
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     let wheel_file_path = format!("{dist_info_prefix}.dist-info/WHEEL");
-    let mut wheel_text = String::new();
-    archive
+    let wheel_file = archive
         .by_name(&wheel_file_path)
-        .map_err(|err| Error::Zip(wheel_file_path, err))?
-        .read_to_string(&mut wheel_text)?;
+        .map_err(|err| Error::Zip(wheel_file_path, err))?;
+    let wheel_text = io::read_to_string(wheel_file)?;
     parse_wheel_version(&wheel_text)?;
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
