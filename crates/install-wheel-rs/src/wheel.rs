@@ -432,6 +432,7 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
 ///
 /// 2.f Compile any installed .py to .pyc. (Uninstallers should be smart enough to remove .pyc
 /// even if it is not mentioned in RECORD.)
+#[instrument(skip_all)]
 fn bytecode_compile(
     site_packages: &Path,
     unpacked_paths: Vec<PathBuf>,
@@ -723,6 +724,7 @@ fn install_script(
 
 /// Move the files from the .data directory to the right location in the venv
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 pub(crate) fn install_data(
     venv_root: &Path,
     site_packages: &Path,

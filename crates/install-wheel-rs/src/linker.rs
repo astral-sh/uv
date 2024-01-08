@@ -6,7 +6,7 @@ use std::path::Path;
 use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::File;
-use tracing::{debug, info_span};
+use tracing::{debug, instrument};
 
 use pypi_types::DirectUrl;
 
@@ -24,6 +24,7 @@ use crate::{read_record_file, Error, Script};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
+#[instrument(skip_all, fields(wheel = %wheel.as_ref().display()))]
 pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
@@ -51,8 +52,6 @@ pub fn install_wheel(
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
     let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
-
-    let _my_span = info_span!("install_wheel", name);
 
     // We're going step by step though
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
@@ -231,6 +230,7 @@ impl Default for LinkMode {
 
 impl LinkMode {
     /// Extract a wheel by linking all of its files into site packages.
+    #[instrument(skip_all)]
     pub fn link_wheel_files(
         self,
         site_packages: impl AsRef<Path>,
