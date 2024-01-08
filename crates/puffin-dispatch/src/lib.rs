@@ -102,6 +102,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         Ok(Resolution::from(graph))
     }
 
+    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(
         skip(self, resolution, venv),
         fields(
@@ -210,6 +211,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         }
     }
 
+    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
     fn setup_build<'data>(
         &'data self,
@@ -232,11 +234,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 build_kind,
             )
             .await?;
-
-            // if let Ok(Some(path)) = builder.get_metadata_without_build().await {
-            //     println!("package_id: {:?} -> {:?}", package_id, path.display());
-            // }
-
             Ok(builder)
         }
     }

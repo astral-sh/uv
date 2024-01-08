@@ -284,7 +284,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     None => Cow::Borrowed(source_dist),
                 };
 
-                let metadata = self.builder.download_and_build_metadata(&source_dist).await?;
+                let metadata = self
+                    .builder
+                    .download_and_build_metadata(&source_dist)
+                    .await?;
                 Ok((metadata, precise))
             }
         }

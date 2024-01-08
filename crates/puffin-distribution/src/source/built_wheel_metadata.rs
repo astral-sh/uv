@@ -5,7 +5,6 @@ use tracing::warn;
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_cache::CacheEntry;
-use pypi_types::Metadata21;
 
 use crate::source::manifest::{DiskFilenameAndMetadata, Manifest};
 
@@ -18,8 +17,6 @@ pub struct BuiltWheelMetadata {
     pub(crate) target: PathBuf,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
-    /// The metadata of the built wheel.
-    pub(crate) metadata: Metadata21,
 }
 
 impl BuiltWheelMetadata {
@@ -30,8 +27,8 @@ impl BuiltWheelMetadata {
         cache_entry: &CacheEntry,
     ) -> Option<Self> {
         // Find a compatible cache entry in the manifest.
-        let (filename, cached_dist) = manifest.find_compatible(tags)?;
-        let metadata = Self::from_cached(filename.clone(), cached_dist.clone(), cache_entry);
+        let (filename, wheel) = manifest.find_wheel(tags)?;
+        let metadata = Self::from_cached(filename.clone(), wheel.clone(), cache_entry);
 
         // Validate that the wheel exists on disk.
         if !metadata.path.is_file() {
@@ -55,7 +52,6 @@ impl BuiltWheelMetadata {
             path: cache_entry.dir().join(&cached_dist.disk_filename),
             target: cache_entry.dir().join(filename.stem()),
             filename,
-            metadata: cached_dist.metadata,
         }
     }
 }

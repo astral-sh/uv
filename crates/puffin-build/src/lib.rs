@@ -389,8 +389,6 @@ impl SourceBuild {
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
-    ///
-    /// TODO(konstin): Return the actual metadata instead of the dist-info dir.
     pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
         // setup.py builds don't support this.
         let Some(pep517_backend) = &self.pep517_backend else {
@@ -402,7 +400,7 @@ impl SourceBuild {
             return Ok(Some(metadata_dir.clone()));
         }
 
-        let metadata_directory = Path::new("/Users/crmarsh/workspace/puffin").join("metadata_directory");
+        let metadata_directory = self.temp_dir.path().join("metadata_directory");
         fs::create_dir_all(&metadata_directory)?;
 
         debug!(

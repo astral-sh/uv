@@ -6,31 +6,49 @@ use platform_tags::Tags;
 use pypi_types::Metadata21;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub(crate) struct Manifest(FxHashMap<WheelFilename, DiskFilenameAndMetadata>);
+pub(crate) struct Manifest {
+    /// The metadata for the distribution, as returned by `prepare_metadata_for_build_wheel`.
+    metadata: Option<Metadata21>,
+    /// The wheels built for the distribution, as returned by `build_wheel`.
+    built_wheels: FxHashMap<WheelFilename, DiskFilenameAndMetadata>,
+}
 
 impl Manifest {
-    /// Find a compatible wheel in the cache.
-    pub(crate) fn find_compatible(
+    /// Set the prepared metadata.
+    pub(crate) fn set_metadata(&mut self, metadata: Metadata21) {
+        self.metadata = Some(metadata);
+    }
+
+    /// Insert a built wheel into the manifest.
+    pub(crate) fn insert_wheel(
+        &mut self,
+        filename: WheelFilename,
+        disk_filename_and_metadata: DiskFilenameAndMetadata,
+    ) {
+        self.built_wheels
+            .insert(filename, disk_filename_and_metadata);
+    }
+
+    /// Find a compatible wheel in the manifest.
+    pub(crate) fn find_wheel(
         &self,
         tags: &Tags,
     ) -> Option<(&WheelFilename, &DiskFilenameAndMetadata)> {
-        self.0
+        self.built_wheels
             .iter()
-            .find(|(filename, _metadata)| filename.is_compatible(tags))
+            .find(|(filename, _)| filename.is_compatible(tags))
     }
-}
 
-impl std::ops::Deref for Manifest {
-    type Target = FxHashMap<WheelFilename, DiskFilenameAndMetadata>;
+    /// Find a metadata in the manifest.
+    pub(crate) fn find_metadata(&self) -> Option<&Metadata21> {
+        // If we already have a prepared metadata, return it.
+        if let Some(metadata) = &self.metadata {
+            return Some(metadata);
+        }
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Manifest {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        // Otherwise, return the metadata from any of the built wheels.
+        let wheel = self.built_wheels.values().next()?;
+        Some(&wheel.metadata)
     }
 }
 
