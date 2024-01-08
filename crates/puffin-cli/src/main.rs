@@ -415,7 +415,7 @@ async fn inner() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
     // Configure the `tracing` crate, which controls internal logging.
-    logging::setup_logging(if cli.verbose {
+    let _guard = logging::setup_logging(if cli.verbose {
         logging::Level::Verbose
     } else {
         logging::Level::Default

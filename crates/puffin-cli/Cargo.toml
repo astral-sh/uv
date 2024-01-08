@@ -66,6 +66,7 @@ tracing-tree = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 which = { workspace = true }
+tracing-durations-export = { version = "0.1.0", features = ["plot"], optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = "0.1.39"
