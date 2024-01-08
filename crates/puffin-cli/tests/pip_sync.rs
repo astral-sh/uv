@@ -2314,6 +2314,7 @@ fn sync_editable() -> Result<()> {
         "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
     let python_version_1 = indoc::indoc! {r"
         from .maturin_editable import *
+        
         version = 1
    "};
     fs_err::write(python_source_file, python_version_1)?;
@@ -2329,6 +2330,7 @@ fn sync_editable() -> Result<()> {
     // Edit the sources.
     let python_version_2 = indoc::indoc! {r"
         from .maturin_editable import *
+        
         version = 2
    "};
     fs_err::write(python_source_file, python_version_2)?;
