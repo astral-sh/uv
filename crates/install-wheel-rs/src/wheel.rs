@@ -655,16 +655,18 @@ fn install_script(
     file: &DirEntry,
     location: &InstallLocation<impl AsRef<Path>>,
 ) -> Result<(), Error> {
-    let path = file.path();
-    if !path.is_file() {
+    if !file.file_type()?.is_file() {
         return Err(Error::InvalidWheel(format!(
             "Wheel contains entry in scripts directory that is not a file: {}",
-            path.display()
+            file.path().display()
         )));
     }
 
     let target_path = bin_rel().join(file.file_name());
+
+    let path = file.path();
     let mut script = File::open(&path)?;
+
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
     // > If the first line of a file in scripts/ starts with exactly b'#!python',
@@ -735,15 +737,17 @@ pub(crate) fn install_data(
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
-    for data_entry in fs::read_dir(data_dir)? {
-        let data_entry = data_entry?;
-        match data_entry.file_name().as_os_str().to_str() {
+    for entry in fs::read_dir(data_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&data_entry.path(), venv_root, site_packages, record)?;
+                move_folder_recorded(&path, venv_root, site_packages, record)?;
             }
             Some("scripts") => {
-                for file in fs::read_dir(data_entry.path())? {
+                for file in fs::read_dir(path)? {
                     let file = file?;
 
                     // Couldn't find any docs for this, took it directly from
@@ -775,17 +779,17 @@ pub(crate) fn install_data(
                         location.python_version().1
                     ))
                     .join(dist_name);
-                move_folder_recorded(&data_entry.path(), &target_path, site_packages, record)?;
+                move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib" | "platlib") => {
                 // purelib and platlib locations are not relevant when using venvs
                 // https://stackoverflow.com/a/27882460/3549270
-                move_folder_recorded(&data_entry.path(), site_packages, site_packages, record)?;
+                move_folder_recorded(&path, site_packages, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
                     "Unknown wheel data type: {:?}",
-                    data_entry.file_name()
+                    entry.file_name()
                 )));
             }
         }
