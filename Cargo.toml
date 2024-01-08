@@ -81,6 +81,7 @@ tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.8" }
 toml_edit = { version = "0.21.0" }
 tracing = { version = "0.1.40" }
+tracing-durations-export = { version = "0.1.0", features = ["plot"] }
 tracing-indicatif = { version = "0.3.6" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-tree = { version = "0.3.0" }
