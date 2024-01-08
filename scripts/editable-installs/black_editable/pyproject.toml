@@ -1,12 +1,18 @@
-[tool.poetry]
+[project]
 name = "black"
 version = "0.1.0"
-description = ""
-authors = ["konstin <konstin@mailbox.org>"]
-
-[tool.poetry.dependencies]
-python = "^3.10"
+description = "Default template for PDM package"
+authors = [
+    {name = "konstin", email = "konstin@mailbox.org"},
+]
+dependencies = []
+requires-python = ">=3.11,<3.13"
+license = {text = "MIT"}
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+package-type = "library"
