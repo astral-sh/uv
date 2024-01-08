@@ -195,10 +195,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             })?;
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(metadata) =
+        if let Some(built_wheel) =
             BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
         {
-            return Ok(metadata);
+            return Ok(built_wheel);
         }
 
         // At this point, we're seeing cached metadata (as in, we have an up-to-date source
@@ -306,10 +306,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .unwrap_or_default();
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(metadata) =
+        if let Some(built_wheel) =
             BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
         {
-            return Ok(metadata);
+            return Ok(built_wheel);
         }
 
         // Otherwise, we need to build a wheel.
@@ -382,10 +382,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(metadata) =
+        if let Some(built_wheel) =
             BuiltWheelMetadata::find_in_cache(self.tags, &manifest, &cache_entry)
         {
-            return Ok(metadata);
+            return Ok(built_wheel);
         }
 
         let task = self
