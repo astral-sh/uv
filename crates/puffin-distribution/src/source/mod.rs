@@ -8,18 +8,13 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use reqwest::Response;
-use rustc_hash::FxHashMap;
-use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
-use thiserror::Error;
-use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
-use zip::result::ZipError;
 use zip::ZipArchive;
 
-use distribution_filename::{WheelFilename, WheelFilenameError};
+use distribution_filename::WheelFilename;
 use distribution_types::{
     DirectArchiveUrl, DirectGitUrl, Dist, GitSourceDist, LocalEditable, Name, PathSourceDist,
     RemoteSource, SourceDist,
@@ -30,147 +25,18 @@ use puffin_cache::{CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Wheel
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
-use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 use pypi_types::Metadata21;
 
+use crate::reporter::Facade;
+use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+pub use crate::source::error::SourceDistError;
+use crate::source::manifest::{DiskFilenameAndMetadata, Manifest};
 use crate::Reporter;
 
-/// The caller is responsible for adding the source dist information to the error chain
-#[derive(Debug, Error)]
-pub enum SourceDistError {
-    #[error("Building source distributions is disabled")]
-    NoBuild,
-
-    // Network error
-    #[error("Failed to parse URL: `{0}`")]
-    UrlParse(String, #[source] url::ParseError),
-    #[error("Git operation failed")]
-    Git(#[source] anyhow::Error),
-    #[error(transparent)]
-    Request(#[from] reqwest::Error),
-    #[error(transparent)]
-    Client(#[from] puffin_client::Error),
-
-    // Cache writing error
-    #[error("Failed to write to source dist cache")]
-    Io(#[from] std::io::Error),
-    #[error("Cache deserialization failed")]
-    Decode(#[from] rmp_serde::decode::Error),
-    #[error("Cache serialization failed")]
-    Encode(#[from] rmp_serde::encode::Error),
-
-    // Build error
-    #[error("Failed to build: {0}")]
-    Build(String, #[source] anyhow::Error),
-    #[error("Built wheel has an invalid filename")]
-    WheelFilename(#[from] WheelFilenameError),
-    #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
-    NameMismatch {
-        given: PackageName,
-        metadata: PackageName,
-    },
-    #[error("Failed to parse metadata from built wheel")]
-    Metadata(#[from] pypi_types::Error),
-    #[error("Failed to read `dist-info` metadata from built wheel")]
-    DistInfo(#[from] install_wheel_rs::Error),
-    #[error("Failed to read zip archive from built wheel")]
-    Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
-    DirWithoutEntrypoint,
-    #[error("Failed to extract source distribution: {0}")]
-    Extract(#[from] puffin_extract::Error),
-
-    /// Should not occur; only seen when another task panicked.
-    #[error("The task executor is broken, did some other task panic?")]
-    Join(#[from] JoinError),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct DiskFilenameAndMetadata {
-    /// Relative, un-normalized wheel filename in the cache, which can be different than
-    /// `WheelFilename::to_string`.
-    disk_filename: String,
-    metadata: Metadata21,
-}
-
-/// The information about the wheel we either just built or got from the cache.
-#[derive(Debug, Clone)]
-pub struct BuiltWheelMetadata {
-    /// The path to the built wheel.
-    pub path: PathBuf,
-    /// The expected path to the downloaded wheel's entry in the cache.
-    pub target: PathBuf,
-    /// The parsed filename.
-    pub filename: WheelFilename,
-    /// The metadata of the built wheel.
-    pub metadata: Metadata21,
-}
-
-impl BuiltWheelMetadata {
-    /// Find a compatible wheel in the cache based on the given manifest.
-    fn find_in_cache(tags: &Tags, manifest: &Manifest, cache_entry: &CacheEntry) -> Option<Self> {
-        // Find a compatible cache entry in the manifest.
-        let (filename, cached_dist) = manifest.find_compatible(tags)?;
-        let metadata = Self::from_cached(filename.clone(), cached_dist.clone(), cache_entry);
-
-        // Validate that the wheel exists on disk.
-        if !metadata.path.is_file() {
-            warn!(
-                "Wheel `{}` is present in the manifest, but not on disk",
-                metadata.path.display()
-            );
-            return None;
-        }
-
-        Some(metadata)
-    }
-
-    /// Create a [`BuiltWheelMetadata`] from a cached entry.
-    fn from_cached(
-        filename: WheelFilename,
-        cached_dist: DiskFilenameAndMetadata,
-        cache_entry: &CacheEntry,
-    ) -> Self {
-        Self {
-            path: cache_entry.dir().join(&cached_dist.disk_filename),
-            target: cache_entry.dir().join(filename.stem()),
-            filename,
-            metadata: cached_dist.metadata,
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct Manifest(FxHashMap<WheelFilename, DiskFilenameAndMetadata>);
-
-impl Manifest {
-    /// Initialize a [`Manifest`] from an iterator over entries.
-    fn from_iter(iter: impl IntoIterator<Item = (WheelFilename, DiskFilenameAndMetadata)>) -> Self {
-        Self(iter.into_iter().collect())
-    }
-
-    /// Find a compatible wheel in the cache.
-    fn find_compatible(&self, tags: &Tags) -> Option<(&WheelFilename, &DiskFilenameAndMetadata)> {
-        self.0
-            .iter()
-            .find(|(filename, _metadata)| filename.is_compatible(tags))
-    }
-}
-
-impl std::ops::Deref for Manifest {
-    type Target = FxHashMap<WheelFilename, DiskFilenameAndMetadata>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Manifest {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+mod built_wheel_metadata;
+mod error;
+mod manifest;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub struct SourceDistCachedBuilder<'a, T: BuildContext> {
@@ -798,33 +664,4 @@ fn read_metadata(
     let mut archive = ZipArchive::new(fs_err::File::open(wheel)?)?;
     let dist_info = read_dist_info(filename, &mut archive)?;
     Ok(Metadata21::parse(&dist_info)?)
-}
-
-trait SourceDistReporter: Send + Sync {
-    /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
-
-    /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
-}
-
-/// A facade for converting from [`Reporter`] to [`puffin_git::Reporter`].
-struct Facade {
-    reporter: Arc<dyn Reporter>,
-}
-
-impl From<Arc<dyn Reporter>> for Facade {
-    fn from(reporter: Arc<dyn Reporter>) -> Self {
-        Self { reporter }
-    }
-}
-
-impl puffin_git::Reporter for Facade {
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        self.reporter.on_checkout_start(url, rev)
-    }
-
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index);
-    }
 }
