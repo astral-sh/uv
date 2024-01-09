@@ -506,7 +506,7 @@ impl RemoteSource for File {
         Ok(&self.filename)
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.size
     }
 }
@@ -518,7 +518,7 @@ impl RemoteSource for Url {
             .ok_or_else(|| Error::UrlFilename(self.clone()))
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         None
     }
 }
@@ -528,7 +528,7 @@ impl RemoteSource for RegistryBuiltDist {
         self.file.filename()
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.file.size()
     }
 }
@@ -538,7 +538,7 @@ impl RemoteSource for RegistrySourceDist {
         self.file.filename()
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.file.size()
     }
 }
@@ -548,7 +548,7 @@ impl RemoteSource for DirectUrlBuiltDist {
         self.url.filename()
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.url.size()
     }
 }
@@ -558,7 +558,7 @@ impl RemoteSource for DirectUrlSourceDist {
         self.url.filename()
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.url.size()
     }
 }
@@ -572,7 +572,7 @@ impl RemoteSource for GitSourceDist {
         })
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.url.size()
     }
 }
@@ -582,7 +582,7 @@ impl RemoteSource for PathBuiltDist {
         self.url.filename()
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.url.size()
     }
 }
@@ -592,7 +592,7 @@ impl RemoteSource for PathSourceDist {
         self.url.filename()
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         self.url.size()
     }
 }
@@ -607,7 +607,7 @@ impl RemoteSource for SourceDist {
         }
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         match self {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
@@ -626,7 +626,7 @@ impl RemoteSource for BuiltDist {
         }
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         match self {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
@@ -643,7 +643,7 @@ impl RemoteSource for Dist {
         }
     }
 
-    fn size(&self) -> Option<usize> {
+    fn size(&self) -> Option<u64> {
         match self {
             Self::Built(dist) => dist.size(),
             Self::Source(dist) => dist.size(),

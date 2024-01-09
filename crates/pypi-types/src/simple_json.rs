@@ -28,7 +28,7 @@ pub struct File {
     /// still fails, we skip the file when creating a version map.
     #[serde(default, deserialize_with = "deserialize_version_specifiers_lenient")]
     pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
-    pub size: Option<usize>,
+    pub size: Option<u64>,
     pub upload_time: Option<DateTime<Utc>>,
     pub url: String,
     pub yanked: Option<Yanked>,
