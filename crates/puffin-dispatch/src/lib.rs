@@ -5,7 +5,7 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
@@ -221,6 +221,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         build_kind: BuildKind,
     ) -> impl Future<Output = Result<SourceBuild>> + Send + 'data {
         async move {
+            if self.no_build {
+                bail!("Building source distributions is disabled");
+            }
+
             let builder = SourceBuild::setup(
                 source,
                 subdirectory,
