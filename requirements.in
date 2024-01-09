@@ -1,0 +1,10 @@
+# flit
+#chanalyze @ git+https://github.com/itzmeanjan/chanalyze.git
+# setuptools
+#urwid @ git+https://github.com/urwid/urwid.git
+#pytest-fail-slow @ https://github.com/jwodder/pytest-fail-slow/releases/download/v0.4.0/pytest-fail-slow-0.4.0.tar.gz
+#pydantic-core @ https://files.pythonhosted.org/packages/b2/7d/8304d8471cfe4288f95a3065ebda56f9790d087edc356ad5bd83c89e2d79/pydantic_core-2.14.6.tar.gz
+#ruff @ https://files.pythonhosted.org/packages/b3/a3/a9a504171d286bbe10c7e5cd09110250c01ebca7acede4352211d5372a0e/ruff-0.1.11.tar.gz
+
+# legacy
+django-ipware==3.0.0
