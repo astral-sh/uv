@@ -265,13 +265,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             )
             .await?;
 
-        if &metadata.name != source_dist.name() {
-            return Err(SourceDistError::NameMismatch {
-                metadata: metadata.name,
-                given: source_dist.name().clone(),
-            });
-        }
-
         let cached_data = DiskFilenameAndMetadata {
             disk_filename: disk_filename.clone(),
             metadata: metadata.clone(),
@@ -364,13 +357,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .build_source_dist_metadata(source_dist, source_dist_entry.path(), subdirectory)
             .await?
         {
-            if &metadata.name != source_dist.name() {
-                return Err(SourceDistError::NameMismatch {
-                    metadata: metadata.name,
-                    given: source_dist.name().clone(),
-                });
-            }
-
             if let Ok(cached) = fs::read(cache_entry.path()).await {
                 let mut cached = rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?;
 
@@ -397,13 +383,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 &cache_entry,
             )
             .await?;
-
-        if &metadata.name != source_dist.name() {
-            return Err(SourceDistError::NameMismatch {
-                metadata: metadata.name,
-                given: source_dist.name().clone(),
-            });
-        }
 
         // Not elegant that we have to read again here, but also not too relevant given that we
         // have to build a source dist next.
@@ -474,7 +453,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache.
-        let mut manifest = Self::read_fresh_metadata(&cache_entry, modified)
+        let mut manifest = Self::read_cached_metadata(&cache_entry, modified)
             .await?
             .unwrap_or_default();
 
@@ -494,13 +473,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_source_dist(source_dist, &path_source_dist.path, None, &cache_entry)
             .await?;
-
-        if metadata.name != path_source_dist.name {
-            return Err(SourceDistError::NameMismatch {
-                metadata: metadata.name,
-                given: path_source_dist.name.clone(),
-            });
-        }
 
         // Store the metadata for this build along with all the other builds.
         manifest.insert_wheel(
@@ -577,7 +549,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache.
-        let mut manifest = Self::read_fresh_metadata(&cache_entry, modified)
+        let mut manifest = Self::read_cached_metadata(&cache_entry, modified)
             .await?
             .unwrap_or_default();
 
@@ -591,13 +563,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .build_source_dist_metadata(source_dist, &path_source_dist.path, None)
             .await?
         {
-            if metadata.name != path_source_dist.name {
-                return Err(SourceDistError::NameMismatch {
-                    metadata: metadata.name,
-                    given: path_source_dist.name.clone(),
-                });
-            }
-
             // Store the metadata for this build along with all the other builds.
             manifest.set_metadata(metadata.clone());
             let cached = CachedByTimestamp {
@@ -621,13 +586,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_source_dist(source_dist, &path_source_dist.path, None, &cache_entry)
             .await?;
-
-        if metadata.name != path_source_dist.name {
-            return Err(SourceDistError::NameMismatch {
-                metadata: metadata.name,
-                given: path_source_dist.name.clone(),
-            });
-        }
 
         // Store the metadata for this build along with all the other builds.
         manifest.insert_wheel(
@@ -694,13 +652,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             )
             .await?;
 
-        if metadata.name != git_source_dist.name {
-            return Err(SourceDistError::NameMismatch {
-                metadata: metadata.name,
-                given: git_source_dist.name.clone(),
-            });
-        }
-
         // Store the metadata for this build along with all the other builds.
         manifest.insert_wheel(
             filename.clone(),
@@ -760,13 +711,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .build_source_dist_metadata(source_dist, fetch.path(), subdirectory.as_deref())
             .await?
         {
-            if metadata.name != git_source_dist.name {
-                return Err(SourceDistError::NameMismatch {
-                    metadata: metadata.name,
-                    given: git_source_dist.name.clone(),
-                });
-            }
-
             // Store the metadata for this build along with all the other builds.
             manifest.set_metadata(metadata.clone());
             let data = rmp_serde::to_vec(&manifest)?;
@@ -791,13 +735,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 &cache_entry,
             )
             .await?;
-
-        if metadata.name != git_source_dist.name {
-            return Err(SourceDistError::NameMismatch {
-                metadata: metadata.name,
-                given: git_source_dist.name.clone(),
-            });
-        }
 
         // Store the metadata for this build along with all the other builds.
         manifest.insert_wheel(
@@ -930,7 +867,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
-    #[instrument(skip_all, fields(dist = % dist))]
+    #[instrument(skip_all, fields(dist))]
     async fn build_source_dist(
         &self,
         dist: &SourceDist,
@@ -964,12 +901,20 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let filename = WheelFilename::from_str(&disk_filename)?;
         let metadata = read_metadata(&filename, cache_entry.dir().join(&disk_filename))?;
 
+        // Validate the metadata.
+        if &metadata.name != dist.name() {
+            return Err(SourceDistError::NameMismatch {
+                metadata: metadata.name,
+                given: dist.name().clone(),
+            });
+        }
+
         debug!("Finished building: {dist}");
         Ok((disk_filename, filename, metadata))
     }
 
     /// Build the metadata for a source distribution.
-    #[instrument(skip_all, fields(dist = % dist))]
+    #[instrument(skip_all, fields(dist))]
     async fn build_source_dist_metadata(
         &self,
         dist: &SourceDist,
@@ -1001,8 +946,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Read the metadata from disk.
         debug!("Prepared metadata for: {dist}");
-        let metadata = fs::read(dist_info.join("METADATA")).await?;
-        Ok(Some(Metadata21::parse(&metadata)?))
+        let metadata = Metadata21::parse(&fs::read(dist_info.join("METADATA")).await?)?;
+
+        // Validate the metadata.
+        if &metadata.name != dist.name() {
+            return Err(SourceDistError::NameMismatch {
+                metadata: metadata.name,
+                given: dist.name().clone(),
+            });
+        }
+
+        Ok(Some(metadata))
     }
 
     /// Build a single directory into an editable wheel
@@ -1040,7 +994,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 
     /// Read an existing cache entry, if it exists and is up-to-date.
-    async fn read_fresh_metadata(
+    async fn read_cached_metadata(
         cache_entry: &CacheEntry,
         modified: std::time::SystemTime,
     ) -> Result<Option<Manifest>, SourceDistError> {

@@ -9,7 +9,7 @@ use pypi_types::Metadata21;
 pub(crate) struct Manifest {
     /// The metadata for the distribution, as returned by `prepare_metadata_for_build_wheel`.
     metadata: Option<Metadata21>,
-    /// The wheels built for the distribution, as returned by `build_wheel`.
+    /// The built wheels for the distribution, each of which was returned from `build_wheel`.
     built_wheels: FxHashMap<WheelFilename, DiskFilenameAndMetadata>,
 }
 
