@@ -570,8 +570,8 @@ async fn create_pep517_build_environment(
         "#, pep517_backend.backend_import(), build_kind
     };
     let span = info_span!(
-        "get_requires_for_build_wheel",
-        script="build_wheel",
+        "run_python_script",
+        script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().version()
     );
     let output = run_python_script(venv, &script, source_tree)
