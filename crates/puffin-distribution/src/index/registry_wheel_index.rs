@@ -2,9 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use fs_err as fs;
 use rustc_hash::FxHashMap;
-use tracing::warn;
 
 use distribution_types::{CachedRegistryDist, CachedWheel, IndexUrls};
 use pep440_rs::Version;
@@ -110,8 +108,8 @@ impl<'a> RegistryWheelIndex<'a> {
     ) {
         for wheel_dir in directories(path.as_ref()) {
             match CachedWheel::from_path(&wheel_dir) {
-                Ok(None) => {}
-                Ok(Some(dist_info)) => {
+                None => {}
+                Some(dist_info) => {
                     let dist_info = dist_info.into_registry_dist();
 
                     // Pick the wheel with the highest priority
@@ -123,19 +121,6 @@ impl<'a> RegistryWheelIndex<'a> {
                         }
                     } else if compatibility.is_some() {
                         versions.insert(dist_info.filename.version.clone(), dist_info);
-                    }
-                }
-                Err(err) => {
-                    warn!(
-                        "Invalid cache entry at {}, removing. {err}",
-                        wheel_dir.display()
-                    );
-
-                    if let Err(err) = fs::remove_dir_all(&wheel_dir) {
-                        warn!(
-                            "Failed to remove invalid cache entry at {}: {err}",
-                            wheel_dir.display()
-                        );
                     }
                 }
             }

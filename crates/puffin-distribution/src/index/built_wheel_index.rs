@@ -1,6 +1,3 @@
-use fs_err as fs;
-use tracing::warn;
-
 use distribution_types::CachedWheel;
 use platform_tags::Tags;
 use puffin_cache::CacheShard;
@@ -31,8 +28,8 @@ impl BuiltWheelIndex {
 
         for subdir in directories(&**shard) {
             match CachedWheel::from_path(&subdir) {
-                Ok(None) => {}
-                Ok(Some(dist_info)) => {
+                None => {}
+                Some(dist_info) => {
                     // Pick the wheel with the highest priority
                     let compatibility = dist_info.filename.compatibility(tags);
 
@@ -54,18 +51,6 @@ impl BuiltWheelIndex {
                         }
                     } else {
                         candidate = Some(dist_info);
-                    }
-                }
-                Err(err) => {
-                    warn!(
-                        "Invalid cache entry at {}, removing. {err}",
-                        subdir.display()
-                    );
-                    if let Err(err) = fs::remove_dir_all(&subdir) {
-                        warn!(
-                            "Failed to remove invalid cache entry at {}: {err}",
-                            subdir.display()
-                        );
                     }
                 }
             }
