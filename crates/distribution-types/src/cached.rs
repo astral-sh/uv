@@ -142,15 +142,8 @@ pub struct CachedWheel {
 impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
     pub fn from_path(path: &Path) -> Option<Self> {
-        let Some(file_name) = path.file_name() else {
-            return None;
-        };
-        let Some(file_name) = file_name.to_str() else {
-            return None;
-        };
-        let Ok(filename) = WheelFilename::from_stem(file_name) else {
-            return None;
-        };
+        let filename = path.file_name()?.to_str()?;
+        let filename = WheelFilename::from_stem(filename).ok()?;
         if path.is_file() {
             return None;
         }
