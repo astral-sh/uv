@@ -522,6 +522,8 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of a>0.1.0 and root depends on a>0.1.0, version solving failed.
+
+              hint: Pre-releases are available for a in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
@@ -1116,6 +1118,8 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of b>0.1 and a==0.1.0 depends on b>0.1, a==0.1.0 is forbidden.
               And because there are no versions of a<0.1.0 | >0.1.0 and root depends on a, version solving failed.
+
+              hint: Pre-releases are available for b in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
