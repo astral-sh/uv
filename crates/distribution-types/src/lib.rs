@@ -71,6 +71,7 @@ mod file;
 mod id;
 mod index_url;
 mod installed;
+pub mod prioritized_distribution;
 mod resolution;
 mod traits;
 
@@ -316,6 +317,13 @@ impl Dist {
             Dist::Source(source) => source.file(),
         }
     }
+
+    pub fn version(&self) -> Option<&Version> {
+        match self {
+            Dist::Built(wheel) => Some(wheel.version()),
+            Dist::Source(source_dist) => source_dist.version(),
+        }
+    }
 }
 
 impl BuiltDist {
@@ -326,6 +334,14 @@ impl BuiltDist {
             BuiltDist::DirectUrl(_) | BuiltDist::Path(_) => None,
         }
     }
+
+    pub fn version(&self) -> &Version {
+        match self {
+            BuiltDist::Registry(wheel) => &wheel.version,
+            BuiltDist::DirectUrl(wheel) => &wheel.filename.version,
+            BuiltDist::Path(wheel) => &wheel.filename.version,
+        }
+    }
 }
 
 impl SourceDist {
@@ -333,6 +349,13 @@ impl SourceDist {
     pub fn file(&self) -> Option<&File> {
         match self {
             SourceDist::Registry(registry) => Some(&registry.file),
+            SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
+        }
+    }
+
+    pub fn version(&self) -> Option<&Version> {
+        match self {
+            SourceDist::Registry(source_dist) => Some(&source_dist.version),
             SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
         }
     }

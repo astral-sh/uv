@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexUrls, Name, Resolution};
+use distribution_types::{CachedDist, IndexLocations, Name, Resolution};
 use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
@@ -25,7 +25,7 @@ pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
     interpreter: &'a Interpreter,
-    index_urls: &'a IndexUrls,
+    index_locations: &'a IndexLocations,
     base_python: PathBuf,
     setup_py: SetupPyStrategy,
     no_build: bool,
@@ -39,7 +39,7 @@ impl<'a> BuildDispatch<'a> {
         client: &'a RegistryClient,
         cache: &'a Cache,
         interpreter: &'a Interpreter,
-        index_urls: &'a IndexUrls,
+        index_locations: &'a IndexLocations,
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
         no_build: bool,
@@ -48,7 +48,7 @@ impl<'a> BuildDispatch<'a> {
             client,
             cache,
             interpreter,
-            index_urls,
+            index_locations,
             base_python,
             setup_py,
             no_build,
@@ -99,7 +99,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             tags,
             self.client,
             self,
-        );
+        )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
@@ -149,7 +149,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 Vec::new(),
                 site_packages,
                 &Reinstall::None,
-                self.index_urls,
+                self.index_locations,
                 self.cache(),
                 venv,
                 tags,

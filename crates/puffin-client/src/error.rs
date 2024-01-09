@@ -31,7 +31,7 @@ pub enum Error {
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]
-    MetadataParseError(WheelFilename, String, #[source] pypi_types::Error),
+    MetadataParseError(WheelFilename, String, #[source] Box<pypi_types::Error>),
 
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry at {1}.")]
@@ -95,6 +95,9 @@ pub enum Error {
 
     #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
     UnsupportedMediaType(Url, String),
+
+    #[error("Failed to read find links directory")]
+    FindLinks(#[source] io::Error),
 }
 
 impl Error {

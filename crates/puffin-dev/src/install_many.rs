@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use tracing::info;
 
 use distribution_types::{
-    CachedDist, Dist, DistributionMetadata, IndexUrls, Name, Resolution, VersionOrUrl,
+    CachedDist, Dist, DistributionMetadata, IndexLocations, Name, Resolution, VersionOrUrl,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
@@ -59,7 +59,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_urls = IndexUrls::default();
+    let index_locations = IndexLocations::default();
     let setup_py = SetupPyStrategy::default();
     let tags = venv.interpreter().tags()?;
 
@@ -67,7 +67,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &client,
         &cache,
         venv.interpreter(),
-        &index_urls,
+        &index_locations,
         venv.python_executable(),
         setup_py,
         args.no_build,
@@ -81,7 +81,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
             tags,
             &client,
             &venv,
-            &index_urls,
+            &index_locations,
         )
         .await
         {
@@ -101,7 +101,7 @@ async fn install_chunk(
     tags: &Tags,
     client: &RegistryClient,
     venv: &Virtualenv,
-    index_urls: &IndexUrls,
+    index_locations: &IndexLocations,
 ) -> Result<()> {
     let resolution: Vec<_> = DistFinder::new(tags, client, venv.interpreter())
         .resolve_stream(requirements)
@@ -136,7 +136,7 @@ async fn install_chunk(
         .into_distributions()
         .collect::<Vec<_>>();
 
-    let mut registry_index = RegistryWheelIndex::new(build_dispatch.cache(), tags, index_urls);
+    let mut registry_index = RegistryWheelIndex::new(build_dispatch.cache(), tags, index_locations);
     let (cached, uncached): (Vec<_>, Vec<_>) = dists.into_iter().partition_map(|dist| {
         // We always want the wheel for the latest version not whatever matching is in cache
         let VersionOrUrl::Version(version) = dist.version_or_url() else {

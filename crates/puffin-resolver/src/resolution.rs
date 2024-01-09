@@ -11,8 +11,8 @@ use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
-use pep440_rs::Version;
-use pep508_rs::{Requirement, VerbatimUrl};
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrl};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::OnceMap;
 use pypi_types::Metadata21;
@@ -29,6 +29,10 @@ pub struct ResolutionGraph {
     petgraph: petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>,
     /// The set of editable requirements in this resolution.
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
+    /// Path and url dists might either come from explicit path or url dependencies, where we need to emit their path,
+    /// or as flat index additions to the indexes, where we need to format them as name==version. Here we track whether
+    /// the latter is the case.    
+    is_registry: FxHashMap<PackageName, bool>,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
 }
@@ -46,6 +50,8 @@ impl ResolutionGraph {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
+        let mut is_registry = FxHashMap::default();
+        is_registry.reserve(selection.len());
         let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
@@ -62,6 +68,7 @@ impl ResolutionGraph {
 
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
+                    is_registry.insert(package_name.clone(), true);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
@@ -76,6 +83,7 @@ impl ResolutionGraph {
 
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
+                    is_registry.insert(package_name.clone(), false);
                 }
                 PubGrubPackage::Package(package_name, Some(extra), None) => {
                     // Validate that the `extra` exists.
@@ -157,6 +165,7 @@ impl ResolutionGraph {
         Ok(Self {
             petgraph,
             editables,
+            is_registry,
             diagnostics,
         })
     }
@@ -171,13 +180,34 @@ impl ResolutionGraph {
         self.petgraph.node_count() == 0
     }
 
+    /// See [`ResolutionGraph::is_registry`].
+    fn dist_to_requirement(&self, dist: Dist) -> Requirement {
+        if self.is_registry[dist.name()] {
+            let version = dist
+                .version()
+                .expect("Registry dists have a version")
+                .clone();
+            let version = VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+                VersionSpecifier::equals_version(version),
+            ));
+            Requirement {
+                name: dist.name().clone(),
+                extras: None,
+                version_or_url: Some(version),
+                marker: None,
+            }
+        } else {
+            Requirement::from(dist)
+        }
+    }
+
     /// Return the set of [`Requirement`]s that this graph represents.
     pub fn requirements(&self) -> Vec<Requirement> {
         self.petgraph
             .node_indices()
             .map(|node| &self.petgraph[node])
             .cloned()
-            .map(Requirement::from)
+            .map(|dist| self.dist_to_requirement(dist))
             .collect()
     }
 
@@ -206,11 +236,17 @@ impl std::fmt::Display for ResolutionGraph {
         nodes.sort_unstable_by_key(|(_, package)| package.name());
 
         // Print out the dependency graph.
-        for (index, package) in nodes {
-            if let Some((editable, _)) = self.editables.get(package.name()) {
+        for (index, dist) in nodes {
+            if let Some((editable, _)) = self.editables.get(dist.name()) {
                 writeln!(f, "-e {}", editable.verbatim())?;
+            } else if self.is_registry[dist.name()] {
+                let version = dist
+                    .version()
+                    .expect("Registry dists have a version")
+                    .clone();
+                writeln!(f, "{}=={}", dist.name(), version)?;
             } else {
-                writeln!(f, "{}", package.verbatim())?;
+                writeln!(f, "{}", dist.verbatim())?;
             }
 
             let mut edges = self

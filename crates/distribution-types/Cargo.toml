@@ -17,6 +17,7 @@ cache-key = { path = "../cache-key" }
 distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
+platform-tags = { path = "../platform-tags" }
 puffin-git = { path = "../puffin-git" }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }

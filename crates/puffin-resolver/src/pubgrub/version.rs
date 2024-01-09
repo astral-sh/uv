@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::str::FromStr;
 
 use once_cell::sync::Lazy;
@@ -62,6 +63,14 @@ impl From<pep440_rs::Version> for PubGrubVersion {
 impl From<PubGrubVersion> for pep440_rs::Version {
     fn from(version: PubGrubVersion) -> Self {
         version.0
+    }
+}
+
+impl Deref for PubGrubVersion {
+    type Target = pep440_rs::Version;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

@@ -1,6 +1,7 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
+use distribution_types::prioritized_distribution::{DistRequiresPython, ResolvableDist};
 use distribution_types::{Dist, DistributionMetadata, Name};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{Requirement, VersionOrUrl};
@@ -10,7 +11,7 @@ use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::{DistRequiresPython, ResolvableFile, VersionMap};
+use crate::version_map::VersionMap;
 use crate::{Manifest, ResolutionOptions};
 
 #[derive(Debug, Clone)]
@@ -160,7 +161,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a PubGrubVersion, ResolvableFile<'a>)>,
+        versions: impl Iterator<Item = (&'a PubGrubVersion, ResolvableDist<'a>)>,
         package_name: &'a PackageName,
         range: &Range<PubGrubVersion>,
         allow_prerelease: AllowPreRelease,
@@ -168,7 +169,7 @@ impl CandidateSelector {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a PubGrubVersion, ResolvableFile<'a>),
+            IfNecessary(&'a PubGrubVersion, ResolvableDist<'a>),
         }
 
         let mut prerelease = None;
@@ -222,15 +223,15 @@ pub(crate) struct Candidate<'a> {
     /// The version of the package.
     version: &'a PubGrubVersion,
     /// The file to use for resolving and installing the package.
-    file: ResolvableFile<'a>,
+    dist: ResolvableDist<'a>,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a PubGrubVersion, file: ResolvableFile<'a>) -> Self {
+    fn new(name: &'a PackageName, version: &'a PubGrubVersion, dist: ResolvableDist<'a>) -> Self {
         Self {
             name,
             version,
-            file,
+            dist,
         }
     }
 
@@ -246,12 +247,12 @@ impl<'a> Candidate<'a> {
 
     /// Return the [`DistFile`] to use when resolving the package.
     pub(crate) fn resolve(&self) -> &DistRequiresPython {
-        self.file.resolve()
+        self.dist.resolve()
     }
 
     /// Return the [`DistFile`] to use when installing the package.
     pub(crate) fn install(&self) -> &DistRequiresPython {
-        self.file.install()
+        self.dist.install()
     }
 
     /// If the candidate doesn't match the given requirement, return the version specifiers.

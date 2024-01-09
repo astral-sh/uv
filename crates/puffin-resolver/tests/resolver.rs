@@ -118,7 +118,7 @@ async fn resolve(
         tags,
         &client,
         &build_context,
-    );
+    )?;
     Ok(resolver.resolve().await?)
 }
 

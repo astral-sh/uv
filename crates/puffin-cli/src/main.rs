@@ -8,7 +8,7 @@ use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use owo_colors::OwoColorize;
 
-use distribution_types::{IndexUrl, IndexUrls};
+use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use puffin_cache::{Cache, CacheArgs};
 use puffin_installer::Reinstall;
 use puffin_interpreter::PythonVersion;
@@ -159,6 +159,15 @@ struct PipCompileArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
+    /// The path to a directory containing wheels or source distributions  to use in addition to
+    /// the indexes, or the URL of a page with package files.
+    ///
+    /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or
+    /// source distribution (`.tar.gz`, `.zip`) at the top level. If a URL, the page must contain
+    /// a flat list of links to package files.
+    #[clap(long)]
+    find_links: Vec<FlatIndexLocation>,
+
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
@@ -229,6 +238,14 @@ struct PipSyncArgs {
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
+
+    /// The path to a directory containing wheels or source distributions  to use in addition to the indexes, or the URL
+    /// of a page with package files.
+    ///
+    /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or source distribution
+    /// (`.tar.gz`, `.zip`) at the top level. If a URL, the page must contain a flat list of links to package files.
+    #[clap(long)]
+    find_links: Vec<FlatIndexLocation>,
 
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
@@ -330,6 +347,14 @@ struct PipInstallArgs {
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
+
+    /// The path to a directory containing wheels or source distributions  to use in addition to the indexes, or the URL
+    /// of a page with package files.
+    ///
+    /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or source distribution
+    /// (`.tar.gz`, `.zip`) at the top level. If a URL, the page must contain a flat list of links to package files.
+    #[clap(long)]
+    find_links: Vec<FlatIndexLocation>,
 
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
@@ -493,8 +518,12 @@ async fn inner() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
-            let index_urls =
-                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            let index_urls = IndexLocations::from_args(
+                args.index_url,
+                args.extra_index_url,
+                args.find_links,
+                args.no_index,
+            );
             let extras = if args.all_extras {
                 ExtrasSpecification::All
             } else if args.extra.is_empty() {
@@ -526,8 +555,12 @@ async fn inner() -> Result<ExitStatus> {
             .await
         }
         Commands::PipSync(args) => {
-            let index_urls =
-                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            let index_urls = IndexLocations::from_args(
+                args.index_url,
+                args.extra_index_url,
+                args.find_links,
+                args.no_index,
+            );
             let sources = args
                 .src_file
                 .into_iter()
@@ -569,8 +602,12 @@ async fn inner() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
-            let index_urls =
-                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            let index_urls = IndexLocations::from_args(
+                args.index_url,
+                args.extra_index_url,
+                args.find_links,
+                args.no_index,
+            );
             let extras = if args.all_extras {
                 ExtrasSpecification::All
             } else if args.extra.is_empty() {
@@ -615,12 +652,17 @@ async fn inner() -> Result<ExitStatus> {
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::PipFreeze(args) => commands::freeze(&cache, args.strict, printer),
         Commands::Venv(args) => {
-            let index_urls =
-                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            let index_locations = IndexLocations::from_args(
+                args.index_url,
+                args.extra_index_url,
+                // No find links for the venv subcommand, to keep things simple
+                Vec::new(),
+                args.no_index,
+            );
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
-                &index_urls,
+                &index_locations,
                 args.seed,
                 &cache,
                 printer,

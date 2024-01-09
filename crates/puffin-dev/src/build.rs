@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use fs_err as fs;
 
-use distribution_types::IndexUrls;
+use distribution_types::IndexLocations;
 use platform_host::Platform;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::{Cache, CacheArgs};
@@ -54,7 +54,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_urls = IndexUrls::default();
+    let index_urls = IndexLocations::default();
     let setup_py = SetupPyStrategy::default();
 
     let build_dispatch = BuildDispatch::new(

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CachedRegistryDist, CachedWheel, IndexUrls};
+use distribution_types::{CachedRegistryDist, CachedWheel, IndexLocations};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
@@ -16,17 +16,17 @@ use puffin_normalize::PackageName;
 pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
-    index_urls: &'a IndexUrls,
+    index_locations: &'a IndexLocations,
     index: FxHashMap<PackageName, BTreeMap<Version, CachedRegistryDist>>,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
     /// Initialize an index of cached distributions from a directory.
-    pub fn new(cache: &'a Cache, tags: &'a Tags, index_urls: &'a IndexUrls) -> Self {
+    pub fn new(cache: &'a Cache, tags: &'a Tags, index_locations: &'a IndexLocations) -> Self {
         Self {
             cache,
             tags,
-            index_urls,
+            index_locations,
             index: FxHashMap::default(),
         }
     }
@@ -56,9 +56,12 @@ impl<'a> RegistryWheelIndex<'a> {
     fn get_impl(&mut self, name: &PackageName) -> &BTreeMap<Version, CachedRegistryDist> {
         let versions = match self.index.entry(name.clone()) {
             Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => {
-                entry.insert(Self::index(name, self.cache, self.tags, self.index_urls))
-            }
+            Entry::Vacant(entry) => entry.insert(Self::index(
+                name,
+                self.cache,
+                self.tags,
+                self.index_locations,
+            )),
         };
         versions
     }
@@ -68,11 +71,11 @@ impl<'a> RegistryWheelIndex<'a> {
         package: &PackageName,
         cache: &Cache,
         tags: &Tags,
-        index_urls: &IndexUrls,
+        index_locations: &IndexLocations,
     ) -> BTreeMap<Version, CachedRegistryDist> {
         let mut versions = BTreeMap::new();
 
-        for index_url in index_urls {
+        for index_url in index_locations.indexes() {
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,

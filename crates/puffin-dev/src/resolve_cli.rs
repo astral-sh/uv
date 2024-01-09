@@ -9,7 +9,7 @@ use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
 
-use distribution_types::IndexUrls;
+use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
@@ -42,6 +42,12 @@ pub(crate) struct ResolveCliArgs {
     cache_args: CacheArgs,
     #[arg(long)]
     exclude_newer: Option<DateTime<Utc>>,
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    index_url: IndexUrl,
+    #[clap(long)]
+    extra_index_url: Vec<IndexUrl>,
+    #[clap(long)]
+    find_links: Vec<FlatIndexLocation>,
 }
 
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
@@ -49,17 +55,19 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
 
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
-    let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_urls = IndexUrls::default();
-    let setup_py = SetupPyStrategy::default();
+    let index_locations =
+        IndexLocations::from_args(args.index_url, args.extra_index_url, args.find_links, false);
+    let client = RegistryClientBuilder::new(cache.clone())
+        .index_locations(index_locations.clone())
+        .build();
 
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
         venv.interpreter(),
-        &index_urls,
+        &index_locations,
         venv.python_executable(),
-        setup_py,
+        SetupPyStrategy::default(),
         args.no_build,
     );
 
@@ -73,7 +81,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         tags,
         &client,
         &build_dispatch,
-    );
+    )?;
     let resolution_graph = resolver.resolve().await.with_context(|| {
         format!(
             "No solution found when resolving: {}",

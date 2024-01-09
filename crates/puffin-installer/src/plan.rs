@@ -5,7 +5,7 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
 use distribution_types::{
-    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexUrls, InstalledDist,
+    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
     Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
@@ -45,13 +45,13 @@ impl InstallPlan {
         editable_requirements: Vec<ResolvedEditable>,
         mut site_packages: SitePackages,
         reinstall: &Reinstall,
-        index_urls: &IndexUrls,
+        index_locations: &IndexLocations,
         cache: &Cache,
         venv: &Virtualenv,
         tags: &Tags,
     ) -> Result<Self> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_urls);
+        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations);
 
         let mut local = vec![];
         let mut remote = vec![];

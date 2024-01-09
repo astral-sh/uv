@@ -17,8 +17,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, RemoteSource, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, RemoteSource,
+    SourceDist, VersionOrUrl,
 };
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
@@ -71,6 +71,8 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
 
 impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvider<'a, Context>> {
     /// Initialize a new resolver using the default backend doing real requests.
+    ///
+    /// Reads the flat index entries.
     pub fn new(
         manifest: Manifest,
         options: ResolutionOptions,
@@ -79,7 +81,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
-    ) -> Self {
+    ) -> Result<Self, puffin_client::Error> {
         let provider = DefaultResolverProvider::new(
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
@@ -91,14 +93,14 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .iter()
                 .chain(manifest.constraints.iter())
                 .collect(),
-        );
-        Self::new_custom_io(
+        )?;
+        Ok(Self::new_custom_io(
             manifest,
             options,
             markers,
             PythonRequirement::new(interpreter, markers),
             provider,
-        )
+        ))
     }
 }
 
@@ -375,7 +377,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if index.redirects.register(url) {
                     let distribution = Dist::from_url(package_name.clone(), url.clone())?;
                     priorities.add(distribution.name().clone());
-                    request_sink.unbounded_send(Request::Dist(distribution))?;
+                    request_sink.unbounded_send(Request::Dist {
+                        dist: distribution,
+                        is_registry: false,
+                    })?;
                 }
             }
         }
@@ -534,8 +539,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .distributions
                     .register_owned(candidate.package_id())
                 {
-                    let distribution = candidate.resolve().dist.clone();
-                    request_sink.unbounded_send(Request::Dist(distribution))?;
+                    let dist = candidate.resolve().dist.clone();
+                    request_sink.unbounded_send(Request::Dist {
+                        dist,
+                        is_registry: true,
+                    })?;
                 }
 
                 Ok(Some(version))
@@ -683,13 +691,35 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     trace!("Received package metadata for: {package_name}");
                     self.index.packages.done(package_name, version_map);
                 }
-                Some(Response::Dist(Dist::Built(distribution), metadata, ..)) => {
-                    trace!("Received built distribution metadata for: {distribution}");
-                    self.index
-                        .distributions
-                        .done(distribution.package_id(), metadata);
+                Some(Response::Dist {
+                    dist: Dist::Built(dist),
+                    metadata,
+                    precise: _,
+                    is_registry,
+                }) => {
+                    trace!("Received built distribution metadata for: {dist}");
+                    // If the built dist is a path or a url dist, it doesn't know whether it's a manually selected
+                    // path/url or part of flat index that moonlights as part of the index. In the latter case, the
+                    // resolver only remembers package name and version, so we have to pretend it's a regular registry
+                    // dist instead of hashing path/url for the package id.
+                    let package_id = if is_registry {
+                        // TODO(konstin): It feels wrong to reimplement the registry package id format here
+                        PackageId::new(format!(
+                            "{}-{}",
+                            dist.name().as_dist_info_name(),
+                            dist.version()
+                        ))
+                    } else {
+                        dist.package_id()
+                    };
+                    self.index.distributions.done(package_id, metadata);
                 }
-                Some(Response::Dist(Dist::Source(distribution), metadata, precise)) => {
+                Some(Response::Dist {
+                    dist: Dist::Source(distribution),
+                    metadata,
+                    precise,
+                    is_registry: _,
+                }) => {
                     trace!("Received source distribution metadata for: {distribution}");
                     self.index
                         .distributions
@@ -729,7 +759,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             }
 
             // Fetch distribution metadata from the distribution database.
-            Request::Dist(dist) => {
+            Request::Dist { dist, is_registry } => {
                 let (metadata, precise) = self
                     .provider
                     .get_or_build_wheel_metadata(&dist)
@@ -746,7 +776,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)
                         }
                     })?;
-                Ok(Some(Response::Dist(dist, metadata, precise)))
+                Ok(Some(Response::Dist {
+                    dist,
+                    metadata,
+                    precise,
+                    is_registry,
+                }))
             }
 
             // Pre-fetch the package and distribution metadata.
@@ -798,7 +833,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             }
                         })?;
 
-                    Ok(Some(Response::Dist(dist, metadata, precise)))
+                    Ok(Some(Response::Dist {
+                        dist,
+                        metadata,
+                        precise,
+                        is_registry: true,
+                    }))
                 } else {
                     Ok(None)
                 }
@@ -835,7 +875,7 @@ enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
     /// A request to fetch the metadata for a built or source distribution.
-    Dist(Dist),
+    Dist { dist: Dist, is_registry: bool },
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<PubGrubVersion>),
 }
@@ -846,7 +886,12 @@ enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, VersionMap),
     /// The returned metadata for a distribution.
-    Dist(Dist, Metadata21, Option<Url>),
+    Dist {
+        dist: Dist,
+        metadata: Metadata21,
+        precise: Option<Url>,
+        is_registry: bool,
+    },
 }
 
 /// An enum used by [`DependencyProvider`] that holds information about package dependencies.

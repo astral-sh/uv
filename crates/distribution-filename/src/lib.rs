@@ -1,3 +1,5 @@
+use pep440_rs::Version;
+use puffin_normalize::PackageName;
 use std::str::FromStr;
 
 pub use source_dist::{SourceDistExtension, SourceDistFilename, SourceDistFilenameError};
@@ -13,16 +15,42 @@ pub enum DistFilename {
 }
 
 impl DistFilename {
-    pub fn try_from_filename(
-        filename: &str,
-        package_name: &puffin_normalize::PackageName,
-    ) -> Option<Self> {
+    /// Parse a filename as wheel or source dist name.
+    pub fn try_from_filename(filename: &str, package_name: &PackageName) -> Option<Self> {
         if let Ok(filename) = WheelFilename::from_str(filename) {
             Some(Self::WheelFilename(filename))
         } else if let Ok(filename) = SourceDistFilename::parse(filename, package_name) {
             Some(Self::SourceDistFilename(filename))
         } else {
             None
+        }
+    }
+
+    /// Like [`DistFilename::try_from_normalized_filename`], but without knowing the package name.
+    ///
+    /// Source dist filenames can be ambiguous, e.g. `a-1-1.tar.gz`. Without knowing the package name, we assume that
+    /// source dist filename version doesn't contain minus (the version is normalized).
+    pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
+        if let Ok(filename) = WheelFilename::from_str(filename) {
+            Some(Self::WheelFilename(filename))
+        } else if let Ok(filename) = SourceDistFilename::parsed_normalized_filename(filename) {
+            Some(Self::SourceDistFilename(filename))
+        } else {
+            None
+        }
+    }
+
+    pub fn name(&self) -> &PackageName {
+        match self {
+            DistFilename::SourceDistFilename(filename) => &filename.name,
+            DistFilename::WheelFilename(filename) => &filename.name,
+        }
+    }
+
+    pub fn version(&self) -> &Version {
+        match self {
+            DistFilename::SourceDistFilename(filename) => &filename.version,
+            DistFilename::WheelFilename(filename) => &filename.version,
         }
     }
 }
