@@ -139,7 +139,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 }
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
-                let byte_size = wheel.file.size.map(|size| ByteSize::b(size as u64));
+                let byte_size = wheel.file.size.map(ByteSize::b);
                 let local_wheel = if let Some(byte_size) =
                     byte_size.filter(|byte_size| *byte_size < ByteSize::mb(5))
                 {
@@ -153,7 +153,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     );
 
                     // Read into a buffer.
-                    let mut buffer = Vec::with_capacity(wheel.file.size.unwrap_or(0));
+                    let mut buffer = Vec::with_capacity(
+                        wheel
+                            .file
+                            .size
+                            .unwrap_or(0)
+                            .try_into()
+                            .expect("5MB shouldn't be bigger usize::MAX"),
+                    );
                     let mut reader = tokio::io::BufReader::new(reader.compat());
                     tokio::io::copy(&mut reader, &mut buffer).await?;
 

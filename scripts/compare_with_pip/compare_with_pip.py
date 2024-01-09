@@ -61,7 +61,7 @@ def resolve_puffin(targets: list[str], venv: Path, profile: str = "dev") -> list
     output = check_output(
         [
             project_root.joinpath("target").joinpath(target_profile).joinpath("puffin-dev"),
-            "resolve-cli",
+            "resolve",
             "--format",
             "expanded",
             *targets,

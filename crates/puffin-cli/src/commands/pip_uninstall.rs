@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};

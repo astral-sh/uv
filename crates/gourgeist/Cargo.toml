@@ -23,7 +23,7 @@ puffin-interpreter = { path = "../puffin-interpreter" }
 
 anstream = { workspace = true }
 camino = { workspace = true }
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 fs-err = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

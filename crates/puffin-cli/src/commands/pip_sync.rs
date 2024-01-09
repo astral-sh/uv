@@ -1,8 +1,8 @@
 use std::fmt::Write;
 
 use anyhow::{Context, Result};
-use colored::Colorize;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{IndexUrls, InstalledMetadata, LocalDist, LocalEditable, Name};

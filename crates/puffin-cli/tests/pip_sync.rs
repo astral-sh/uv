@@ -2314,6 +2314,7 @@ fn sync_editable() -> Result<()> {
         "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
     let python_version_1 = indoc::indoc! {r"
         from .maturin_editable import *
+        
         version = 1
    "};
     fs_err::write(python_source_file, python_version_1)?;
@@ -2329,6 +2330,7 @@ fn sync_editable() -> Result<()> {
     // Edit the sources.
     let python_version_2 = indoc::indoc! {r"
         from .maturin_editable import *
+        
         version = 2
    "};
     fs_err::write(python_source_file, python_version_2)?;
@@ -2458,7 +2460,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==24.1a1
-         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
+         + black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
         "###);
     });
 
@@ -2535,7 +2537,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Downloaded 1 package in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
+         - black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
          + black==23.10.0
         warning: The package `black` requires `click >=8.0.0`, but it's not installed.
         warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.

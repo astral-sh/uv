@@ -87,9 +87,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
     ) -> Result<Vec<CachedDist>, Error> {
         // Sort the distributions by size.
-        distributions.sort_unstable_by_key(|distribution| {
-            Reverse(distribution.size().unwrap_or(usize::MAX))
-        });
+        distributions
+            .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
         let wheels = self
             .download_stream(distributions, in_flight)

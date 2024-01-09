@@ -1,19 +1,23 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use std::env;
 use std::io::IsTerminal;
+use std::path::PathBuf;
 use std::process::ExitCode;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anstream::eprintln;
 use anyhow::Result;
 use clap::Parser;
-use colored::Colorize;
 use tracing::debug;
+use tracing_durations_export::plot::PlotConfig;
+use tracing_durations_export::DurationsLayerBuilder;
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
+use owo_colors::OwoColorize;
 use resolve_many::ResolveManyArgs;
 
 use crate::build::{build, BuildArgs};
@@ -87,6 +91,34 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let (duration_layer, _guard) = if let Ok(location) = env::var("TRACING_DURATIONS_FILE") {
+        let location = PathBuf::from(location);
+        if let Some(parent) = location.parent() {
+            fs_err::tokio::create_dir_all(&parent)
+                .await
+                .expect("Failed to create parent of TRACING_DURATIONS_FILE");
+        }
+        let plot_config = PlotConfig {
+            multi_lane: true,
+            min_length: Some(Duration::from_secs_f32(0.002)),
+            remove: Some(
+                ["get_cached_with_callback".to_string()]
+                    .into_iter()
+                    .collect(),
+            ),
+            ..PlotConfig::default()
+        };
+        let (layer, guard) = DurationsLayerBuilder::default()
+            .durations_file(&location)
+            .plot_file(location.with_extension("svg"))
+            .plot_config(plot_config)
+            .build()
+            .expect("Couldn't create TRACING_DURATIONS_FILE files");
+        (Some(layer), Some(guard))
+    } else {
+        (None, None)
+    };
+
     let indicatif_layer = IndicatifLayer::new();
     let indicatif_compatible_writer_layer = tracing_subscriber::fmt::layer()
         .with_writer(indicatif_layer.get_stderr_writer())
@@ -99,6 +131,7 @@ async fn main() -> ExitCode {
             .unwrap()
     });
     tracing_subscriber::registry()
+        .with(duration_layer)
         .with(filter_layer)
         .with(indicatif_compatible_writer_layer)
         .with(indicatif_layer)

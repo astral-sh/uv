@@ -4,11 +4,9 @@ use std::sync::Mutex;
 // macro hygiene: The user might not have direct dependencies on those crates
 #[doc(hidden)]
 pub use anstream;
-
-#[doc(hidden)]
-pub use colored;
-
 use once_cell::sync::Lazy;
+#[doc(hidden)]
+pub use owo_colors;
 use rustc_hash::FxHashSet;
 
 /// Whether user-facing warnings are enabled.
@@ -24,7 +22,7 @@ pub fn enable() {
 macro_rules! warn_user {
     ($($arg:tt)*) => {
         use $crate::anstream::eprintln;
-        use $crate::colored::Colorize;
+        use $crate::owo_colors::OwoColorize;
 
         if $crate::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
             let message = format!("{}", format_args!($($arg)*));
@@ -42,14 +40,13 @@ pub static WARNINGS: Lazy<Mutex<FxHashSet<String>>> = Lazy::new(Mutex::default);
 macro_rules! warn_user_once {
     ($($arg:tt)*) => {
         use $crate::anstream::eprintln;
-        use $crate::colored::Colorize;
+        use $crate::owo_colors::OwoColorize;
 
         if $crate::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
             if let Ok(mut states) = $crate::WARNINGS.lock() {
                 let message = format!("{}", format_args!($($arg)*));
-                let formatted = message.bold();
-                if states.insert(message) {
-                    eprintln!("{}{} {formatted}", "warning".yellow().bold(), ":".bold());
+                if states.insert(message.clone()) {
+                    eprintln!("{}{} {}", "warning".yellow().bold(), ":".bold(), message.bold());
                 }
             }
         }

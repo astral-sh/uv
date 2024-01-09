@@ -114,6 +114,13 @@ async fn resolve(
     Ok(resolver.resolve().await?)
 }
 
+macro_rules! assert_snapshot {
+    ($value:expr, @$snapshot:literal) => {
+        let snapshot = anstream::adapter::strip_str(&format!("{}", $value)).to_string();
+        insta::assert_snapshot!(&snapshot, @$snapshot)
+    };
+}
+
 #[tokio::test]
 async fn black() -> Result<()> {
     let manifest = Manifest::simple(vec![Requirement::from_str("black<=23.9.1").unwrap()]);
@@ -125,7 +132,7 @@ async fn black() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -155,7 +162,7 @@ async fn black_colorama() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -187,7 +194,7 @@ async fn black_tensorboard() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -215,7 +222,7 @@ async fn black_python_310() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_310, &TAGS_310).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -256,7 +263,7 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -293,7 +300,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -330,7 +337,7 @@ async fn black_flake8() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -358,7 +365,7 @@ async fn black_lowest() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==22.1.0
     click==8.0.0
         # via black
@@ -386,7 +393,7 @@ async fn black_lowest_direct() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==22.1.0
     click==8.1.7
         # via black
@@ -421,7 +428,7 @@ async fn black_respect_preference() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.0
     click==8.1.7
         # via black
@@ -456,7 +463,7 @@ async fn black_ignore_preference() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -486,7 +493,11 @@ async fn black_disallow_prerelease() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
+    assert_snapshot!(err, @r###"
+    Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.
+
+    hint: Pre-releases are available for black in the requested range (e.g., 19.10b0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    "###);
 
     Ok(())
 }
@@ -504,7 +515,11 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err, @"Because there is no version of black available matching <=20.0 and root depends on black<=20.0, version solving failed.");
+    assert_snapshot!(err, @r###"
+    Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.
+
+    hint: Pre-releases are available for black in the requested range (e.g., 19.10b0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    "###);
 
     Ok(())
 }
@@ -520,7 +535,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     astroid==3.0.1
         # via pylint
     isort==5.12.0
@@ -544,7 +559,7 @@ async fn pylint_allow_prerelease() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     astroid==3.0.1
         # via pylint
     isort==6.0.0b2
@@ -571,7 +586,7 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     astroid==3.0.1
         # via pylint
     isort==5.12.0
@@ -598,7 +613,7 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    insta::assert_display_snapshot!(resolution, @r###"
+    assert_snapshot!(resolution, @r###"
     astroid==3.0.1
         # via pylint
     isort==6.0.0b2
@@ -626,8 +641,8 @@ async fn msgraph_sdk() -> Result<()> {
         .await
         .unwrap_err();
 
-    insta::assert_display_snapshot!(err, @r###"
-    Because there is no version of msgraph-core available matching >=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, msgraph-sdk==1.0.0 is forbidden.
+    assert_snapshot!(err, @r###"
+    Because there are no versions of msgraph-core>=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, msgraph-sdk==1.0.0 is forbidden.
     And because root depends on msgraph-sdk==1.0.0, version solving failed.
 
     hint: msgraph-core was requested with a pre-release marker (e.g., >=1.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)

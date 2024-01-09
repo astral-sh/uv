@@ -1,8 +1,8 @@
 use std::fmt::Write;
 
 use anyhow::{Context, Result};
-use colored::Colorize;
 use fs_err as fs;
+use owo_colors::OwoColorize;
 
 use puffin_cache::Cache;
 use puffin_normalize::PackageName;
@@ -20,7 +20,7 @@ pub(crate) fn clean(
         writeln!(
             printer,
             "No cache found at: {}",
-            format!("{}", cache.root().display()).cyan()
+            cache.root().display().cyan()
         )?;
         return Ok(ExitStatus::Success);
     }
@@ -29,7 +29,7 @@ pub(crate) fn clean(
         writeln!(
             printer,
             "Clearing cache at: {}",
-            format!("{}", cache.root().display()).cyan()
+            cache.root().display().cyan()
         )?;
         fs::remove_dir_all(cache.root())
             .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
@@ -37,20 +37,12 @@ pub(crate) fn clean(
         for package in packages {
             let count = cache.purge(package)?;
             match count {
-                0 => writeln!(
-                    printer,
-                    "No entries found for package: {}",
-                    format!("{package}").cyan()
-                )?,
-                1 => writeln!(
-                    printer,
-                    "Cleared 1 entry for package: {}",
-                    format!("{package}").cyan()
-                )?,
+                0 => writeln!(printer, "No entries found for package: {}", package.cyan())?,
+                1 => writeln!(printer, "Cleared 1 entry for package: {}", package.cyan())?,
                 count => writeln!(
                     printer,
                     "Cleared {count} entries for package: {}",
-                    format!("{package}").cyan()
+                    package.cyan()
                 )?,
             }
         }

@@ -53,7 +53,7 @@ pub trait RemoteSource {
     fn filename(&self) -> Result<&str, Error>;
 
     /// Return the size of the distribution, if known.
-    fn size(&self) -> Option<usize>;
+    fn size(&self) -> Option<u64>;
 }
 
 pub trait Identifier {

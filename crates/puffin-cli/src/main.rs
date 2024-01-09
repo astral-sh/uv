@@ -6,7 +6,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
-use colored::Colorize;
+use owo_colors::OwoColorize;
 
 use distribution_types::{IndexUrl, IndexUrls};
 use puffin_cache::{Cache, CacheArgs};
@@ -415,11 +415,18 @@ async fn inner() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
     // Configure the `tracing` crate, which controls internal logging.
-    logging::setup_logging(if cli.verbose {
-        logging::Level::Verbose
-    } else {
-        logging::Level::Default
-    });
+    #[cfg(feature = "tracing-durations-export")]
+    let (duration_layer, _duration_guard) = logging::setup_duration();
+    #[cfg(not(feature = "tracing-durations-export"))]
+    let duration_layer = None::<tracing_subscriber::layer::Identity>;
+    logging::setup_logging(
+        if cli.verbose {
+            logging::Level::Verbose
+        } else {
+            logging::Level::Default
+        },
+        duration_layer,
+    );
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if cli.quiet {

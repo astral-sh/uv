@@ -1,13 +1,15 @@
-use crate::candidate_selector::CandidateSelector;
-use crate::prerelease_mode::PreReleaseStrategy;
-use colored::Colorize;
+use std::borrow::Cow;
+
 use derivative::Derivative;
+use owo_colors::OwoColorize;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::borrow::Cow;
+
+use crate::candidate_selector::CandidateSelector;
+use crate::prerelease_mode::PreReleaseStrategy;
 
 use super::{PubGrubPackage, PubGrubVersion};
 
@@ -31,9 +33,11 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
             External::NoVersions(package, set) => {
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {
-                    format!("there is no available version for {package}")
+                    format!("there are no versions of {package}")
+                } else if set.as_singleton().is_some() {
+                    format!("there is no version of {package}{set}")
                 } else {
-                    format!("there is no version of {package} available matching {set}")
+                    format!("there are no versions of {package}{set}")
                 }
             }
             External::UnavailableDependencies(package, set) => {
@@ -41,7 +45,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 if set.as_ref() == &Range::full() {
                     format!("dependencies of {package} are unavailable")
                 } else {
-                    format!("dependencies of {package} at version {set} are unavailable")
+                    format!("dependencies of {package}{set} are unavailable")
                 }
             }
             External::UnusableDependencies(package, set, reason) => {
@@ -123,7 +127,10 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 &External::FromDependencyOf((*p2).clone(), r2.clone(), (*p1).clone(), r1.clone()),
             ),
             slice => {
-                let str_terms: Vec<_> = slice.iter().map(|(p, t)| format!("{p} {t}")).collect();
+                let str_terms: Vec<_> = slice
+                    .iter()
+                    .map(|(p, t)| format!("{p}{}", PubGrubTerm::from_term((*t).clone())))
+                    .collect();
                 str_terms.join(", ") + " are incompatible"
             }
         }
@@ -153,37 +160,55 @@ impl PubGrubReportFormatter<'_> {
         derivation_tree: &DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
         selector: &CandidateSelector,
     ) -> FxHashSet<PubGrubHint> {
+        /// Returns `true` if pre-releases were allowed for a package.
+        fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
+            match selector.prerelease_strategy() {
+                PreReleaseStrategy::Disallow => false,
+                PreReleaseStrategy::Allow => true,
+                PreReleaseStrategy::IfNecessary => false,
+                PreReleaseStrategy::Explicit(packages) => {
+                    if let PubGrubPackage::Package(package, ..) = package {
+                        packages.contains(package)
+                    } else {
+                        false
+                    }
+                }
+                PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
+                    if let PubGrubPackage::Package(package, ..) = package {
+                        packages.contains(package)
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+
         let mut hints = FxHashSet::default();
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::NoVersions(package, set) => {
-                    // Determine whether a pre-release marker appeared in the version requirements.
                     if set.bounds().any(PubGrubVersion::any_prerelease) {
-                        // Determine whether pre-releases were allowed for this package.
-                        let allowed_prerelease = match selector.prerelease_strategy() {
-                            PreReleaseStrategy::Disallow => false,
-                            PreReleaseStrategy::Allow => true,
-                            PreReleaseStrategy::IfNecessary => false,
-                            PreReleaseStrategy::Explicit(packages) => {
-                                if let PubGrubPackage::Package(package, ..) = package {
-                                    packages.contains(package)
-                                } else {
-                                    false
-                                }
-                            }
-                            PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                                if let PubGrubPackage::Package(package, ..) = package {
-                                    packages.contains(package)
-                                } else {
-                                    false
-                                }
-                            }
-                        };
-
-                        if !allowed_prerelease {
-                            hints.insert(PubGrubHint::NoVersionsWithPreRelease {
+                        // A pre-release marker appeared in the version requirements.
+                        if !allowed_prerelease(package, selector) {
+                            hints.insert(PubGrubHint::PreReleaseRequested {
                                 package: package.clone(),
                                 range: self.simplify_set(set, package).into_owned(),
+                            });
+                        }
+                    } else if let Some(version) =
+                        self.available_versions.get(package).and_then(|versions| {
+                            versions
+                                .iter()
+                                .rev()
+                                .filter(|version| version.any_prerelease())
+                                .find(|version| set.contains(version))
+                        })
+                    {
+                        // There are pre-release versions available for the package.
+                        if !allowed_prerelease(package, selector) {
+                            hints.insert(PubGrubHint::PreReleaseAvailable {
+                                package: package.clone(),
+                                version: version.clone(),
                             });
                         }
                     }
@@ -205,9 +230,17 @@ impl PubGrubReportFormatter<'_> {
 #[derive(Derivative, Debug, Clone)]
 #[derivative(Hash, PartialEq, Eq)]
 pub(crate) enum PubGrubHint {
-    /// A package was requested with a pre-release marker, but pre-releases weren't enabled for
-    /// that package.
-    NoVersionsWithPreRelease {
+    /// There are pre-release versions available for a package, but pre-releases weren't enabled
+    /// for that package.
+    ///
+    PreReleaseAvailable {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        version: PubGrubVersion,
+    },
+    /// A requirement included a pre-release marker, but pre-releases weren't enabled for that
+    /// package.
+    PreReleaseRequested {
         package: PubGrubPackage,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         range: Range<PubGrubVersion>,
@@ -217,16 +250,52 @@ pub(crate) enum PubGrubHint {
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PubGrubHint::NoVersionsWithPreRelease { package, range } => {
+            PubGrubHint::PreReleaseAvailable { package, version } => {
+                write!(
+                    f,
+                    "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold()
+                )
+            }
+            PubGrubHint::PreReleaseRequested { package, range } => {
                 write!(
                     f,
                     "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    format!("{package}").bold(),
-                    format!("{range}").bold(),
+                    package.bold(),
+                    range.bold()
                 )
             }
         }
+    }
+}
+
+/// A derivative of the [Term] type with custom formatting.
+struct PubGrubTerm {
+    inner: Term<Range<PubGrubVersion>>,
+}
+
+impl std::fmt::Display for PubGrubTerm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.inner {
+            Term::Positive(set) => write!(f, "{set}"),
+            Term::Negative(set) => {
+                if let Some(version) = set.as_singleton() {
+                    write!(f, "!={version}")
+                } else {
+                    write!(f, "!( {set} )")
+                }
+            }
+        }
+    }
+}
+
+impl PubGrubTerm {
+    fn from_term(term: Term<Range<PubGrubVersion>>) -> PubGrubTerm {
+        PubGrubTerm { inner: term }
     }
 }

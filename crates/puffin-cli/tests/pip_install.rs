@@ -77,9 +77,8 @@ fn no_solution() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of flask available matching >3.0.0 and
-          flask==3.0.0 depends on werkzeug>=3.0.0, flask>=3.0.0 depends on
-          werkzeug>=3.0.0.
+      ╰─▶ Because there are no versions of flask>3.0.0 and flask==3.0.0 depends on
+          werkzeug>=3.0.0, flask>=3.0.0 depends on werkzeug>=3.0.0.
           And because root depends on flask>=3.0.0 and root depends on
           werkzeug<1.0.0, version solving failed.
     "###);
@@ -644,7 +643,7 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==23.11.0
-         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
+         + black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
         "###);
     });
 
@@ -694,7 +693,7 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 6 packages in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
+         - black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
          + black==23.10.0
         "###);
     });

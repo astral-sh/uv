@@ -558,20 +558,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 
 [[package]]
+name = "cmake"
+version = "0.1.50"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
-
-[[package]]
-name = "colored"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbf2150cce219b664a8a70df7a1f933836724b503f8a413af9365b4dcc4d90b8"
-dependencies = [
- "lazy_static",
- "windows-sys 0.48.0",
-]
 
 [[package]]
 name = "configparser"
@@ -926,6 +925,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46303f565772937ffe1d394a4fac6f411c6013172fadde9dcdb1e147a086940e"
 dependencies = [
  "crc32fast",
+ "libz-ng-sys",
  "miniz_oxide",
 ]
 
@@ -1660,6 +1660,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libz-ng-sys"
+version = "1.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81157dde2fd4ad2b45ea3a4bb47b8193b52a6346b678840d91d80d3c2cd166c5"
+dependencies = [
+ "cmake",
+ "libc",
+]
+
+[[package]]
 name = "libz-sys"
 version = "1.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2250,7 +2260,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/zanieb/pubgrub?rev=78b8add6942766e5fb070bbda1de570e93d6399f#78b8add6942766e5fb070bbda1de570e93d6399f"
+source = "git+https://github.com/zanieb/pubgrub?rev=866c0f2a87fee1e8abe804d40a2ee934de0973d7#866c0f2a87fee1e8abe804d40a2ee934de0973d7"
 dependencies = [
  "indexmap 2.1.0",
  "log",
@@ -2319,7 +2329,6 @@ dependencies = [
  "bitflags 2.4.1",
  "chrono",
  "clap",
- "colored",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -2333,6 +2342,7 @@ dependencies = [
  "itertools 0.12.0",
  "miette",
  "mimalloc",
+ "owo-colors",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-host",
@@ -2363,6 +2373,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
  "url",
@@ -2417,7 +2428,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "colored",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -2427,6 +2437,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.12.0",
  "mimalloc",
+ "owo-colors",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "petgraph",
@@ -2448,6 +2459,7 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "tracing",
+ "tracing-durations-export",
  "tracing-indicatif",
  "tracing-subscriber",
  "url",
@@ -2631,12 +2643,12 @@ dependencies = [
 name = "puffin-resolver"
 version = "0.0.1"
 dependencies = [
+ "anstream",
  "anyhow",
  "bitflags 2.4.1",
  "cache-key",
  "chrono",
  "clap",
- "colored",
  "derivative",
  "distribution-filename",
  "distribution-types",
@@ -2648,6 +2660,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.12.0",
  "once_cell",
+ "owo-colors",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "petgraph",
@@ -2697,8 +2710,8 @@ name = "puffin-warnings"
 version = "0.0.1"
 dependencies = [
  "anstream",
- "colored",
  "once_cell",
+ "owo-colors",
  "rustc-hash",
 ]
 
@@ -3452,6 +3465,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "svg"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d703a3635418d4e4d0e410009ddbfb65047ef9468b1d29afd3b057a5bc4c217"
+
+[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3858,6 +3877,24 @@ checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-durations-export"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6bb8898f56f636911130c78cc528338a2bb0426bdfb5a8fb523f98fc8da46d"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "itertools 0.12.0",
+ "once_cell",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "svg",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

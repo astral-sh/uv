@@ -1,7 +1,7 @@
 use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;

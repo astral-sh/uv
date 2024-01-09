@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::ffi::OsString;
+
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -87,9 +87,8 @@ fn parse_scripts<R: Read + Seek>(
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = format!("{dist_info_dir}/entry_points.txt");
     let entry_points_mapping = match archive.by_name(&entry_points_path) {
-        Ok(mut file) => {
-            let mut ini_text = String::new();
-            file.read_to_string(&mut ini_text)?;
+        Ok(file) => {
+            let ini_text = std::io::read_to_string(file)?;
             Ini::new_cs()
                 .read(ini_text)
                 .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?
@@ -433,6 +432,7 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
 ///
 /// 2.f Compile any installed .py to .pyc. (Uninstallers should be smart enough to remove .pyc
 /// even if it is not mentioned in RECORD.)
+#[instrument(skip_all)]
 fn bytecode_compile(
     site_packages: &Path,
     unpacked_paths: Vec<PathBuf>,
@@ -446,7 +446,9 @@ fn bytecode_compile(
     let py_source_paths: Vec<_> = unpacked_paths
         .into_iter()
         .filter(|path| {
-            site_packages.join(path).is_file() && path.extension() == Some(&OsString::from("py"))
+            path.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+                && site_packages.join(path).is_file()
         })
         .collect();
 
@@ -655,16 +657,18 @@ fn install_script(
     file: &DirEntry,
     location: &InstallLocation<impl AsRef<Path>>,
 ) -> Result<(), Error> {
-    let path = file.path();
-    if !path.is_file() {
+    if !file.file_type()?.is_file() {
         return Err(Error::InvalidWheel(format!(
             "Wheel contains entry in scripts directory that is not a file: {}",
-            path.display()
+            file.path().display()
         )));
     }
 
     let target_path = bin_rel().join(file.file_name());
+
+    let path = file.path();
     let mut script = File::open(&path)?;
+
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
     // > If the first line of a file in scripts/ starts with exactly b'#!python',
@@ -724,6 +728,7 @@ fn install_script(
 
 /// Move the files from the .data directory to the right location in the venv
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 pub(crate) fn install_data(
     venv_root: &Path,
     site_packages: &Path,
@@ -734,15 +739,17 @@ pub(crate) fn install_data(
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
-    for data_entry in fs::read_dir(data_dir)? {
-        let data_entry = data_entry?;
-        match data_entry.file_name().as_os_str().to_str() {
+    for entry in fs::read_dir(data_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&data_entry.path(), venv_root, site_packages, record)?;
+                move_folder_recorded(&path, venv_root, site_packages, record)?;
             }
             Some("scripts") => {
-                for file in fs::read_dir(data_entry.path())? {
+                for file in fs::read_dir(path)? {
                     let file = file?;
 
                     // Couldn't find any docs for this, took it directly from
@@ -774,17 +781,17 @@ pub(crate) fn install_data(
                         location.python_version().1
                     ))
                     .join(dist_name);
-                move_folder_recorded(&data_entry.path(), &target_path, site_packages, record)?;
+                move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib" | "platlib") => {
                 // purelib and platlib locations are not relevant when using venvs
                 // https://stackoverflow.com/a/27882460/3549270
-                move_folder_recorded(&data_entry.path(), site_packages, site_packages, record)?;
+                move_folder_recorded(&path, site_packages, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
                     "Unknown wheel data type: {:?}",
-                    data_entry.file_name()
+                    entry.file_name()
                 )));
             }
         }
@@ -961,11 +968,10 @@ pub fn install_wheel(
     // > 1.a Parse distribution-1.0.dist-info/WHEEL.
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     let wheel_file_path = format!("{dist_info_prefix}.dist-info/WHEEL");
-    let mut wheel_text = String::new();
-    archive
+    let wheel_file = archive
         .by_name(&wheel_file_path)
-        .map_err(|err| Error::Zip(wheel_file_path, err))?
-        .read_to_string(&mut wheel_text)?;
+        .map_err(|err| Error::Zip(wheel_file_path, err))?;
+    let wheel_text = io::read_to_string(wheel_file)?;
     parse_wheel_version(&wheel_text)?;
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).

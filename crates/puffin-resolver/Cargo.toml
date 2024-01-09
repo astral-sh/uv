@@ -32,17 +32,18 @@ puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 
+anstream = { workspace = true }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
-colored = { workspace = true }
 derivative = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http-cache-semantics = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
+owo-colors = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 reqwest = { workspace = true }

@@ -6,7 +6,7 @@ use std::path::Path;
 use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::File;
-use tracing::{debug, info_span};
+use tracing::{debug, instrument};
 
 use pypi_types::DirectUrl;
 
@@ -24,6 +24,7 @@ use crate::{read_record_file, Error, Script};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
+#[instrument(skip_all, fields(wheel = %wheel.as_ref().display()))]
 pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
@@ -51,8 +52,6 @@ pub fn install_wheel(
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
     let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
-
-    let _my_span = info_span!("install_wheel", name);
 
     // We're going step by step though
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
@@ -137,8 +136,9 @@ fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
         let entry = entry.ok()?;
-        let path = entry.path();
-        if path.is_dir() {
+        let file_type = entry.file_type().ok()?;
+        if file_type.is_dir() {
+            let path = entry.path();
             if path.extension().map_or(false, |ext| ext == "dist-info") {
                 Some(path)
             } else {
@@ -231,6 +231,7 @@ impl Default for LinkMode {
 
 impl LinkMode {
     /// Extract a wheel by linking all of its files into site packages.
+    #[instrument(skip_all)]
     pub fn link_wheel_files(
         self,
         site_packages: impl AsRef<Path>,
@@ -317,7 +318,9 @@ fn copy_wheel_files(
     // Walk over the directory.
     for entry in walkdir::WalkDir::new(&wheel) {
         let entry = entry?;
-        let relative = entry.path().strip_prefix(&wheel).unwrap();
+        let path = entry.path();
+
+        let relative = path.strip_prefix(&wheel).unwrap();
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {
@@ -326,7 +329,7 @@ fn copy_wheel_files(
         }
 
         // Copy the file.
-        fs::copy(entry.path(), &out_path)?;
+        fs::copy(path, &out_path)?;
 
         #[cfg(unix)]
         {
@@ -370,7 +373,9 @@ fn hardlink_wheel_files(
     // Walk over the directory.
     for entry in walkdir::WalkDir::new(&wheel) {
         let entry = entry?;
-        let relative = entry.path().strip_prefix(&wheel).unwrap();
+        let path = entry.path();
+
+        let relative = path.strip_prefix(&wheel).unwrap();
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {
@@ -379,8 +384,8 @@ fn hardlink_wheel_files(
         }
 
         // The `RECORD` file is modified during installation, so we copy it instead of hard-linking.
-        if entry.path().ends_with("RECORD") {
-            fs::copy(entry.path(), &out_path)?;
+        if path.ends_with("RECORD") {
+            fs::copy(path, &out_path)?;
             count += 1;
             continue;
         }
@@ -390,33 +395,33 @@ fn hardlink_wheel_files(
             Attempt::Initial => {
                 // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that.
                 attempt = Attempt::Subsequent;
-                if let Err(err) = fs::hard_link(entry.path(), &out_path) {
+                if let Err(err) = fs::hard_link(path, &out_path) {
                     // If the file already exists, remove it and try again.
                     if err.kind() == std::io::ErrorKind::AlreadyExists {
                         fs::remove_file(&out_path)?;
-                        if fs::hard_link(entry.path(), &out_path).is_err() {
-                            fs::copy(entry.path(), &out_path)?;
+                        if fs::hard_link(path, &out_path).is_err() {
+                            fs::copy(path, &out_path)?;
                             attempt = Attempt::UseCopyFallback;
                         }
                     } else {
-                        fs::copy(entry.path(), &out_path)?;
+                        fs::copy(path, &out_path)?;
                         attempt = Attempt::UseCopyFallback;
                     }
                 }
             }
             Attempt::Subsequent => {
-                if let Err(err) = fs::hard_link(entry.path(), &out_path) {
+                if let Err(err) = fs::hard_link(path, &out_path) {
                     // If the file already exists, remove it and try again.
                     if err.kind() == std::io::ErrorKind::AlreadyExists {
                         fs::remove_file(&out_path)?;
-                        fs::hard_link(entry.path(), &out_path)?;
+                        fs::hard_link(path, &out_path)?;
                     } else {
                         return Err(err.into());
                     }
                 }
             }
             Attempt::UseCopyFallback => {
-                fs::copy(entry.path(), &out_path)?;
+                fs::copy(path, &out_path)?;
             }
         }
 
