@@ -1271,7 +1271,7 @@ fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, a==1.0.0 is forbidden.
+          ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, a==1.0.0 is forbidden.
               And because there are no versions of a<1.0.0 | >1.0.0 and root depends on a, version solving failed.
 
               hint: c was requested with a pre-release marker (e.g., ==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -1681,7 +1681,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a==2.0.0 and root depends on a==2.0.0, version solving failed.
+          ╰─▶ Because there is no version of a==2.0.0 and root depends on a==2.0.0, version solving failed.
         "###);
     });
 
@@ -2315,7 +2315,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a==1.0.0 and root depends on a==1.0.0, version solving failed.
+          ╰─▶ Because there is no version of a==1.0.0 and root depends on a==1.0.0, version solving failed.
         "###);
     });
 
