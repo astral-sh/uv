@@ -493,7 +493,11 @@ async fn black_disallow_prerelease() -> Result<()> {
         .await
         .unwrap_err();
 
-    assert_snapshot!(err, @"Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.");
+    assert_snapshot!(err, @r###"
+    Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.
+
+    hint: Pre-releases are available for black in the requested range (e.g., 19.10b0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    "###);
 
     Ok(())
 }
@@ -511,7 +515,11 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         .await
         .unwrap_err();
 
-    assert_snapshot!(err, @"Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.");
+    assert_snapshot!(err, @r###"
+    Because there are no versions of black<=20.0 and root depends on black<=20.0, version solving failed.
+
+    hint: Pre-releases are available for black in the requested range (e.g., 19.10b0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    "###);
 
     Ok(())
 }
