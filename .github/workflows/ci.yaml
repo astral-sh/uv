@@ -38,7 +38,7 @@ jobs:
           rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-test:
     strategy:

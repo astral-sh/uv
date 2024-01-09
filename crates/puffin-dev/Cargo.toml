@@ -38,7 +38,7 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-fs-err = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
@@ -48,6 +48,7 @@ rustc-hash = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-durations-export = { version = "0.1.0", features = ["plot"] }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }

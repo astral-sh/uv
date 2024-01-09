@@ -2246,7 +2246,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/zanieb/pubgrub?rev=78b8add6942766e5fb070bbda1de570e93d6399f#78b8add6942766e5fb070bbda1de570e93d6399f"
+source = "git+https://github.com/zanieb/pubgrub?rev=866c0f2a87fee1e8abe804d40a2ee934de0973d7#866c0f2a87fee1e8abe804d40a2ee934de0973d7"
 dependencies = [
  "indexmap 2.1.0",
  "log",
@@ -2359,6 +2359,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
  "url",
@@ -2444,6 +2445,7 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "tracing",
+ "tracing-durations-export",
  "tracing-indicatif",
  "tracing-subscriber",
  "url",
@@ -3271,18 +3273,18 @@ checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "serde"
-version = "1.0.194"
+version = "1.0.195"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b114498256798c94a0689e1a15fec6005dee8ac1f41de56404b67afc2a4b773"
+checksum = "63261df402c67811e9ac6def069e4786148c4563f4b50fd4bf30aa370d626b02"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.194"
+version = "1.0.195"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3385e45322e8f9931410f01b3031ec534c3947d0e94c18049af4d9f9907d4e0"
+checksum = "46fe8f8603d81ba86327b23a2e9cdf49e1255fb94a4c5f297f6ee0547178ea2c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3445,6 +3447,12 @@ checksum = "4b6c2cb240ab5dd21ed4906895ee23fe5a48acdbd15a3ce388e7b62a9b66baf7"
 dependencies = [
  "is-terminal",
 ]
+
+[[package]]
+name = "svg"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d703a3635418d4e4d0e410009ddbfb65047ef9468b1d29afd3b057a5bc4c217"
 
 [[package]]
 name = "syn"
@@ -3853,6 +3861,24 @@ checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-durations-export"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6bb8898f56f636911130c78cc528338a2bb0426bdfb5a8fb523f98fc8da46d"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "itertools 0.12.0",
+ "once_cell",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "svg",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

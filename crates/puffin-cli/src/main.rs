@@ -415,11 +415,18 @@ async fn inner() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
     // Configure the `tracing` crate, which controls internal logging.
-    logging::setup_logging(if cli.verbose {
-        logging::Level::Verbose
-    } else {
-        logging::Level::Default
-    });
+    #[cfg(feature = "tracing-durations-export")]
+    let (duration_layer, _duration_guard) = logging::setup_duration();
+    #[cfg(not(feature = "tracing-durations-export"))]
+    let duration_layer = None::<tracing_subscriber::layer::Identity>;
+    logging::setup_logging(
+        if cli.verbose {
+            logging::Level::Verbose
+        } else {
+            logging::Level::Default
+        },
+        duration_layer,
+    );
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if cli.quiet {
