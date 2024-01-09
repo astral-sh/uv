@@ -4,7 +4,7 @@ use std::ops::Bound;
 use derivative::Derivative;
 use owo_colors::OwoColorize;
 use pubgrub::range::Range;
-use pubgrub::report::{DerivationTree, External, ReportFormatter};
+use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -160,6 +160,105 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 str_terms.join(", ") + " are incompatible"
             }
         }
+    }
+
+    /// Simplest case, we just combine two external incompatibilities.
+    fn explain_both_external(
+        &self,
+        external1: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        external2: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
+    ) -> String {
+        // TODO: order should be chosen to make it more logical.
+        format!(
+            "Because {} and {}, {}.",
+            self.format_external(external1),
+            self.format_external(external2),
+            self.format_terms(current_terms)
+        )
+    }
+
+    /// Both causes have already been explained so we use their refs.
+    fn explain_both_ref(
+        &self,
+        ref_id1: usize,
+        derived1: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        ref_id2: usize,
+        derived2: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
+    ) -> String {
+        // TODO: order should be chosen to make it more logical.
+        format!(
+            "Because {} ({}) and {} ({}), {}.",
+            self.format_terms(&derived1.terms),
+            ref_id1,
+            self.format_terms(&derived2.terms),
+            ref_id2,
+            self.format_terms(current_terms)
+        )
+    }
+
+    /// One cause is derived (already explained so one-line),
+    /// the other is a one-line external cause,
+    /// and finally we conclude with the current incompatibility.
+    fn explain_ref_and_external(
+        &self,
+        ref_id: usize,
+        derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
+    ) -> String {
+        // TODO: order should be chosen to make it more logical.
+        format!(
+            "Because {} ({}) and {}, {}.",
+            self.format_terms(&derived.terms),
+            ref_id,
+            self.format_external(external),
+            self.format_terms(current_terms)
+        )
+    }
+
+    /// Add an external cause to the chain of explanations.
+    fn and_explain_external(
+        &self,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
+    ) -> String {
+        format!(
+            "And because {}, {}.",
+            self.format_external(external),
+            self.format_terms(current_terms)
+        )
+    }
+
+    /// Add an already explained incompat to the chain of explanations.
+    fn and_explain_ref(
+        &self,
+        ref_id: usize,
+        derived: &Derived<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
+    ) -> String {
+        format!(
+            "And because {} ({}), {}.",
+            self.format_terms(&derived.terms),
+            ref_id,
+            self.format_terms(current_terms)
+        )
+    }
+
+    /// Add an already explained incompat to the chain of explanations.
+    fn and_explain_prior_and_external(
+        &self,
+        prior_external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        external: &External<PubGrubPackage, Range<PubGrubVersion>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<PubGrubVersion>>>,
+    ) -> String {
+        format!(
+            "And because {} and {}, {}.",
+            self.format_external(prior_external),
+            self.format_external(external),
+            self.format_terms(current_terms)
+        )
     }
 }
 
