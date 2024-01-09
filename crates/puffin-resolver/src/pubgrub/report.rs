@@ -336,7 +336,7 @@ impl std::fmt::Display for PubGrubRange<'_> {
         } else {
             for (idx, segment) in self.inner.iter().enumerate() {
                 if idx > 0 {
-                    write!(f, " | ")?;
+                    write!(f, "|")?;
                 }
                 match segment {
                     (Bound::Unbounded, Bound::Unbounded) => write!(f, "*")?,
@@ -347,13 +347,13 @@ impl std::fmt::Display for PubGrubRange<'_> {
                         if v == b {
                             write!(f, "=={v}")?;
                         } else {
-                            write!(f, ">={v}, <={b}")?;
+                            write!(f, ">={v},<={b}")?;
                         }
                     }
-                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, ">={v}, <{b}")?,
+                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, ">={v},<{b}")?,
                     (Bound::Excluded(v), Bound::Unbounded) => write!(f, ">{v}")?,
-                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, ">{v}, <={b}")?,
-                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, ">{v}, <{b}")?,
+                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, ">{v},<={b}")?,
+                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, ">{v},<{b}")?,
                 };
             }
         }

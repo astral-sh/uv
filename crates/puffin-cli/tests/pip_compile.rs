@@ -2225,8 +2225,8 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of attrs>20.3.0, <21.2.0 and root depends
-              on attrs>20.3.0, <21.2.0, version solving failed.
+          ╰─▶ Because there are no versions of attrs>20.3.0,<21.2.0 and root depends
+              on attrs>20.3.0,<21.2.0, version solving failed.
         "###);
     });
 
