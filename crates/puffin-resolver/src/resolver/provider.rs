@@ -5,19 +5,19 @@ use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use url::Url;
 
-use distribution_types::{Dist, IndexUrl};
+use distribution_types::Dist;
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
-use pypi_types::{BaseUrl, Metadata21};
+use pypi_types::Metadata21;
 
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
-type VersionMapResponse = Result<(IndexUrl, BaseUrl, VersionMap), puffin_client::Error>;
+type VersionMapResponse = Result<VersionMap, puffin_client::Error>;
 type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
 
 pub trait ResolverProvider: Send + Sync {
@@ -83,17 +83,15 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         self.client
             .simple(package_name)
             .map_ok(move |(index, base, metadata)| {
-                (
-                    index,
-                    base,
-                    VersionMap::from_metadata(
-                        metadata,
-                        package_name,
-                        self.tags,
-                        &self.python_requirement,
-                        &self.allowed_yanks,
-                        self.exclude_newer.as_ref(),
-                    ),
+                VersionMap::from_metadata(
+                    metadata,
+                    package_name,
+                    &index,
+                    &base,
+                    self.tags,
+                    &self.python_requirement,
+                    &self.allowed_yanks,
+                    self.exclude_newer.as_ref(),
                 )
             })
     }

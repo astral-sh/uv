@@ -1,8 +1,7 @@
 use rustc_hash::FxHashMap;
 
-use distribution_types::{File, IndexUrl};
+use distribution_types::Dist;
 use puffin_normalize::PackageName;
-use pypi_types::BaseUrl;
 
 use crate::candidate_selector::Candidate;
 
@@ -11,29 +10,19 @@ use crate::candidate_selector::Candidate;
 /// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
 /// `3.0.0` to the specific wheel or source distribution archive that was pinned for that version.
 #[derive(Debug, Default)]
-pub(crate) struct FilePins(
-    FxHashMap<PackageName, FxHashMap<pep440_rs::Version, (IndexUrl, BaseUrl, File)>>,
-);
+pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<pep440_rs::Version, Dist>>);
 
 impl FilePins {
     /// Pin a candidate package.
-    pub(crate) fn insert(&mut self, candidate: &Candidate, index: &IndexUrl, base: &BaseUrl) {
+    pub(crate) fn insert(&mut self, candidate: &Candidate) {
         self.0.entry(candidate.name().clone()).or_default().insert(
             candidate.version().clone().into(),
-            (
-                index.clone(),
-                base.clone(),
-                candidate.install().clone().into(),
-            ),
+            candidate.install().dist.clone(),
         );
     }
 
     /// Return the pinned file for the given package name and version, if it exists.
-    pub(crate) fn get(
-        &self,
-        name: &PackageName,
-        version: &pep440_rs::Version,
-    ) -> Option<&(IndexUrl, BaseUrl, File)> {
+    pub(crate) fn get(&self, name: &PackageName, version: &pep440_rs::Version) -> Option<&Dist> {
         self.0.get(name)?.get(version)
     }
 }
