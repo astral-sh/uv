@@ -3,7 +3,7 @@ use std::str::FromStr;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
-use tracing::trace;
+use tracing::warn;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
@@ -62,7 +62,7 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
             }
 
             if let Ok(requirement) = T::from_str(&patched_input) {
-                trace!(
+                warn!(
                     "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched_input}`)",
                     messages.join(", ")
                 );

@@ -13,8 +13,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::log::{log, Level};
-use tracing::{debug, info_span, instrument, trace, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -469,13 +468,8 @@ impl SimpleMetadata {
                 let file = match file.try_into() {
                     Ok(file) => file,
                     Err(err) => {
-                        let level = if cfg!(debug_assertions) {
-                            Level::Warn
-                        } else {
-                            Level::Trace
-                        };
                         // Ignore files with unparseable version specifiers.
-                        log!(level, "Skipping file in {}: {}", package_name, err);
+                        warn!("Skipping file for {package_name}: {err}");
                         continue;
                     }
                 };
@@ -531,10 +525,12 @@ impl MediaType {
 
 #[cfg(test)]
 mod tests {
-    use crate::SimpleMetadata;
+    use std::str::FromStr;
+
     use puffin_normalize::PackageName;
     use pypi_types::SimpleJson;
-    use std::str::FromStr;
+
+    use crate::SimpleMetadata;
 
     #[test]
     fn ignore_failing_files() {
