@@ -11,7 +11,7 @@ pub struct File {
     pub filename: String,
     pub hashes: Hashes,
     pub requires_python: Option<VersionSpecifiers>,
-    pub size: Option<usize>,
+    pub size: Option<u64>,
     pub upload_time: Option<DateTime<Utc>>,
     pub url: String,
     pub yanked: Option<Yanked>,
