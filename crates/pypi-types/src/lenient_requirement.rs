@@ -3,10 +3,10 @@ use std::str::FromStr;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
+use tracing::warn;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
-use puffin_warnings::warn_user_once;
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -62,7 +62,7 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
             }
 
             if let Ok(requirement) = T::from_str(&patched_input) {
-                warn_user_once!(
+                warn!(
                     "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched_input}`)",
                     messages.join(", ")
                 );

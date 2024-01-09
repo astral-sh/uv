@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, trace, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -465,13 +465,21 @@ impl SimpleMetadata {
                     DistFilename::WheelFilename(ref inner) => &inner.version,
                 };
 
+                let file = match file.try_into() {
+                    Ok(file) => file,
+                    Err(err) => {
+                        // Ignore files with unparseable version specifiers.
+                        warn!("Skipping file for {package_name}: {err}");
+                        continue;
+                    }
+                };
                 match metadata.0.entry(version.clone()) {
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        entry.get_mut().push(filename, file.into());
+                        entry.get_mut().push(filename, file);
                     }
                     std::collections::btree_map::Entry::Vacant(entry) => {
                         let mut files = VersionFiles::default();
-                        files.push(filename, file.into());
+                        files.push(filename, file);
                         entry.insert(files);
                     }
                 }
@@ -512,5 +520,60 @@ impl MediaType {
     const fn accepts() -> &'static str {
         // See: https://peps.python.org/pep-0691/#version-format-selection
         "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use puffin_normalize::PackageName;
+    use pypi_types::SimpleJson;
+
+    use crate::SimpleMetadata;
+
+    #[test]
+    fn ignore_failing_files() {
+        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
+        let response = r#"
+        {
+          "files": [
+            {
+              "core-metadata": false,
+              "data-dist-info-metadata": false,
+              "filename": "pyflyby-1.7.7.tar.gz",
+              "hashes": {
+                "sha256": "0c4d953f405a7be1300b440dbdbc6917011a07d8401345a97e72cd410d5fb291"
+              },
+              "requires-python": ">=2.5, !=3.0.*, !=3.1.*, !=3.2.*, !=3.2.*, !=3.3.*, !=3.4.*,, !=3.5.*, !=3.6.*, <4",
+              "size": 427200,
+              "upload-time": "2022-05-19T09:14:36.591835Z",
+              "url": "https://files.pythonhosted.org/packages/61/93/9fec62902d0b4fc2521333eba047bff4adbba41f1723a6382367f84ee522/pyflyby-1.7.7.tar.gz",
+              "yanked": false
+            },
+            {
+              "core-metadata": false,
+              "data-dist-info-metadata": false,
+              "filename": "pyflyby-1.7.8.tar.gz",
+              "hashes": {
+                "sha256": "1ee37474f6da8f98653dbcc208793f50b7ace1d9066f49e2707750a5ba5d53c6"
+              },
+              "requires-python": ">=2.5, !=3.0.*, !=3.1.*, !=3.2.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, !=3.6.*, <4",
+              "size": 424460,
+              "upload-time": "2022-08-04T10:42:02.190074Z",
+              "url": "https://files.pythonhosted.org/packages/ad/39/17180d9806a1c50197bc63b25d0f1266f745fc3b23f11439fccb3d6baa50/pyflyby-1.7.8.tar.gz",
+              "yanked": false
+            }
+          ]
+        }
+        "#;
+        let data: SimpleJson = serde_json::from_str(response).unwrap();
+        let simple_metadata =
+            SimpleMetadata::from_files(data.files, &PackageName::from_str("pyflyby").unwrap());
+        let versions: Vec<String> = simple_metadata
+            .iter()
+            .map(|(version, _)| version.to_string())
+            .collect();
+        assert_eq!(versions, ["1.7.8".to_string()]);
     }
 }
