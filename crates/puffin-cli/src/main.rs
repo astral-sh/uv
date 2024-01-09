@@ -408,9 +408,25 @@ struct VenvArgs {
     #[clap(short, long)]
     python: Option<PathBuf>,
 
+    /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
+    #[clap(long)]
+    seed: bool,
+
     /// The path to the virtual environment to create.
     #[clap(default_value = ".venv")]
     name: PathBuf,
+
+    /// The URL of the Python Package Index.
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    index_url: IndexUrl,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    #[clap(long)]
+    extra_index_url: Vec<IndexUrl>,
+
+    /// Ignore the package index, instead relying on local archives and caches.
+    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    no_index: bool,
 }
 
 #[derive(Args)]
@@ -598,7 +614,19 @@ async fn inner() -> Result<ExitStatus> {
         }
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::PipFreeze(args) => commands::freeze(&cache, args.strict, printer),
-        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
+        Commands::Venv(args) => {
+            let index_urls =
+                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            commands::venv(
+                &args.name,
+                args.python.as_deref(),
+                &index_urls,
+                args.seed,
+                &cache,
+                printer,
+            )
+            .await
+        }
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),
     }
