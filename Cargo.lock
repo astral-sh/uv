@@ -2527,12 +2527,14 @@ dependencies = [
 name = "puffin-extract"
 version = "0.0.1"
 dependencies = [
+ "async_zip",
  "flate2",
  "fs-err",
  "rayon",
  "tar",
  "thiserror",
  "tokio",
+ "tokio-util",
  "zip",
 ]
 

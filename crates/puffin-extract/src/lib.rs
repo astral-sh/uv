@@ -22,6 +22,36 @@ pub enum Error {
     InvalidArchive(Vec<fs_err::DirEntry>),
 }
 
+pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<(), Error> {
+    let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+
+    while let Some(mut entry) = zip.next_with_entry().await.unwrap() {
+        // Construct path
+        let path = entry.reader().entry().filename().as_str().unwrap();
+        let path = target.join(path);
+        let is_dir = entry.reader().entry().dir().unwrap();
+
+        // Create dir or write file
+        if is_dir {
+            tokio::fs::create_dir_all(path).await.unwrap();
+        } else {
+            tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();
+            let mut file = tokio::fs::File::create(path).await.unwrap();
+            use tokio_util::compat::FuturesAsyncReadCompatExt;
+            let mut reader = entry.reader_mut().compat();
+            tokio::io::copy(&mut reader, &mut file).await.unwrap();
+        }
+
+        // Close current file, allowing next file to be read safely
+        zip = entry.skip().await.unwrap();
+    }
+
+    Ok(())
+}
+
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
     reader: R,

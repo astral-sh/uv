@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use bytesize::ByteSize;
 use fs_err::tokio as fs;
+use puffin_extract::unzip_no_seek;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -21,7 +22,7 @@ use puffin_git::GitSource;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
-use crate::download::BuiltWheel;
+use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;
 use crate::reporter::Facade;
 use crate::{
@@ -115,8 +116,27 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .map_err(|err| DistributionDatabaseError::Url(wheel.file.url.clone(), err))?;
 
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Index(&wheel.index)
+                        .remote_wheel_dir(wheel_filename.name.as_ref()),
+                    wheel_filename.stem(),
+                );
 
                 let reader = self.client.stream_external(&url).await?;
+
+                // HACK always stream for now, just to see how it performs
+                let unzip_while_downloading = true;
+                if unzip_while_downloading {
+                    let target = cache_entry.into_path_buf();
+                    unzip_no_seek(reader.compat(), &target).await.unwrap();
+
+                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        dist: dist.clone(),
+                        target,
+                        filename: wheel_filename,
+                    }));
+                }
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
                 let byte_size = wheel.file.size.map(|size| ByteSize::b(size as u64));
