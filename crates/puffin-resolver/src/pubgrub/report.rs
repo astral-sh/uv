@@ -34,6 +34,8 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {
                     format!("there are no versions of {package}")
+                } else if set.as_singleton().is_some() {
+                    format!("there is no version of {package}{set}")
                 } else {
                     format!("there are no versions of {package}{set}")
                 }

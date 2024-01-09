@@ -1405,7 +1405,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of werkzeug==3.0.0 and root depends on
+          ╰─▶ Because there is no version of werkzeug==3.0.0 and root depends on
               werkzeug==3.0.0, version solving failed.
         "###);
     });
@@ -1899,8 +1899,8 @@ dependencies = ["django==300.1.4"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of django==300.1.4 and my-project depends
-              on django==300.1.4, version solving failed.
+          ╰─▶ Because there is no version of django==300.1.4 and my-project depends on
+              django==300.1.4, version solving failed.
         "###);
     });
 
