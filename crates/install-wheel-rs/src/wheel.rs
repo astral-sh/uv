@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::ffi::OsString;
+
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -446,7 +446,9 @@ fn bytecode_compile(
     let py_source_paths: Vec<_> = unpacked_paths
         .into_iter()
         .filter(|path| {
-            site_packages.join(path).is_file() && path.extension() == Some(&OsString::from("py"))
+            path.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+                && site_packages.join(path).is_file()
         })
         .collect();
 
