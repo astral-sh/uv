@@ -1,9 +1,13 @@
+use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
+use pep508_rs::VerbatimUrl;
 use pypi_types::{BaseUrl, DistInfoMetadata, Hashes, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
@@ -24,7 +28,7 @@ pub struct File {
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
     pub upload_time: Option<DateTime<Utc>>,
-    pub url: Url,
+    pub url: FileLocation,
     pub yanked: Option<Yanked>,
 }
 
@@ -38,10 +42,29 @@ impl File {
             requires_python: file.requires_python.transpose()?,
             size: file.size,
             upload_time: file.upload_time,
-            url: base
-                .join_relative(&file.url)
-                .map_err(|err| FileConversionError::Url(file.url.clone(), err))?,
+            url: FileLocation::Url(
+                base.join_relative(&file.url)
+                    .map_err(|err| FileConversionError::Url(file.url.clone(), err))?,
+            ),
             yanked: file.yanked,
         })
+    }
+}
+
+/// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FileLocation {
+    /// URL relative to base
+    Url(Url),
+    /// Absolute path to file
+    Path(PathBuf, VerbatimUrl),
+}
+
+impl Display for FileLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileLocation::Url(url) => Display::fmt(url, f),
+            FileLocation::Path(path, _url) => Display::fmt(&path.display(), f),
+        }
     }
 }

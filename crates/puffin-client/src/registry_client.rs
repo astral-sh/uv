@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
@@ -17,7 +18,9 @@ use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{BuiltDist, File, IndexUrl, IndexUrls, Name};
+use distribution_types::{
+    BuiltDist, File, FileLocation, FlatIndexLocation, IndexLocations, IndexUrl, Name,
+};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
@@ -31,7 +34,7 @@ use crate::{CachedClient, CachedClientError, Error};
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     retries: u32,
     cache: Cache,
 }
@@ -39,7 +42,7 @@ pub struct RegistryClientBuilder {
 impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
-            index_urls: IndexUrls::default(),
+            index_locations: IndexLocations::default(),
             cache,
             retries: 3,
         }
@@ -48,8 +51,8 @@ impl RegistryClientBuilder {
 
 impl RegistryClientBuilder {
     #[must_use]
-    pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
-        self.index_urls = index_urls;
+    pub fn index_locations(mut self, index_urls: IndexLocations) -> Self {
+        self.index_locations = index_urls;
         self
     }
 
@@ -84,7 +87,7 @@ impl RegistryClientBuilder {
 
         let client = CachedClient::new(uncached_client.clone());
         RegistryClient {
-            index_urls: self.index_urls,
+            index_locations: self.index_locations,
             client_raw: client_raw.clone(),
             cache: self.cache,
             client,
@@ -96,7 +99,7 @@ impl RegistryClientBuilder {
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Don't use this client, it only exists because `async_http_range_reader` needs
@@ -112,6 +115,68 @@ impl RegistryClient {
         &self.client
     }
 
+    /// Read the directories and flat remote indexes from `--find-links`.
+    #[allow(clippy::result_large_err)]
+    pub fn flat_index(&self) -> Result<Vec<(DistFilename, PathBuf)>, Error> {
+        let mut dists = Vec::new();
+        for flat_index in self.index_locations.flat_indexes() {
+            match flat_index {
+                FlatIndexLocation::Path(path) => {
+                    dists.extend(Self::read_flat_index_dir(path).map_err(Error::FindLinks)?);
+                }
+                FlatIndexLocation::Url(_) => {
+                    warn!("TODO(konstin): No yet implemented: Find links urls");
+                }
+            }
+        }
+        Ok(dists)
+    }
+
+    /// Read a list of [`DistFilename`] entries from a `--find-links` directory..
+    fn read_flat_index_dir(path: &PathBuf) -> Result<Vec<(DistFilename, PathBuf)>, io::Error> {
+        // Absolute paths are required for the URL conversion.
+        let path = fs_err::canonicalize(path)?;
+
+        let mut dists = Vec::new();
+        for entry in fs_err::read_dir(&path)? {
+            let entry = entry?;
+            let metadata = entry.metadata()?;
+            if !metadata.is_file() {
+                continue;
+            }
+
+            let Ok(filename) = entry.file_name().into_string() else {
+                warn!(
+                    "Skipping non-UTF-8 filename in `--find-links` directory: {}",
+                    entry.file_name().to_string_lossy()
+                );
+                continue;
+            };
+            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
+                debug!(
+                    "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
+                    entry.path().display()
+                );
+                continue;
+            };
+            let path = entry.path().to_path_buf();
+            dists.push((filename, path));
+        }
+        if dists.is_empty() {
+            warn!(
+                "No packages found in `--find-links` directory: {}",
+                path.display()
+            );
+        } else {
+            debug!(
+                "Found {} packages in `--find-links` directory: {}",
+                dists.len(),
+                path.display()
+            );
+        }
+        Ok(dists)
+    }
+
     /// Fetch a package from the `PyPI` simple API.
     ///
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
@@ -122,77 +187,13 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
     ) -> Result<(IndexUrl, SimpleMetadata), Error> {
-        if self.index_urls.no_index() {
+        if self.index_locations.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
-        for index in &self.index_urls {
-            // Format the URL for PyPI.
-            let mut url: Url = index.clone().into();
-            url.path_segments_mut()
-                .unwrap()
-                .pop_if_empty()
-                .push(package_name.as_ref());
+        for index in self.index_locations.indexes() {
+            let result = self.simple_single_index(package_name, index).await?;
 
-            trace!("Fetching metadata for {package_name} from {url}");
-
-            let cache_entry = self.cache.entry(
-                CacheBucket::Simple,
-                Path::new(&match index {
-                    IndexUrl::Pypi => "pypi".to_string(),
-                    IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
-                }),
-                format!("{package_name}.msgpack"),
-            );
-
-            let simple_request = self
-                .client
-                .uncached()
-                .get(url.clone())
-                .header("Accept-Encoding", "gzip")
-                .header("Accept", MediaType::accepts())
-                .build()?;
-            let parse_simple_response = |response: Response| {
-                async {
-                    let content_type = response
-                        .headers()
-                        .get("content-type")
-                        .ok_or_else(|| Error::MissingContentType(url.clone()))?;
-                    let content_type = content_type
-                        .to_str()
-                        .map_err(|err| Error::InvalidContentTypeHeader(url.clone(), err))?;
-                    let media_type = content_type.split(';').next().unwrap_or(content_type);
-                    let media_type = MediaType::from_str(media_type).ok_or_else(|| {
-                        Error::UnsupportedMediaType(url.clone(), media_type.to_string())
-                    })?;
-
-                    match media_type {
-                        MediaType::Json => {
-                            let bytes = response.bytes().await?;
-                            let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
-                                .map_err(|err| Error::from_json_err(err, url.clone()))?;
-                            let base = BaseUrl::from(url.clone());
-                            let metadata =
-                                SimpleMetadata::from_files(data.files, package_name, &base);
-                            Ok(metadata)
-                        }
-                        MediaType::Html => {
-                            let text = response.text().await?;
-                            let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
-                                .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                            let metadata = SimpleMetadata::from_files(files, package_name, &base);
-                            Ok(metadata)
-                        }
-                    }
-                }
-                .instrument(info_span!("parse_simple_api", package = %package_name))
-            };
-            let result = self
-                .client
-                .get_cached_with_callback(simple_request, &cache_entry, parse_simple_response)
-                .await;
-
-            // Fetch from the index.
             return match result {
                 Ok(metadata) => Ok((index.clone(), metadata)),
                 Err(CachedClientError::Client(Error::RequestError(err))) => {
@@ -208,6 +209,77 @@ impl RegistryClient {
         Err(Error::PackageNotFound(package_name.to_string()))
     }
 
+    async fn simple_single_index(
+        &self,
+        package_name: &PackageName,
+        index: &IndexUrl,
+    ) -> Result<Result<SimpleMetadata, CachedClientError<Error>>, Error> {
+        // Format the URL for PyPI.
+        let mut url: Url = index.clone().into();
+        url.path_segments_mut()
+            .unwrap()
+            .pop_if_empty()
+            .push(package_name.as_ref());
+
+        trace!("Fetching metadata for {package_name} from {url}");
+
+        let cache_entry = self.cache.entry(
+            CacheBucket::Simple,
+            Path::new(&match index {
+                IndexUrl::Pypi => "pypi".to_string(),
+                IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
+            }),
+            format!("{package_name}.msgpack"),
+        );
+
+        let simple_request = self
+            .client
+            .uncached()
+            .get(url.clone())
+            .header("Accept-Encoding", "gzip")
+            .header("Accept", MediaType::accepts())
+            .build()?;
+        let parse_simple_response = |response: Response| {
+            async {
+                let content_type = response
+                    .headers()
+                    .get("content-type")
+                    .ok_or_else(|| Error::MissingContentType(url.clone()))?;
+                let content_type = content_type
+                    .to_str()
+                    .map_err(|err| Error::InvalidContentTypeHeader(url.clone(), err))?;
+                let media_type = content_type.split(';').next().unwrap_or(content_type);
+                let media_type = MediaType::from_str(media_type).ok_or_else(|| {
+                    Error::UnsupportedMediaType(url.clone(), media_type.to_string())
+                })?;
+
+                match media_type {
+                    MediaType::Json => {
+                        let bytes = response.bytes().await?;
+                        let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
+                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                        let base = BaseUrl::from(url.clone());
+                        let metadata = SimpleMetadata::from_files(data.files, package_name, &base);
+                        Ok(metadata)
+                    }
+                    MediaType::Html => {
+                        let text = response.text().await?;
+                        let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
+                            .map_err(|err| Error::from_html_err(err, url.clone()))?;
+                        let metadata = SimpleMetadata::from_files(files, package_name, &base);
+                        Ok(metadata)
+                    }
+                }
+            }
+            .instrument(info_span!("parse_simple_api", package = %package_name))
+        };
+        let result = self
+            .client
+            .get_cached_with_callback(simple_request, &cache_entry, parse_simple_response)
+            .await;
+        Ok(result)
+    }
+
     /// Fetch the metadata for a remote wheel file.
     ///
     /// For a remote wheel, we try the following ways to fetch the metadata:
@@ -217,10 +289,16 @@ impl RegistryClient {
     #[instrument(skip(self))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
-            BuiltDist::Registry(wheel) => {
-                self.wheel_metadata_registry(&wheel.index, &wheel.file)
-                    .await?
-            }
+            BuiltDist::Registry(wheel) => match &wheel.file.url {
+                FileLocation::Url(url) => {
+                    self.wheel_metadata_registry(&wheel.index, &wheel.file, url)
+                        .await?
+                }
+                FileLocation::Path(path, _url) => {
+                    let reader = fs_err::tokio::File::open(&path).await?;
+                    read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
+                }
+            },
             BuiltDist::DirectUrl(wheel) => {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,
@@ -250,8 +328,9 @@ impl RegistryClient {
         &self,
         index: &IndexUrl,
         file: &File,
+        url: &Url,
     ) -> Result<Metadata21, Error> {
-        if self.index_urls.no_index() {
+        if self.index_locations.no_index() {
             return Err(Error::NoIndex(file.filename.clone()));
         }
 
@@ -262,7 +341,7 @@ impl RegistryClient {
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{}.metadata", file.url))?;
+            let url = Url::parse(&format!("{}.metadata", url))?;
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
@@ -275,7 +354,9 @@ impl RegistryClient {
 
                 info_span!("parse_metadata21")
                     .in_scope(|| Metadata21::parse(bytes.as_ref()))
-                    .map_err(|err| Error::MetadataParseError(filename, url.to_string(), err))
+                    .map_err(|err| {
+                        Error::MetadataParseError(filename, url.to_string(), Box::new(err))
+                    })
             };
             let req = self.client.uncached().get(url.clone()).build()?;
             Ok(self
@@ -286,7 +367,7 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, &file.url, WheelCache::Index(index))
+            self.wheel_metadata_no_pep658(&filename, url, WheelCache::Index(index))
                 .await
         }
     }
@@ -298,7 +379,7 @@ impl RegistryClient {
         url: &'data Url,
         cache_shard: WheelCache<'data>,
     ) -> Result<Metadata21, Error> {
-        if self.index_urls.no_index() {
+        if self.index_locations.no_index() {
             return Err(Error::NoIndex(url.to_string()));
         }
 
@@ -317,7 +398,7 @@ impl RegistryClient {
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
-                    Error::MetadataParseError(filename.clone(), url.to_string(), err)
+                    Error::MetadataParseError(filename.clone(), url.to_string(), Box::new(err))
                 })?;
                 Ok(metadata)
             }
@@ -364,7 +445,7 @@ impl RegistryClient {
         &self,
         url: &Url,
     ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
-        if self.index_urls.no_index() {
+        if self.index_locations.no_index() {
             return Err(Error::NoIndex(url.to_string()));
         }
 
@@ -413,7 +494,7 @@ pub async fn read_metadata_async(
         .map_err(|err| Error::Zip(filename.clone(), err))?;
 
     let metadata = Metadata21::parse(&contents)
-        .map_err(|err| Error::MetadataParseError(filename.clone(), debug_source, err))?;
+        .map_err(|err| Error::MetadataParseError(filename.clone(), debug_source, Box::new(err)))?;
     Ok(metadata)
 }
 

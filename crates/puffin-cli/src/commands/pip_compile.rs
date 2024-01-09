@@ -13,7 +13,7 @@ use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexUrls, LocalEditable};
+use distribution_types::{IndexLocations, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -48,7 +48,7 @@ pub(crate) async fn pip_compile(
     prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
     generate_hashes: bool,
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     no_build: bool,
     python_version: Option<PythonVersion>,
@@ -144,7 +144,7 @@ pub(crate) async fn pip_compile(
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_urls.clone())
+        .index_locations(index_locations.clone())
         .build();
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
@@ -152,7 +152,7 @@ pub(crate) async fn pip_compile(
         &client,
         &cache,
         &interpreter,
-        &index_urls,
+        &index_locations,
         interpreter.sys_executable().to_path_buf(),
         setup_py,
         no_build,
@@ -228,7 +228,7 @@ pub(crate) async fn pip_compile(
         &tags,
         &client,
         &build_dispatch,
-    )
+    )?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {

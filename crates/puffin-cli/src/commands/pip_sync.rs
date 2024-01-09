@@ -5,7 +5,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexUrls, InstalledMetadata, LocalDist, LocalEditable, Name};
+use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -29,7 +29,7 @@ pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     reinstall: &Reinstall,
     link_mode: LinkMode,
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     no_build: bool,
     strict: bool,
@@ -60,7 +60,7 @@ pub(crate) async fn pip_sync(
 
     // Prep the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_urls.clone())
+        .index_locations(index_locations.clone())
         .build();
 
     // Prep the build context.
@@ -68,7 +68,7 @@ pub(crate) async fn pip_sync(
         &client,
         &cache,
         venv.interpreter(),
-        &index_urls,
+        &index_locations,
         venv.python_executable(),
         setup_py,
         no_build,
@@ -104,7 +104,7 @@ pub(crate) async fn pip_sync(
         resolved_editables.editables,
         site_packages,
         reinstall,
-        &index_urls,
+        &index_locations,
         &cache,
         &venv,
         tags,
@@ -130,7 +130,7 @@ pub(crate) async fn pip_sync(
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_urls.clone())
+        .index_locations(index_locations.clone())
         .build();
 
     // Resolve any registry-based requirements.

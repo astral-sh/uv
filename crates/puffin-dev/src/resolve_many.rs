@@ -11,7 +11,7 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use distribution_types::IndexUrls;
+use distribution_types::IndexLocations;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_host::Platform;
@@ -73,14 +73,14 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_urls = IndexUrls::default();
+    let index_locations = IndexLocations::default();
     let setup_py = SetupPyStrategy::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
         venv.interpreter(),
-        &index_urls,
+        &index_locations,
         venv.python_executable(),
         setup_py,
         args.no_build,

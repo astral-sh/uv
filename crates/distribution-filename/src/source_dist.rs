@@ -105,6 +105,43 @@ impl SourceDistFilename {
             extension,
         })
     }
+
+    /// Like [`SourceDistFilename::parse`], but without knowing the package name.
+    ///
+    /// Source dist filenames can be ambiguous, e.g. `a-1-1.tar.gz`. Without knowing the package name, we assume that
+    /// source dist filename version doesn't contain minus (the version is normalized).
+    pub fn parsed_normalized_filename(filename: &str) -> Result<Self, SourceDistFilenameError> {
+        let Some((stem, extension)) = SourceDistExtension::from_filename(filename) else {
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Extension,
+            });
+        };
+
+        let Some((package_name, version)) = stem.rsplit_once('-') else {
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Minus,
+            });
+        };
+        let package_name =
+            PackageName::from_str(package_name).map_err(|err| SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::PackageName(err),
+            })?;
+
+        // We checked the length above
+        let version = Version::from_str(version).map_err(|err| SourceDistFilenameError {
+            filename: filename.to_string(),
+            kind: SourceDistFilenameErrorKind::Version(err),
+        })?;
+
+        Ok(Self {
+            name: package_name,
+            version,
+            extension,
+        })
+    }
 }
 
 impl Display for SourceDistFilename {
@@ -139,12 +176,15 @@ enum SourceDistFilenameErrorKind {
     Version(#[from] VersionParseError),
     #[error(transparent)]
     PackageName(#[from] InvalidNameError),
+    #[error("Missing name-version separator")]
+    Minus,
 }
 
 #[cfg(test)]
 mod tests {
-    use puffin_normalize::PackageName;
     use std::str::FromStr;
+
+    use puffin_normalize::PackageName;
 
     use crate::SourceDistFilename;
 

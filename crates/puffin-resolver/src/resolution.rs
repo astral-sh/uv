@@ -253,12 +253,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         nodes.sort_unstable_by_key(|(_, package)| package.name());
 
         // Print out the dependency graph.
-        for (index, package) in nodes {
+        for (index, dist) in nodes {
             // Display the node itself.
-            if let Some((editable, _)) = self.resolution.editables.get(package.name()) {
+            if let Some((editable, _)) = self.resolution.editables.get(dist.name()) {
                 write!(f, "-e {}", editable.verbatim())?;
             } else {
-                write!(f, "{}", package.verbatim())?;
+                write!(f, "{}", dist.verbatim())?;
             }
 
             // Display the distribution hashes, if any.
@@ -266,7 +266,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 if let Some(hashes) = self
                     .resolution
                     .hashes
-                    .get(package.name())
+                    .get(dist.name())
                     .filter(|hashes| !hashes.is_empty())
                 {
                     for hash in hashes {

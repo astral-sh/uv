@@ -25,8 +25,6 @@
 //! * [`CachedRegistryDist`]
 //! * [`CachedDirectUrlDist`]
 //!
-//! TODO(konstin): Track all kinds from [`Dist`].
-//!
 //! ## `InstalledDist`
 //! An [`InstalledDist`] is built distribution (wheel) that is installed in a virtual environment,
 //! with the two possible origins we currently track:
@@ -34,8 +32,6 @@
 //! * [`InstalledDirectUrlDist`]
 //!
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
-//!
-//! TODO(konstin): Track all kinds from [`Dist`].
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -43,7 +39,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use url::Url;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
@@ -58,6 +54,7 @@ pub use crate::file::*;
 pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
 pub use crate::traits::*;
 
@@ -70,6 +67,7 @@ mod file;
 mod id;
 mod index_url;
 mod installed;
+mod prioritized_distribution;
 mod resolution;
 mod traits;
 
@@ -148,8 +146,7 @@ pub enum SourceDist {
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistryBuiltDist {
-    pub name: PackageName,
-    pub version: Version,
+    pub filename: WheelFilename,
     pub file: File,
     pub index: IndexUrl,
 }
@@ -174,8 +171,7 @@ pub struct PathBuiltDist {
 /// A source distribution that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistrySourceDist {
-    pub name: PackageName,
-    pub version: Version,
+    pub filename: SourceDistFilename,
     pub file: File,
     pub index: IndexUrl,
 }
@@ -207,24 +203,22 @@ pub struct PathSourceDist {
 
 impl Dist {
     /// Create a [`Dist`] for a registry-based distribution.
-    pub fn from_registry(name: PackageName, version: Version, file: File, index: IndexUrl) -> Self {
-        if Path::new(&file.filename)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-        {
-            Self::Built(BuiltDist::Registry(RegistryBuiltDist {
-                name,
-                version,
-                file,
-                index,
-            }))
-        } else {
-            Self::Source(SourceDist::Registry(RegistrySourceDist {
-                name,
-                version,
-                file,
-                index,
-            }))
+    pub fn from_registry(filename: DistFilename, file: File, index: IndexUrl) -> Self {
+        match filename {
+            DistFilename::WheelFilename(filename) => {
+                Self::Built(BuiltDist::Registry(RegistryBuiltDist {
+                    filename,
+                    file,
+                    index,
+                }))
+            }
+            DistFilename::SourceDistFilename(filename) => {
+                Self::Source(SourceDist::Registry(RegistrySourceDist {
+                    filename,
+                    file,
+                    index,
+                }))
+            }
         }
     }
 
@@ -305,6 +299,13 @@ impl Dist {
             Dist::Source(source) => source.file(),
         }
     }
+
+    pub fn version(&self) -> Option<&Version> {
+        match self {
+            Dist::Built(wheel) => Some(wheel.version()),
+            Dist::Source(source_dist) => source_dist.version(),
+        }
+    }
 }
 
 impl BuiltDist {
@@ -315,6 +316,14 @@ impl BuiltDist {
             BuiltDist::DirectUrl(_) | BuiltDist::Path(_) => None,
         }
     }
+
+    pub fn version(&self) -> &Version {
+        match self {
+            BuiltDist::Registry(wheel) => &wheel.filename.version,
+            BuiltDist::DirectUrl(wheel) => &wheel.filename.version,
+            BuiltDist::Path(wheel) => &wheel.filename.version,
+        }
+    }
 }
 
 impl SourceDist {
@@ -322,6 +331,13 @@ impl SourceDist {
     pub fn file(&self) -> Option<&File> {
         match self {
             SourceDist::Registry(registry) => Some(&registry.file),
+            SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
+        }
+    }
+
+    pub fn version(&self) -> Option<&Version> {
+        match self {
+            SourceDist::Registry(source_dist) => Some(&source_dist.filename.version),
             SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
         }
     }
@@ -348,7 +364,7 @@ impl SourceDist {
 
 impl Name for RegistryBuiltDist {
     fn name(&self) -> &PackageName {
-        &self.name
+        &self.filename.name
     }
 }
 
@@ -366,7 +382,7 @@ impl Name for PathBuiltDist {
 
 impl Name for RegistrySourceDist {
     fn name(&self) -> &PackageName {
-        &self.name
+        &self.filename.name
     }
 }
 
@@ -420,7 +436,7 @@ impl Name for Dist {
 
 impl DistributionMetadata for RegistryBuiltDist {
     fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
+        VersionOrUrl::Version(&self.filename.version)
     }
 }
 
@@ -438,7 +454,7 @@ impl DistributionMetadata for PathBuiltDist {
 
 impl DistributionMetadata for RegistrySourceDist {
     fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
+        VersionOrUrl::Version(&self.filename.version)
     }
 }
 
@@ -675,6 +691,22 @@ impl Identifier for Path {
 
     fn resource_id(&self) -> ResourceId {
         ResourceId::new(cache_key::digest(&self))
+    }
+}
+
+impl Identifier for FileLocation {
+    fn distribution_id(&self) -> DistributionId {
+        match self {
+            FileLocation::Url(url) => url.distribution_id(),
+            FileLocation::Path(path, _) => path.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        match self {
+            FileLocation::Url(url) => url.resource_id(),
+            FileLocation::Path(path, _) => path.resource_id(),
+        }
     }
 }
 
