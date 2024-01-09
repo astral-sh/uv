@@ -9,7 +9,6 @@ pub use resolver::{BuildId, Reporter as ResolverReporter, Resolver, ResolverProv
 
 mod candidate_selector;
 mod error;
-mod file;
 mod finder;
 mod manifest;
 mod overrides;

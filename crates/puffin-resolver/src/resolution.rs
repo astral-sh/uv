@@ -55,12 +55,10 @@ impl ResolutionGraph {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     let version = Version::from(version.clone());
-                    let (index, base, file) = pins
+                    let pinned_package = pins
                         .get(package_name, &version)
                         .expect("Every package should be pinned")
                         .clone();
-                    let pinned_package =
-                        Dist::from_registry(package_name.clone(), version, file, index, base);
 
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
@@ -89,12 +87,10 @@ impl ResolutionGraph {
 
                     if !metadata.provides_extras.contains(extra) {
                         let version = Version::from(version.clone());
-                        let (index, base, file) = pins
+                        let pinned_package = pins
                             .get(package_name, &version)
                             .expect("Every package should be pinned")
                             .clone();
-                        let pinned_package =
-                            Dist::from_registry(package_name.clone(), version, file, index, base);
 
                         diagnostics.push(Diagnostic::MissingExtra {
                             dist: pinned_package,
