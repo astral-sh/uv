@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 use zip::result::ZipError;
 use zip::ZipArchive;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 pub use crate::vendor::{CloneableSeekableReader, HasLength};
 
@@ -12,6 +13,8 @@ mod vendor;
 pub enum Error {
     #[error(transparent)]
     Zip(#[from] ZipError),
+    #[error(transparent)]
+    AsyncZip(#[from] async_zip::error::ZipError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Unsupported archive type: {0}")]
@@ -33,26 +36,27 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<(), Error> {
     let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
 
-    while let Some(mut entry) = zip.next_with_entry().await.unwrap() {
+    while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct path
-        let path = entry.reader().entry().filename().as_str().unwrap();
+        let path = entry.reader().entry().filename().as_str()?;
         let path = target.join(path);
-        let is_dir = entry.reader().entry().dir().unwrap();
+        let is_dir = entry.reader().entry().dir()?;
 
         // Create dir or write file
         if is_dir {
-            tokio::fs::create_dir_all(path).await.unwrap();
+            tokio::fs::create_dir_all(path).await?;
         } else {
-            tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();
-            let mut file = tokio::fs::File::create(path).await.unwrap();
-            use tokio_util::compat::FuturesAsyncReadCompatExt;
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
+            let mut file = tokio::fs::File::create(path).await?;
             let mut reader = entry.reader_mut().compat();
-            tokio::io::copy(&mut reader, &mut file).await.unwrap();
+            tokio::io::copy(&mut reader, &mut file).await?;
         }
 
         // Close current file to get access to the next one. See docs:
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
-        zip = entry.skip().await.unwrap();
+        zip = entry.skip().await?;
     }
 
     Ok(())
