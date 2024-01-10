@@ -83,7 +83,7 @@ impl LocalWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         match self {
-            LocalWheel::Unzipped(wheel) => &wheel.remote(),
+            LocalWheel::Unzipped(wheel) => wheel.remote(),
             LocalWheel::InMemory(wheel) => wheel.remote(),
             LocalWheel::Disk(wheel) => wheel.remote(),
             LocalWheel::Built(wheel) => wheel.remote(),
