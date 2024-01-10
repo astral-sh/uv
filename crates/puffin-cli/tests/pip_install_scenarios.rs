@@ -289,12 +289,12 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                   c>1.0.0,<2.0.0
                   c>2.0.0
               and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
-              And because c==2.0.0 depends on a>=3.0.0 we can conclude that c depends on one of:
+              And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c depends on one of:
                   a<2.0.0
                   a>=3.0.0
 
-              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, c*, b!=1.0.0 are incompatible.
-              And because a==3.0.0 depends on b==3.0.0 we can conclude that c depends on one of:
+              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, all versions of c, b!=1.0.0 are incompatible.
+              And because a==3.0.0 depends on b==3.0.0 we can conclude that all versions of c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
 
@@ -438,7 +438,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                   c>1.0.0,<2.0.0
                   c>2.0.0
               and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
-              And because c==2.0.0 depends on a>=3.0.0 we can conclude that c depends on one of:
+              And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c depends on one of:
                   a<2.0.0
                   a>=3.0.0
 
@@ -448,7 +448,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
               depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-              we can conclude that c depends on one of:
+              we can conclude that all versions of c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
 
@@ -1537,12 +1537,12 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
           ╰─▶ Because there are no versions of b that satisfy any of:
                   b<1.0.0
                   b>1.0.0
-              and b==1.0.0 depends on c, we can conclude that b depends on c.
-              And because there are no versions of c that satisfy c>=2.0.0b1 we can conclude that b depends on c<2.0.0b1.
+              and b==1.0.0 depends on c, we can conclude that all versions of b depends on c.
+              And because there are no versions of c that satisfy c>=2.0.0b1 we can conclude that all versions of b depends on c<2.0.0b1.
               And because a==1.0.0 depends on c>=2.0.0b1 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              we can conclude that b* and a* are incompatible.
+              we can conclude that all versions of b and all versions of a are incompatible.
               And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: c was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -2068,7 +2068,7 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
           ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              and a==1.0.0 depends on b==2.0.0, we can conclude that a depends on b==2.0.0.
+              and a==1.0.0 depends on b==2.0.0, we can conclude that all versions of a depends on b==2.0.0.
               And because root depends on a and root depends on b==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2147,11 +2147,11 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
           ╰─▶ Because there are no versions of b that satisfy any of:
                   b<1.0.0
                   b>1.0.0
-              and b==1.0.0 depends on c==2.0.0, we can conclude that b depends on c==2.0.0.
+              and b==1.0.0 depends on c==2.0.0, we can conclude that all versions of b depends on c==2.0.0.
               And because a==1.0.0 depends on c==1.0.0 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              we can conclude that a* and b* are incompatible.
+              we can conclude that all versions of a and all versions of b are incompatible.
               And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
         "###);
     });
