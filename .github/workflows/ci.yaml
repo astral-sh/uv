@@ -62,6 +62,7 @@ jobs:
         with:
           name: nextest-archive-${{ matrix.os }}
           path: nextest-archive.tar.zst
+          compression-level: 0 # already compressed by nextest
 
   cargo-test:
     strategy:
