@@ -1542,7 +1542,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
               And because a==1.0.0 depends on c>=2.0.0b1 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              we can conclude that b*, a* are incompatible.
+              we can conclude that b* and a* are incompatible.
               And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: c was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -2151,7 +2151,7 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
               And because a==1.0.0 depends on c==1.0.0 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              we can conclude that a*, b* are incompatible.
+              we can conclude that a* and b* are incompatible.
               And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
         "###);
     });

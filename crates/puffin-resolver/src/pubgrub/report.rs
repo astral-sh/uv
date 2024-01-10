@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::ops::Bound;
 
 use derivative::Derivative;
@@ -154,11 +155,25 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                 &External::FromDependencyOf((*p2).clone(), r2.clone(), (*p1).clone(), r1.clone()),
             ),
             slice => {
+                let mut result = String::new();
                 let str_terms: Vec<_> = slice
                     .iter()
                     .map(|(p, t)| format!("{}", PackageTerm::new(p, t)))
                     .collect();
-                str_terms.join(", ") + " are incompatible"
+                for (index, term) in str_terms.iter().enumerate() {
+                    result.push_str(term);
+                    match str_terms.len().cmp(&2) {
+                        Ordering::Equal if index == 0 => {
+                            result.push_str(" and ");
+                        }
+                        Ordering::Greater if index + 1 < str_terms.len() => {
+                            result.push_str(", ");
+                        }
+                        _ => (),
+                    }
+                }
+                result.push_str(" are incompatible");
+                result
             }
         }
     }
