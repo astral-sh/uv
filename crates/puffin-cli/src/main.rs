@@ -14,6 +14,7 @@ use puffin_installer::Reinstall;
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
+use puffin_traits::SetupPyStrategy;
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus};
@@ -166,6 +167,11 @@ struct PipCompileArgs {
     #[clap(long)]
     upgrade: bool,
 
+    /// Use legacy `setuptools` behavior when building source distributions without a
+    /// `pyproject.toml`.
+    #[clap(long)]
+    legacy_setup_py: bool,
+
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
@@ -227,6 +233,11 @@ struct PipSyncArgs {
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Use legacy `setuptools` behavior when building source distributions without a
+    /// `pyproject.toml`.
+    #[clap(long)]
+    legacy_setup_py: bool,
 
     /// Don't build source distributions.
     ///
@@ -323,6 +334,11 @@ struct PipInstallArgs {
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Use legacy `setuptools` behavior when building source distributions without a
+    /// `pyproject.toml`.
+    #[clap(long)]
+    legacy_setup_py: bool,
 
     /// Don't build source distributions.
     ///
@@ -480,6 +496,11 @@ async fn inner() -> Result<ExitStatus> {
                 args.prerelease,
                 args.upgrade.into(),
                 index_urls,
+                if args.legacy_setup_py {
+                    SetupPyStrategy::Setuptools
+                } else {
+                    SetupPyStrategy::Pep517
+                },
                 args.no_build,
                 args.python_version,
                 args.exclude_newer,
@@ -502,6 +523,11 @@ async fn inner() -> Result<ExitStatus> {
                 &reinstall,
                 args.link_mode,
                 index_urls,
+                if args.legacy_setup_py {
+                    SetupPyStrategy::Setuptools
+                } else {
+                    SetupPyStrategy::Pep517
+                },
                 args.no_build,
                 args.strict,
                 cache,
@@ -547,6 +573,11 @@ async fn inner() -> Result<ExitStatus> {
                 index_urls,
                 &reinstall,
                 args.link_mode,
+                if args.legacy_setup_py {
+                    SetupPyStrategy::Setuptools
+                } else {
+                    SetupPyStrategy::Pep517
+                },
                 args.no_build,
                 args.strict,
                 args.exclude_newer,

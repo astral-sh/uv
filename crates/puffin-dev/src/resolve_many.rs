@@ -20,7 +20,7 @@ use puffin_client::{RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
@@ -74,6 +74,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexUrls::default();
+    let setup_py = SetupPyStrategy::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -81,6 +82,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
         venv.interpreter(),
         &index_urls,
         venv.python_executable(),
+        setup_py,
         args.no_build,
     );
     let build_dispatch = Arc::new(build_dispatch);

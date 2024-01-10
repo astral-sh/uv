@@ -14,7 +14,7 @@ use puffin_client::{RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
-use puffin_traits::OnceMap;
+use puffin_traits::{OnceMap, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
@@ -30,6 +30,7 @@ pub(crate) async fn pip_sync(
     reinstall: &Reinstall,
     link_mode: LinkMode,
     index_urls: IndexUrls,
+    setup_py: SetupPyStrategy,
     no_build: bool,
     strict: bool,
     cache: Cache,
@@ -69,6 +70,7 @@ pub(crate) async fn pip_sync(
         venv.interpreter(),
         &index_urls,
         venv.python_executable(),
+        setup_py,
         no_build,
     );
 

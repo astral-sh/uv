@@ -68,9 +68,10 @@ pub trait BuildContext {
     /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
     /// we can't build them
-    fn no_build(&self) -> bool {
-        false
-    }
+    fn no_build(&self) -> bool;
+
+    /// The strategy to use when building source distributions that lack a `pyproject.toml`.
+    fn setup_py_strategy(&self) -> SetupPyStrategy;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -121,6 +122,16 @@ pub trait SourceBuildTrait {
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
     fn wheel<'a>(&'a self, wheel_dir: &'a Path)
         -> impl Future<Output = Result<String>> + Send + 'a;
+}
+
+/// The strategy to use when building source distributions that lack a `pyproject.toml`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum SetupPyStrategy {
+    /// Perform a PEP 517 build.
+    #[default]
+    Pep517,
+    /// Perform a build by invoking `setuptools` directly.
+    Setuptools,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]

@@ -28,7 +28,7 @@ use puffin_normalize::PackageName;
 use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::OnceMap;
+use puffin_traits::{OnceMap, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -48,6 +48,7 @@ pub(crate) async fn pip_install(
     index_urls: IndexUrls,
     reinstall: &Reinstall,
     link_mode: LinkMode,
+    setup_py: SetupPyStrategy,
     no_build: bool,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -144,6 +145,7 @@ pub(crate) async fn pip_install(
         &interpreter,
         &index_urls,
         venv.python_executable(),
+        setup_py,
         no_build,
     )
     .with_options(options);

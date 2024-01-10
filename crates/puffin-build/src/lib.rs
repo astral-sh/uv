@@ -11,9 +11,7 @@ use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use distribution_types::Resolution;
 use fs_err as fs;
-use fs_err::DirEntry;
 use indoc::formatdoc;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
@@ -26,10 +24,11 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, Instrument};
 
+use distribution_types::Resolution;
 use pep508_rs::Requirement;
 use puffin_extract::extract_source;
 use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -38,9 +37,20 @@ static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
     )
     .unwrap()
 });
+
 /// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
 static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
+});
+
+/// The default backend to use when PEP 517 is used without a `build-system` section.
+static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
+    backend: "setuptools.build_meta:__legacy__".to_string(),
+    backend_path: None,
+    requirements: vec![
+        Requirement::from_str("wheel").unwrap(),
+        Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+    ],
 });
 
 #[derive(Error, Debug)]
@@ -89,8 +99,6 @@ pub enum MissingLibrary {
 #[derive(Debug, Error)]
 pub struct MissingHeaderCause {
     missing_library: MissingLibrary,
-    // I've picked this over the better readable package name to make clear that you need to
-    // look for the build dependencies of that version or git commit respectively
     package_id: String,
 }
 
@@ -109,7 +117,7 @@ impl Display for MissingHeaderCause {
                     f,
                     "This error likely indicates that you need to install the library that provides a shared library \
                     for {library} for {package_id} (e.g. lib{library}-dev)",
-                    library=library, package_id=self.package_id
+                    library = library, package_id = self.package_id
                 )
             }
         }
@@ -171,7 +179,7 @@ pub struct PyProjectToml {
 }
 
 /// `[build-backend]` from pyproject.toml
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Pep517Backend {
     /// The build backend string such as `setuptools.build_meta:__legacy__` or `maturin` from
     /// `build-backend.backend` in pyproject.toml
@@ -222,7 +230,7 @@ impl Pep517Backend {
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
     /// Cache the first resolution of `pip`, `setuptools` and `wheel` we made for setup.py (and
-    /// some PEP 517) builds so we can reuse it
+    /// some PEP 517) builds so we can reuse it.
     setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
 }
 
@@ -234,8 +242,9 @@ pub struct SourceBuildContext {
 pub struct SourceBuild {
     temp_dir: TempDir,
     source_tree: PathBuf,
-    /// `Some` if this is a PEP 517 build
+    /// If performing a PEP 517 build, the backend to use.
     pep517_backend: Option<Pep517Backend>,
+    /// The virtual environment in which to build the source distribution.
     venv: Virtualenv,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
@@ -258,6 +267,7 @@ impl SourceBuild {
     /// contents from an archive if necessary.
     ///
     /// `source_dist` is for error reporting only.
+    #[allow(clippy::too_many_arguments)]
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
@@ -265,6 +275,7 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         package_id: String,
+        setup_py: SetupPyStrategy,
         build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
@@ -282,6 +293,8 @@ impl SourceBuild {
         } else {
             source_root
         };
+
+        let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
 
         // Check if we have a PEP 517 build backend.
         let pep517_backend = match fs::read_to_string(source_tree.join("pyproject.toml")) {
@@ -306,74 +319,91 @@ impl SourceBuild {
                 } else {
                     // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
                     // a PEP 517 build using the default backend, to match `pip` and `build`.
-                    Some(Pep517Backend {
-                        backend: "setuptools.build_meta:__legacy__".to_string(),
-                        backend_path: None,
-                        requirements: vec![
-                            Requirement::from_str("wheel").unwrap(),
-                            Requirement::from_str("setuptools >= 40.8.0").unwrap(),
-                        ],
-                    })
+                    Some(default_backend.clone())
                 }
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                // We require either a `pyproject.toml` or a `setup.py` file at the top level.
+                if !source_tree.join("setup.py").is_file() {
+                    return Err(Error::InvalidSourceDist(
+                        "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
+                            .to_string(),
+                    ));
+                }
+
+                // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
+                // the default backend, to match `build`. `pip` uses `setup.py` directly in this
+                // case (which we allow via `SetupPyStrategy::Setuptools`), but plans to make PEP
+                // 517 builds the default in the future.
+                // See: https://github.com/pypa/pip/issues/9175.
+                match setup_py {
+                    SetupPyStrategy::Pep517 => Some(default_backend.clone()),
+                    SetupPyStrategy::Setuptools => None,
+                }
+            }
             Err(err) => return Err(err.into()),
         };
 
         let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter.clone())?;
 
-        // Setup the build environment using PEP 517 or the legacy setuptools backend.
-        if let Some(pep517_backend) = pep517_backend.as_ref() {
-            let resolved_requirements = build_context
-                .resolve(&pep517_backend.requirements)
-                .await
-                .map_err(|err| {
-                Error::RequirementsInstall("build-system.requires (resolve)", err)
-            })?;
-            build_context
-                .install(&resolved_requirements, &venv)
-                .await
-                .map_err(|err| {
-                    Error::RequirementsInstall("build-system.requires (install)", err)
-                })?;
+        // Setup the build environment.
+        let resolved_requirements = if let Some(pep517_backend) = pep517_backend.as_ref() {
+            if pep517_backend.requirements == default_backend.requirements {
+                let mut resolution = source_build_context.setup_py_resolution.lock().await;
+                if let Some(resolved_requirements) = &*resolution {
+                    resolved_requirements.clone()
+                } else {
+                    let resolved_requirements = build_context
+                        .resolve(&default_backend.requirements)
+                        .await
+                        .map_err(|err| {
+                            Error::RequirementsInstall("setup.py build (resolve)", err)
+                        })?;
+                    *resolution = Some(resolved_requirements.clone());
+                    resolved_requirements
+                }
+            } else {
+                build_context
+                    .resolve(&pep517_backend.requirements)
+                    .await
+                    .map_err(|err| {
+                        Error::RequirementsInstall("build-system.requires (resolve)", err)
+                    })?
+            }
         } else {
-            let requirements = vec![
-                Requirement::from_str("wheel").unwrap(),
-                Requirement::from_str("setuptools").unwrap(),
-                Requirement::from_str("pip").unwrap(),
-            ];
+            // Install default requirements for `setup.py`-based builds.
             let mut resolution = source_build_context.setup_py_resolution.lock().await;
-            let resolved_requirements = if let Some(resolved_requirements) = &*resolution {
+            if let Some(resolved_requirements) = &*resolution {
                 resolved_requirements.clone()
             } else {
                 let resolved_requirements = build_context
-                    .resolve(&requirements)
+                    .resolve(&default_backend.requirements)
                     .await
                     .map_err(|err| Error::RequirementsInstall("setup.py build (resolve)", err))?;
                 *resolution = Some(resolved_requirements.clone());
                 resolved_requirements
-            };
-            build_context
-                .install(&resolved_requirements, &venv)
-                .await
-                .map_err(|err| Error::RequirementsInstall("setup.py build (install)", err))?;
+            }
         };
 
+        build_context
+            .install(&resolved_requirements, &venv)
+            .await
+            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
+
+        // If we're using the default backend configuration, skip `get_requires_for_build_*`, since
+        // we already installed the requirements above.
         if let Some(pep517_backend) = &pep517_backend {
-            create_pep517_build_environment(
-                &source_tree,
-                &venv,
-                pep517_backend,
-                build_context,
-                &package_id,
-                build_kind,
-            )
-            .await?;
-        } else if !source_tree.join("setup.py").is_file() {
-            return Err(Error::InvalidSourceDist(
-                "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
-                    .to_string(),
-            ));
+            if pep517_backend != &default_backend {
+                create_pep517_build_environment(
+                    &source_tree,
+                    &venv,
+                    pep517_backend,
+                    build_context,
+                    &package_id,
+                    build_kind,
+                )
+                .await?;
+            }
         }
 
         Ok(Self {
@@ -390,12 +420,11 @@ impl SourceBuild {
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
     pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
-        // setup.py builds don't support this.
         let Some(pep517_backend) = &self.pep517_backend else {
             return Ok(None);
         };
 
-        // We've already called this method, but return the existing result is easier than erroring
+        // We've already called this method; return the existing result.
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));
         }
@@ -503,7 +532,7 @@ impl SourceBuild {
                 ));
             }
             let dist = fs::read_dir(self.source_tree.join("dist"))?;
-            let dist_dir = dist.collect::<io::Result<Vec<DirEntry>>>()?;
+            let dist_dir = dist.collect::<io::Result<Vec<fs_err::DirEntry>>>()?;
             let [dist_wheel] = dist_dir.as_slice() else {
                 return Err(Error::from_command_output(
                     format!(
@@ -622,8 +651,8 @@ async fn create_pep517_build_environment(
         "#, pep517_backend.backend_import(), build_kind
     };
     let span = info_span!(
-        "get_requires_for_build_wheel",
-        script="build_wheel",
+        "run_python_script",
+        script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().version()
     );
     let output = run_python_script(venv, &script, source_tree)
@@ -644,6 +673,7 @@ async fn create_pep517_build_environment(
         .map_err(|err| err.to_string())
         .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
         .and_then(|message| serde_json::from_str(&message).map_err(|err| err.to_string()));
+
     let extra_requires: Vec<Requirement> = extra_requires.map_err(|err| {
         Error::from_command_output(
             format!(
@@ -653,14 +683,14 @@ async fn create_pep517_build_environment(
             package_id,
         )
     })?;
+
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
     // and installation again.
     // TODO(konstin): Do we still need this when we have a fast resolver?
-    if !extra_requires.is_empty()
-        && !extra_requires
-            .iter()
-            .all(|req| pep517_backend.requirements.contains(req))
+    if extra_requires
+        .iter()
+        .any(|req| !pep517_backend.requirements.contains(req))
     {
         debug!("Installing extra requirements for build backend");
         let requirements: Vec<Requirement> = pep517_backend
@@ -679,6 +709,7 @@ async fn create_pep517_build_environment(
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
     }
+
     Ok(())
 }
 
