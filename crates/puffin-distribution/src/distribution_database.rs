@@ -38,6 +38,8 @@ pub enum DistributionDatabaseError {
     #[error(transparent)]
     Client(#[from] puffin_client::Error),
     #[error(transparent)]
+    Extract(#[from] puffin_extract::Error),
+    #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
     Distribution(#[from] distribution_types::Error),
@@ -140,7 +142,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let unzip_while_downloading = true;
                 if unzip_while_downloading {
                     let target = cache_entry.into_path_buf();
-                    unzip_no_seek(reader.compat(), &target).await.unwrap();
+                    unzip_no_seek(reader.compat(), &target).await?;
 
                     return Ok(LocalWheel::Unzipped(UnzippedWheel {
                         dist: dist.clone(),
