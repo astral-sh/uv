@@ -535,6 +535,8 @@ impl PackageRange<'_> {
     }
 }
 
+/// Inserts the given padding on the left and right sides of the content if
+/// the content does not start and end with whitespace respectively.
 #[derive(Debug)]
 struct Padded<'a, T: std::fmt::Display> {
     left: &'a str,
