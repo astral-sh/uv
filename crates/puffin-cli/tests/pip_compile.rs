@@ -2233,9 +2233,9 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
-              and root depends on attrs>20.3.0,<21.2.0, we can conclude that the
-              requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0 and
+              attrs<21.2.0 and root depends on attrs>20.3.0 and attrs<21.2.0, we can
+              conclude that the requirements are unsatisfiable.
         "###);
     });
 

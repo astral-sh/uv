@@ -158,8 +158,8 @@ fn excluded_only_compatible_version() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
-                  a>1.0.0,<2.0.0
-                  a>2.0.0,<3.0.0
+                  a>1.0.0 and a<2.0.0
+                  a>2.0.0 and a<3.0.0
                   a>3.0.0
               and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0.
               And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
@@ -169,7 +169,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                   b<=1.0.0
                   b>=3.0.0
 
-              And because root depends on b>=2.0.0,<3.0.0 and root depends on one of:
+              And because root depends on b>=2.0.0 and b<3.0.0 and root depends on one of:
                   a<2.0.0
                   a>2.0.0
               we can conclude that the requirements are unsatisfiable.
@@ -280,13 +280,13 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
-                  a>1.0.0,<2.0.0
+                  a>1.0.0 and a<2.0.0
                   a>3.0.0
               and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
 
               Because there are no versions of c that satisfy any of:
                   c<1.0.0
-                  c>1.0.0,<2.0.0
+                  c>1.0.0 and c<2.0.0
                   c>2.0.0
               and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
               And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c depends on one of:
@@ -298,7 +298,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                   b<=1.0.0
                   b>=3.0.0
 
-              And because root depends on c and root depends on b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+              And because root depends on c and root depends on b>=2.0.0 and b<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -422,7 +422,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
           × No solution found when resolving dependencies:
           ╰─▶ Because a==1.0.0 depends on b==1.0.0 and there are no versions of a that satisfy any of:
                   a<1.0.0
-                  a>1.0.0,<2.0.0
+                  a>1.0.0 and a<2.0.0
                   a>3.0.0
               we can conclude that a<2.0.0 depends on b==1.0.0.
               And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
@@ -435,7 +435,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
               Because there are no versions of c that satisfy any of:
                   c<1.0.0
-                  c>1.0.0,<2.0.0
+                  c>1.0.0 and c<2.0.0
                   c>2.0.0
               and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
               And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c depends on one of:
@@ -452,7 +452,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                   b<=1.0.0
                   b>=3.0.0
 
-              And because root depends on b>=2.0.0,<3.0.0 and root depends on c, we can conclude that the requirements are unsatisfiable.
+              And because root depends on b>=2.0.0 and b<3.0.0 and root depends on c, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1640,13 +1640,13 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of c that satisfy any of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+                  c>1.0.0 and c<2.0.0a5
+                  c>2.0.0a7 and c<2.0.0b1
+                  c>2.0.0b1 and c<2.0.0b5
               and a==1.0.0 depends on one of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+                  c>1.0.0 and c<2.0.0a5
+                  c>2.0.0a7 and c<2.0.0b1
+                  c>2.0.0b1 and c<2.0.0b5
               we can conclude that a==1.0.0 cannot be used.
               And because there are no versions of a that satisfy any of:
                   a<1.0.0
@@ -1654,9 +1654,9 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
               and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: c was requested with a pre-release marker (e.g., any of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+                  c>1.0.0 and c<2.0.0a5
+                  c>2.0.0a7 and c<2.0.0b1
+                  c>2.0.0b1 and c<2.0.0b5
               ), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
@@ -2547,23 +2547,23 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10,<3.11 and there are no versions of Python that satisfy Python>=3.12, we can conclude that any of:
-                  Python>=3.10,<3.11
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10 and Python<3.11 and there are no versions of Python that satisfy Python>=3.12, we can conclude that any of:
+                  Python>=3.10 and Python<3.11
                   Python>=3.12
                are incompatible.
-              And because there are no versions of Python that satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
+              And because there are no versions of Python that satisfy Python>=3.11 and Python<3.12 we can conclude that Python>=3.10 are incompatible.
               And because a==2.0.0 depends on Python>=3.10 and there are no versions of a that satisfy any of:
-                  a>2.0.0,<3.0.0
-                  a>3.0.0,<4.0.0
+                  a>2.0.0 and a<3.0.0
+                  a>3.0.0 and a<4.0.0
                   a>4.0.0
-              we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
+              we can conclude that a>=2.0.0 and a<3.0.0 cannot be used. (1)
 
-              Because there are no versions of Python that satisfy Python>=3.11,<3.12 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
+              Because there are no versions of Python that satisfy Python>=3.11 and Python<3.12 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
               And because a==3.0.0 depends on Python>=3.11 we can conclude that a==3.0.0 cannot be used.
-              And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
+              And because we know from (1) that a>=2.0.0 and a<3.0.0 cannot be used, we can conclude that a>=2.0.0 and a<4.0.0 cannot be used. (2)
 
               Because there are no versions of Python that satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
-              And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
+              And because we know from (2) that a>=2.0.0 and a<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
               And because root depends on a>=2.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });

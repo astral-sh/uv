@@ -486,13 +486,19 @@ impl std::fmt::Display for PackageRange<'_> {
                         if v == b {
                             write!(f, "{package}=={v}")?;
                         } else {
-                            write!(f, "{package}>={v},<={b}")?;
+                            write!(f, "{package}>={v} and {package}<={b}")?;
                         }
                     }
-                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, "{package}>={v},<{b}")?,
+                    (Bound::Included(v), Bound::Excluded(b)) => {
+                        write!(f, "{package}>={v} and {package}<{b}")?;
+                    }
                     (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
-                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
-                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
+                    (Bound::Excluded(v), Bound::Included(b)) => {
+                        write!(f, "{package}>{v} and {package}<={b}")?;
+                    }
+                    (Bound::Excluded(v), Bound::Excluded(b)) => {
+                        write!(f, "{package}>{v} and {package}<{b}")?;
+                    }
                 };
             }
             if segments.len() > 1 {
