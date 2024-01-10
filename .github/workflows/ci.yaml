@@ -54,8 +54,8 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: Build and archive tests
-        run: cargo nextest archive --archive-file nextest-archive.tar.zst
+      - name: Build tests
+        run: cargo nextest archive --archive-file nextest-archive.tar.zst --all --all-features
       - name: Upload archive
         uses: actions/upload-artifact@v3
         with:
@@ -103,7 +103,6 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           cargo nextest run \
-            --all --all-features \
             --status-level skip --failure-output immediate-final --no-fail-fast \
             --archive-file nextest-archive.tar.zst \
             --partition count:${{ matrix.partition }}/2
