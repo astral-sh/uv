@@ -93,9 +93,6 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
