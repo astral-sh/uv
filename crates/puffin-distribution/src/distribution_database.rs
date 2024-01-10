@@ -151,6 +151,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 }
 
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
+                //
+                // TODO this is currently dead code. Consider deleting if there's no use for it.
                 let byte_size = wheel.file.size.map(ByteSize::b);
                 let local_wheel = if let Some(byte_size) =
                     byte_size.filter(|byte_size| *byte_size < ByteSize::mb(5))
