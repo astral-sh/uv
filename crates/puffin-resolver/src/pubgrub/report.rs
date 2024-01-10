@@ -156,7 +156,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
             slice => {
                 let str_terms: Vec<_> = slice
                     .iter()
-                    .map(|(p, t)| format!("{p}{}", PackageTerm::new(p, t)))
+                    .map(|(p, t)| format!("{}", PackageTerm::new(p, t)))
                     .collect();
                 str_terms.join(", ") + " are incompatible"
             }
@@ -432,10 +432,11 @@ struct PackageTerm<'a> {
 impl std::fmt::Display for PackageTerm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.term {
-            Term::Positive(set) => write!(f, "{set}"),
+            Term::Positive(set) => write!(f, "{}", PackageRange::requires(self.package, set)),
             Term::Negative(set) => {
                 if let Some(version) = set.as_singleton() {
-                    write!(f, "!={version}")
+                    let package = self.package;
+                    write!(f, "{package}!={version}")
                 } else {
                     write!(f, "!( {} )", PackageRange::requires(self.package, set))
                 }

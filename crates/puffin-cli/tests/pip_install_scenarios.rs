@@ -2547,7 +2547,10 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10,<3.11 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.10, <3.11 | >=3.12 are incompatible.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10,<3.11 and there are no versions of Python that satisfy Python>=3.12, we can conclude that any of:
+                  Python>=3.10,<3.11
+                  Python>=3.12
+               are incompatible.
               And because there are no versions of Python that satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
               And because a==2.0.0 depends on Python>=3.10 and there are no versions of a that satisfy any of:
                   a>2.0.0,<3.0.0
