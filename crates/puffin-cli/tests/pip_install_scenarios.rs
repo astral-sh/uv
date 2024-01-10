@@ -1176,7 +1176,7 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of b that satisfy b>0.1 and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 is forbidden.
+          ╰─▶ Because there are no versions of b that satisfy b>0.1 and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
               And because there are no versions of a that satisfy any of:
                   a<0.1.0
                   a>0.1.0
@@ -1334,7 +1334,7 @@ fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 is forbidden.
+          ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 cannot be used.
               And because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
@@ -1647,7 +1647,7 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
                   c>1.0.0,<2.0.0a5
                   c>2.0.0a7,<2.0.0b1
                   c>2.0.0b1,<2.0.0b5
-              we can conclude that a==1.0.0 is forbidden.
+              we can conclude that a==1.0.0 cannot be used.
               And because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
@@ -2212,7 +2212,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=4.0 and a==1.0.0 depends on Python>=4.0, we can conclude that a==1.0.0 is forbidden.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=4.0 and a==1.0.0 depends on Python>=4.0, we can conclude that a==1.0.0 cannot be used.
               And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2269,7 +2269,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python<=3.8 and a==1.0.0 depends on Python<=3.8, we can conclude that a==1.0.0 is forbidden.
+          ╰─▶ Because there are no versions of Python that satisfy Python<=3.8 and a==1.0.0 depends on Python<=3.8, we can conclude that a==1.0.0 cannot be used.
               And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2329,7 +2329,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 is forbidden.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
               And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2556,14 +2556,14 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                   a>2.0.0,<3.0.0
                   a>3.0.0,<4.0.0
                   a>4.0.0
-              we can conclude that a>=2.0.0,<3.0.0 is forbidden. (1)
+              we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
 
               Because there are no versions of Python that satisfy Python>=3.11,<3.12 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
-              And because a==3.0.0 depends on Python>=3.11 we can conclude that a==3.0.0 is forbidden.
-              And because we know from (1) that a>=2.0.0,<3.0.0 is forbidden, we can conclude that a>=2.0.0,<4.0.0 is forbidden. (2)
+              And because a==3.0.0 depends on Python>=3.11 we can conclude that a==3.0.0 cannot be used.
+              And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
 
-              Because there are no versions of Python that satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 is forbidden.
-              And because we know from (2) that a>=2.0.0,<4.0.0 is forbidden, we can conclude that a>=2.0.0 is forbidden.
+              Because there are no versions of Python that satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
+              And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
               And because root depends on a>=2.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
