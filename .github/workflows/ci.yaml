@@ -58,7 +58,7 @@ jobs:
       - name: Build tests
         run: cargo nextest archive --archive-file nextest-archive.tar.zst --all --all-features
       - name: Upload archive
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: nextest-archive-${{ matrix.os }}
           path: nextest-archive.tar.zst
@@ -97,7 +97,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: nextest-archive-${{ matrix.os }}
       - name: "Tests (Ubuntu)"
