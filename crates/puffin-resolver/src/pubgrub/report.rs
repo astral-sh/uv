@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::ops::Bound;
 
-use chrono::format::Pad;
 use derivative::Derivative;
 use owo_colors::OwoColorize;
 use pubgrub::range::Range;
@@ -157,7 +156,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
             slice => {
                 let str_terms: Vec<_> = slice
                     .iter()
-                    .map(|(p, t)| format!("{p}{}", PackageTerm::new(p, *t)))
+                    .map(|(p, t)| format!("{p}{}", PackageTerm::new(p, t)))
                     .collect();
                 str_terms.join(", ") + " are incompatible"
             }
@@ -424,7 +423,7 @@ impl std::fmt::Display for PubGrubHint {
     }
 }
 
-/// A [Term] and [PubGrubPackage] combination for display.
+/// A [`Term`] and [`PubGrubPackage`] combination for display.
 struct PackageTerm<'a> {
     package: &'a PubGrubPackage,
     term: &'a Term<Range<PubGrubVersion>>,
@@ -454,14 +453,14 @@ impl PackageTerm<'_> {
     }
 }
 
-/// The kind of version ranges being displayed in [PackageRange]
+/// The kind of version ranges being displayed in [`PackageRange`]
 #[derive(Debug)]
 enum PackageRangeKind {
     Depends,
     Requires,
 }
 
-/// A [Range] and [PubGrubPackage] combination for display.
+/// A [`Range`] and [`PubGrubPackage`] combination for display.
 #[derive(Debug)]
 struct PackageRange<'a> {
     package: &'a PubGrubPackage,
@@ -481,7 +480,7 @@ impl std::fmt::Display for PackageRange<'_> {
                     PackageRangeKind::Requires => write!(f, "any of:")?,
                 }
             }
-            for (_idx, segment) in segments.iter().enumerate() {
+            for segment in &segments {
                 if segments.len() > 1 {
                     write!(f, "\n    ")?;
                 }
@@ -505,7 +504,7 @@ impl std::fmt::Display for PackageRange<'_> {
                 };
             }
             if segments.len() > 1 {
-                write!(f, "\n")?;
+                writeln!(f)?;
             }
         }
         Ok(())
@@ -570,7 +569,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
 
         if let Some(char) = content.chars().next() {
             if !char.is_whitespace() {
-                result.push_str(self.left)
+                result.push_str(self.left);
             }
         }
 
@@ -578,7 +577,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
 
         if let Some(char) = content.chars().last() {
             if !char.is_whitespace() {
-                result.push_str(self.right)
+                result.push_str(self.right);
             }
         }
 
