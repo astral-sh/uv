@@ -22,6 +22,11 @@ pub enum Error {
     InvalidArchive(Vec<fs_err::DirEntry>),
 }
 
+/// Unzip a `.zip` archive into the target directory without requiring Seek.
+///
+/// This is useful for unzipping files as they're being downloaded. If the archive
+/// is already fully on disk, consider using `unzip_archive`, which can use multiple
+/// threads to work faster in that case.
 pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
@@ -45,7 +50,8 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
             tokio::io::copy(&mut reader, &mut file).await.unwrap();
         }
 
-        // Close current file, allowing next file to be read safely
+        // Close current file to get access to the next one. See docs:
+        // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
         zip = entry.skip().await.unwrap();
     }
 
