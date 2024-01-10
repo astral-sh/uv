@@ -104,6 +104,6 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           cargo nextest run \
-            --status-level skip --failure-output immediate-final --no-fail-fast \
+            --failure-output immediate-final --no-fail-fast \
             --archive-file nextest-archive.tar.zst \
             --partition count:${{ matrix.partition }}/2
