@@ -50,6 +50,7 @@ jobs:
     name: "cargo build | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
       - name: Install cargo nextest
         uses: taiki-e/install-action@v2
         with:
