@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
 
@@ -45,7 +45,7 @@ jobs:
   cargo-test:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
@@ -53,7 +53,7 @@ jobs:
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:
-          python-version: |
+          python-version: | 
             3.7
             3.8
             3.9
@@ -66,13 +66,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-insta
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast
+        run: cargo insta test --all --all-features --unreferenced reject
