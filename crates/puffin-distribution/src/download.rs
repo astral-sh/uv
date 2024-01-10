@@ -17,7 +17,7 @@ pub struct UnzippedWheel {
     pub(crate) dist: Dist,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
-    /// The expected path to the downloaded wheel's entry in the cache.
+    /// The path in the cache dir where the wheel was downloaded.
     pub(crate) target: PathBuf,
 }
 
