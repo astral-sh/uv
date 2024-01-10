@@ -568,7 +568,7 @@ impl<'a> Padded<'a, String> {
 impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut result = String::new();
-        let content = format!("{}", self.content);
+        let content = self.content.to_string();
 
         if let Some(char) = content.chars().next() {
             if !char.is_whitespace() {
