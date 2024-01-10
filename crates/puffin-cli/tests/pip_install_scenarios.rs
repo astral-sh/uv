@@ -293,7 +293,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                   a<2.0.0
                   a>=3.0.0
 
-              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conlude that a!=3.0.0, c*, b!=1.0.0 are incompatible.
+              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, c*, b!=1.0.0 are incompatible.
               And because a==3.0.0 depends on b==3.0.0 we can conclude that c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
@@ -448,7 +448,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
               depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-              we can conlude that c depends on one of:
+              we can conclude that c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
 
@@ -2557,10 +2557,10 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
               Because there are no versions of Python that satisfy Python>=3.11,<3.12 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
               And because a==3.0.0 depends on Python>=3.11 we can conclude that a==3.0.0 is forbidden.
-              And because we know from (1) that a>=2.0.0,<3.0.0 is forbidden, we can conlude that a>=2.0.0,<4.0.0 is forbidden. (2)
+              And because we know from (1) that a>=2.0.0,<3.0.0 is forbidden, we can conclude that a>=2.0.0,<4.0.0 is forbidden. (2)
 
               Because there are no versions of Python that satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 is forbidden.
-              And because we know from (2) that a>=2.0.0,<4.0.0 is forbidden, we can conlude that a>=2.0.0 is forbidden.
+              And because we know from (2) that a>=2.0.0,<4.0.0 is forbidden, we can conclude that a>=2.0.0 is forbidden.
               And because root depends on a>=2.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });

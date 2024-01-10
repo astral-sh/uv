@@ -259,7 +259,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
         let current = self.format_terms(current_terms);
 
         format!(
-            "And because we know from ({}) that {}we can conlude that {}",
+            "And because we know from ({}) that {}we can conclude that {}",
             ref_id,
             Padded::from_string("", &derived, ", "),
             Padded::from_string("", &current, "."),
