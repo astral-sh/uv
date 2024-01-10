@@ -75,4 +75,4 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast
+        run: cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast --test-threads 4
