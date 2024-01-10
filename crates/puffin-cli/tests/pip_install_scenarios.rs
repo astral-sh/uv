@@ -158,8 +158,8 @@ fn excluded_only_compatible_version() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
-                  a>1.0.0,<2.0.0
-                  a>2.0.0,<3.0.0
+                  a>1.0.0, <2.0.0
+                  a>2.0.0, <3.0.0
                   a>3.0.0
               and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0.
               And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
@@ -280,13 +280,13 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
-                  a>1.0.0,<2.0.0
+                  a>1.0.0, <2.0.0
                   a>3.0.0
               and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
 
               Because there are no versions of c that satisfy any of:
                   c<1.0.0
-                  c>1.0.0,<2.0.0
+                  c>1.0.0, <2.0.0
                   c>2.0.0
               and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
               And because c==2.0.0 depends on a>=3.0.0 we can conclude that c depends on one of:
@@ -422,7 +422,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
           × No solution found when resolving dependencies:
           ╰─▶ Because a==1.0.0 depends on b==1.0.0 and there are no versions of a that satisfy any of:
                   a<1.0.0
-                  a>1.0.0,<2.0.0
+                  a>1.0.0, <2.0.0
                   a>3.0.0
               we can conclude that a<2.0.0 depends on b==1.0.0.
               And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
@@ -435,7 +435,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
               Because there are no versions of c that satisfy any of:
                   c<1.0.0
-                  c>1.0.0,<2.0.0
+                  c>1.0.0, <2.0.0
                   c>2.0.0
               and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
               And because c==2.0.0 depends on a>=3.0.0 we can conclude that c depends on one of:
@@ -1640,13 +1640,13 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of c that satisfy any of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+                  c>1.0.0, <2.0.0a5
+                  c>2.0.0a7, <2.0.0b1
+                  c>2.0.0b1, <2.0.0b5
               and a==1.0.0 depends on one of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+                  c>1.0.0, <2.0.0a5
+                  c>2.0.0a7, <2.0.0b1
+                  c>2.0.0b1, <2.0.0b5
               we can conclude that a==1.0.0 is forbidden.
               And because there are no versions of a that satisfy any of:
                   a<1.0.0
@@ -1654,9 +1654,9 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
               and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: c was requested with a pre-release marker (e.g., any of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+                  c>1.0.0, <2.0.0a5
+                  c>2.0.0a7, <2.0.0b1
+                  c>2.0.0b1, <2.0.0b5
               ), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
@@ -2548,13 +2548,13 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of Python that satisfy Python>=3.10,<3.11 and there are no versions of Python that satisfy Python>=3.12, we can conclude that any of:
-                  Python>=3.10,<3.11
+                  Python>=3.10, <3.11
                   Python>=3.12
                are incompatible.
               And because there are no versions of Python that satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
               And because a==2.0.0 depends on Python>=3.10 and there are no versions of a that satisfy any of:
-                  a>2.0.0,<3.0.0
-                  a>3.0.0,<4.0.0
+                  a>2.0.0, <3.0.0
+                  a>3.0.0, <4.0.0
                   a>4.0.0
               we can conclude that a>=2.0.0,<3.0.0 is forbidden. (1)
 

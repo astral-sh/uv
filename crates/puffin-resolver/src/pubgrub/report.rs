@@ -481,6 +481,7 @@ impl std::fmt::Display for PackageRange<'_> {
                     PackageRangeKind::Requires => write!(f, "any of:")?,
                 }
             }
+            let space = if segments.len() > 1 { " " } else { "" };
             for segment in &segments {
                 if segments.len() > 1 {
                     write!(f, "\n    ")?;
@@ -495,13 +496,13 @@ impl std::fmt::Display for PackageRange<'_> {
                         if v == b {
                             write!(f, "=={v}")?;
                         } else {
-                            write!(f, ">={v},<={b}")?;
+                            write!(f, ">={v},{space}<={b}")?;
                         }
                     }
-                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, ">={v},<{b}")?,
+                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, ">={v},{space}<{b}")?,
                     (Bound::Excluded(v), Bound::Unbounded) => write!(f, ">{v}")?,
-                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, ">{v},<={b}")?,
-                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, ">{v},<{b}")?,
+                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, ">{v},{space}<={b}")?,
+                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, ">{v},{space}<{b}")?,
                 };
             }
             if segments.len() > 1 {
