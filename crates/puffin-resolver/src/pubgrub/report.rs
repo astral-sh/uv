@@ -440,9 +440,10 @@ impl std::fmt::Display for PackageRange<'_> {
         if self.range.is_empty() {
             write!(f, "∅")?;
         } else {
-            for (idx, segment) in self.range.iter().enumerate() {
-                if idx > 0 {
-                    write!(f, "|")?;
+            let segments: Vec<_> = self.range.iter().collect();
+            for (_idx, segment) in segments.iter().enumerate() {
+                if segments.len() > 1 {
+                    write!(f, "\n    ")?;
                 }
                 write!(f, "{}", self.package)?;
                 match segment {
@@ -462,6 +463,9 @@ impl std::fmt::Display for PackageRange<'_> {
                     (Bound::Excluded(v), Bound::Included(b)) => write!(f, ">{v},<={b}")?,
                     (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, ">{v},<{b}")?,
                 };
+            }
+            if segments.len() > 1 {
+                write!(f, "\n")?;
             }
         }
         Ok(())
