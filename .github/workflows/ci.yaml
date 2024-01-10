@@ -42,12 +42,34 @@ jobs:
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-test:
+  cargo-build-test:
     strategy:
       matrix:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    name: "cargo test | ${{ matrix.os }}"
+    name: "cargo build | ${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Build and archive tests
+        run: cargo nextest archive --archive-file nextest-archive.tar.zst
+      - name: Upload archive
+        uses: actions/upload-artifact@v3
+        with:
+          name: nextest-archive-${{ matrix.os }}
+          path: nextest-archive.tar.zst
+
+  cargo-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        partition: [1, 2]
+    runs-on: ${{ matrix.os }}
+    name: "cargo test [${{ matrix.partition }}/2] | ${{ matrix.os }}"
+    needs: cargo-build-test
     steps:
       - uses: actions/checkout@v4
       - name: "Install Python"
@@ -73,6 +95,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: nextest-archive-${{ matrix.os }}
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast --test-threads 4
+        run: |
+          cargo nextest run \
+            --all --all-features \
+            --status-level skip --failure-output immediate-final --no-fail-fast \
+            --archive-file nextest-archive.tar.zst \
+            --partition count:${{ matrix.partition }}/2
