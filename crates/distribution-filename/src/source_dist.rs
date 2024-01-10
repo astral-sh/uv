@@ -16,13 +16,13 @@ pub enum SourceDistExtension {
 }
 
 impl FromStr for SourceDistExtension {
-    type Err = SourceDistFilenameError;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "zip" => Self::Zip,
             "tar.gz" => Self::TarGz,
-            other => return Err(SourceDistFilenameError::InvalidExtension(other.to_string())),
+            other => return Err(other.to_string()),
         })
     }
 }
@@ -66,31 +66,38 @@ impl SourceDistFilename {
         package_name: &PackageName,
     ) -> Result<Self, SourceDistFilenameError> {
         let Some((stem, extension)) = SourceDistExtension::from_filename(filename) else {
-            return Err(SourceDistFilenameError::InvalidExtension(
-                filename.to_string(),
-            ));
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Extension,
+            });
         };
 
         if stem.len() <= package_name.as_ref().len() + "-".len() {
-            return Err(SourceDistFilenameError::InvalidFilename {
+            return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
-                package_name: package_name.to_string(),
+                kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
             });
         }
         let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
-            .map_err(|err| {
-                SourceDistFilenameError::InvalidPackageName(filename.to_string(), err)
+            .map_err(|err| SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::PackageName(err),
             })?;
         if &actual_package_name != package_name {
-            return Err(SourceDistFilenameError::InvalidFilename {
+            return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
-                package_name: package_name.to_string(),
+                kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
             });
         }
 
         // We checked the length above
-        let version = Version::from_str(&stem[package_name.as_ref().len() + "-".len()..])
-            .map_err(SourceDistFilenameError::InvalidVersion)?;
+        let version =
+            Version::from_str(&stem[package_name.as_ref().len() + "-".len()..]).map_err(|err| {
+                SourceDistFilenameError {
+                    filename: filename.to_string(),
+                    kind: SourceDistFilenameErrorKind::Version(err),
+                }
+            })?;
 
         Ok(Self {
             name: package_name.clone(),
@@ -107,18 +114,31 @@ impl Display for SourceDistFilename {
 }
 
 #[derive(Error, Debug, Clone)]
-pub enum SourceDistFilenameError {
-    #[error("Source distribution name {filename} doesn't start with package name {package_name}")]
-    InvalidFilename {
-        filename: String,
-        package_name: String,
-    },
-    #[error("Source distributions filenames must end with .zip or .tar.gz, not {0}")]
-    InvalidExtension(String),
-    #[error("Source distribution filename version section is invalid: {0}")]
-    InvalidVersion(VersionParseError),
-    #[error("Source distribution filename has an invalid package name: {0}")]
-    InvalidPackageName(String, #[source] InvalidNameError),
+pub struct SourceDistFilenameError {
+    filename: String,
+    kind: SourceDistFilenameErrorKind,
+}
+
+impl Display for SourceDistFilenameError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Failed to parse source distribution filename {}: {}",
+            self.filename, self.kind
+        )
+    }
+}
+
+#[derive(Error, Debug, Clone)]
+enum SourceDistFilenameErrorKind {
+    #[error("Name doesn't start with package name {0}")]
+    Filename(PackageName),
+    #[error("Source distributions filenames must end with .zip or .tar.gz")]
+    Extension,
+    #[error("Version section is invalid")]
+    Version(#[from] VersionParseError),
+    #[error(transparent)]
+    PackageName(#[from] InvalidNameError),
 }
 
 #[cfg(test)]
