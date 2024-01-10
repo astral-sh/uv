@@ -42,20 +42,16 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     format!(
                         "there are no versions of {} that satisfy {}",
                         package,
-                        PackageRange::requires(package, &set)
+                        PackageRange::compatibility(package, &set)
                     )
                 }
             }
             External::UnavailableDependencies(package, set) => {
                 let set = self.simplify_set(set, package);
-                if set.as_ref() == &Range::full() {
-                    format!("dependencies of {package} are unavailable")
-                } else {
-                    format!(
-                        "dependencies of {}are unavailable",
-                        Padded::new("", &PackageRange::requires(package, &set), " ")
-                    )
-                }
+                format!(
+                    "dependencies of {}are unavailable",
+                    Padded::new("", &PackageRange::compatibility(package, &set), " ")
+                )
             }
             External::UnusableDependencies(package, set, reason) => {
                 if let Some(reason) = reason {
@@ -63,63 +59,34 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         format!("{package} dependencies are unusable: {reason}")
                     } else {
                         let set = self.simplify_set(set, package);
-                        if set.as_ref() == &Range::full() {
-                            format!("dependencies of {package} are unusable: {reason}")
-                        } else {
-                            format!(
-                                "dependencies of {}are unusable: {reason}",
-                                Padded::new("", &PackageRange::requires(package, &set), " ")
-                            )
-                        }
+                        format!(
+                            "dependencies of {}are unusable: {reason}",
+                            Padded::new("", &PackageRange::compatibility(package, &set), " ")
+                        )
                     }
                 } else {
                     let set = self.simplify_set(set, package);
-                    if set.as_ref() == &Range::full() {
-                        format!("dependencies of {package} are unusable")
-                    } else {
-                        format!(
-                            "dependencies of {}are unusable",
-                            Padded::new("", &PackageRange::requires(package, &set), " ")
-                        )
-                    }
+                    format!(
+                        "dependencies of {}are unusable",
+                        Padded::new("", &PackageRange::compatibility(package, &set), " ")
+                    )
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
-                if package_set.as_ref() == &Range::full()
-                    && dependency_set.as_ref() == &Range::full()
-                {
-                    format!("{package} depends on {dependency}")
-                } else if package_set.as_ref() == &Range::full() {
+                if matches!(package, PubGrubPackage::Root(_)) {
+                    // Exclude the dummy version for root packages
                     format!(
                         "{package} depends on {}",
-                        PackageRange::depends(dependency, &dependency_set)
+                        PackageRange::dependency(dependency, &dependency_set)
                     )
-                } else if dependency_set.as_ref() == &Range::full() {
-                    if matches!(package, PubGrubPackage::Root(_)) {
-                        // Exclude the dummy version for root packages
-                        format!("{package} depends on {dependency}")
-                    } else {
-                        format!(
-                            "{}depends on {dependency}",
-                            Padded::new("", &PackageRange::requires(package, &package_set), " ")
-                        )
-                    }
                 } else {
-                    if matches!(package, PubGrubPackage::Root(_)) {
-                        // Exclude the dummy version for root packages
-                        format!(
-                            "{package} depends on {}",
-                            PackageRange::depends(dependency, &dependency_set)
-                        )
-                    } else {
-                        format!(
-                            "{}depends on {}",
-                            Padded::new("", &PackageRange::requires(package, &package_set), " "),
-                            PackageRange::depends(dependency, &dependency_set)
-                        )
-                    }
+                    format!(
+                        "{}depends on {}",
+                        Padded::new("", &PackageRange::compatibility(package, &package_set), " "),
+                        PackageRange::dependency(dependency, &dependency_set)
+                    )
                 }
             }
         }
@@ -137,7 +104,10 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         .unwrap_or(&vec![])
                         .iter(),
                 );
-                format!("{} cannot be used", PackageRange::requires(package, &range))
+                format!(
+                    "{} cannot be used",
+                    PackageRange::compatibility(package, &range)
+                )
             }
             [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
                 let range = range.simplify(
@@ -146,7 +116,10 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         .unwrap_or(&vec![])
                         .iter(),
                 );
-                format!("{} must be used", PackageRange::requires(package, &range))
+                format!(
+                    "{} must be used",
+                    PackageRange::compatibility(package, &range)
+                )
             }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => self.format_external(
                 &External::FromDependencyOf((*p1).clone(), r1.clone(), (*p2).clone(), r2.clone()),
@@ -431,7 +404,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    PackageRange::requires(package, range).bold()
+                    PackageRange::compatibility(package, range).bold()
                 )
             }
         }
@@ -447,13 +420,13 @@ struct PackageTerm<'a> {
 impl std::fmt::Display for PackageTerm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.term {
-            Term::Positive(set) => write!(f, "{}", PackageRange::requires(self.package, set)),
+            Term::Positive(set) => write!(f, "{}", PackageRange::compatibility(self.package, set)),
             Term::Negative(set) => {
                 if let Some(version) = set.as_singleton() {
                     let package = self.package;
                     write!(f, "{package}!={version}")
                 } else {
-                    write!(f, "!( {} )", PackageRange::requires(self.package, set))
+                    write!(f, "!( {} )", PackageRange::compatibility(self.package, set))
                 }
             }
         }
@@ -472,8 +445,8 @@ impl PackageTerm<'_> {
 /// The kind of version ranges being displayed in [`PackageRange`]
 #[derive(Debug)]
 enum PackageRangeKind {
-    Depends,
-    Requires,
+    Dependency,
+    Compatibility,
 }
 
 /// A [`Range`] and [`PubGrubPackage`] combination for display.
@@ -492,31 +465,34 @@ impl std::fmt::Display for PackageRange<'_> {
             let segments: Vec<_> = self.range.iter().collect();
             if segments.len() > 1 {
                 match self.kind {
-                    PackageRangeKind::Depends => write!(f, "one of:")?,
-                    PackageRangeKind::Requires => write!(f, "any of:")?,
+                    PackageRangeKind::Dependency => write!(f, "one of:")?,
+                    PackageRangeKind::Compatibility => write!(f, "any of:")?,
                 }
             }
             for segment in &segments {
                 if segments.len() > 1 {
                     write!(f, "\n    ")?;
                 }
-                write!(f, "{}", self.package)?;
+                let package = self.package;
                 match segment {
-                    (Bound::Unbounded, Bound::Unbounded) => write!(f, "*")?,
-                    (Bound::Unbounded, Bound::Included(v)) => write!(f, "<={v}")?,
-                    (Bound::Unbounded, Bound::Excluded(v)) => write!(f, "<{v}")?,
-                    (Bound::Included(v), Bound::Unbounded) => write!(f, ">={v}")?,
+                    (Bound::Unbounded, Bound::Unbounded) => match self.kind {
+                        PackageRangeKind::Dependency => write!(f, "{package}")?,
+                        PackageRangeKind::Compatibility => write!(f, "all versions of {package}")?,
+                    },
+                    (Bound::Unbounded, Bound::Included(v)) => write!(f, "{package}<={v}")?,
+                    (Bound::Unbounded, Bound::Excluded(v)) => write!(f, "{package}<{v}")?,
+                    (Bound::Included(v), Bound::Unbounded) => write!(f, "{package}>={v}")?,
                     (Bound::Included(v), Bound::Included(b)) => {
                         if v == b {
-                            write!(f, "=={v}")?;
+                            write!(f, "{package}=={v}")?;
                         } else {
-                            write!(f, ">={v},<={b}")?;
+                            write!(f, "{package}>={v},<={b}")?;
                         }
                     }
-                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, ">={v},<{b}")?,
-                    (Bound::Excluded(v), Bound::Unbounded) => write!(f, ">{v}")?,
-                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, ">{v},<={b}")?,
-                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, ">{v},<{b}")?,
+                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, "{package}>={v},<{b}")?,
+                    (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
+                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
+                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
                 };
             }
             if segments.len() > 1 {
@@ -528,25 +504,25 @@ impl std::fmt::Display for PackageRange<'_> {
 }
 
 impl PackageRange<'_> {
-    fn requires<'a>(
+    fn compatibility<'a>(
         package: &'a PubGrubPackage,
         range: &'a Range<PubGrubVersion>,
     ) -> PackageRange<'a> {
         PackageRange {
             package,
             range,
-            kind: PackageRangeKind::Requires,
+            kind: PackageRangeKind::Compatibility,
         }
     }
 
-    fn depends<'a>(
+    fn dependency<'a>(
         package: &'a PubGrubPackage,
         range: &'a Range<PubGrubVersion>,
     ) -> PackageRange<'a> {
         PackageRange {
             package,
             range,
-            kind: PackageRangeKind::Depends,
+            kind: PackageRangeKind::Dependency,
         }
     }
 }
