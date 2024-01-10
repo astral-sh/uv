@@ -206,6 +206,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
 
         // Unzip the wheel.
         let normalized_path = if matches!(download, LocalWheel::Unzipped(_)) {
+            // Just an optimizaion: Avoid spawning a blocking
+            // task if there is no work to be done.
             download.target().to_path_buf()
         } else {
             tokio::task::spawn_blocking({
