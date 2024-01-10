@@ -133,9 +133,9 @@ echo "" >> "$SCENARIO_OUTPUT"
 echo '```' >> "$SCENARIO_OUTPUT"
 VIRTUAL_ENV=$VENV \
 run poetry --directory="$PROJECT" add \
-    {{#root.requires}}
-    "{{prefix}}-{{.}}" \
-    {{/root.requires}}
+    {{#root.requires_packages}}
+    "{{prefix}}-{{package}}{{specifier}}" \
+    {{/root.requires_packages}}
     {{#environment.prereleases}}
     --allow-prereleases
     {{/environment.prereleases}}

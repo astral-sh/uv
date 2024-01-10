@@ -189,9 +189,15 @@ for scenario in data["scenarios"]:
 for scenario in data["scenarios"]:
     requires_packages = scenario["root"]["requires_packages"] = []
     for requirement in scenario["root"]["requires"]:
-        package = packaging.requirements.Requirement(requirement).name
+        parsed = packaging.requirements.Requirement(requirement)
         requires_packages.append(
-            {"package": package, "package_module": package.replace("-", "_")}
+            {
+                "package": parsed.name,
+                "package_module": parsed.name.replace("-", "_"),
+                "specifier": (
+                    str(parsed.specifier) if len(parsed.specifier) > 0 else "==*"
+                ),
+            }
         )
 
 
