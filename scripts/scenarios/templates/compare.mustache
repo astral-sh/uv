@@ -11,6 +11,20 @@ RIP="$(pwd)/target/debug/rip"
 # Scenarios from <{{generated_from}}>
 # EOF
 
+run() { 
+    echo '$' "$@" \
+        | sed "s#$CACHE#[cache]#g" \
+        | sed "s#$VENV#[venv]#g" \
+        | sed "s#$TMP#[tmp]#g" \
+        | sed "s#$PWD#.#g" \
+        >> "$SCENARIO_OUTPUT"
+    $@ \
+        2>&1 \
+        | sed 's/$PREFIX-//g' \
+        | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' \
+        >> "$SCENARIO_OUTPUT"
+}
+
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
 echo "Creating temporary directory at $TMP"
@@ -21,19 +35,22 @@ CACHE="$TMP/cache"
 mkdir -p "$CACHE"
 
 cat << "EOF" > "$SCENARIO_OUTPUT"
-{{name}}
+# {{name}}
 
 {{#description_lines}}
 {{.}}
 {{/description_lines}}
 
+```
 {{prefix}}
 {{#tree}}
 {{.}}
 {{/tree}}
-
+```
 
 EOF
+
+PREFIX='{{prefix}}'
 
 echo "Running {{name}} with pip"
 VENV="$TMP/venv"
@@ -43,7 +60,7 @@ VIRTUAL_ENV=$VENV \
 echo "## pip" >> "$SCENARIO_OUTPUT"
 echo "" >> "$SCENARIO_OUTPUT"
 echo '```' >> "$SCENARIO_OUTPUT"
-pip --python "$VENV/bin/python" install \
+run pip --python "$VENV/bin/python" install \
     {{#root.requires}}
     "{{prefix}}-{{.}}" \
     {{/root.requires}}
@@ -52,8 +69,6 @@ pip --python "$VENV/bin/python" install \
     {{/environment.prereleases}}
     --extra-index-url https://test.pypi.org/simple \
     --cache-dir $CACHE \
-    2>&1 \
-    | sed 's/{{prefix}}-//g' >> "$SCENARIO_OUTPUT"
 
 echo '```' >> "$SCENARIO_OUTPUT"
 
@@ -69,7 +84,7 @@ echo "## puffin" >> "$SCENARIO_OUTPUT"
 echo "" >> "$SCENARIO_OUTPUT"
 echo '```' >> "$SCENARIO_OUTPUT"
 VIRTUAL_ENV=$VENV PUFFIN_NO_WRAP=1 \
-$PUFFIN pip-install \
+run $PUFFIN pip-install \
     {{#root.requires}}
     "{{prefix}}-{{.}}" \
     {{/root.requires}}
@@ -77,9 +92,7 @@ $PUFFIN pip-install \
     --prerelease=allow \
     {{/environment.prereleases}}
     --extra-index-url https://test.pypi.org/simple \
-    --cache-dir $CACHE \
-    2>&1 \
-    | sed 's/{{prefix}}-//g' >> "$SCENARIO_OUTPUT"
+    --cache-dir $CACHE
 
 echo '```' >> "$SCENARIO_OUTPUT"
 
@@ -95,14 +108,11 @@ echo "## rip" >> "$SCENARIO_OUTPUT"
 echo "" >> "$SCENARIO_OUTPUT"
 echo '```' >> "$SCENARIO_OUTPUT"
 VIRTUAL_ENV=$VENV \
-$RIP \
+run $RIP \
     {{#root.requires}}
     "{{prefix}}-{{.}}" \
     {{/root.requires}}
-    --index-url http://localhost:3141/packages/all/+simple/ \
-    2>&1 \
-    | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' \
-    | sed 's/{{prefix}}-//g' >> "$SCENARIO_OUTPUT"
+    --index-url http://localhost:3141/packages/all/+simple/
 echo '```' >> "$SCENARIO_OUTPUT"
 
 
@@ -112,7 +122,9 @@ echo "" >> "$SCENARIO_OUTPUT"
 
 echo "Running {{name}} with poetry"
 $PUFFIN venv "$VENV" --cache-dir "$CACHE" --python "python{{environment.python}}" > /dev/null 2>&1
+
 PROJECT="$TMP/project"
+mkdir -p "$PROJECT"
 VIRTUAL_ENV=$VENV poetry --directory="$PROJECT" init --name 'compare' --no-interaction  --python '>={{environment.python}}' > /dev/null 2>&1
 VIRTUAL_ENV=$VENV poetry --directory="$PROJECT" source add test-pypi https://test.pypi.org/simple/ --priority=supplemental > /dev/null 2>&1
 
@@ -120,15 +132,14 @@ echo "## poetry" >> "$SCENARIO_OUTPUT"
 echo "" >> "$SCENARIO_OUTPUT"
 echo '```' >> "$SCENARIO_OUTPUT"
 VIRTUAL_ENV=$VENV \
-poetry --directory="$PROJECT" add \
+run poetry --directory="$PROJECT" add \
     {{#root.requires}}
     "{{prefix}}-{{.}}" \
     {{/root.requires}}
     {{#environment.prereleases}}
-    --allow-prereleases\
+    --allow-prereleases
     {{/environment.prereleases}}
-    2>&1 \
-    | sed 's/{{prefix}}-//g' >> "$SCENARIO_OUTPUT"
+
 echo '```' >> "$SCENARIO_OUTPUT"
 
 rm -r "$TMP"
