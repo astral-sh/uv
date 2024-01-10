@@ -235,8 +235,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                     Ok(download.target().to_path_buf())
                 }
             })
-                .await?
-                .map_err(|err| Error::Unzip(remote.clone(), err))?
+            .await?
+            .map_err(|err| Error::Unzip(remote.clone(), err))?
         };
 
         Ok(CachedDist::from_remote(remote, filename, normalized_path))

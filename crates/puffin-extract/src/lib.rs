@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use zip::result::ZipError;
 use zip::ZipArchive;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 pub use crate::vendor::{CloneableSeekableReader, HasLength};
 

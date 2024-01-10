@@ -118,8 +118,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelCache::Index(&wheel.index)
-                        .remote_wheel_dir(wheel_filename.name.as_ref()),
+                    WheelCache::Index(&wheel.index).remote_wheel_dir(wheel_filename.name.as_ref()),
                     wheel_filename.stem(),
                 );
 
@@ -197,7 +196,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         CacheBucket::Wheels,
                         WheelCache::Index(&wheel.index)
                             .remote_wheel_dir(wheel_filename.name.as_ref()),
-                        filename,  // TODO should this be filename.stem() to match the other branch?
+                        filename, // TODO should this be filename.stem() to match the other branch?
                     );
                     fs::create_dir_all(&cache_entry.dir()).await?;
                     tokio::fs::rename(temp_file, &cache_entry.path()).await?;
