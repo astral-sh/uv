@@ -424,7 +424,7 @@ impl std::fmt::Display for PubGrubHint {
     }
 }
 
-/// A derivative of [Term] with custom formatting.
+/// A [Term] and [PubGrubPackage] combination for display.
 struct PackageTerm<'a> {
     package: &'a PubGrubPackage,
     term: &'a Term<Range<PubGrubVersion>>,
@@ -454,13 +454,14 @@ impl PackageTerm<'_> {
     }
 }
 
+/// The kind of version ranges being displayed in [PackageRange]
 #[derive(Debug)]
 enum PackageRangeKind {
     Depends,
     Requires,
 }
 
-/// A derivative of [Range] with custom formatting.
+/// A [Range] and [PubGrubPackage] combination for display.
 #[derive(Debug)]
 struct PackageRange<'a> {
     package: &'a PubGrubPackage,
