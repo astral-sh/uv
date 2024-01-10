@@ -670,9 +670,11 @@ fn compile_python_37() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python>=3.8 and black==23.10.1 depends
-              on Python>=3.8, black==23.10.1 is forbidden.
-              And because root depends on black==23.10.1, version solving failed.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.8
+              and black==23.10.1 depends on Python>=3.8, we can conclude that
+              black==23.10.1 is forbidden.
+              And because root depends on black==23.10.1 we can conclude that the
+              requirements are unsatisfiable.
         "###);
     });
 
@@ -1407,8 +1409,9 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of werkzeug==3.0.0 and root depends on
-              werkzeug==3.0.0, version solving failed.
+          ╰─▶ Because there is no version of werkzeug==3.0.0 and root depends
+              on werkzeug==3.0.0, we can conclude that the requirements are
+              unsatisfiable.
         "###);
     });
 
@@ -1558,8 +1561,10 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there are no
-              versions of werkzeug>=3.0.0, flask==3.0.0 is forbidden.
-              And because root depends on flask==3.0.0, version solving failed.
+              versions of werkzeug that satisfy werkzeug>=3.0.0, we can conclude that
+              flask==3.0.0 is forbidden.
+              And because root depends on flask==3.0.0 we can conclude that the
+              requirements are unsatisfiable.
         "###);
     });
 
@@ -1901,8 +1906,9 @@ dependencies = ["django==300.1.4"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of django==300.1.4 and my-project depends on
-              django==300.1.4, version solving failed.
+          ╰─▶ Because there is no version of django==300.1.4 and my-project
+              depends on django==300.1.4, we can conclude that the requirements are
+              unsatisfiable.
         "###);
     });
 
@@ -2227,8 +2233,9 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of attrs>20.3.0,<21.2.0 and root depends
-              on attrs>20.3.0,<21.2.0, version solving failed.
+          ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
+              and root depends on attrs>20.3.0,<21.2.0, we can conclude that the
+              requirements are unsatisfiable.
         "###);
     });
 

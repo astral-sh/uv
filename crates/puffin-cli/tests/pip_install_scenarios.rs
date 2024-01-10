@@ -82,13 +82,13 @@ fn excluded_only_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-               and root depends on 
+              and root depends on one of:
                   a<1.0.0
                   a>1.0.0
-              , version solving failed.
+              we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -156,23 +156,23 @@ fn excluded_only_compatible_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0,<2.0.0
                   a>2.0.0,<3.0.0
                   a>3.0.0
-               and a==1.0.0 depends on b==1.0.0, a<2.0.0 depends on b==1.0.0.
-              And because a==3.0.0 depends on b==3.0.0, 
+              and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0.
+              And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
                   a<2.0.0
                   a>2.0.0
-               depends on 
+              depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-              .
-              And because root depends on b>=2.0.0,<3.0.0 and root depends on 
+
+              And because root depends on b>=2.0.0,<3.0.0 and root depends on one of:
                   a<2.0.0
                   a>2.0.0
-              , version solving failed.
+              we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -278,27 +278,27 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0,<2.0.0
                   a>3.0.0
-               and a==1.0.0 depends on b==1.0.0, a<2.0.0 depends on b==1.0.0. (1)
+              and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
 
-              Because there are no versions of 
+              Because there are no versions of c that satisfy any of:
                   c<1.0.0
                   c>1.0.0,<2.0.0
                   c>2.0.0
-               and c==1.0.0 depends on a<2.0.0, c<2.0.0 depends on a<2.0.0.
-              And because c==2.0.0 depends on a>=3.0.0, c depends on 
+              and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
+              And because c==2.0.0 depends on a>=3.0.0 we can conclude that c depends on one of:
                   a<2.0.0
                   a>=3.0.0
-              .
-              And because a<2.0.0 depends on b==1.0.0 (1), a!=3.0.0, c*, b!=1.0.0 are incompatible.
-              And because a==3.0.0 depends on b==3.0.0, c depends on 
+
+              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conlude that a!=3.0.0, c*, b!=1.0.0 are incompatible.
+              And because a==3.0.0 depends on b==3.0.0 we can conclude that c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-              .
-              And because root depends on c and root depends on b>=2.0.0,<3.0.0, version solving failed.
+
+              And because root depends on c and root depends on b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -420,39 +420,39 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because a==1.0.0 depends on b==1.0.0 and there are no versions of 
+          ╰─▶ Because a==1.0.0 depends on b==1.0.0 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0,<2.0.0
                   a>3.0.0
-              , a<2.0.0 depends on b==1.0.0.
-              And because a==3.0.0 depends on b==3.0.0, 
+              we can conclude that a<2.0.0 depends on b==1.0.0.
+              And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
                   a<2.0.0
                   a>=3.0.0
-               depends on 
+              depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-              . (1)
+               (1)
 
-              Because there are no versions of 
+              Because there are no versions of c that satisfy any of:
                   c<1.0.0
                   c>1.0.0,<2.0.0
                   c>2.0.0
-               and c==1.0.0 depends on a<2.0.0, c<2.0.0 depends on a<2.0.0.
-              And because c==2.0.0 depends on a>=3.0.0, c depends on 
+              and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
+              And because c==2.0.0 depends on a>=3.0.0 we can conclude that c depends on one of:
                   a<2.0.0
                   a>=3.0.0
-              .
-              And because 
+
+              And because we know from (1) that any of:
                   a<2.0.0
                   a>=3.0.0
-               depends on 
+              depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-               (1), c depends on 
+              we can conlude that c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
-              .
-              And because root depends on b>=2.0.0,<3.0.0 and root depends on c, version solving failed.
+
+              And because root depends on b>=2.0.0,<3.0.0 and root depends on c, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -581,7 +581,7 @@ fn requires_package_only_prereleases_in_range() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a>0.1.0 and root depends on a>0.1.0, version solving failed.
+          ╰─▶ Because there are no versions of a that satisfy a>0.1.0 and root depends on a>0.1.0, we can conclude that the requirements are unsatisfiable.
 
               hint: Pre-releases are available for a in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
@@ -1176,11 +1176,11 @@ fn requires_transitive_package_only_prereleases_in_range() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of b>0.1 and a==0.1.0 depends on b>0.1, a==0.1.0 is forbidden.
-              And because there are no versions of 
+          ╰─▶ Because there are no versions of b that satisfy b>0.1 and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 is forbidden.
+              And because there are no versions of a that satisfy any of:
                   a<0.1.0
                   a>0.1.0
-               and root depends on a, version solving failed.
+              and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: Pre-releases are available for b in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
@@ -1334,11 +1334,11 @@ fn requires_transitive_prerelease_and_stable_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, a==1.0.0 is forbidden.
-              And because there are no versions of 
+          ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 is forbidden.
+              And because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-               and root depends on a, version solving failed.
+              and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: c was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
@@ -1534,16 +1534,16 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions() -> Resul
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of b that satisfy any of:
                   b<1.0.0
                   b>1.0.0
-               and b==1.0.0 depends on c, b depends on c.
-              And because there are no versions of c>=2.0.0b1, b depends on c<2.0.0b1.
-              And because a==1.0.0 depends on c>=2.0.0b1 and there are no versions of 
+              and b==1.0.0 depends on c, we can conclude that b depends on c.
+              And because there are no versions of c that satisfy c>=2.0.0b1 we can conclude that b depends on c<2.0.0b1.
+              And because a==1.0.0 depends on c>=2.0.0b1 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              , b*, a* are incompatible.
-              And because root depends on b and root depends on a, version solving failed.
+              we can conclude that b*, a* are incompatible.
+              And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
 
               hint: c was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
@@ -1639,21 +1639,21 @@ fn requires_transitive_prerelease_and_stable_dependency_many_versions_holes() ->
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of c that satisfy any of:
                   c>1.0.0,<2.0.0a5
                   c>2.0.0a7,<2.0.0b1
                   c>2.0.0b1,<2.0.0b5
-               and a==1.0.0 depends on 
+              and a==1.0.0 depends on one of:
                   c>1.0.0,<2.0.0a5
                   c>2.0.0a7,<2.0.0b1
                   c>2.0.0b1,<2.0.0b5
-              , a==1.0.0 is forbidden.
-              And because there are no versions of 
+              we can conclude that a==1.0.0 is forbidden.
+              And because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-               and root depends on a, version solving failed.
+              and root depends on a, we can conclude that the requirements are unsatisfiable.
 
-              hint: c was requested with a pre-release marker (e.g., 
+              hint: c was requested with a pre-release marker (e.g., any of:
                   c>1.0.0,<2.0.0a5
                   c>2.0.0a7,<2.0.0b1
                   c>2.0.0b1,<2.0.0b5
@@ -1768,7 +1768,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of a==2.0.0 and root depends on a==2.0.0, version solving failed.
+          ╰─▶ Because there is no version of a==2.0.0 and root depends on a==2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1824,7 +1824,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a>1.0.0 and root depends on a>1.0.0, version solving failed.
+          ╰─▶ Because there are no versions of a that satisfy a>1.0.0 and root depends on a>1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1881,7 +1881,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a<2.0.0 and root depends on a<2.0.0, version solving failed.
+          ╰─▶ Because there are no versions of a that satisfy a<2.0.0 and root depends on a<2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2065,11 +2065,11 @@ fn requires_transitive_incompatible_with_root_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-               and a==1.0.0 depends on b==2.0.0, a depends on b==2.0.0.
-              And because root depends on a and root depends on b==1.0.0, version solving failed.
+              and a==1.0.0 depends on b==2.0.0, we can conclude that a depends on b==2.0.0.
+              And because root depends on a and root depends on b==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2144,15 +2144,15 @@ fn requires_transitive_incompatible_with_transitive() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of 
+          ╰─▶ Because there are no versions of b that satisfy any of:
                   b<1.0.0
                   b>1.0.0
-               and b==1.0.0 depends on c==2.0.0, b depends on c==2.0.0.
-              And because a==1.0.0 depends on c==1.0.0 and there are no versions of 
+              and b==1.0.0 depends on c==2.0.0, we can conclude that b depends on c==2.0.0.
+              And because a==1.0.0 depends on c==1.0.0 and there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0
-              , a*, b* are incompatible.
-              And because root depends on b and root depends on a, version solving failed.
+              we can conclude that a*, b* are incompatible.
+              And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2212,8 +2212,8 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python>=4.0 and a==1.0.0 depends on Python>=4.0, a==1.0.0 is forbidden.
-              And because root depends on a==1.0.0, version solving failed.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=4.0 and a==1.0.0 depends on Python>=4.0, we can conclude that a==1.0.0 is forbidden.
+              And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2269,8 +2269,8 @@ fn requires_python_version_less_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python<=3.8 and a==1.0.0 depends on Python<=3.8, a==1.0.0 is forbidden.
-              And because root depends on a==1.0.0, version solving failed.
+          ╰─▶ Because there are no versions of Python that satisfy Python<=3.8 and a==1.0.0 depends on Python<=3.8, we can conclude that a==1.0.0 is forbidden.
+              And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2329,8 +2329,8 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python>=3.10 and a==1.0.0 depends on Python>=3.10, a==1.0.0 is forbidden.
-              And because root depends on a==1.0.0, version solving failed.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 is forbidden.
+              And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2411,7 +2411,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of a==1.0.0 and root depends on a==1.0.0, version solving failed.
+          ╰─▶ Because there is no version of a==1.0.0 and root depends on a==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2547,21 +2547,21 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python>=3.10,<3.11 and there are no versions of Python>=3.12, Python>=3.10, <3.11 | >=3.12 are incompatible.
-              And because there are no versions of Python>=3.11,<3.12, Python>=3.10 are incompatible.
-              And because a==2.0.0 depends on Python>=3.10 and there are no versions of 
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10,<3.11 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.10, <3.11 | >=3.12 are incompatible.
+              And because there are no versions of Python that satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
+              And because a==2.0.0 depends on Python>=3.10 and there are no versions of a that satisfy any of:
                   a>2.0.0,<3.0.0
                   a>3.0.0,<4.0.0
                   a>4.0.0
-              , a>=2.0.0,<3.0.0 is forbidden. (1)
+              we can conclude that a>=2.0.0,<3.0.0 is forbidden. (1)
 
-              Because there are no versions of Python>=3.11,<3.12 and there are no versions of Python>=3.12, Python>=3.11 are incompatible.
-              And because a==3.0.0 depends on Python>=3.11, a==3.0.0 is forbidden.
-              And because a>=2.0.0,<3.0.0 is forbidden (1), a>=2.0.0,<4.0.0 is forbidden. (2)
+              Because there are no versions of Python that satisfy Python>=3.11,<3.12 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
+              And because a==3.0.0 depends on Python>=3.11 we can conclude that a==3.0.0 is forbidden.
+              And because we know from (1) that a>=2.0.0,<3.0.0 is forbidden, we can conlude that a>=2.0.0,<4.0.0 is forbidden. (2)
 
-              Because there are no versions of Python>=3.12 and a==4.0.0 depends on Python>=3.12, a==4.0.0 is forbidden.
-              And because a>=2.0.0,<4.0.0 is forbidden (2), a>=2.0.0 is forbidden.
-              And because root depends on a>=2.0.0, version solving failed.
+              Because there are no versions of Python that satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 is forbidden.
+              And because we know from (2) that a>=2.0.0,<4.0.0 is forbidden, we can conlude that a>=2.0.0 is forbidden.
+              And because root depends on a>=2.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
