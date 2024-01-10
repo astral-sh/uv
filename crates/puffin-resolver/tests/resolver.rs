@@ -20,7 +20,7 @@ use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -47,6 +47,14 @@ impl BuildContext for DummyContext {
 
     fn base_python(&self) -> &Path {
         panic!("The test should not need to build source distributions")
+    }
+
+    fn no_build(&self) -> bool {
+        false
+    }
+
+    fn setup_py_strategy(&self) -> SetupPyStrategy {
+        SetupPyStrategy::default()
     }
 
     async fn resolve<'a>(&'a self, _requirements: &'a [Requirement]) -> Result<Resolution> {
