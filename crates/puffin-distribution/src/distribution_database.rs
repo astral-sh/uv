@@ -109,12 +109,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ) -> Result<LocalWheel, DistributionDatabaseError> {
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
-                // Fetch the wheel.
                 let url = wheel
                     .base
                     .join_relative(&wheel.file.url)
                     .map_err(|err| DistributionDatabaseError::Url(wheel.file.url.clone(), err))?;
 
+                // Make cache entry
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
@@ -123,9 +123,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     wheel_filename.stem(),
                 );
 
+                // Start the download
                 let reader = self.client.stream_external(&url).await?;
 
-                // HACK always stream for now, just to see how it performs
+                // In all wheels we've seen so far, unzipping while downloading is the
+                // faster option.
+                //
+                // Writing to a file first may be faster if the wheel takes longer to
+                // unzip than it takes to download. This may happen if the wheel is a
+                // zip bomb, or if the machine has a weak cpu (with many cores), but a
+                // fast network.
+                //
+                // If we find such a case, it may make sense to create separate tasks
+                // for downloading and unzipping (with a buffer in between) and switch
+                // to rayon if this buffer grows large by the time the file is fully
+                // downloaded.
                 let unzip_while_downloading = true;
                 if unzip_while_downloading {
                     let target = cache_entry.into_path_buf();
@@ -144,13 +156,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     byte_size.filter(|byte_size| *byte_size < ByteSize::mb(5))
                 {
                     debug!("Fetching in-memory wheel from registry: {dist} ({byte_size})",);
-
-                    let cache_entry = self.cache.entry(
-                        CacheBucket::Wheels,
-                        WheelCache::Index(&wheel.index)
-                            .remote_wheel_dir(wheel_filename.name.as_ref()),
-                        wheel_filename.stem(),
-                    );
 
                     // Read into a buffer.
                     let mut buffer = Vec::with_capacity(
@@ -190,7 +195,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         CacheBucket::Wheels,
                         WheelCache::Index(&wheel.index)
                             .remote_wheel_dir(wheel_filename.name.as_ref()),
-                        filename,
+                        filename,  // TODO should this be filename.stem() to match the other branch?
                     );
                     fs::create_dir_all(&cache_entry.dir()).await?;
                     tokio::fs::rename(temp_file, &cache_entry.path()).await?;
