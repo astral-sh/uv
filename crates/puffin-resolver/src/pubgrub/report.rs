@@ -39,8 +39,8 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     format!("there is no version of {package}{set}")
                 } else {
                     format!(
-                        "there are no versions of {package}{}",
-                        PubGrubRange::new(&set)
+                        "there are no versions of {}",
+                        PackageRange::new(package, &set)
                     )
                 }
             }
@@ -50,8 +50,8 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     format!("dependencies of {package} are unavailable")
                 } else {
                     format!(
-                        "dependencies of {package}{} are unavailable",
-                        PubGrubRange::new(&set)
+                        "dependencies of {} are unavailable",
+                        PackageRange::new(package, &set)
                     )
                 }
             }
@@ -65,8 +65,8 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                             format!("dependencies of {package} are unusable: {reason}")
                         } else {
                             format!(
-                                "dependencies of {package}{} are unusable: {reason}",
-                                PubGrubRange::new(&set)
+                                "dependencies of {} are unusable: {reason}",
+                                PackageRange::new(package, &set)
                             )
                         }
                     }
@@ -76,8 +76,8 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         format!("dependencies of {package} are unusable")
                     } else {
                         format!(
-                            "dependencies of {package}{} are unusable",
-                            PubGrubRange::new(&set)
+                            "dependencies of {} are unusable",
+                            PackageRange::new(package, &set)
                         )
                     }
                 }
@@ -91,8 +91,8 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                     format!("{package} depends on {dependency}")
                 } else if package_set.as_ref() == &Range::full() {
                     format!(
-                        "{package} depends on {dependency}{}",
-                        PubGrubRange::new(&dependency_set)
+                        "{package} depends on {}",
+                        PackageRange::new(dependency, &dependency_set)
                     )
                 } else if dependency_set.as_ref() == &Range::full() {
                     if matches!(package, PubGrubPackage::Root(_)) {
@@ -100,22 +100,22 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         format!("{package} depends on {dependency}")
                     } else {
                         format!(
-                            "{package}{} depends on {dependency}",
-                            PubGrubRange::new(&package_set)
+                            "{} depends on {dependency}",
+                            PackageRange::new(package, &package_set)
                         )
                     }
                 } else {
                     if matches!(package, PubGrubPackage::Root(_)) {
                         // Exclude the dummy version for root packages
                         format!(
-                            "{package} depends on {dependency}{}",
-                            PubGrubRange::new(&dependency_set)
+                            "{package} depends on {}",
+                            PackageRange::new(dependency, &dependency_set)
                         )
                     } else {
                         format!(
-                            "{package}{} depends on {dependency}{}",
-                            PubGrubRange::new(&package_set),
-                            PubGrubRange::new(&dependency_set)
+                            "{} depends on {}",
+                            PackageRange::new(package, &package_set),
+                            PackageRange::new(dependency, &dependency_set)
                         )
                     }
                 }
@@ -135,7 +135,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         .unwrap_or(&vec![])
                         .iter(),
                 );
-                format!("{package}{} is forbidden", PubGrubRange::new(&range))
+                format!("{} is forbidden", PackageRange::new(package, &range))
             }
             [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
                 let range = range.simplify(
@@ -144,7 +144,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
                         .unwrap_or(&vec![])
                         .iter(),
                 );
-                format!("{package}{} is mandatory", PubGrubRange::new(&range))
+                format!("{} is mandatory", PackageRange::new(package, &range))
             }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => self.format_external(
                 &External::FromDependencyOf((*p1).clone(), r1.clone(), (*p2).clone(), r2.clone()),
@@ -155,7 +155,7 @@ impl ReportFormatter<PubGrubPackage, Range<PubGrubVersion>> for PubGrubReportFor
             slice => {
                 let str_terms: Vec<_> = slice
                     .iter()
-                    .map(|(p, t)| format!("{p}{}", PubGrubTerm::from_term((*t).clone())))
+                    .map(|(p, t)| format!("{p}{}", PackageTerm::new(p, *t)))
                     .collect();
                 str_terms.join(", ") + " are incompatible"
             }
@@ -392,7 +392,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    PubGrubRange::new(range).bold()
+                    PackageRange::new(package, range).bold()
                 )
             }
         }
@@ -400,45 +400,51 @@ impl std::fmt::Display for PubGrubHint {
 }
 
 /// A derivative of [Term] with custom formatting.
-struct PubGrubTerm {
-    inner: Term<Range<PubGrubVersion>>,
+struct PackageTerm<'a> {
+    package: &'a PubGrubPackage,
+    term: &'a Term<Range<PubGrubVersion>>,
 }
 
-impl std::fmt::Display for PubGrubTerm {
+impl std::fmt::Display for PackageTerm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
+        match &self.term {
             Term::Positive(set) => write!(f, "{set}"),
             Term::Negative(set) => {
                 if let Some(version) = set.as_singleton() {
                     write!(f, "!={version}")
                 } else {
-                    write!(f, "!( {} )", PubGrubRange::new(set))
+                    write!(f, "!( {} )", PackageRange::new(self.package, set))
                 }
             }
         }
     }
 }
 
-impl PubGrubTerm {
-    fn from_term(term: Term<Range<PubGrubVersion>>) -> PubGrubTerm {
-        PubGrubTerm { inner: term }
+impl PackageTerm<'_> {
+    fn new<'a>(
+        package: &'a PubGrubPackage,
+        term: &'a Term<Range<PubGrubVersion>>,
+    ) -> PackageTerm<'a> {
+        PackageTerm { package, term }
     }
 }
 
 /// A derivative of [Range] with custom formatting.
-struct PubGrubRange<'a> {
-    inner: &'a Range<PubGrubVersion>,
+struct PackageRange<'a> {
+    package: &'a PubGrubPackage,
+    range: &'a Range<PubGrubVersion>,
 }
 
-impl std::fmt::Display for PubGrubRange<'_> {
+impl std::fmt::Display for PackageRange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.inner.is_empty() {
+        if self.range.is_empty() {
             write!(f, "∅")?;
         } else {
-            for (idx, segment) in self.inner.iter().enumerate() {
+            for (idx, segment) in self.range.iter().enumerate() {
                 if idx > 0 {
                     write!(f, "|")?;
                 }
+                write!(f, "{}", self.package)?;
                 match segment {
                     (Bound::Unbounded, Bound::Unbounded) => write!(f, "*")?,
                     (Bound::Unbounded, Bound::Included(v)) => write!(f, "<={v}")?,
@@ -462,8 +468,8 @@ impl std::fmt::Display for PubGrubRange<'_> {
     }
 }
 
-impl PubGrubRange<'_> {
-    fn new(range: &Range<PubGrubVersion>) -> PubGrubRange {
-        PubGrubRange { inner: range }
+impl PackageRange<'_> {
+    fn new<'a>(package: &'a PubGrubPackage, range: &'a Range<PubGrubVersion>) -> PackageRange<'a> {
+        PackageRange { package, range }
     }
 }
