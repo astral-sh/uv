@@ -268,7 +268,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         match dist {
             Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
             Dist::Source(source_dist) => {
-                // Optimization: Skip source dist download when we must not build them anyway
+                // Optimization: Skip source dist download when we must not build them anyway.
                 if self.build_context.no_build() {
                     return Err(DistributionDatabaseError::NoBuild);
                 }
@@ -284,8 +284,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     None => Cow::Borrowed(source_dist),
                 };
 
-                let built_wheel = self.builder.download_and_build(&source_dist).await?;
-                Ok((built_wheel.metadata, precise))
+                let metadata = self
+                    .builder
+                    .download_and_build_metadata(&source_dist)
+                    .await?;
+                Ok((metadata, precise))
             }
         }
     }

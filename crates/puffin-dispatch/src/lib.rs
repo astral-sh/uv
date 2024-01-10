@@ -224,6 +224,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             if self.no_build {
                 bail!("Building source distributions is disabled");
             }
+
             let builder = SourceBuild::setup(
                 source,
                 subdirectory,

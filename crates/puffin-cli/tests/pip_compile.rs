@@ -845,6 +845,8 @@ fn compile_wheel_url_dependency() -> Result<()> {
 }
 
 /// Resolve a specific Flask source distribution via a URL dependency.
+///
+/// Exercises the `prepare_metadata_for_build_wheel` hooks.
 #[test]
 fn compile_sdist_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
@@ -2573,11 +2575,10 @@ fn compile_editable() -> Result<()> {
     })?;
 
     let filter_path = requirements_in.display().to_string();
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[(filter_path.as_str(), "requirements.in")])
-        .copied()
-        .collect::<Vec<_>>();
+    let filters: Vec<_> = iter::once((filter_path.as_str(), "requirements.in"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
     insta::with_settings!({
         filters => filters
     }, {
