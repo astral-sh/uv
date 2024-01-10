@@ -650,7 +650,7 @@ async fn msgraph_sdk() -> Result<()> {
         .unwrap_err();
 
     assert_snapshot!(err, @r###"
-    Because there are no versions of msgraph-core that satisfy msgraph-core>=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, we can conclude that msgraph-sdk==1.0.0 is forbidden.
+    Because there are no versions of msgraph-core that satisfy msgraph-core>=1.0.0a2 and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, we can conclude that msgraph-sdk==1.0.0 cannot be used.
     And because root depends on msgraph-sdk==1.0.0 we can conclude that the requirements are unsatisfiable.
 
     hint: msgraph-core was requested with a pre-release marker (e.g., msgraph-core>=1.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)

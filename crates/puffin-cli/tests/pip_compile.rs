@@ -672,7 +672,7 @@ fn compile_python_37() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of Python that satisfy Python>=3.8
               and black==23.10.1 depends on Python>=3.8, we can conclude that
-              black==23.10.1 is forbidden.
+              black==23.10.1 cannot be used.
               And because root depends on black==23.10.1 we can conclude that the
               requirements are unsatisfiable.
         "###);
@@ -1562,7 +1562,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there are no
               versions of werkzeug that satisfy werkzeug>=3.0.0, we can conclude that
-              flask==3.0.0 is forbidden.
+              flask==3.0.0 cannot be used.
               And because root depends on flask==3.0.0 we can conclude that the
               requirements are unsatisfiable.
         "###);
