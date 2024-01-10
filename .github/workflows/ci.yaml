@@ -67,9 +67,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        partition: [1, 2]
+        partition: [1, 2, 3, 4]
     runs-on: ${{ matrix.os }}
-    name: "cargo test [${{ matrix.partition }}/2] | ${{ matrix.os }}"
+    name: "cargo test [${{ matrix.partition }}/4] | ${{ matrix.os }}"
     needs: cargo-build-test
     steps:
       - uses: actions/checkout@v4
@@ -103,4 +103,4 @@ jobs:
           cargo nextest run \
             --failure-output immediate-final --no-fail-fast \
             --archive-file nextest-archive.tar.zst \
-            --partition count:${{ matrix.partition }}/2
+            --partition count:${{ matrix.partition }}/4
