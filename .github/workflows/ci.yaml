@@ -70,6 +70,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         partition: [1, 2, 3, 4]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     name: "cargo test [${{ matrix.partition }}/4] | ${{ matrix.os }}"
     needs: cargo-build-test
