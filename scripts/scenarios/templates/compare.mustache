@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+TMP=$(mktemp -d)
+OUTPUT="./compare"
+
+# Write some metadata frontmatter
+# cat << EOF > "$OUTPUT"
+# Generated with {{generated_with}}
+# Scenarios from <{{generated_from}}>
+# EOF
+
+rm -rf "$OUTPUT"
+mkdir -p "$OUTPUT"
+echo "Creating temporary directory at $TMP"
+
+{{#scenarios}}
+SCENARIO_OUTPUT="$OUTPUT/{{name}}"
+CACHE="$TMP/cache"
+mkdir -p "$CACHE"
+
+cat << "EOF" > "$SCENARIO_OUTPUT"
+{{name}}
+
+{{#description_lines}}
+{{.}}
+{{/description_lines}}
+
+{{prefix}}
+{{#tree}}
+{{.}}
+{{/tree}}
+
+
+EOF
+
+echo "Running {{name}} with pip"
+VENV="$TMP/venv"
+./target/debug/puffin venv "$VENV" --cache-dir "$CACHE" --python "python{{environment.python}}" > /dev/null 2>&1
+
+VIRTUAL_ENV=$VENV \
+echo "pip" >> "$SCENARIO_OUTPUT"
+echo "---------" >> "$SCENARIO_OUTPUT"
+pip --python "$VENV/bin/python" install \
+    {{#root.requires}}
+    "{{prefix}}-{{.}}" \
+    {{/root.requires}}
+    {{#environment.prereleases}}
+    --pre \
+    {{/environment.prereleases}}
+    --extra-index-url https://test.pypi.org/simple \
+    --cache-dir $CACHE \
+    2>&1 \
+    | sed 's/{{prefix}}-//g' >> "$SCENARIO_OUTPUT" 
+
+# Reset
+rm -rf "$VENV"
+echo "" >> "$SCENARIO_OUTPUT" 
+echo "" >> "$SCENARIO_OUTPUT" 
+
+echo "Running {{name}} with puffin"
+./target/debug/puffin venv "$VENV" --cache-dir "$CACHE" --python "python{{environment.python}}" > /dev/null 2>&1
+
+echo "puffin" >> "$SCENARIO_OUTPUT"
+echo "---------" >> "$SCENARIO_OUTPUT"
+VIRTUAL_ENV=$VENV PUFFIN_NO_WRAP=1 \
+./target/debug/puffin pip-install \
+    {{#root.requires}}
+    "{{prefix}}-{{.}}" \
+    {{/root.requires}}
+    {{#environment.prereleases}}
+    --prerelease=allow \
+    {{/environment.prereleases}}
+    --extra-index-url https://test.pypi.org/simple \
+    --cache-dir $CACHE \
+    2>&1 \
+    | sed 's/{{prefix}}-//g' >> "$SCENARIO_OUTPUT" 
+
+
+rm -r "$TMP"
+{{/scenarios}}
+
+echo "Done! See $OUTPUT for results"
