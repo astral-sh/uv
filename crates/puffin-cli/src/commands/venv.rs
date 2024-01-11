@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::Result;
 use fs_err as fs;
@@ -7,22 +8,29 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
+use distribution_types::{DistributionMetadata, IndexUrls, Name};
+use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::Cache;
+use puffin_client::RegistryClientBuilder;
+use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Interpreter;
+use puffin_traits::{BuildContext, SetupPyStrategy};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps)]
-pub(crate) fn venv(
+pub(crate) async fn venv(
     path: &Path,
     base_python: Option<&Path>,
+    index_urls: &IndexUrls,
+    seed: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    match venv_impl(path, base_python, cache, printer) {
+    match venv_impl(path, base_python, index_urls, seed, cache, printer).await {
         Ok(status) => Ok(status),
         Err(err) => {
             #[allow(clippy::print_stderr)]
@@ -51,12 +59,18 @@ enum VenvError {
     #[error("Failed to create virtual environment")]
     #[diagnostic(code(puffin::venv::creation))]
     CreationError(#[source] gourgeist::Error),
+
+    #[error("Failed to install seed packages")]
+    #[diagnostic(code(puffin::venv::seed))]
+    SeedError(#[source] anyhow::Error),
 }
 
 /// Create a virtual environment.
-fn venv_impl(
+async fn venv_impl(
     path: &Path,
     base_python: Option<&Path>,
+    index_urls: &IndexUrls,
+    seed: bool,
     cache: &Cache,
     mut printer: Printer,
 ) -> miette::Result<ExitStatus> {
@@ -96,7 +110,51 @@ fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    gourgeist::create_venv(path, interpreter).map_err(VenvError::CreationError)?;
+    let venv = gourgeist::create_venv(path, interpreter).map_err(VenvError::CreationError)?;
+
+    // Install seed packages.
+    if seed {
+        // Instantiate a client.
+        let client = RegistryClientBuilder::new(cache.clone()).build();
+
+        // Prep the build context.
+        let build_dispatch = BuildDispatch::new(
+            &client,
+            cache,
+            venv.interpreter(),
+            index_urls,
+            venv.python_executable(),
+            SetupPyStrategy::default(),
+            true,
+        );
+
+        // Resolve the seed packages.
+        let resolution = build_dispatch
+            .resolve(&[
+                Requirement::from_str("wheel").unwrap(),
+                Requirement::from_str("pip").unwrap(),
+                Requirement::from_str("setuptools").unwrap(),
+            ])
+            .await
+            .map_err(VenvError::SeedError)?;
+
+        // Install into the environment.
+        build_dispatch
+            .install(&resolution, &venv)
+            .await
+            .map_err(VenvError::SeedError)?;
+
+        for distribution in resolution.distributions() {
+            writeln!(
+                printer,
+                " {} {}{}",
+                "+".green(),
+                distribution.name().as_ref().white().bold(),
+                distribution.version_or_url().dimmed()
+            )
+            .into_diagnostic()?;
+        }
+    }
 
     Ok(ExitStatus::Success)
 }

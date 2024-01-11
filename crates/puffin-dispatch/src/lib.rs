@@ -17,7 +17,7 @@ use puffin_client::RegistryClient;
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
-use puffin_traits::{BuildContext, BuildKind, OnceMap};
+use puffin_traits::{BuildContext, BuildKind, OnceMap, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -27,6 +27,7 @@ pub struct BuildDispatch<'a> {
     interpreter: &'a Interpreter,
     index_urls: &'a IndexUrls,
     base_python: PathBuf,
+    setup_py: SetupPyStrategy,
     no_build: bool,
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
@@ -40,6 +41,7 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_urls: &'a IndexUrls,
         base_python: PathBuf,
+        setup_py: SetupPyStrategy,
         no_build: bool,
     ) -> Self {
         Self {
@@ -48,6 +50,7 @@ impl<'a> BuildDispatch<'a> {
             interpreter,
             index_urls,
             base_python,
+            setup_py,
             no_build,
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
@@ -79,6 +82,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn no_build(&self) -> bool {
         self.no_build
+    }
+
+    fn setup_py_strategy(&self) -> SetupPyStrategy {
+        self.setup_py
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
@@ -224,6 +231,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             if self.no_build {
                 bail!("Building source distributions is disabled");
             }
+
             let builder = SourceBuild::setup(
                 source,
                 subdirectory,
@@ -231,6 +239,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 self,
                 self.source_build_context.clone(),
                 package_id.to_string(),
+                self.setup_py,
                 build_kind,
             )
             .await?;

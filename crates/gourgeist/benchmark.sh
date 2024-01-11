@@ -2,15 +2,13 @@
 
 set -e
 
+cd "$(git rev-parse --show-toplevel)"
+
 virtualenv --version
 
-#cargo build --profile profiling
-cargo build --release #--features parallel
-# Benchmarking trick! strip your binaries ٩( ∂‿∂ )۶
-strip target/release/gourgeist
+cargo build --profile profiling --bin gourgeist --features cli
 
-echo "## Bare"
-hyperfine --warmup 1 --prepare "rm -rf target/a" "virtualenv -p 3.11 --no-seed target/a" "target/release/gourgeist -p 3.11 --bare target/a"
-echo "## Default"
-hyperfine --warmup 1 --prepare "rm -rf target/a" "virtualenv -p 3.11 target/a" "target/release/gourgeist -p 3.11 target/a"
+hyperfine --warmup 1 --shell none --prepare "rm -rf target/venv-benchmark" \
+  "target/profiling/gourgeist -p 3.11 target/venv-benchmark" \
+  "virtualenv -p 3.11 --no-seed target/venv-benchmark"
 
