@@ -151,7 +151,20 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     {
                         "Building source distributions is disabled".to_string()
                     } else {
-                        format!("{err:?}")
+                        err.chain()
+                            .map(|err| {
+                                let formatted = err.to_string();
+                                // Cut overly long c/c++ compile output
+                                if formatted.lines().count() > 20 {
+                                    let formatted: Vec<_> = formatted.lines().collect();
+                                    formatted[..20].join("\n")
+                                        + "\n[...]\n"
+                                        + &formatted[formatted.len() - 20..].join("\n")
+                                } else {
+                                    formatted
+                                }
+                            })
+                            .join("\n  Caused by: ")
                     };
                 info!(
                     "Error for {} ({}/{}, {} ms): {}",

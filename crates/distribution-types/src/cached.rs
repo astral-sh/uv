@@ -120,7 +120,7 @@ impl CachedDist {
 }
 
 impl CachedDirectUrlDist {
-    /// Initialize a [`CachedDirectUrlDist`] from a [`WheelFilename`], [`Url`], and [`Path`].
+    /// Initialize a [`CachedDirectUrlDist`] from a [`WheelFilename`], [`url::Url`], and [`Path`].
     pub fn from_url(filename: WheelFilename, url: VerbatimUrl, path: PathBuf) -> Self {
         Self {
             filename,
