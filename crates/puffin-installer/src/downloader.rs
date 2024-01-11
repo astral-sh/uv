@@ -34,7 +34,7 @@ pub enum Error {
 /// Download, build, and unzip a set of distributions.
 pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
     database: DistributionDatabase<'a, Context>,
-    reporter: Option<Arc<dyn Reporter>>,
+    pub reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {

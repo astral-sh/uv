@@ -46,7 +46,7 @@ impl<'a> DistFinder<'a> {
     /// Resolve a single pinned package, either as cached network request
     /// (version or no constraint) or by constructing a URL [`Dist`] from the
     /// specifier URL.
-    async fn resolve_requirement(
+    pub async fn resolve_requirement(
         &self,
         requirement: &Requirement,
     ) -> Result<(PackageName, Dist), ResolveError> {
