@@ -159,9 +159,9 @@ pub(crate) async fn pip_sync(
     };
 
     // Get some perf metrics
-    let total_remote_bytes: u64 = {
+    let total_remote_bytes: Option<u64> = {
         use distribution_types::RemoteSource;
-        remote.iter().map(|d| d.size().unwrap()).sum()
+        remote.iter().map(RemoteSource::size).sum()
     };
     let num_source_dists: usize = remote
         .iter()
@@ -224,12 +224,15 @@ pub(crate) async fn pip_sync(
             .dimmed()
         )?;
 
-        #[allow(clippy::cast_precision_loss)]
-        let remote_mb = total_remote_bytes as f32 / 1024.0 / 1024.0;
-        let rate = remote_mb / start.elapsed().as_secs_f32();
-        debug!("total remote size: {remote_mb}MB");
-        debug!("effective processing rate: {rate}MB/s");
+        // Print some metrics
         debug!("number of source distributions: {num_source_dists}");
+        if let Some(bytes) = total_remote_bytes {
+            #[allow(clippy::cast_precision_loss)]
+            let remote_mb = bytes as f32 / 1024.0 / 1024.0;
+            let rate = remote_mb / start.elapsed().as_secs_f32();
+            debug!("total remote size: {remote_mb}MB");
+            debug!("effective processing rate: {rate}MB/s");
+        }
 
         wheels
     };
