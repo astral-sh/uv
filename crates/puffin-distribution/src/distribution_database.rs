@@ -141,7 +141,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // downloaded.
                 let unzip_while_downloading = true;
                 if unzip_while_downloading {
-                    // Write to temporary dir
+                    // Download and unzip to a temporary dir
                     let temp_dir = tempfile::tempdir_in(self.cache.root())?;
                     let temp_target = temp_dir.path().join(&wheel.file.filename);
                     unzip_no_seek(reader.compat(), &temp_target).await?;
@@ -230,7 +230,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let reader = self.client.stream_external(&wheel.url).await?;
                 let filename = wheel.filename.to_string();
 
-                // Download the wheel to a temporary file.
+                // Download and unzip the wheel to a temporary dir.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
                 let temp_target = temp_dir.path().join(&filename);
                 unzip_no_seek(reader.compat(), &temp_target).await?;
