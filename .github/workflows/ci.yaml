@@ -67,6 +67,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-insta
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: true
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo insta test --all --all-features --unreferenced reject
