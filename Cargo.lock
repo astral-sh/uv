@@ -2035,9 +2035,7 @@ name = "pep440_rs"
 version = "0.3.12"
 dependencies = [
  "indoc",
- "once_cell",
  "pyo3",
- "regex",
  "serde",
  "tracing",
  "unicode-width",
@@ -2818,7 +2816,6 @@ dependencies = [
  "pep440_rs 0.3.12",
  "pep508_rs",
  "puffin-normalize",
- "puffin-warnings",
  "regex",
  "rfc2047-decoder",
  "serde",

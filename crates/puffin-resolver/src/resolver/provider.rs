@@ -37,7 +37,7 @@ pub trait ResolverProvider: Send + Sync {
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io;
 
-    /// Set the [`Reporter`] to use for this installer.
+    /// Set the [`puffin_distribution::Reporter`] to use for this installer.
     #[must_use]
     fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self;
 }

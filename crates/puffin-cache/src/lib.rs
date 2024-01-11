@@ -392,7 +392,7 @@ pub enum CacheBucket {
     ///  * `simple-v0/pypi/<package_name>.msgpack`
     ///  * `simple-v0/<digest(index_url)>/<package_name>.msgpack`
     ///
-    /// The response is parsed into [`puffin_client::SimpleMetadata`] before storage.
+    /// The response is parsed into `puffin_client::SimpleMetadata` before storage.
     Simple,
 }
 

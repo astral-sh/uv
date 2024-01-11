@@ -12,10 +12,6 @@
 //! assert!(version_specifiers.iter().all(|specifier| specifier.contains(&version)));
 //! ```
 //!
-//! The error handling and diagnostics is a bit overdone because this my parser-and-diagnostics
-//! learning project (which kinda failed because the byte based regex crate and char-based
-//! diagnostics don't mix well)
-//!
 //! PEP 440 has a lot of unintuitive features, including:
 //!
 //! * An epoch that you can prefix the version which, e.g. `1!1.2.3`. Lower epoch always means lower
