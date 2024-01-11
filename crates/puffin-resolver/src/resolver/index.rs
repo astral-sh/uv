@@ -1,10 +1,10 @@
 use url::Url;
 
-use distribution_types::{IndexUrl, PackageId};
+use distribution_types::PackageId;
 use pep440_rs::VersionSpecifiers;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
-use pypi_types::{BaseUrl, Metadata21};
+use pypi_types::Metadata21;
 
 use crate::version_map::VersionMap;
 
@@ -13,7 +13,7 @@ use crate::version_map::VersionMap;
 pub(crate) struct Index {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
-    pub(crate) packages: OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
+    pub(crate) packages: OnceMap<PackageName, VersionMap>,
 
     /// A map from package ID to metadata for that distribution.
     pub(crate) distributions: OnceMap<PackageId, Metadata21>,

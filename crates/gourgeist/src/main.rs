@@ -5,6 +5,7 @@ use std::time::Instant;
 use anstream::eprintln;
 use camino::Utf8PathBuf;
 use clap::Parser;
+use directories::ProjectDirs;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -27,7 +28,11 @@ fn run() -> Result<(), gourgeist::Error> {
     let location = cli.path.unwrap_or(Utf8PathBuf::from(".venv"));
     let python = parse_python_cli(cli.python)?;
     let platform = Platform::current()?;
-    let cache = Cache::temp()?;
+    let cache = if let Some(project_dirs) = ProjectDirs::from("", "", "gourgeist") {
+        Cache::from_path(project_dirs.cache_dir())?
+    } else {
+        Cache::from_path(".gourgeist_cache")?
+    };
     let info = Interpreter::query(python.as_std_path(), platform, &cache).unwrap();
     create_bare_venv(&location, &info)?;
     Ok(())

@@ -22,7 +22,7 @@ pub enum SourceDistError {
     Client(#[from] puffin_client::Error),
 
     // Cache writing error
-    #[error("Failed to write to source dist cache")]
+    #[error("Failed to write to source distribution cache")]
     Io(#[from] std::io::Error),
     #[error("Cache deserialization failed")]
     Decode(#[from] rmp_serde::decode::Error),

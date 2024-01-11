@@ -5,13 +5,14 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
+use distribution_types::{Dist, IndexUrl};
+use pep440_rs::VersionSpecifiers;
 use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
-use pypi_types::Yanked;
+use pypi_types::{BaseUrl, Yanked};
 
-use crate::file::{DistFile, SdistFile, WheelFile};
 use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::yanks::AllowedYanks;
@@ -23,9 +24,12 @@ pub struct VersionMap(BTreeMap<PubGrubVersion, PrioritizedDistribution>);
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
     #[instrument(skip_all, fields(package_name = % package_name))]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_metadata(
         metadata: SimpleMetadata,
         package_name: &PackageName,
+        index: &IndexUrl,
+        base: &BaseUrl,
         tags: &Tags,
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
@@ -65,6 +69,7 @@ impl VersionMap {
                     }
                 }
 
+                let requires_python = file.requires_python.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         // To be compatible, the wheel must both have compatible tags _and_ have a
@@ -78,25 +83,45 @@ impl VersionMap {
                                         .all(|version| requires_python.contains(version))
                                 })
                         });
+                        let dist = Dist::from_registry(
+                            filename.name.clone(),
+                            filename.version.clone(),
+                            file,
+                            index.clone(),
+                            base.clone(),
+                        );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
-                                entry.get_mut().insert_built(WheelFile(file), priority);
+                                entry
+                                    .get_mut()
+                                    .insert_built(dist, requires_python, priority);
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(PrioritizedDistribution::from_built(
-                                    WheelFile(file),
+                                    dist,
+                                    requires_python,
                                     priority,
                                 ));
                             }
                         }
                     }
-                    DistFilename::SourceDistFilename(_) => {
+                    DistFilename::SourceDistFilename(filename) => {
+                        let dist = Dist::from_registry(
+                            filename.name.clone(),
+                            filename.version.clone(),
+                            file,
+                            index.clone(),
+                            base.clone(),
+                        );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
-                                entry.get_mut().insert_source(SdistFile(file));
+                                entry.get_mut().insert_source(dist, requires_python);
                             }
                             Entry::Vacant(entry) => {
-                                entry.insert(PrioritizedDistribution::from_source(SdistFile(file)));
+                                entry.insert(PrioritizedDistribution::from_source(
+                                    dist,
+                                    requires_python,
+                                ));
                             }
                         }
                     }
@@ -122,63 +147,111 @@ impl VersionMap {
     }
 }
 
+/// Attach its requires-python to a [`Dist`], since downstream needs this information to filter
+/// [`PrioritizedDistribution`].
+#[derive(Debug)]
+pub(crate) struct DistRequiresPython {
+    pub(crate) dist: Dist,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
+}
+
 #[derive(Debug)]
 struct PrioritizedDistribution {
     /// An arbitrary source distribution for the package version.
-    source: Option<DistFile>,
+    source: Option<DistRequiresPython>,
     /// The highest-priority, platform-compatible wheel for the package version.
-    compatible_wheel: Option<(DistFile, TagPriority)>,
+    compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
-    incompatible_wheel: Option<DistFile>,
+    incompatible_wheel: Option<DistRequiresPython>,
 }
 
 impl PrioritizedDistribution {
     /// Create a new [`PrioritizedDistribution`] from the given wheel distribution.
-    fn from_built(dist: WheelFile, priority: Option<TagPriority>) -> Self {
+    fn from_built(
+        dist: Dist,
+        requires_python: Option<VersionSpecifiers>,
+        priority: Option<TagPriority>,
+    ) -> Self {
         if let Some(priority) = priority {
             Self {
                 source: None,
-                compatible_wheel: Some((dist.into(), priority)),
+                compatible_wheel: Some((
+                    DistRequiresPython {
+                        dist,
+
+                        requires_python,
+                    },
+                    priority,
+                )),
                 incompatible_wheel: None,
             }
         } else {
             Self {
                 source: None,
                 compatible_wheel: None,
-                incompatible_wheel: Some(dist.into()),
+                incompatible_wheel: Some(DistRequiresPython {
+                    dist,
+                    requires_python,
+                }),
             }
         }
     }
 
     /// Create a new [`PrioritizedDistribution`] from the given source distribution.
-    fn from_source(dist: SdistFile) -> Self {
+    fn from_source(dist: Dist, requires_python: Option<VersionSpecifiers>) -> Self {
         Self {
-            source: Some(dist.into()),
+            source: Some(DistRequiresPython {
+                dist,
+                requires_python,
+            }),
             compatible_wheel: None,
             incompatible_wheel: None,
         }
     }
 
     /// Insert the given built distribution into the [`PrioritizedDistribution`].
-    fn insert_built(&mut self, file: WheelFile, priority: Option<TagPriority>) {
+    fn insert_built(
+        &mut self,
+        dist: Dist,
+        requires_python: Option<VersionSpecifiers>,
+        priority: Option<TagPriority>,
+    ) {
         // Prefer the highest-priority, platform-compatible wheel.
         if let Some(priority) = priority {
             if let Some((.., existing_priority)) = &self.compatible_wheel {
                 if priority > *existing_priority {
-                    self.compatible_wheel = Some((file.into(), priority));
+                    self.compatible_wheel = Some((
+                        DistRequiresPython {
+                            dist,
+                            requires_python,
+                        },
+                        priority,
+                    ));
                 }
             } else {
-                self.compatible_wheel = Some((file.into(), priority));
+                self.compatible_wheel = Some((
+                    DistRequiresPython {
+                        dist,
+                        requires_python,
+                    },
+                    priority,
+                ));
             }
         } else if self.incompatible_wheel.is_none() {
-            self.incompatible_wheel = Some(file.into());
+            self.incompatible_wheel = Some(DistRequiresPython {
+                dist,
+                requires_python,
+            });
         }
     }
 
     /// Insert the given source distribution into the [`PrioritizedDistribution`].
-    fn insert_source(&mut self, file: SdistFile) {
+    fn insert_source(&mut self, dist: Dist, requires_python: Option<VersionSpecifiers>) {
         if self.source.is_none() {
-            self.source = Some(file.into());
+            self.source = Some(DistRequiresPython {
+                dist,
+                requires_python,
+            });
         }
     }
 
@@ -195,9 +268,11 @@ impl PrioritizedDistribution {
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
             // using the wheel is faster.
-            (_, Some(sdist), Some(wheel)) => Some(ResolvableFile::IncompatibleWheel(sdist, wheel)),
+            (_, Some(source_dist), Some(wheel)) => {
+                Some(ResolvableFile::IncompatibleWheel(source_dist, wheel))
+            }
             // Otherwise, if we have a source distribution, return it.
-            (_, Some(sdist), _) => Some(ResolvableFile::SourceDist(sdist)),
+            (_, Some(source_dist), _) => Some(ResolvableFile::SourceDist(source_dist)),
             _ => None,
         }
     }
@@ -206,18 +281,18 @@ impl PrioritizedDistribution {
 #[derive(Debug, Clone)]
 pub(crate) enum ResolvableFile<'a> {
     /// The distribution should be resolved and installed using a source distribution.
-    SourceDist(&'a DistFile),
+    SourceDist(&'a DistRequiresPython),
     /// The distribution should be resolved and installed using a wheel distribution.
-    CompatibleWheel(&'a DistFile),
+    CompatibleWheel(&'a DistRequiresPython),
     /// The distribution should be resolved using an incompatible wheel distribution, but
     /// installed using a source distribution.
-    IncompatibleWheel(&'a DistFile, &'a DistFile),
+    IncompatibleWheel(&'a DistRequiresPython, &'a DistRequiresPython),
 }
 
 impl<'a> ResolvableFile<'a> {
     /// Return the [`DistFile`] to use during resolution.
-    pub(crate) fn resolve(&self) -> &DistFile {
-        match self {
+    pub(crate) fn resolve(&self) -> &DistRequiresPython {
+        match *self {
             ResolvableFile::SourceDist(sdist) => sdist,
             ResolvableFile::CompatibleWheel(wheel) => wheel,
             ResolvableFile::IncompatibleWheel(_, wheel) => wheel,
@@ -225,8 +300,8 @@ impl<'a> ResolvableFile<'a> {
     }
 
     /// Return the [`DistFile`] to use during installation.
-    pub(crate) fn install(&self) -> &DistFile {
-        match self {
+    pub(crate) fn install(&self) -> &DistRequiresPython {
+        match *self {
             ResolvableFile::SourceDist(sdist) => sdist,
             ResolvableFile::CompatibleWheel(wheel) => wheel,
             ResolvableFile::IncompatibleWheel(sdist, _) => sdist,

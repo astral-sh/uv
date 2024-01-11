@@ -1,18 +1,16 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, DistributionMetadata, IndexUrl, Name};
+use distribution_types::{Dist, DistributionMetadata, Name};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
-use pypi_types::BaseUrl;
 
-use crate::file::DistFile;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::{ResolvableFile, VersionMap};
+use crate::version_map::{DistRequiresPython, ResolvableFile, VersionMap};
 use crate::{Manifest, ResolutionOptions};
 
 #[derive(Debug, Clone)]
@@ -247,12 +245,12 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the [`DistFile`] to use when resolving the package.
-    pub(crate) fn resolve(&self) -> &DistFile {
+    pub(crate) fn resolve(&self) -> &DistRequiresPython {
         self.file.resolve()
     }
 
     /// Return the [`DistFile`] to use when installing the package.
-    pub(crate) fn install(&self) -> &DistFile {
+    pub(crate) fn install(&self) -> &DistRequiresPython {
         self.file.install()
     }
 
@@ -271,24 +269,13 @@ impl<'a> Candidate<'a> {
 
         // If the candidate is a source distribution, and doesn't support the installed Python
         // version, return the failing version specifiers, since we won't be able to build it.
-        if self.install().is_sdist() {
+        if matches!(self.install().dist, Dist::Source(_)) {
             if !requires_python.contains(requirement.installed()) {
                 return Some(requires_python);
             }
         }
 
         None
-    }
-
-    /// Return the [`Dist`] to use when resolving the candidate.
-    pub(crate) fn into_distribution(self, index: IndexUrl, base: BaseUrl) -> Dist {
-        Dist::from_registry(
-            self.name().clone(),
-            self.version().clone().into(),
-            self.resolve().clone().into(),
-            index,
-            base,
-        )
     }
 }
 

@@ -2,14 +2,13 @@ pub use error::ResolveError;
 pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use prerelease_mode::PreReleaseMode;
-pub use resolution::ResolutionGraph;
+pub use resolution::{Diagnostic, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolution_options::ResolutionOptions;
 pub use resolver::{BuildId, Reporter as ResolverReporter, Resolver, ResolverProvider};
 
 mod candidate_selector;
 mod error;
-mod file;
 mod finder;
 mod manifest;
 mod overrides;

@@ -25,7 +25,7 @@ use puffin_installer::Downloader;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::DistFinder;
-use puffin_traits::{BuildContext, OnceMap};
+use puffin_traits::{BuildContext, OnceMap, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -60,13 +60,16 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexUrls::default();
+    let setup_py = SetupPyStrategy::default();
     let tags = venv.interpreter().tags()?;
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
         venv.interpreter(),
         &index_urls,
         venv.python_executable(),
+        setup_py,
         args.no_build,
     );
 

@@ -14,6 +14,7 @@ use puffin_installer::Reinstall;
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
+use puffin_traits::SetupPyStrategy;
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus};
@@ -166,6 +167,11 @@ struct PipCompileArgs {
     #[clap(long)]
     upgrade: bool,
 
+    /// Use legacy `setuptools` behavior when building source distributions without a
+    /// `pyproject.toml`.
+    #[clap(long)]
+    legacy_setup_py: bool,
+
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
@@ -227,6 +233,11 @@ struct PipSyncArgs {
     /// Ignore the package index, instead relying on local archives and caches.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Use legacy `setuptools` behavior when building source distributions without a
+    /// `pyproject.toml`.
+    #[clap(long)]
+    legacy_setup_py: bool,
 
     /// Don't build source distributions.
     ///
@@ -324,6 +335,11 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// Use legacy `setuptools` behavior when building source distributions without a
+    /// `pyproject.toml`.
+    #[clap(long)]
+    legacy_setup_py: bool,
+
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
@@ -392,9 +408,25 @@ struct VenvArgs {
     #[clap(short, long)]
     python: Option<PathBuf>,
 
+    /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
+    #[clap(long)]
+    seed: bool,
+
     /// The path to the virtual environment to create.
     #[clap(default_value = ".venv")]
     name: PathBuf,
+
+    /// The URL of the Python Package Index.
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    index_url: IndexUrl,
+
+    /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    #[clap(long)]
+    extra_index_url: Vec<IndexUrl>,
+
+    /// Ignore the package index, instead relying on local archives and caches.
+    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    no_index: bool,
 }
 
 #[derive(Args)]
@@ -480,6 +512,11 @@ async fn inner() -> Result<ExitStatus> {
                 args.prerelease,
                 args.upgrade.into(),
                 index_urls,
+                if args.legacy_setup_py {
+                    SetupPyStrategy::Setuptools
+                } else {
+                    SetupPyStrategy::Pep517
+                },
                 args.no_build,
                 args.python_version,
                 args.exclude_newer,
@@ -502,6 +539,11 @@ async fn inner() -> Result<ExitStatus> {
                 &reinstall,
                 args.link_mode,
                 index_urls,
+                if args.legacy_setup_py {
+                    SetupPyStrategy::Setuptools
+                } else {
+                    SetupPyStrategy::Pep517
+                },
                 args.no_build,
                 args.strict,
                 cache,
@@ -547,6 +589,11 @@ async fn inner() -> Result<ExitStatus> {
                 index_urls,
                 &reinstall,
                 args.link_mode,
+                if args.legacy_setup_py {
+                    SetupPyStrategy::Setuptools
+                } else {
+                    SetupPyStrategy::Pep517
+                },
                 args.no_build,
                 args.strict,
                 args.exclude_newer,
@@ -567,7 +614,19 @@ async fn inner() -> Result<ExitStatus> {
         }
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::PipFreeze(args) => commands::freeze(&cache, args.strict, printer),
-        Commands::Venv(args) => commands::venv(&args.name, args.python.as_deref(), &cache, printer),
+        Commands::Venv(args) => {
+            let index_urls =
+                IndexUrls::from_args(args.index_url, args.extra_index_url, args.no_index);
+            commands::venv(
+                &args.name,
+                args.python.as_deref(),
+                &index_urls,
+                args.seed,
+                &cache,
+                printer,
+            )
+            .await
+        }
         Commands::Add(args) => commands::add(&args.name, printer),
         Commands::Remove(args) => commands::remove(&args.name, printer),
     }
