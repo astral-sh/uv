@@ -228,18 +228,17 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 debug!("Fetching disk-based wheel from URL: {}", wheel.url);
 
                 let reader = self.client.stream_external(&wheel.url).await?;
-                let filename = wheel.filename.to_string();
 
                 // Download and unzip the wheel to a temporary dir.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                let temp_target = temp_dir.path().join(&filename);
+                let temp_target = temp_dir.path().join(&wheel.filename.to_string());
                 unzip_no_seek(reader.compat(), &temp_target).await?;
 
                 // Move the temporary file to the cache.
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
-                    filename,
+                    wheel.filename.stem(),
                 );
                 fs::create_dir_all(&cache_entry.dir()).await?;
                 let target = cache_entry.into_path_buf();
