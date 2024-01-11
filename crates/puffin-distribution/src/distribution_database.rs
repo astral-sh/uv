@@ -141,8 +141,15 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // downloaded.
                 let unzip_while_downloading = true;
                 if unzip_while_downloading {
+                    // Write to temporary dir
+                    let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                    let temp_target = temp_dir.path().join(&wheel.file.filename);
+                    unzip_no_seek(reader.compat(), &temp_target).await?;
+
+                    // Move the dir to the right place
+                    fs::create_dir_all(&cache_entry.dir()).await?;
                     let target = cache_entry.into_path_buf();
-                    unzip_no_seek(reader.compat(), &target).await?;
+                    tokio::fs::rename(temp_target, &target).await?;
 
                     return Ok(LocalWheel::Unzipped(UnzippedWheel {
                         dist: dist.clone(),
