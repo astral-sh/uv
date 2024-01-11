@@ -46,7 +46,11 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on:
+      # TODO(zanieb): The runner labels should be changed to include the OS and
+      #               templated here or moved to the matrix depending on how we
+      #               want things to display
+      labels: astral-4-core
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
