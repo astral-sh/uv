@@ -161,10 +161,13 @@ pub(crate) async fn pip_sync(
         use distribution_types::RemoteSource;
         remote.iter().map(|d| d.size().unwrap()).sum()
     };
-    let num_source_dists: usize = remote.iter().map(|d| match d {
-        distribution_types::Dist::Built(_) => 0,
-        distribution_types::Dist::Source(_) => 1,
-    }).sum();
+    let num_source_dists: usize = remote
+        .iter()
+        .map(|d| match d {
+            distribution_types::Dist::Built(_) => 0,
+            distribution_types::Dist::Source(_) => 1,
+        })
+        .sum();
 
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
     // have been yanked, we currently don't show this message on the second run anymore
@@ -227,7 +230,7 @@ pub(crate) async fn pip_sync(
                     "- total remote size: {}MB",
                     total_remote_bytes as f32 / 1024.0 / 1024.0
                 )
-                    .dimmed()
+                .dimmed()
             )?;
             writeln!(
                 printer,
@@ -236,16 +239,12 @@ pub(crate) async fn pip_sync(
                     "- effective processing rate: {}MB/s",
                     (total_remote_bytes as f32 / 1024.0 / 1024.0) / start.elapsed().as_secs_f32()
                 )
-                    .dimmed()
+                .dimmed()
             )?;
             writeln!(
                 printer,
                 "{}",
-                format!(
-                    "- number of source distributions: {}",
-                    num_source_dists
-                )
-                    .dimmed()
+                format!("- number of source distributions: {}", num_source_dists).dimmed()
             )?;
         };
 
