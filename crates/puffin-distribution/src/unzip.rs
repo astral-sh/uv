@@ -31,6 +31,7 @@ impl Unzip for BuiltWheel {
 impl Unzip for LocalWheel {
     fn unzip(&self, target: &Path) -> Result<(), Error> {
         match self {
+            LocalWheel::Unzipped(_) => Ok(()),
             LocalWheel::InMemory(wheel) => wheel.unzip(target),
             LocalWheel::Disk(wheel) => wheel.unzip(target),
             LocalWheel::Built(wheel) => wheel.unzip(target),

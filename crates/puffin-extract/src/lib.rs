@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use zip::result::ZipError;
 use zip::ZipArchive;
 
@@ -13,6 +14,8 @@ pub enum Error {
     #[error(transparent)]
     Zip(#[from] ZipError),
     #[error(transparent)]
+    AsyncZip(#[from] async_zip::error::ZipError),
+    #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Unsupported archive type: {0}")]
     UnsupportedArchive(PathBuf),
@@ -20,6 +23,44 @@ pub enum Error {
         "The top level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
     InvalidArchive(Vec<fs_err::DirEntry>),
+}
+
+/// Unzip a `.zip` archive into the target directory without requiring Seek.
+///
+/// This is useful for unzipping files as they're being downloaded. If the archive
+/// is already fully on disk, consider using `unzip_archive`, which can use multiple
+/// threads to work faster in that case.
+pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<(), Error> {
+    let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+
+    while let Some(mut entry) = zip.next_with_entry().await? {
+        // Construct path
+        let path = entry.reader().entry().filename().as_str()?;
+        let path = target.join(path);
+        let is_dir = entry.reader().entry().dir()?;
+
+        // Create dir or write file
+        if is_dir {
+            tokio::fs::create_dir_all(path).await?;
+        } else {
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
+            let file = tokio::fs::File::create(path).await?;
+            let mut writer = tokio::io::BufWriter::new(file);
+            let mut reader = entry.reader_mut().compat();
+            tokio::io::copy(&mut reader, &mut writer).await?;
+        }
+
+        // Close current file to get access to the next one. See docs:
+        // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
+        zip = entry.skip().await?;
+    }
+
+    Ok(())
 }
 
 /// Unzip a `.zip` archive into the target directory.

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use bytesize::ByteSize;
 use fs_err::tokio as fs;
+use puffin_extract::unzip_no_seek;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -21,7 +22,7 @@ use puffin_git::GitSource;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
-use crate::download::BuiltWheel;
+use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;
 use crate::reporter::Facade;
 use crate::{
@@ -36,6 +37,8 @@ pub enum DistributionDatabaseError {
     WheelFilename(#[from] WheelFilenameError),
     #[error(transparent)]
     Client(#[from] puffin_client::Error),
+    #[error(transparent)]
+    Extract(#[from] puffin_extract::Error),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -108,29 +111,61 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ) -> Result<LocalWheel, DistributionDatabaseError> {
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
-                // Fetch the wheel.
                 let url = wheel
                     .base
                     .join_relative(&wheel.file.url)
                     .map_err(|err| DistributionDatabaseError::Url(wheel.file.url.clone(), err))?;
 
+                // Make cache entry
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Index(&wheel.index).remote_wheel_dir(wheel_filename.name.as_ref()),
+                    wheel_filename.stem(),
+                );
 
+                // Start the download
                 let reader = self.client.stream_external(&url).await?;
 
+                // In all wheels we've seen so far, unzipping while downloading is the
+                // faster option.
+                //
+                // Writing to a file first may be faster if the wheel takes longer to
+                // unzip than it takes to download. This may happen if the wheel is a
+                // zip bomb, or if the machine has a weak cpu (with many cores), but a
+                // fast network.
+                //
+                // If we find such a case, it may make sense to create separate tasks
+                // for downloading and unzipping (with a buffer in between) and switch
+                // to rayon if this buffer grows large by the time the file is fully
+                // downloaded.
+                let unzip_while_downloading = true;
+                if unzip_while_downloading {
+                    // Download and unzip to a temporary dir
+                    let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                    let temp_target = temp_dir.path().join(&wheel.file.filename);
+                    unzip_no_seek(reader.compat(), &temp_target).await?;
+
+                    // Move the dir to the right place
+                    fs::create_dir_all(&cache_entry.dir()).await?;
+                    let target = cache_entry.into_path_buf();
+                    tokio::fs::rename(temp_target, &target).await?;
+
+                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        dist: dist.clone(),
+                        target,
+                        filename: wheel_filename,
+                    }));
+                }
+
                 // If the file is greater than 5MB, write it to disk; otherwise, keep it in memory.
+                //
+                // TODO this is currently dead code. Consider deleting if there's no use for it.
                 let byte_size = wheel.file.size.map(ByteSize::b);
                 let local_wheel = if let Some(byte_size) =
                     byte_size.filter(|byte_size| *byte_size < ByteSize::mb(5))
                 {
                     debug!("Fetching in-memory wheel from registry: {dist} ({byte_size})",);
-
-                    let cache_entry = self.cache.entry(
-                        CacheBucket::Wheels,
-                        WheelCache::Index(&wheel.index)
-                            .remote_wheel_dir(wheel_filename.name.as_ref()),
-                        wheel_filename.stem(),
-                    );
 
                     // Read into a buffer.
                     let mut buffer = Vec::with_capacity(
@@ -170,7 +205,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         CacheBucket::Wheels,
                         WheelCache::Index(&wheel.index)
                             .remote_wheel_dir(wheel_filename.name.as_ref()),
-                        filename,
+                        filename, // TODO should this be filename.stem() to match the other branch?
                     );
                     fs::create_dir_all(&cache_entry.dir()).await?;
                     tokio::fs::rename(temp_file, &cache_entry.path()).await?;
@@ -193,31 +228,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 debug!("Fetching disk-based wheel from URL: {}", wheel.url);
 
                 let reader = self.client.stream_external(&wheel.url).await?;
-                let filename = wheel.filename.to_string();
 
-                // Download the wheel to a temporary file.
+                // Download and unzip the wheel to a temporary dir.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                let temp_file = temp_dir.path().join(&filename);
-                let mut writer =
-                    tokio::io::BufWriter::new(tokio::fs::File::create(&temp_file).await?);
-                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+                let temp_target = temp_dir.path().join(wheel.filename.to_string());
+                unzip_no_seek(reader.compat(), &temp_target).await?;
 
                 // Move the temporary file to the cache.
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
-                    filename,
+                    wheel.filename.stem(),
                 );
                 fs::create_dir_all(&cache_entry.dir()).await?;
-                tokio::fs::rename(temp_file, &cache_entry.path()).await?;
+                let target = cache_entry.into_path_buf();
+                tokio::fs::rename(temp_target, &target).await?;
 
-                let local_wheel = LocalWheel::Disk(DiskWheel {
+                let local_wheel = LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target: cache_entry
-                        .with_file(wheel.filename.stem())
-                        .path()
-                        .to_path_buf(),
-                    path: cache_entry.into_path_buf(),
+                    target,
                     filename: wheel.filename.clone(),
                 });
 
