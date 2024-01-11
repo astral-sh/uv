@@ -233,9 +233,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // Download the wheel to a temporary file.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
                 let temp_file = temp_dir.path().join(&filename);
-                let mut writer =
-                    tokio::io::BufWriter::new(tokio::fs::File::create(&temp_file).await?);
-                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+                unzip_no_seek(reader.compat(), &temp_file).await?;
 
                 // Move the temporary file to the cache.
                 let cache_entry = self.cache.entry(
