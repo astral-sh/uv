@@ -2776,6 +2776,8 @@ fn trailing_slash() -> Result<()> {
             .arg(cache_dir.path())
             .arg("--index-url")
             .arg("https://test.pypi.org/simple")
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
@@ -2802,6 +2804,8 @@ fn trailing_slash() -> Result<()> {
             .arg(cache_dir.path())
             .arg("--index-url")
             .arg("https://test.pypi.org/simple/")
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
