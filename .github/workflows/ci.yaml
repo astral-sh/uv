@@ -47,10 +47,10 @@ jobs:
       matrix:
         os: [ubuntu-latest]
     runs-on:
-      # TODO(zanieb): The runner labels should be changed to include the OS and
-      #               templated here or moved to the matrix depending on how we
-      #               want things to display
-      labels: astral-8-core
+      # We use the large GitHub actions runners for faster testing
+      # For Ubuntu and Windows, this requires Organization-level configuration
+      # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+      labels: ${{ matrix.os }}-large
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
