@@ -244,13 +244,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 fs::create_dir_all(&cache_entry.dir()).await?;
                 tokio::fs::rename(temp_file, &cache_entry.path()).await?;
 
-                let local_wheel = LocalWheel::Disk(DiskWheel {
+                let local_wheel = LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
                     target: cache_entry
                         .with_file(wheel.filename.stem())
                         .path()
                         .to_path_buf(),
-                    path: cache_entry.into_path_buf(),
                     filename: wheel.filename.clone(),
                 });
 
