@@ -156,6 +156,16 @@ pub(crate) async fn pip_sync(
         resolution.into_distributions().collect::<Vec<_>>()
     };
 
+    // Get some perf metrics
+    let total_remote_bytes: u64 = {
+        use distribution_types::RemoteSource;
+        remote.iter().map(|d| d.size().unwrap()).sum()
+    };
+    let num_source_dists: usize = remote.iter().map(|d| match d {
+        distribution_types::Dist::Built(_) => 0,
+        distribution_types::Dist::Source(_) => 1,
+    }).sum();
+
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
     // have been yanked, we currently don't show this message on the second run anymore
     for dist in &remote {
@@ -208,6 +218,36 @@ pub(crate) async fn pip_sync(
             )
             .dimmed()
         )?;
+
+        if std::env::var("PUFFIN_PERF_METRICS").is_ok() {
+            writeln!(
+                printer,
+                "{}",
+                format!(
+                    "- total remote size: {}MB",
+                    total_remote_bytes as f32 / 1024.0 / 1024.0
+                )
+                    .dimmed()
+            )?;
+            writeln!(
+                printer,
+                "{}",
+                format!(
+                    "- effective processing rate: {}MB/s",
+                    (total_remote_bytes as f32 / 1024.0 / 1024.0) / start.elapsed().as_secs_f32()
+                )
+                    .dimmed()
+            )?;
+            writeln!(
+                printer,
+                "{}",
+                format!(
+                    "- number of source distributions: {}",
+                    num_source_dists
+                )
+                    .dimmed()
+            )?;
+        };
 
         wheels
     };
