@@ -160,6 +160,16 @@ impl PrioritizedDistribution {
         }
     }
 
+    /// Return the source distribution, if any.
+    pub fn source(&self) -> Option<&DistRequiresPython> {
+        self.source.as_ref()
+    }
+
+    /// Return the compatible built distribution, if any.
+    pub fn compatible_wheel(&self) -> Option<&(DistRequiresPython, TagPriority)> {
+        self.compatible_wheel.as_ref()
+    }
+
     /// Return the hashes for each distribution.
     pub fn hashes(&self) -> &[Hashes] {
         &self.hashes

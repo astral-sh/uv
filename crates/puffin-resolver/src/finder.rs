@@ -3,15 +3,15 @@
 //! This is similar to running `pip install` with the `--no-deps` flag.
 
 use anyhow::Result;
-use distribution_filename::DistFilename;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, File, Resolution};
+use distribution_filename::DistFilename;
+use distribution_types::{Dist, IndexUrl, Resolution};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
-use platform_tags::{TagPriority, Tags};
-use puffin_client::{RegistryClient, SimpleMetadata};
+use platform_tags::Tags;
+use puffin_client::{FlatIndex, RegistryClient, SimpleMetadata};
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 
@@ -22,16 +22,23 @@ pub struct DistFinder<'a> {
     client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
     interpreter: &'a Interpreter,
+    flat_index: &'a FxHashMap<PackageName, FlatIndex<Version>>,
 }
 
 impl<'a> DistFinder<'a> {
     /// Initialize a new distribution finder.
-    pub fn new(tags: &'a Tags, client: &'a RegistryClient, interpreter: &'a Interpreter) -> Self {
+    pub fn new(
+        tags: &'a Tags,
+        client: &'a RegistryClient,
+        interpreter: &'a Interpreter,
+        flat_index: &'a FxHashMap<PackageName, FlatIndex<Version>>,
+    ) -> Self {
         Self {
             tags,
             client,
             reporter: None,
             interpreter,
+            flat_index,
         }
     }
 
@@ -50,6 +57,7 @@ impl<'a> DistFinder<'a> {
     async fn resolve_requirement(
         &self,
         requirement: &Requirement,
+        flat_index: Option<&FlatIndex<Version>>,
     ) -> Result<(PackageName, Dist), ResolveError> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
@@ -57,17 +65,16 @@ impl<'a> DistFinder<'a> {
                 let (index, metadata) = self.client.simple(&requirement.name).await?;
 
                 // Pick a version that satisfies the requirement.
-                let Some(ParsedFile { filename, file }) = self.select(requirement, metadata) else {
+                let Some(dist) = self.select(requirement, metadata, &index, flat_index) else {
                     return Err(ResolveError::NotFound(requirement.clone()));
                 };
-                let distribution = Dist::from_registry(filename, file, index);
 
                 if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_progress(&distribution);
+                    reporter.on_progress(&dist);
                 }
 
                 let normalized_name = requirement.name.clone();
-                Ok((normalized_name, distribution))
+                Ok((normalized_name, dist))
             }
             Some(VersionOrUrl::Url(url)) => {
                 // We have a URL; fetch the distribution directly.
@@ -84,7 +91,9 @@ impl<'a> DistFinder<'a> {
         requirements: &'data [Requirement],
     ) -> impl Stream<Item = Result<(PackageName, Dist), ResolveError>> + 'data {
         stream::iter(requirements)
-            .map(move |requirement| self.resolve_requirement(requirement))
+            .map(move |requirement| {
+                self.resolve_requirement(requirement, self.flat_index.get(&requirement.name))
+            })
             .buffer_unordered(32)
     }
 
@@ -105,10 +114,37 @@ impl<'a> DistFinder<'a> {
     }
 
     /// select a version that satisfies the requirement, preferring wheels to source distributions.
-    fn select(&self, requirement: &Requirement, metadata: SimpleMetadata) -> Option<ParsedFile> {
-        let mut best_version: Option<Version> = None;
-        let mut best_wheel: Option<(ParsedFile, TagPriority)> = None;
-        let mut best_sdist: Option<ParsedFile> = None;
+    fn select(
+        &self,
+        requirement: &Requirement,
+        metadata: SimpleMetadata,
+        index: &IndexUrl,
+        flat_index: Option<&FlatIndex<Version>>,
+    ) -> Option<Dist> {
+        // Prioritize the flat index by initializing the "best" matches with its entries.
+        let matching_override = if let Some(flat_index) = flat_index {
+            match &requirement.version_or_url {
+                None => flat_index.iter().next(),
+                Some(VersionOrUrl::Url(_)) => None,
+                Some(VersionOrUrl::VersionSpecifier(specifiers)) => flat_index
+                    .iter()
+                    .find(|(version, _)| specifiers.contains(version)),
+            }
+        } else {
+            None
+        };
+        let (mut best_version, mut best_wheel, mut best_sdist) =
+            if let Some((version, resolvable_dist)) = matching_override {
+                (
+                    Some(version.clone()),
+                    resolvable_dist
+                        .compatible_wheel()
+                        .map(|(dist, tag_priority)| (dist.dist.clone(), *tag_priority)),
+                    resolvable_dist.source().map(|dist| dist.dist.clone()),
+                )
+            } else {
+                (None, None, None)
+            };
 
         for (version, files) in metadata.into_iter().rev() {
             // If we iterated past the first-compatible version, break.
@@ -147,10 +183,11 @@ impl<'a> DistFinder<'a> {
                         .map_or(true, |(.., existing)| priority > *existing)
                     {
                         best_wheel = Some((
-                            ParsedFile {
-                                filename: DistFilename::WheelFilename(wheel),
+                            Dist::from_registry(
+                                DistFilename::WheelFilename(wheel),
                                 file,
-                            },
+                                index.clone(),
+                            ),
                             priority,
                         ));
                     }
@@ -159,7 +196,7 @@ impl<'a> DistFinder<'a> {
 
             // Find the most-compatible sdist, if no wheel was found.
             if best_wheel.is_none() {
-                for (sdist, file) in files.source_dists {
+                for (source_dist, file) in files.source_dists {
                     // Only add dists compatible with the python version.
                     // This is relevant for source dists which give no other indication of their
                     // compatibility and wheels which may be tagged `py3-none-any` but
@@ -174,25 +211,18 @@ impl<'a> DistFinder<'a> {
                         continue;
                     }
 
-                    best_version = Some(sdist.version.clone());
-                    best_sdist = Some(ParsedFile {
-                        filename: DistFilename::SourceDistFilename(sdist),
+                    best_version = Some(source_dist.version.clone());
+                    best_sdist = Some(Dist::from_registry(
+                        DistFilename::SourceDistFilename(source_dist),
                         file,
-                    });
+                        index.clone(),
+                    ));
                 }
             }
         }
 
         best_wheel.map_or(best_sdist, |(wheel, ..)| Some(wheel))
     }
-}
-
-#[derive(Debug)]
-struct ParsedFile {
-    /// The wheel or source dist filename extracted from the [`File`].
-    filename: DistFilename,
-    /// The underlying [`File`].
-    file: File,
 }
 
 pub trait Reporter: Send + Sync {
