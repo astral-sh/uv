@@ -73,7 +73,7 @@ jobs:
         partition: [1, 2, 3, 4]
       fail-fast: false
     runs-on: ${{ matrix.os }}
-    name: "cargo test [${{ matrix.partition }}/4] | ${{ matrix.os }}"
+    name: "cargo test | ${{ matrix.os }} (${{ matrix.partition }}/4)"
     needs: cargo-build-test
     steps:
       - uses: actions/checkout@v4
