@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -45,7 +45,7 @@ jobs:
   cargo-test:
     strategy:
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
@@ -53,7 +53,7 @@ jobs:
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:
-          python-version: | 
+          python-version: |
             3.7
             3.8
             3.9
@@ -62,6 +62,7 @@ jobs:
             3.12
       - name: "Install Rust toolchain"
         run: rustup show
+      - uses: rui314/setup-mold@v1
       - name: "Install cargo insta"
         uses: taiki-e/install-action@v2
         with:
