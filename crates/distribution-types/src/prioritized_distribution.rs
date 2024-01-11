@@ -14,9 +14,9 @@ pub struct DistRequiresPython {
 #[derive(Debug, Clone)]
 pub struct PrioritizedDistribution {
     /// An arbitrary source distribution for the package version.
-    source: Option<DistRequiresPython>,
+    pub source: Option<DistRequiresPython>,
     /// The highest-priority, platform-compatible wheel for the package version.
-    compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
+    pub compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
     incompatible_wheel: Option<DistRequiresPython>,
 }
