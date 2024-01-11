@@ -24,9 +24,7 @@ use pypi_types::Metadata21;
 use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;
 use crate::reporter::Facade;
-use crate::{
-    DiskWheel, LocalWheel, Reporter, SourceDistCachedBuilder, SourceDistError,
-};
+use crate::{DiskWheel, LocalWheel, Reporter, SourceDistCachedBuilder, SourceDistError};
 
 #[derive(Debug, Error)]
 pub enum DistributionDatabaseError {
