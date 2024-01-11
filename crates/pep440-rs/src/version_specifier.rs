@@ -1279,7 +1279,7 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_mismatch() {
+    fn test_invalid_word() {
         let result = VersionSpecifiers::from_str("blergh");
         assert_eq!(
             result.unwrap_err().inner.err,

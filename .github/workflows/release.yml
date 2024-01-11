@@ -96,6 +96,8 @@ jobs:
         with:
           submodules: recursive
       - uses: swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-dist
         run: ${{ matrix.install_dist }}
       - name: Build artifacts

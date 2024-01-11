@@ -12,7 +12,7 @@ use puffin_cache::{Cache, CacheArgs};
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_traits::{BuildContext, BuildKind};
+use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -55,6 +55,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexUrls::default();
+    let setup_py = SetupPyStrategy::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -62,6 +63,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         venv.interpreter(),
         &index_urls,
         venv.python_executable(),
+        setup_py,
         false,
     );
 
@@ -72,6 +74,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &build_dispatch,
         SourceBuildContext::default(),
         args.sdist.display().to_string(),
+        setup_py,
         build_kind,
     )
     .await?;

@@ -17,7 +17,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, RemoteSource, SourceDist,
+    VersionOrUrl,
 };
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
@@ -26,7 +27,7 @@ use puffin_distribution::DistributionDatabase;
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
-use pypi_types::{BaseUrl, Metadata21};
+use pypi_types::Metadata21;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
@@ -472,7 +473,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await;
-                let (index, base, version_map) = entry.value();
+                let version_map = entry.value();
 
                 if let Some(extra) = extra {
                     debug!(
@@ -502,20 +503,28 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         candidate.name(),
                         extra,
                         candidate.version(),
-                        candidate.resolve().filename()
+                        candidate
+                            .resolve()
+                            .dist
+                            .filename()
+                            .unwrap_or("unknown filename")
                     );
                 } else {
                     debug!(
                         "Selecting: {}=={} ({})",
                         candidate.name(),
                         candidate.version(),
-                        candidate.resolve().filename()
+                        candidate
+                            .resolve()
+                            .dist
+                            .filename()
+                            .unwrap_or("unknown filename")
                     );
                 }
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
-                pins.insert(&candidate, index, base);
+                pins.insert(&candidate);
 
                 let version = candidate.version().clone();
 
@@ -525,7 +534,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .distributions
                     .register_owned(candidate.package_id())
                 {
-                    let distribution = candidate.into_distribution(index.clone(), base.clone());
+                    let distribution = candidate.resolve().dist.clone();
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
 
@@ -670,11 +679,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         while let Some(response) = response_stream.next().await {
             match response? {
-                Some(Response::Package(package_name, index, base, version_map)) => {
+                Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index
-                        .packages
-                        .done(package_name, (index, base, version_map));
+                    self.index.packages.done(package_name, version_map);
                 }
                 Some(Response::Dist(Dist::Built(distribution), metadata, ..)) => {
                     trace!("Received built distribution metadata for: {distribution}");
@@ -713,12 +720,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         match request {
             // Fetch package metadata from the registry.
             Request::Package(package_name) => {
-                let (index, base, metadata) = self
+                let version_map = self
                     .provider
                     .get_version_map(&package_name)
                     .await
                     .map_err(ResolveError::Client)?;
-                Ok(Some(Response::Package(package_name, index, base, metadata)))
+                Ok(Some(Response::Package(package_name, version_map)))
             }
 
             // Fetch distribution metadata from the distribution database.
@@ -746,7 +753,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
                 let entry = self.index.packages.wait(&package_name).await;
-                let (index, base, version_map) = entry.value();
+                let version_map = entry.value();
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.
@@ -769,7 +776,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .distributions
                     .register_owned(candidate.package_id())
                 {
-                    let dist = candidate.into_distribution(index.clone(), base.clone());
+                    let dist = candidate.resolve().dist.clone();
                     drop(entry);
 
                     let (metadata, precise) = self
@@ -837,7 +844,7 @@ enum Request {
 #[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, IndexUrl, BaseUrl, VersionMap),
+    Package(PackageName, VersionMap),
     /// The returned metadata for a distribution.
     Dist(Dist, Metadata21, Option<Url>),
 }

@@ -4,6 +4,7 @@ use std::time::SystemTimeError;
 
 use thiserror::Error;
 
+pub use crate::cfg::Configuration;
 pub use crate::interpreter::Interpreter;
 pub use crate::python_version::PythonVersion;
 pub use crate::virtual_env::Virtualenv;

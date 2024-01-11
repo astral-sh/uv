@@ -670,9 +670,11 @@ fn compile_python_37() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python>=3.8 and black==23.10.1 depends
-              on Python>=3.8, black==23.10.1 is forbidden.
-              And because root depends on black==23.10.1, version solving failed.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.8
+              and black==23.10.1 depends on Python>=3.8, we can conclude that
+              black==23.10.1 cannot be used.
+              And because root depends on black==23.10.1 we can conclude that the
+              requirements are unsatisfiable.
         "###);
     });
 
@@ -845,6 +847,8 @@ fn compile_wheel_url_dependency() -> Result<()> {
 }
 
 /// Resolve a specific Flask source distribution via a URL dependency.
+///
+/// Exercises the `prepare_metadata_for_build_wheel` hooks.
 #[test]
 fn compile_sdist_url_dependency() -> Result<()> {
     let temp_dir = TempDir::new()?;
@@ -1405,8 +1409,9 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of werkzeug==3.0.0 and root depends on
-              werkzeug==3.0.0, version solving failed.
+          ╰─▶ Because there is no version of werkzeug==3.0.0 and root depends
+              on werkzeug==3.0.0, we can conclude that the requirements are
+              unsatisfiable.
         "###);
     });
 
@@ -1556,8 +1561,10 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and there are no
-              versions of werkzeug>=3.0.0, flask==3.0.0 is forbidden.
-              And because root depends on flask==3.0.0, version solving failed.
+              versions of werkzeug that satisfy werkzeug>=3.0.0, we can conclude that
+              flask==3.0.0 cannot be used.
+              And because root depends on flask==3.0.0 we can conclude that the
+              requirements are unsatisfiable.
         "###);
     });
 
@@ -1899,8 +1906,9 @@ dependencies = ["django==300.1.4"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of django==300.1.4 and my-project depends on
-              django==300.1.4, version solving failed.
+          ╰─▶ Because there is no version of django==300.1.4 and my-project
+              depends on django==300.1.4, we can conclude that the requirements are
+              unsatisfiable.
         "###);
     });
 
@@ -2225,8 +2233,9 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of attrs>20.3.0, <21.2.0 and root depends
-              on attrs>20.3.0, <21.2.0, version solving failed.
+          ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
+              and root depends on attrs>20.3.0,<21.2.0, we can conclude that the
+              requirements are unsatisfiable.
         "###);
     });
 
@@ -2573,11 +2582,10 @@ fn compile_editable() -> Result<()> {
     })?;
 
     let filter_path = requirements_in.display().to_string();
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[(filter_path.as_str(), "requirements.in")])
-        .copied()
-        .collect::<Vec<_>>();
+    let filters: Vec<_> = iter::once((filter_path.as_str(), "requirements.in"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
     insta::with_settings!({
         filters => filters
     }, {
@@ -2768,6 +2776,8 @@ fn trailing_slash() -> Result<()> {
             .arg(cache_dir.path())
             .arg("--index-url")
             .arg("https://test.pypi.org/simple")
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
@@ -2794,6 +2804,8 @@ fn trailing_slash() -> Result<()> {
             .arg(cache_dir.path())
             .arg("--index-url")
             .arg("https://test.pypi.org/simple/")
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
@@ -2807,6 +2819,93 @@ fn trailing_slash() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
+        "###);
+    });
+
+    Ok(())
+}
+
+/// Resolve a project without a `pyproject.toml`, using the PEP 517 build backend (default).
+#[test]
+fn compile_legacy_sdist_pep_517() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        # This file was autogenerated by Puffin v0.0.1 via the following command:
+        #    puffin pip-compile requirements.in --cache-dir [CACHE_DIR]
+        flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz
+        mccabe==0.7.0
+            # via flake8
+        pycodestyle==2.10.0
+            # via flake8
+        pyflakes==3.0.1
+            # via flake8
+
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
+        "###);
+    });
+
+    Ok(())
+}
+
+/// Resolve a project without a `pyproject.toml`, using `setuptools` directly.
+#[test]
+fn compile_legacy_sdist_setuptools() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-compile")
+            .arg("requirements.in")
+            .arg("--legacy-setup-py")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        # This file was autogenerated by Puffin v0.0.1 via the following command:
+        #    puffin pip-compile requirements.in --legacy-setup-py --cache-dir [CACHE_DIR]
+        flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz
+        mccabe==0.7.0
+            # via flake8
+        pycodestyle==2.10.0
+            # via flake8
+        pyflakes==3.0.1
+            # via flake8
+
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
         "###);
     });
 

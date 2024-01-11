@@ -17,6 +17,7 @@ use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
+use puffin_traits::SetupPyStrategy;
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -50,6 +51,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexUrls::default();
+    let setup_py = SetupPyStrategy::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -57,6 +59,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         venv.interpreter(),
         &index_urls,
         venv.python_executable(),
+        setup_py,
         args.no_build,
     );
 

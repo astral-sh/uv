@@ -151,31 +151,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 debug!("Fetching disk-based wheel from URL: {}", wheel.url);
 
                 let reader = self.client.stream_external(&wheel.url).await?;
-                let filename = wheel.filename.to_string();
 
-                // Download the wheel to a temporary file.
+                // Download and unzip the wheel to a temporary dir.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                let temp_file = temp_dir.path().join(&filename);
-                let mut writer =
-                    tokio::io::BufWriter::new(tokio::fs::File::create(&temp_file).await?);
-                tokio::io::copy(&mut reader.compat(), &mut writer).await?;
+                let temp_target = temp_dir.path().join(wheel.filename.to_string());
+                unzip_no_seek(reader.compat(), &temp_target).await?;
 
                 // Move the temporary file to the cache.
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
-                    filename,
+                    wheel.filename.stem(),
                 );
                 fs::create_dir_all(&cache_entry.dir()).await?;
-                tokio::fs::rename(temp_file, &cache_entry.path()).await?;
+                let target = cache_entry.into_path_buf();
+                tokio::fs::rename(temp_target, &target).await?;
 
-                let local_wheel = LocalWheel::Disk(DiskWheel {
+                let local_wheel = LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target: cache_entry
-                        .with_file(wheel.filename.stem())
-                        .path()
-                        .to_path_buf(),
-                    path: cache_entry.into_path_buf(),
+                    target,
                     filename: wheel.filename.clone(),
                 });
 
@@ -226,7 +220,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         match dist {
             Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
             Dist::Source(source_dist) => {
-                // Optimization: Skip source dist download when we must not build them anyway
+                // Optimization: Skip source dist download when we must not build them anyway.
                 if self.build_context.no_build() {
                     return Err(DistributionDatabaseError::NoBuild);
                 }
@@ -242,8 +236,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     None => Cow::Borrowed(source_dist),
                 };
 
-                let built_wheel = self.builder.download_and_build(&source_dist).await?;
-                Ok((built_wheel.metadata, precise))
+                let metadata = self
+                    .builder
+                    .download_and_build_metadata(&source_dist)
+                    .await?;
+                Ok((metadata, precise))
             }
         }
     }

@@ -7,12 +7,11 @@ use rustc_hash::FxHashMap;
 use thiserror::Error;
 use url::Url;
 
-use distribution_types::{BuiltDist, IndexUrl, PathBuiltDist, PathSourceDist, SourceDist};
+use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
-use pypi_types::BaseUrl;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter, PubGrubVersion};
@@ -161,7 +160,7 @@ impl NoSolutionError {
     pub(crate) fn with_available_versions(
         mut self,
         python_requirement: &PythonRequirement,
-        package_versions: &OnceMap<PackageName, (IndexUrl, BaseUrl, VersionMap)>,
+        package_versions: &OnceMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = FxHashMap::default();
         for package in self.derivation_tree.packages() {
@@ -181,7 +180,7 @@ impl NoSolutionError {
                 }
                 PubGrubPackage::Package(name, ..) => {
                     if let Some(entry) = package_versions.get(name) {
-                        let (_, _, version_map) = entry.value();
+                        let version_map = entry.value();
                         available_versions.insert(
                             package.clone(),
                             version_map

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -37,13 +37,15 @@ jobs:
         run: |
           rustup component add clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-test:
     strategy:
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
@@ -51,7 +53,7 @@ jobs:
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:
-          python-version: | 
+          python-version: |
             3.7
             3.8
             3.9
@@ -60,11 +62,14 @@ jobs:
             3.12
       - name: "Install Rust toolchain"
         run: rustup show
+      - uses: rui314/setup-mold@v1
       - name: "Install cargo insta"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-insta
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests (Ubuntu)"
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo insta test --all --all-features --unreferenced reject

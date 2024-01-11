@@ -23,6 +23,7 @@ use puffin_installer::Downloader;
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::ExtraName;
 use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver};
+use puffin_traits::SetupPyStrategy;
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -44,6 +45,7 @@ pub(crate) async fn pip_compile(
     prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
     index_urls: IndexUrls,
+    setup_py: SetupPyStrategy,
     no_build: bool,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
@@ -141,6 +143,7 @@ pub(crate) async fn pip_compile(
         &interpreter,
         &index_urls,
         interpreter.sys_executable().to_path_buf(),
+        setup_py,
         no_build,
     )
     .with_options(options);
