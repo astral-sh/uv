@@ -21,19 +21,6 @@ pub struct UnzippedWheel {
     pub(crate) target: PathBuf,
 }
 
-/// A downloaded wheel that's stored in-memory.
-#[derive(Debug, Clone)]
-pub struct InMemoryWheel {
-    /// The remote distribution from which this wheel was downloaded.
-    pub(crate) dist: Dist,
-    /// The parsed filename.
-    pub(crate) filename: WheelFilename,
-    /// The contents of the wheel.
-    pub(crate) buffer: Vec<u8>,
-    /// The expected path to the downloaded wheel's entry in the cache.
-    pub(crate) target: PathBuf,
-}
-
 /// A downloaded wheel that's stored on-disk.
 #[derive(Debug, Clone)]
 pub struct DiskWheel {
@@ -64,7 +51,6 @@ pub struct BuiltWheel {
 #[derive(Debug, Clone)]
 pub enum LocalWheel {
     Unzipped(UnzippedWheel),
-    InMemory(InMemoryWheel),
     Disk(DiskWheel),
     Built(BuiltWheel),
 }
@@ -74,7 +60,6 @@ impl LocalWheel {
     pub fn target(&self) -> &Path {
         match self {
             LocalWheel::Unzipped(wheel) => &wheel.target,
-            LocalWheel::InMemory(wheel) => &wheel.target,
             LocalWheel::Disk(wheel) => &wheel.target,
             LocalWheel::Built(wheel) => &wheel.target,
         }
@@ -84,7 +69,6 @@ impl LocalWheel {
     pub fn remote(&self) -> &Dist {
         match self {
             LocalWheel::Unzipped(wheel) => wheel.remote(),
-            LocalWheel::InMemory(wheel) => wheel.remote(),
             LocalWheel::Disk(wheel) => wheel.remote(),
             LocalWheel::Built(wheel) => wheel.remote(),
         }
@@ -94,7 +78,6 @@ impl LocalWheel {
     pub fn filename(&self) -> &WheelFilename {
         match self {
             LocalWheel::Unzipped(wheel) => &wheel.filename,
-            LocalWheel::InMemory(wheel) => &wheel.filename,
             LocalWheel::Disk(wheel) => &wheel.filename,
             LocalWheel::Built(wheel) => &wheel.filename,
         }
@@ -109,13 +92,6 @@ impl UnzippedWheel {
 }
 
 impl DiskWheel {
-    /// Return the [`Dist`] from which this wheel was downloaded.
-    pub fn remote(&self) -> &Dist {
-        &self.dist
-    }
-}
-
-impl InMemoryWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         &self.dist
