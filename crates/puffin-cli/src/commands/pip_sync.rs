@@ -224,31 +224,12 @@ pub(crate) async fn pip_sync(
             .dimmed()
         )?;
 
-        if std::env::var("PUFFIN_PERF_METRICS").is_ok() {
-            writeln!(
-                printer,
-                "{}",
-                format!(
-                    "- total remote size: {}MB",
-                    total_remote_bytes as f32 / 1024.0 / 1024.0
-                )
-                .dimmed()
-            )?;
-            writeln!(
-                printer,
-                "{}",
-                format!(
-                    "- effective processing rate: {}MB/s",
-                    (total_remote_bytes as f32 / 1024.0 / 1024.0) / start.elapsed().as_secs_f32()
-                )
-                .dimmed()
-            )?;
-            writeln!(
-                printer,
-                "{}",
-                format!("- number of source distributions: {}", num_source_dists).dimmed()
-            )?;
-        };
+        #[allow(clippy::cast_precision_loss)]
+        let remote_mb = total_remote_bytes as f32 / 1024.0 / 1024.0;
+        let rate = remote_mb / start.elapsed().as_secs_f32();
+        debug!("total remote size: {remote_mb}MB");
+        debug!("effective processing rate: {rate}MB/s");
+        debug!("number of source distributions: {num_source_dists}");
 
         wheels
     };
