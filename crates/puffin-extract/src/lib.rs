@@ -49,9 +49,10 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
             if let Some(parent) = path.parent() {
                 tokio::fs::create_dir_all(parent).await?;
             }
-            let mut file = tokio::fs::File::create(path).await?;
+            let file = tokio::fs::File::create(path).await?;
+            let mut writer = tokio::io::BufWriter::new(file);
             let mut reader = entry.reader_mut().compat();
-            tokio::io::copy(&mut reader, &mut file).await?;
+            tokio::io::copy(&mut reader, &mut writer).await?;
         }
 
         // Close current file to get access to the next one. See docs:
