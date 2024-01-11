@@ -57,7 +57,7 @@ jobs:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
       - name: Build tests
-        run: cargo nextest archive --archive-file nextest-archive.tar.zst --all --all-features
+        run: cargo nextest archive --archive-file nextest-archive.tar.zst --all --all-features --zstd-level 10
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
