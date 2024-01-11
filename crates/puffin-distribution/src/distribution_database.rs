@@ -232,8 +232,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Download the wheel to a temporary file.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                let temp_file = temp_dir.path().join(&filename);
-                unzip_no_seek(reader.compat(), &temp_file).await?;
+                let temp_target = temp_dir.path().join(&filename);
+                unzip_no_seek(reader.compat(), &temp_target).await?;
 
                 // Move the temporary file to the cache.
                 let cache_entry = self.cache.entry(
@@ -242,14 +242,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     filename,
                 );
                 fs::create_dir_all(&cache_entry.dir()).await?;
-                tokio::fs::rename(temp_file, &cache_entry.path()).await?;
+                let target = cache_entry.into_path_buf();
+                tokio::fs::rename(temp_target, &target).await?;
 
                 let local_wheel = LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target: cache_entry
-                        .with_file(wheel.filename.stem())
-                        .path()
-                        .to_path_buf(),
+                    target,
                     filename: wheel.filename.clone(),
                 });
 
