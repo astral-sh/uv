@@ -205,33 +205,39 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         }
 
         // Unzip the wheel.
-        let normalized_path = tokio::task::spawn_blocking({
-            move || -> Result<PathBuf, puffin_extract::Error> {
-                // Unzip the wheel into a temporary directory.
-                let parent = download
-                    .target()
-                    .parent()
-                    .expect("Cache paths can't be root");
-                fs_err::create_dir_all(parent)?;
-                let staging = tempfile::tempdir_in(parent)?;
-                download.unzip(staging.path())?;
+        let normalized_path = if matches!(download, LocalWheel::Unzipped(_)) {
+            // Just an optimizaion: Avoid spawning a blocking
+            // task if there is no work to be done.
+            download.target().to_path_buf()
+        } else {
+            tokio::task::spawn_blocking({
+                move || -> Result<PathBuf, puffin_extract::Error> {
+                    // Unzip the wheel into a temporary directory.
+                    let parent = download
+                        .target()
+                        .parent()
+                        .expect("Cache paths can't be root");
+                    fs_err::create_dir_all(parent)?;
+                    let staging = tempfile::tempdir_in(parent)?;
+                    download.unzip(staging.path())?;
 
-                // Move the unzipped wheel into the cache.
-                if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
-                    // If another thread already unpacked the wheel, we can ignore the error.
-                    return if download.target().is_dir() {
-                        warn!("Wheel is already unpacked: {}", download.remote());
-                        Ok(download.target().to_path_buf())
-                    } else {
-                        Err(err.into())
-                    };
+                    // Move the unzipped wheel into the cache.
+                    if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
+                        // If another thread already unpacked the wheel, we can ignore the error.
+                        return if download.target().is_dir() {
+                            warn!("Wheel is already unpacked: {}", download.remote());
+                            Ok(download.target().to_path_buf())
+                        } else {
+                            Err(err.into())
+                        };
+                    }
+
+                    Ok(download.target().to_path_buf())
                 }
-
-                Ok(download.target().to_path_buf())
-            }
-        })
-        .await?
-        .map_err(|err| Error::Unzip(remote.clone(), err))?;
+            })
+            .await?
+            .map_err(|err| Error::Unzip(remote.clone(), err))?
+        };
 
         Ok(CachedDist::from_remote(remote, filename, normalized_path))
     }

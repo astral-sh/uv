@@ -101,7 +101,6 @@ impl FromStr for Operator {
             "<=" => Self::LessThanEqual,
             ">" => Self::GreaterThan,
             ">=" => Self::GreaterThanEqual,
-            // Should be forbidden by the regex if called from normal parsing
             other => {
                 return Err(OperatorParseError {
                     got: other.to_string(),
@@ -666,8 +665,7 @@ impl FromStr for Version {
 
     /// Parses a version such as `1.19`, `1.0a1`,`1.0+abc.5` or `1!2012.2`
     ///
-    /// Note that this variant doesn't allow the version to end with a star, see
-    /// [`Self::from_str_star`] if you want to parse versions for specifiers
+    /// Note that this doesn't allow wildcard versions.
     fn from_str(version: &str) -> Result<Self, Self::Err> {
         Parser::new(version.as_bytes()).parse()
     }
@@ -2766,7 +2764,7 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_mismatch() {
+    fn test_invalid_word() {
         let result = Version::from_str("blergh");
         assert_eq!(result.unwrap_err(), ErrorKind::NoLeadingNumber.into());
     }
