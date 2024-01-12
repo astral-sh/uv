@@ -14,9 +14,9 @@ pub struct DistRequiresPython {
 #[derive(Debug, Clone)]
 pub struct PrioritizedDistribution {
     /// An arbitrary source distribution for the package version.
-    pub source: Option<DistRequiresPython>,
+    source: Option<DistRequiresPython>,
     /// The highest-priority, platform-compatible wheel for the package version.
-    pub compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
+    compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
     incompatible_wheel: Option<DistRequiresPython>,
 }
@@ -127,6 +127,14 @@ impl PrioritizedDistribution {
             (_, Some(source_dist), _) => Some(ResolvableDist::SourceDist(source_dist)),
             _ => None,
         }
+    }
+
+    pub fn source(&self) -> Option<&DistRequiresPython> {
+        self.source.as_ref()
+    }
+
+    pub fn compatible_wheel(&self) -> Option<&(DistRequiresPython, TagPriority)> {
+        self.compatible_wheel.as_ref()
     }
 }
 

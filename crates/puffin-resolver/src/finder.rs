@@ -140,13 +140,9 @@ impl<'a> DistFinder<'a> {
                 (
                     Some(version.clone()),
                     resolvable_dist
-                        .compatible_wheel
-                        .as_ref()
+                        .compatible_wheel()
                         .map(|(dist, tag_priority)| (dist.dist.clone(), *tag_priority)),
-                    resolvable_dist
-                        .source
-                        .as_ref()
-                        .map(|dist| dist.dist.clone()),
+                    resolvable_dist.source().map(|dist| dist.dist.clone()),
                 )
             } else {
                 (None, None, None)
