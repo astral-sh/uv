@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import Any, Literal, Self, TextIO
 
 
-SOURCE_TREE = os.getenv("HOOKD_SOURCE_TREE")
-
 # Arbitrary nesting is allowed, but all keys and terminal values are strings
 StringDict = dict[str, "str | StringDict"]
 
