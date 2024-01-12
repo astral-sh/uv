@@ -18,12 +18,14 @@ import time
 import traceback
 from contextlib import ExitStack, contextmanager
 from functools import cache
-from pathlib import Path
 from typing import Any, Literal, Self, TextIO
 
 
 # Arbitrary nesting is allowed, but all keys and terminal values are strings
 StringDict = dict[str, "str | StringDict"]
+
+# Alias for readability — we don't use `pathlib` for a modest speedup
+Path = str
 
 
 class FatalError(Exception):
@@ -274,7 +276,7 @@ def parse_hook_name(buffer: TextIO) -> Hook:
 
 
 def parse_path(buffer: TextIO) -> Path:
-    path = Path(buffer.readline().rstrip("\n"))
+    path = os.path.abspath(buffer.readline().rstrip("\n"))
     # TODO(zanieb): Consider validating the path here
     return path
 
@@ -284,7 +286,7 @@ def parse_optional_path(buffer: TextIO) -> Path | None:
     if not data:
         return None
     # TODO(zanieb): Consider validating the path here
-    return Path(data)
+    return os.path.abspath(data)
 
 
 def parse_config_settings(buffer: TextIO) -> StringDict | None:
@@ -623,7 +625,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        source_tree = Path(sys.argv[1]).resolve()
+        source_tree = os.path.abspath(sys.argv[1])
         os.chdir(source_tree)
         send_debug(sys.stdout, "changed working directory to", source_tree)
     except IndexError:
