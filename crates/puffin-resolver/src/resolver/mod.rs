@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::channel::mpsc::UnboundedReceiver;
-use futures::{pin_mut, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
@@ -199,14 +199,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
 
         // Run the fetcher.
-        let requests_fut = self.fetch(request_stream);
+        let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(&request_sink);
-
-        let requests_fut = requests_fut.fuse();
-        let resolve_fut = resolve_fut.fuse();
-        pin_mut!(requests_fut, resolve_fut);
+        let resolve_fut = self.solve(&request_sink).fuse();
 
         let resolution = select! {
             result = requests_fut => {
