@@ -517,12 +517,6 @@ class Puffin(Suite):
 
 def main():
     """Run the benchmark."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     parser = argparse.ArgumentParser(
         description="Benchmark Puffin against other packaging tools."
     )
@@ -603,6 +597,11 @@ def main():
     )
 
     args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARN,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     verbose = args.verbose
     warmup = args.warmup
