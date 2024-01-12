@@ -167,6 +167,10 @@ struct PipCompileArgs {
     #[clap(long)]
     upgrade: bool,
 
+    /// Include distribution hashes in the output file.
+    #[clap(long)]
+    generate_hashes: bool,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -511,6 +515,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.resolution,
                 args.prerelease,
                 args.upgrade.into(),
+                args.generate_hashes,
                 index_urls,
                 if args.legacy_setup_py {
                     SetupPyStrategy::Setuptools

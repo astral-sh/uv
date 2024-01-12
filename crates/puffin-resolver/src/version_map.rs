@@ -11,7 +11,7 @@ use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
-use pypi_types::{BaseUrl, Yanked};
+use pypi_types::{BaseUrl, Hashes, Yanked};
 
 use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
@@ -42,7 +42,7 @@ impl VersionMap {
         for (version, files) in metadata {
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
-                // upload time information
+                // upload time information.
                 if let Some(exclude_newer) = exclude_newer {
                     match file.upload_time.as_ref() {
                         Some(upload_time) if upload_time >= exclude_newer => {
@@ -50,9 +50,8 @@ impl VersionMap {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {}",
+                                "{} is missing an upload date, but user provided: {exclude_newer}",
                                 file.filename,
-                                exclude_newer,
                             );
                             continue;
                         }
@@ -69,7 +68,9 @@ impl VersionMap {
                     }
                 }
 
+                // Prioritize amongst all available files.
                 let requires_python = file.requires_python.clone();
+                let hash = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         // To be compatible, the wheel must both have compatible tags _and_ have a
@@ -92,12 +93,13 @@ impl VersionMap {
                             Entry::Occupied(mut entry) => {
                                 entry
                                     .get_mut()
-                                    .insert_built(dist, requires_python, priority);
+                                    .insert_built(dist, requires_python, hash, priority);
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(PrioritizedDistribution::from_built(
                                     dist,
                                     requires_python,
+                                    hash,
                                     priority,
                                 ));
                             }
@@ -113,12 +115,13 @@ impl VersionMap {
                         );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
-                                entry.get_mut().insert_source(dist, requires_python);
+                                entry.get_mut().insert_source(dist, requires_python, hash);
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(PrioritizedDistribution::from_source(
                                     dist,
                                     requires_python,
+                                    hash,
                                 ));
                             }
                         }
@@ -143,6 +146,14 @@ impl VersionMap {
             .iter()
             .filter_map(|(version, file)| Some((version, file.get()?)))
     }
+
+    /// Return the [`Hashes`] for the given version, if any.
+    pub(crate) fn hashes(&self, version: &PubGrubVersion) -> Vec<Hashes> {
+        self.0
+            .get(version)
+            .map(|file| file.hashes.clone())
+            .unwrap_or_default()
+    }
 }
 
 /// Attach its requires-python to a [`Dist`], since downstream needs this information to filter
@@ -161,6 +172,8 @@ struct PrioritizedDistribution {
     compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
     incompatible_wheel: Option<DistRequiresPython>,
+    /// The hashes for each distribution.
+    hashes: Vec<Hashes>,
 }
 
 impl PrioritizedDistribution {
@@ -168,6 +181,7 @@ impl PrioritizedDistribution {
     fn from_built(
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
+        hash: Hashes,
         priority: Option<TagPriority>,
     ) -> Self {
         if let Some(priority) = priority {
@@ -182,6 +196,7 @@ impl PrioritizedDistribution {
                     priority,
                 )),
                 incompatible_wheel: None,
+                hashes: vec![hash],
             }
         } else {
             Self {
@@ -191,12 +206,13 @@ impl PrioritizedDistribution {
                     dist,
                     requires_python,
                 }),
+                hashes: vec![hash],
             }
         }
     }
 
     /// Create a new [`PrioritizedDistribution`] from the given source distribution.
-    fn from_source(dist: Dist, requires_python: Option<VersionSpecifiers>) -> Self {
+    fn from_source(dist: Dist, requires_python: Option<VersionSpecifiers>, hash: Hashes) -> Self {
         Self {
             source: Some(DistRequiresPython {
                 dist,
@@ -204,6 +220,7 @@ impl PrioritizedDistribution {
             }),
             compatible_wheel: None,
             incompatible_wheel: None,
+            hashes: vec![hash],
         }
     }
 
@@ -212,6 +229,7 @@ impl PrioritizedDistribution {
         &mut self,
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
+        hash: Hashes,
         priority: Option<TagPriority>,
     ) {
         // Prefer the highest-priority, platform-compatible wheel.
@@ -241,16 +259,23 @@ impl PrioritizedDistribution {
                 requires_python,
             });
         }
+        self.hashes.push(hash);
     }
 
     /// Insert the given source distribution into the [`PrioritizedDistribution`].
-    fn insert_source(&mut self, dist: Dist, requires_python: Option<VersionSpecifiers>) {
+    fn insert_source(
+        &mut self,
+        dist: Dist,
+        requires_python: Option<VersionSpecifiers>,
+        hash: Hashes,
+    ) {
         if self.source.is_none() {
             self.source = Some(DistRequiresPython {
                 dist,
                 requires_python,
             });
         }
+        self.hashes.push(hash);
     }
 
     /// Return the highest-priority distribution for the package version, if any.
