@@ -261,7 +261,9 @@ class Poetry(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line) for line in fp if not line.lstrip().startswith("#")
+                Requirement(line)
+                for line in fp
+                if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
 
         # Create a Poetry project.
