@@ -7,7 +7,9 @@ use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, LocalEditable, RemoteSource, SourceDist};
+use distribution_types::{
+    CachedDist, Dist, DistributionId, Identifier, LocalEditable, RemoteSource, SourceDist,
+};
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
@@ -64,7 +66,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub fn download_stream<'stream>(
         &'stream self,
         distributions: Vec<Dist>,
-        in_flight: &'stream OnceMap<PathBuf, Result<CachedDist, String>>,
+        in_flight: &'stream OnceMap<DistributionId, Result<CachedDist, String>>,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         futures::stream::iter(distributions)
             .map(|dist| async {
@@ -84,7 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub async fn download(
         &self,
         mut distributions: Vec<Dist>,
-        in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
+        in_flight: &OnceMap<DistributionId, Result<CachedDist, String>>,
     ) -> Result<Vec<CachedDist>, Error> {
         // Sort the distributions by size.
         distributions
@@ -151,35 +153,33 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Download, build, and unzip a single wheel.
-    #[instrument(skip_all, fields(name = %dist, size = ?dist.size(), url = dist.file().unwrap().url))]
+    #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().unwrap().url))]
     pub async fn get_wheel(
         &self,
         dist: Dist,
-        in_flight: &OnceMap<PathBuf, Result<CachedDist, String>>,
+        in_flight: &OnceMap<DistributionId, Result<CachedDist, String>>,
     ) -> Result<CachedDist, Error> {
-        // TODO(charlie): Add in-flight tracking around `get_or_build_wheel`.
-        let download: LocalWheel = self
-            .database
-            .get_or_build_wheel(dist.clone())
-            .map_err(|err| Error::Fetch(dist.clone(), err))
-            .await?;
-
-        let target = download.target().to_path_buf();
-        let wheel = if in_flight.register(&target) {
+        let id = dist.distribution_id();
+        let wheel = if in_flight.register(&id) {
+            let download: LocalWheel = self
+                .database
+                .get_or_build_wheel(dist.clone())
+                .map_err(|err| Error::Fetch(dist.clone(), err))
+                .await?;
             let result = Self::unzip_wheel(download).await;
             match result {
                 Ok(cached) => {
-                    in_flight.done(target, Ok(cached.clone()));
+                    in_flight.done(id, Ok(cached.clone()));
                     cached
                 }
                 Err(err) => {
-                    in_flight.done(target, Err(err.to_string()));
+                    in_flight.done(id, Err(err.to_string()));
                     return Err(err);
                 }
             }
         } else {
             in_flight
-                .wait(&target)
+                .wait(&id)
                 .await
                 .value()
                 .clone()
@@ -194,22 +194,21 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         let remote = download.remote().clone();
         let filename = download.filename().clone();
 
-        // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
-        if download.target().is_dir() {
-            warn!("Wheel is already unpacked: {remote}");
-            return Ok(CachedDist::from_remote(
-                remote,
-                filename,
-                download.target().to_path_buf(),
-            ));
-        }
-
         // Unzip the wheel.
         let normalized_path = if matches!(download, LocalWheel::Unzipped(_)) {
-            // Just an optimizaion: Avoid spawning a blocking
-            // task if there is no work to be done.
+            // Just an optimization: Avoid spawning a blocking task if there is no work to be done.
             download.target().to_path_buf()
         } else {
+            // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
+            if download.target().is_dir() {
+                warn!("Wheel is already unpacked: {remote}");
+                return Ok(CachedDist::from_remote(
+                    remote,
+                    filename,
+                    download.target().to_path_buf(),
+                ));
+            }
+
             tokio::task::spawn_blocking({
                 move || -> Result<PathBuf, puffin_extract::Error> {
                     // Unzip the wheel into a temporary directory.

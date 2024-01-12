@@ -5,11 +5,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use fs_err::tokio as fs;
-use puffin_extract::unzip_no_seek;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, instrument};
+use tracing::instrument;
 use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
@@ -17,6 +16,7 @@ use distribution_types::{BuiltDist, DirectGitUrl, Dist, LocalEditable, Name, Sou
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
+use puffin_extract::unzip_no_seek;
 use puffin_git::GitSource;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
@@ -113,15 +113,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .join_relative(&wheel.file.url)
                     .map_err(|err| DistributionDatabaseError::Url(wheel.file.url.clone(), err))?;
 
-                // Make cache entry
-                let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
-                let cache_entry = self.cache.entry(
-                    CacheBucket::Wheels,
-                    WheelCache::Index(&wheel.index).remote_wheel_dir(wheel_filename.name.as_ref()),
-                    wheel_filename.stem(),
-                );
-
-                // Download and unzip on the same tokio task
+                // Download and unzip on the same tokio task.
                 //
                 // In all wheels we've seen so far, unzipping while downloading is
                 // faster than downloading into a file and then unzipping on multiple
@@ -137,8 +129,22 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // to rayon if this buffer grows large by the time the file is fully
                 // downloaded.
                 let reader = self.client.stream_external(&url).await?;
+
+                // Download and unzip the wheel to a temporary directory.
+                let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                let temp_target = temp_dir.path().join(&wheel.file.filename);
+                unzip_no_seek(reader.compat(), &temp_target).await?;
+
+                // Move the temporary file to the cache.
+                let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
+                let cache_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Index(&wheel.index).remote_wheel_dir(wheel_filename.name.as_ref()),
+                    wheel_filename.stem(),
+                );
+                fs::create_dir_all(&cache_entry.dir()).await?;
                 let target = cache_entry.into_path_buf();
-                unzip_no_seek(reader.compat(), &target).await?;
+                tokio::fs::rename(temp_target, &target).await?;
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
@@ -148,11 +154,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             }
 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                debug!("Fetching disk-based wheel from URL: {}", wheel.url);
-
                 let reader = self.client.stream_external(&wheel.url).await?;
 
-                // Download and unzip the wheel to a temporary dir.
+                // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
                 let temp_target = temp_dir.path().join(wheel.filename.to_string());
                 unzip_no_seek(reader.compat(), &temp_target).await?;
