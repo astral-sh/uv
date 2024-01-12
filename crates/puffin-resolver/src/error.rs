@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 use std::fmt::Formatter;
 
+use dashmap::DashMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use rustc_hash::FxHashMap;
@@ -12,7 +13,6 @@ use pep440_rs::Version;
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
-use puffin_traits::OnceMap;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
@@ -161,7 +161,7 @@ impl NoSolutionError {
     pub(crate) fn with_available_versions(
         mut self,
         python_requirement: &PythonRequirement,
-        package_versions: &OnceMap<PackageName, VersionMap>,
+        package_versions: &DashMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = FxHashMap::default();
         for package in self.derivation_tree.packages() {

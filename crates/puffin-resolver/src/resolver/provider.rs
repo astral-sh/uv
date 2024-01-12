@@ -1,43 +1,45 @@
 use std::future::Future;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use futures::FutureExt;
 use url::Url;
 
-use distribution_types::Dist;
-use platform_tags::Tags;
-use puffin_client::{FlatIndex, RegistryClient};
+use distribution_types::{Dist, IndexUrl};
+use puffin_client::{FlatDistributions, FlatIndex, RegistryClient, SimpleMetadata};
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
-use crate::python_requirement::PythonRequirement;
-use crate::version_map::VersionMap;
-use crate::yanks::AllowedYanks;
+#[derive(Debug)]
+pub enum PackageMetadata {
+    /// The metadata came from an index, and may be accompanied by a list of distributions from
+    /// `--find-links` that should override the index.
+    Simple(IndexUrl, SimpleMetadata, Option<FlatDistributions>),
+    /// The metadata wasn't present in the index, but was found in `--find-links`.
+    FindLinks(FlatDistributions),
+}
 
-type VersionMapResponse = Result<VersionMap, puffin_client::Error>;
+type PackageMetadataResponse = Result<PackageMetadata, puffin_client::Error>;
 type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
 
 pub trait ResolverProvider: Send + Sync {
-    /// Get the version map for a package.
-    fn get_version_map<'io>(
+    /// Get the metadata for a package.
+    fn get_package_metadata<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> impl Future<Output = VersionMapResponse> + Send + 'io;
+    ) -> impl Future<Output = PackageMetadataResponse> + Send + 'io;
 
     /// Get the metadata for a distribution.
     ///
-    /// For a wheel, this is done by querying it's (remote) metadata, for a source dist we
-    /// (fetch and) build the source distribution and return the metadata from the built
-    /// distribution.
+    /// For a wheel, we query its (remote) metadata. For a source distribution, we fetch and build
+    /// the distribution, then return the metadata from the built wheeel.
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io;
 
-    /// Set the [`puffin_distribution::Reporter`] to use for this installer.
+    /// Set the [`puffin_distribution::Reporter`]..
     #[must_use]
     fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self;
 }
@@ -51,31 +53,18 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: &'a FlatIndex,
-    tags: &'a Tags,
-    python_requirement: PythonRequirement<'a>,
-    exclude_newer: Option<DateTime<Utc>>,
-    allowed_yanks: AllowedYanks,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
-    /// Reads the flat index entries and builds the provider.
     pub fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
-        tags: &'a Tags,
-        python_requirement: PythonRequirement<'a>,
-        exclude_newer: Option<DateTime<Utc>>,
-        allowed_yanks: AllowedYanks,
     ) -> Self {
         Self {
             client,
             fetcher,
             flat_index,
-            tags,
-            python_requirement,
-            exclude_newer,
-            allowed_yanks,
         }
     }
 }
@@ -83,29 +72,24 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
 impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     for DefaultResolverProvider<'a, Context>
 {
-    fn get_version_map<'io>(
+    fn get_package_metadata<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> impl Future<Output = VersionMapResponse> + Send + 'io {
+    ) -> impl Future<Output = PackageMetadataResponse> + Send + 'io {
         self.client
             .simple(package_name)
             .map(move |result| match result {
-                Ok((index, metadata)) => Ok(VersionMap::from_metadata(
+                Ok((index, metadata)) => Ok(PackageMetadata::Simple(
+                    index,
                     metadata,
-                    package_name,
-                    &index,
-                    self.tags,
-                    &self.python_requirement,
-                    &self.allowed_yanks,
-                    self.exclude_newer.as_ref(),
                     self.flat_index.get(package_name).cloned(),
                 )),
                 Err(
                     err @ (puffin_client::Error::PackageNotFound(_)
                     | puffin_client::Error::NoIndex(_)),
                 ) => {
-                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionMap::from(flat_index))
+                    if let Some(distributions) = self.flat_index.get(package_name).cloned() {
+                        Ok(PackageMetadata::FindLinks(distributions))
                     } else {
                         Err(err)
                     }

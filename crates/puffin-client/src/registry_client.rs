@@ -421,7 +421,7 @@ pub async fn read_metadata_async(
     Ok(metadata)
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct VersionFiles {
     pub wheels: Vec<(WheelFilename, File)>,
     pub source_dists: Vec<(SourceDistFilename, File)>,
@@ -447,7 +447,7 @@ impl VersionFiles {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
 
 impl SimpleMetadata {
@@ -506,7 +506,7 @@ impl IntoIterator for SimpleMetadata {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum MediaType {
     Json,
     Html,

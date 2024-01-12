@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt};
@@ -44,11 +45,12 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 use crate::resolver::allowed_urls::AllowedUrls;
 use crate::resolver::index::Index;
-use crate::resolver::provider::DefaultResolverProvider;
 pub use crate::resolver::provider::ResolverProvider;
+use crate::resolver::provider::{DefaultResolverProvider, PackageMetadata};
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::version_map::VersionMap;
+use crate::yanks::AllowedYanks;
 use crate::ResolutionOptions;
 
 mod allowed_urls;
@@ -62,12 +64,16 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     constraints: Vec<Requirement>,
     overrides: Overrides,
     allowed_urls: AllowedUrls,
+    allowed_yanks: AllowedYanks,
     markers: &'a MarkerEnvironment,
+    tags: &'a Tags,
     python_requirement: PythonRequirement<'a>,
+    exclude_newer: Option<DateTime<Utc>>,
     selector: CandidateSelector,
     index: Arc<Index>,
     /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
     incompatibilities: DashMap<PackageId, VersionSpecifiers>,
+    versions: DashMap<PackageName, VersionMap>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
@@ -92,19 +98,12 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
             flat_index,
-            tags,
-            PythonRequirement::new(interpreter, markers),
-            options.exclude_newer,
-            manifest
-                .requirements
-                .iter()
-                .chain(manifest.constraints.iter())
-                .collect(),
         );
         Self::new_custom_io(
             manifest,
             options,
             markers,
+            tags,
             PythonRequirement::new(interpreter, markers),
             provider,
         )
@@ -117,6 +116,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
+        tags: &'a Tags,
         python_requirement: PythonRequirement<'a>,
         provider: Provider,
     ) -> Self {
@@ -162,15 +162,26 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             )
             .collect();
 
+        // Determine the list of allowed yanks.
+        let allowed_yanks: AllowedYanks = manifest
+            .requirements
+            .iter()
+            .chain(manifest.constraints.iter())
+            .collect();
+
         Self {
             index: Arc::new(index),
             incompatibilities: DashMap::default(),
+            versions: DashMap::default(),
             selector,
             allowed_urls,
+            allowed_yanks,
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
+            exclude_newer: options.exclude_newer,
             overrides: Overrides::from_requirements(manifest.overrides),
+            tags,
             markers,
             python_requirement,
             editables,
@@ -219,7 +230,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                     // Add version information to improve unsat error messages.
                     if let ResolveError::NoSolution(err) = err {
-                        ResolveError::NoSolution(err.with_available_versions(&self.python_requirement, &self.index.packages).with_selector(self.selector.clone()))
+                        ResolveError::NoSolution(
+                            err.with_available_versions(&self.python_requirement, &self.versions)
+                                .with_selector(self.selector.clone()),
+                        )
                     } else {
                         err
                     }
@@ -269,7 +283,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 return ResolutionGraph::from_state(
                     &selection,
                     &pins,
-                    &self.index.packages,
+                    &self.versions,
                     &self.index.distributions,
                     &self.index.redirects,
                     &state,
@@ -482,8 +496,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
-                let entry = self.index.packages.wait(package_name).await;
-                let version_map = entry.value();
+                let index_entry = self.index.packages.wait(package_name).await;
+                let metadata = index_entry.value();
 
                 if let Some(extra) = extra {
                     debug!(
@@ -493,8 +507,33 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Searching for a compatible version of {package_name} ({range})");
                 }
 
+                // Compute the version map.
+                let version_entry =
+                    self.versions
+                        .entry(package_name.clone())
+                        .or_insert_with(|| match metadata {
+                            PackageMetadata::Simple(index, metadata, distributions) => {
+                                VersionMap::from_metadata(
+                                    metadata.clone(),
+                                    package_name,
+                                    index,
+                                    self.tags,
+                                    &self.python_requirement,
+                                    &self.allowed_yanks,
+                                    self.exclude_newer.as_ref(),
+                                    distributions.clone(),
+                                )
+                            }
+                            PackageMetadata::FindLinks(distributions) => {
+                                VersionMap::from(distributions.clone())
+                            }
+                        });
+
                 // Find a compatible version.
-                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                let Some(candidate) =
+                    self.selector
+                        .select(package_name, range, version_entry.value())
+                else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
                     return Ok(None);
                 };
@@ -687,9 +726,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         while let Some(response) = response_stream.next().await {
             match response? {
-                Some(Response::Package(package_name, version_map)) => {
-                    trace!("Received package metadata for: {package_name}");
-                    self.index.packages.done(package_name, version_map);
+                Some(Response::Package { name, metadata }) => {
+                    trace!("Received package metadata for: {name}");
+                    self.index.packages.done(name, metadata);
                 }
                 Some(Response::Dist {
                     dist: Dist::Built(dist),
@@ -733,13 +772,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     async fn process_request(&self, request: Request) -> Result<Option<Response>, ResolveError> {
         match request {
             // Fetch package metadata from the registry.
-            Request::Package(package_name) => {
-                let version_map = self
+            Request::Package(name) => {
+                let metadata = self
                     .provider
-                    .get_version_map(&package_name)
+                    .get_package_metadata(&name)
                     .await
                     .map_err(ResolveError::Client)?;
-                Ok(Some(Response::Package(package_name, version_map)))
+                Ok(Some(Response::Package { name, metadata }))
             }
 
             // Fetch distribution metadata from the distribution database.
@@ -770,12 +809,36 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
-                let entry = self.index.packages.wait(&package_name).await;
-                let version_map = entry.value();
+                let index_entry = self.index.packages.wait(&package_name).await;
+                let metadata = index_entry.value();
+
+                // Compute the version map.
+                let version_entry =
+                    self.versions
+                        .entry(package_name.clone())
+                        .or_insert_with(|| match metadata {
+                            PackageMetadata::Simple(index, metadata, distributions) => {
+                                VersionMap::from_metadata(
+                                    metadata.clone(),
+                                    &package_name,
+                                    index,
+                                    self.tags,
+                                    &self.python_requirement,
+                                    &self.allowed_yanks,
+                                    self.exclude_newer.as_ref(),
+                                    distributions.clone(),
+                                )
+                            }
+                            PackageMetadata::FindLinks(distributions) => {
+                                VersionMap::from(distributions.clone())
+                            }
+                        });
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.
-                let Some(candidate) = self.selector.select(&package_name, &range, version_map)
+                let Some(candidate) =
+                    self.selector
+                        .select(&package_name, &range, version_entry.value())
                 else {
                     return Ok(None);
                 };
@@ -794,7 +857,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .register_owned(candidate.package_id())
                 {
                     let dist = candidate.resolve().dist.clone();
-                    drop(entry);
+                    drop(index_entry);
+                    drop(version_entry);
 
                     let (metadata, precise) = self
                         .provider
@@ -865,7 +929,10 @@ enum Request {
 #[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, VersionMap),
+    Package {
+        name: PackageName,
+        metadata: PackageMetadata,
+    },
     /// The returned metadata for a distribution.
     Dist {
         dist: Dist,

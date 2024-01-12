@@ -18,7 +18,7 @@ use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default, Clone)]
-pub struct VersionMap(BTreeMap<Version, PrioritizedDistribution>);
+pub(crate) struct VersionMap(BTreeMap<Version, PrioritizedDistribution>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.

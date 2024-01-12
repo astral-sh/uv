@@ -6,14 +6,13 @@ use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
 use pypi_types::Metadata21;
 
-use crate::version_map::VersionMap;
+use crate::resolver::provider::PackageMetadata;
 
 /// In-memory index of package metadata.
 #[derive(Default)]
 pub(crate) struct Index {
-    /// A map from package name to the metadata for that package and the index where the metadata
-    /// came from.
-    pub(crate) packages: OnceMap<PackageName, VersionMap>,
+    /// A map from package name to the metadata for that package.
+    pub(crate) packages: OnceMap<PackageName, PackageMetadata>,
 
     /// A map from package ID to metadata for that distribution.
     pub(crate) distributions: OnceMap<PackageId, Metadata21>,

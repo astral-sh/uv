@@ -42,7 +42,7 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, VersionMap>,
+        packages: &DashMap<PackageName, VersionMap>,
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
