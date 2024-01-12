@@ -35,7 +35,7 @@ pub trait DistributionMetadata: Name {
             VersionOrUrl::Version(version) => {
                 // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
                 // `version` is normalized by its `ToString` impl
-                format!("{}-{}", self.name().as_dist_info_name(), version)
+                format!("{}-{}", self.name(), version)
             }
             VersionOrUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
         })

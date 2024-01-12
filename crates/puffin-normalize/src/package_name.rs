@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -22,8 +23,26 @@ impl PackageName {
     /// Escape this name with underscores (`_`) instead of dashes (`-`)
     ///
     /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
-    pub fn as_dist_info_name(&self) -> String {
-        self.0.replace('-', "_")
+    pub fn as_dist_info_name(&self) -> Cow<'_, str> {
+        if let Some(dash_position) = self.0.find('-') {
+            // Initialize `replaced` with the start of the string up to the current character.
+            let mut owned_string = String::with_capacity(self.0.len());
+            owned_string.push_str(&self.0[..dash_position]);
+            owned_string.push('_');
+
+            // Iterate over the rest of the string.
+            owned_string.extend(self.0[dash_position + 1..].chars().map(|character| {
+                if character == '-' {
+                    '_'
+                } else {
+                    character
+                }
+            }));
+
+            Cow::Owned(owned_string)
+        } else {
+            Cow::Borrowed(self.0.as_str())
+        }
     }
 }
 
