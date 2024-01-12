@@ -1179,8 +1179,9 @@ fn install_ujson() -> Result<()> {
     Ok(())
 }
 
-/// The `DTLSSocket` package includes a `[build-system]`, but no `build-backend`. It lists some
-/// explicit build requirements that are necessary to build the distribution:
+/// This package includes a `[build-system]`, but no `build-backend`.
+///
+/// It lists some explicit build requirements that are necessary to build the distribution:
 /// ```toml
 /// [build-system]
 /// requires = ["Cython<3", "setuptools", "wheel"]
@@ -1188,15 +1189,17 @@ fn install_ujson() -> Result<()> {
 ///
 /// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
 /// default build backend.
+///
+/// The example is based `DTLSSocket==0.1.16`
 #[test]
-fn install_dtls_socket() -> Result<()> {
+fn install_build_system_no_backend() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("DTLSSocket @ https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz")?;
+    requirements_txt.write_str("build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz")?;
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1217,12 +1220,11 @@ fn install_dtls_socket() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + dtlssocket==0.1.16 (from https://files.pythonhosted.org/packages/58/42/0a0442118096eb9fbc9dc70b45aee2957f7546b80545e2a05bd839380519/DTLSSocket-0.1.16.tar.gz)
-        warning: The package `dtlssocket` requires `cython <3`, but it's not installed.
+         + build-system-no-backend==0.1.0 (from https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz)
         "###);
     });
 
-    check_command(&venv, "import DTLSSocket", &temp_dir);
+    check_command(&venv, "import build_system_no_backend", &temp_dir);
 
     Ok(())
 }
