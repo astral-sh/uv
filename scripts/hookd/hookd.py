@@ -127,7 +127,7 @@ class InvalidAction(HookdError):
 class UnsupportedHook(HookdError):
     """A hook is not supported by the backend"""
 
-    def __init__(self, backend: object, hook: str) -> None:
+    def __init__(self, backend: object, hook: Hook) -> None:
         self.backend = backend
         self.hook = hook
         super().__init__()
@@ -135,9 +135,14 @@ class UnsupportedHook(HookdError):
     def message(self) -> str:
         hook_names = set(Hook._member_names_)
         names = ", ".join(
-            repr(name) for name in self.backend.__dict__ if name in hook_names
+            repr(name) for name in dir(self.backend) if name in hook_names
         )
-        return f"The hook {self.name!r} is not supported by the backend. The backend supports: {names}"
+        hint = (
+            f"The backend supports: {names}"
+            if names
+            else "The backend does not support any known hooks."
+        )
+        return f"The hook {self.hook.value!r} is not supported by the backend. {hint}"
 
 
 class MalformedHookArgument(HookdError):
@@ -375,38 +380,48 @@ HookArguments = {
 }
 
 
-def send_expect(fd: TextIO, name: str):
-    print("EXPECT", name.replace("_", "-"), file=fd)
+def write_safe(file: TextIO, *args: str):
+    args = [str(arg).replace("\n", "\\n") for arg in args]
+    print(*args, file=file)
 
 
-def send_ready(fd: TextIO):
-    print("READY", file=fd)
+def send_expect(file: TextIO, name: str):
+    write_safe(file, "EXPECT", name.replace("_", "-"))
 
 
-def send_shutdown(fd: TextIO):
-    print("SHUTDOWN", file=fd)
+def send_ready(file: TextIO):
+    write_safe(file, "READY")
 
 
-def send_error(fd: TextIO, exc: HookdError):
-    print("ERROR", type(exc).__name__, str(exc), file=fd)
+def send_shutdown(file: TextIO):
+    write_safe(file, "SHUTDOWN")
 
 
-def send_ok(fd: TextIO, result: str):
-    print("OK", result, file=fd)
+def send_error(file: TextIO, exc: HookdError):
+    write_safe(file, "ERROR", type(exc).__name__, str(exc))
+    send_traceback(file, exc)
 
 
-def send_fatal(fd: TextIO, exc: BaseException):
-    print("FATAL", type(exc).__name__, str(exc), file=fd)
-    # TODO(zanieb): Figure out a better way to transport tracebacks
-    traceback.print_exception(exc, file=fd)
+def send_traceback(file: TextIO, exc: BaseException):
+    tb = traceback.format_exception(exc)
+    write_safe(file, "TRACEBACK", "\n".join(tb))
 
 
-def send_debug(fd: TextIO, *args):
-    print("DEBUG", *args, file=fd)
+def send_ok(file: TextIO, result: str):
+    write_safe(file, "OK", result)
 
 
-def send_redirect(fd: TextIO, name: Literal["stdout", "stderr"], path: str):
-    print(name.upper(), path, file=fd)
+def send_fatal(file: TextIO, exc: BaseException):
+    write_safe(file, "FATAL", type(exc).__name__, str(exc))
+    send_traceback(file, exc)
+
+
+def send_debug(file: TextIO, *args):
+    write_safe(file, "DEBUG", *args)
+
+
+def send_redirect(file: TextIO, name: Literal["stdout", "stderr"], path: str):
+    write_safe(file, name.upper(), path)
 
 
 def run_once(stdin: TextIO, stdout: TextIO):
@@ -449,7 +464,10 @@ def run_once(stdin: TextIO, stdout: TextIO):
         try:
             build_backend = import_build_backend(build_backend_name)
         except Exception as exc:
-            raise BackendImportError(exc) from None
+            if not isinstance(exc, HookdError):
+                # Wrap unhandled errors in a generic one
+                raise BackendImportError(exc) from exc
+            raise
 
         try:
             hook = getattr(build_backend, hook_name)
@@ -463,7 +481,7 @@ def run_once(stdin: TextIO, stdout: TextIO):
             if isinstance(exc, (SystemExit, KeyboardInterrupt)):
                 raise
 
-            raise HookRuntimeError(exc) from None
+            raise HookRuntimeError(exc) from exc
         else:
             send_ok(stdout, result)
 
@@ -474,7 +492,7 @@ def main():
     stdout = sys.stdout
     stdin = sys.stdin
 
-    # TODO: Close `sys.stdin` and create a duplicate fd for ourselves so hooks don't read from our stream
+    # TODO: Close `sys.stdin` and create a duplicate file for ourselves so hooks don't read from our stream
 
     while True:
         try:
@@ -497,7 +515,12 @@ def main():
 
         except HookdError as exc:
             # These errors are "handled" and non-fatal
-            send_error(stdout, exc)
+            try:
+                send_error(stdout, exc)
+            except Exception as exc:
+                # Failures to report errors are a fatal error
+                send_fatal(stdout, exc)
+                raise exc
         except BaseException as exc:
             # All other exceptions result in a crash of the daemon
             send_fatal(stdout, exc)

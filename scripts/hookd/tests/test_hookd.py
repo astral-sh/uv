@@ -24,12 +24,18 @@ SHUTDOWN = (
 )
 STDOUT = ("STDOUT .*", "STDOUT [PATH]")
 STDERR = ("STDERR .*", "STDERR [PATH]")
+TRACEBACK = ("TRACEBACK .*", "TRACEBACK [TRACEBACK]")
+DEFAULT_FILTERS = [TIME, STDOUT, STDERR, TRACEBACK]
 
 
-def new() -> subprocess.Popen:
+def new(extra_backend_paths: list[str] | None = None) -> subprocess.Popen:
+    extra_backend_paths = extra_backend_paths or []
+
     env = os.environ.copy()
     # Add the test backends to the Python path
-    env["PYTHONPATH"] = PROJECT_DIR / "backends"
+    env["PYTHONPATH"] = ":".join(
+        [str(path) for path in [PROJECT_DIR / "backends"] + extra_backend_paths]
+    )
 
     return subprocess.Popen(
         [sys.executable, str(PROJECT_DIR / "hookd.py")],
@@ -75,7 +81,7 @@ def test_sigterm():
 
 def test_run_invalid_backend():
     daemon = new()
-    send(daemon, ["run", "backend_does_not_exist"])
+    send(daemon, ["run", "backend_does_not_exist", "build_wheel", "", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
@@ -83,11 +89,21 @@ def test_run_invalid_backend():
         READY
         EXPECT action
         EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG backend_does_not_exist build_wheel wheel_directory=. config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         ERROR MissingBackendModule Failed to import the backend 'backend_does_not_exist'
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -105,10 +121,12 @@ def test_run_invalid_hook():
         EXPECT build-backend
         EXPECT hook-name
         ERROR InvalidHookName The name 'hook_does_not_exist' is not valid hook. Expected one of: 'build_wheel', 'build_sdist', 'prepare_metadata_for_build_wheel', 'get_requires_for_build_wheel', 'get_requires_for_build_sdist'
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -133,13 +151,15 @@ def test_run_build_wheel_ok():
         EXPECT metadata-directory
         DEBUG ok_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK build_wheel_fake_path
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -163,13 +183,15 @@ def test_run_build_sdist_ok():
         EXPECT config-settings
         DEBUG ok_backend build_sdist sdist_directory=foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK build_sdist_fake_path
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -192,13 +214,15 @@ def test_run_get_requires_for_build_wheel_ok():
         EXPECT config-settings
         DEBUG ok_backend get_requires_for_build_wheel config_settings=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK ['fake', 'build', 'wheel', 'requires']
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -222,13 +246,15 @@ def test_run_prepare_metadata_for_build_wheel_ok():
         EXPECT config-settings
         DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK prepare_metadata_fake_dist_info_path
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -252,11 +278,12 @@ def test_run_invalid_config_settings():
         EXPECT hook-name
         EXPECT config-settings
         ERROR MalformedHookArgument Malformed content for argument 'config_settings': 'not-valid-json'
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -282,6 +309,8 @@ def test_run_build_wheel_multiple_times():
         EXPECT metadata-directory
         DEBUG ok_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK build_wheel_fake_path
         DEBUG ran hook in [TIME]"""
         * 5
@@ -290,7 +319,7 @@ def test_run_build_wheel_multiple_times():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -315,12 +344,15 @@ def test_run_build_wheel_error():
         EXPECT metadata-directory
         DEBUG err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         ERROR HookRuntimeError Oh no
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -346,7 +378,10 @@ def test_run_error_not_fatal():
         EXPECT metadata-directory
         DEBUG err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         ERROR HookRuntimeError Oh no
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         EXPECT build-backend
@@ -356,22 +391,116 @@ def test_run_error_not_fatal():
         EXPECT metadata-directory
         DEBUG err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         ERROR HookRuntimeError Oh no
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
 
 
-def test_run_missing_hook():
+def test_run_base_exception_error_not_fatal(tmp_path: Path):
+    """
+    Uses a mock backend that throws an error to ensure errors are not fatal and another hook can be run.
+    """
+    (tmp_path / "base_exc_backend.py").write_text(
+        textwrap.dedent(
+            """
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                raise BaseException("Oh no")
+            """
+        )
+    )
+
+    daemon = new(extra_backend_paths=[tmp_path])
+    send(daemon, ["run", "base_exc_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "base_exc_backend", "build_wheel", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG base_exc_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        ERROR HookRuntimeError Oh no
+        TRACEBACK [TRACEBACK]
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG base_exc_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        ERROR HookRuntimeError Oh no
+        TRACEBACK [TRACEBACK]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_error_in_backend_module(tmp_path: Path):
+    """
+    Tests a backend that raises an error on import.
+    """
+    (tmp_path / "import_err_backend.py").write_text("raise RuntimeError('oh no')")
+    daemon = new(extra_backend_paths=[tmp_path])
+    send(daemon, ["run", "import_err_backend", "build_wheel", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG import_err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        ERROR BackendImportError Backend threw an exception during import: oh no
+        TRACEBACK [TRACEBACK]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_unsupported_hook_empty(tmp_path: Path):
     """
     Tests a backend without any hooks.
     """
-    daemon = new()
+    (tmp_path / "empty_backend.py").write_text("")
+    daemon = new(extra_backend_paths=[tmp_path])
     send(daemon, ["run", "empty_backend", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
@@ -386,13 +515,63 @@ def test_run_missing_hook():
         EXPECT metadata-directory
         DEBUG empty_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
-        OK build_wheel_fake_path
-        DEBUG ran hook in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        ERROR UnsupportedHook The hook 'build_wheel' is not supported by the backend. The backend does not support any known hooks.
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_unsupported_hook_partial(tmp_path: Path):
+    """
+    Tests a backend without the requested hook.
+    """
+    (tmp_path / "partial_backend.py").write_text(
+        textwrap.dedent(
+            """
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                raise BaseException("Oh no")
+
+            def some_other_utility():
+                pass
+            """
+        )
+    )
+
+    daemon = new(extra_backend_paths=[tmp_path])
+    send(daemon, ["run", "partial_backend", "build_sdist", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT hook-name
+        EXPECT sdist-directory
+        EXPECT config-settings
+        DEBUG partial_backend build_sdist sdist_directory=foo config_settings=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        ERROR UnsupportedHook The hook 'build_sdist' is not supported by the backend. The backend supports: 'build_wheel'
+        TRACEBACK [TRACEBACK]
+        READY
+        EXPECT action
+        ERROR InvalidAction Received invalid action ''. Expected one of: 'run', 'shutdown'
+        TRACEBACK [TRACEBACK]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -418,13 +597,15 @@ def test_run_cls_backend(separator):
         EXPECT metadata-directory
         DEBUG cls_backend{separator}Class build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK build_wheel_fake_path
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -450,13 +631,15 @@ def test_run_obj_backend(separator):
         EXPECT metadata-directory
         DEBUG obj_backend{separator}obj build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK build_wheel_fake_path
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -481,13 +664,15 @@ def test_run_submodule_backend():
         EXPECT metadata-directory
         DEBUG submodule_backend.submodule build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         OK build_wheel_fake_path
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -498,7 +683,7 @@ def test_run_submodule_backend_invalid_import():
     Tests a backend namespaced to an submodule but imported as an attribute
     """
     daemon = new()
-    send(daemon, ["run", "submodule_backend:submodule"])
+    send(daemon, ["run", "submodule_backend:submodule", "build_wheel", "", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
@@ -506,12 +691,21 @@ def test_run_submodule_backend_invalid_import():
         READY
         EXPECT action
         EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG submodule_backend:submodule build_wheel wheel_directory=. config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         ERROR MissingBackendAttribute Failed to find attribute 'submodule_backend:submodule' in the backend module 'submodule_backend'
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -544,7 +738,7 @@ def test_run_stdout_capture():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     stdout_parts = stderr_parts = None
     for line in stdout.splitlines():
@@ -597,7 +791,7 @@ def test_run_stderr_capture():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, STDOUT, STDERR],
+        filters=DEFAULT_FILTERS,
     )
     stdout_parts = stderr_parts = None
     for line in stdout.splitlines():
@@ -690,12 +884,17 @@ def test_run_real_backend_build_wheel_error(backend: str):
         EXPECT metadata-directory
         DEBUG {backend} build_wheel wheel_directory=foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
         ERROR HookRuntimeError [MESSAGE]
+        TRACEBACK [TRACEBACK]
         READY
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME, ("HookRuntimeError .*", "HookRuntimeError [MESSAGE]")],
+        filters=(
+            DEFAULT_FILTERS + [("HookRuntimeError .*", "HookRuntimeError [MESSAGE]")]
+        ),
     )
     assert stderr == ""
     assert daemon.returncode == 0
