@@ -260,6 +260,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 return ResolutionGraph::from_state(
                     &selection,
                     &pins,
+                    &self.index.packages,
                     &self.index.distributions,
                     &self.index.redirects,
                     &state,

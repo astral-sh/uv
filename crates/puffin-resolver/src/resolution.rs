@@ -15,10 +15,11 @@ use pep440_rs::Version;
 use pep508_rs::{Requirement, VerbatimUrl};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::OnceMap;
-use pypi_types::Metadata21;
+use pypi_types::{Hashes, Metadata21};
 
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority, PubGrubVersion};
+use crate::version_map::VersionMap;
 use crate::ResolveError;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
@@ -27,6 +28,8 @@ use crate::ResolveError;
 pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>,
+    /// The metadata for every distribution in this resolution.
+    hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The set of editable requirements in this resolution.
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     /// Any diagnostics that were encountered while building the graph.
@@ -38,6 +41,7 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
         pins: &FilePins,
+        packages: &OnceMap<PackageName, VersionMap>,
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &OnceMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
@@ -46,6 +50,8 @@ impl ResolutionGraph {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
+        let mut hashes =
+            FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
@@ -54,16 +60,28 @@ impl ResolutionGraph {
         for (package, version) in selection {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
-                    let version = Version::from(version.clone());
+                    // Create the distribution.
                     let pinned_package = pins
-                        .get(package_name, &version)
+                        .get(package_name, &Version::from(version.clone()))
                         .expect("Every package should be pinned")
                         .clone();
 
+                    // Add its hashes to the index.
+                    if let Some(entry) = packages.get(package_name) {
+                        let version_map = entry.value();
+                        hashes.insert(package_name.clone(), {
+                            let mut hashes = version_map.hashes(version);
+                            hashes.sort_unstable();
+                            hashes
+                        });
+                    }
+
+                    // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
+                    // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
@@ -74,6 +92,17 @@ impl ResolutionGraph {
                         Dist::from_url(package_name.clone(), url)?
                     };
 
+                    // Add its hashes to the index.
+                    if let Some(entry) = packages.get(package_name) {
+                        let version_map = entry.value();
+                        hashes.insert(package_name.clone(), {
+                            let mut hashes = version_map.hashes(version);
+                            hashes.sort_unstable();
+                            hashes
+                        });
+                    }
+
+                    // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
                 }
@@ -156,6 +185,7 @@ impl ResolutionGraph {
 
         Ok(Self {
             petgraph,
+            hashes,
             editables,
             diagnostics,
         })
@@ -194,29 +224,74 @@ impl ResolutionGraph {
     }
 }
 
+/// A [`std::fmt::Display`] implementation for the resolution graph.
+#[derive(Debug)]
+pub struct DisplayResolutionGraph<'a> {
+    /// The underlying graph.
+    resolution: &'a ResolutionGraph,
+    /// Whether to include hashes in the output.
+    show_hashes: bool,
+}
+
+impl<'a> DisplayResolutionGraph<'a> {
+    /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    pub fn new(underlying: &'a ResolutionGraph, show_hashes: bool) -> DisplayResolutionGraph<'a> {
+        Self {
+            resolution: underlying,
+            show_hashes,
+        }
+    }
+}
+
+impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
+    fn from(resolution: &'a ResolutionGraph) -> Self {
+        Self::new(resolution, false)
+    }
+}
+
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
-impl std::fmt::Display for ResolutionGraph {
+impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Collect and sort all packages.
         let mut nodes = self
+            .resolution
             .petgraph
             .node_indices()
-            .map(|node| (node, &self.petgraph[node]))
+            .map(|node| (node, &self.resolution.petgraph[node]))
             .collect::<Vec<_>>();
         nodes.sort_unstable_by_key(|(_, package)| package.name());
 
         // Print out the dependency graph.
         for (index, package) in nodes {
-            if let Some((editable, _)) = self.editables.get(package.name()) {
-                writeln!(f, "-e {}", editable.verbatim())?;
+            // Display the node itself.
+            if let Some((editable, _)) = self.resolution.editables.get(package.name()) {
+                write!(f, "-e {}", editable.verbatim())?;
             } else {
-                writeln!(f, "{}", package.verbatim())?;
+                write!(f, "{}", package.verbatim())?;
             }
 
+            // Display the distribution hashes, if any.
+            if self.show_hashes {
+                if let Some(hashes) = self
+                    .resolution
+                    .hashes
+                    .get(package.name())
+                    .filter(|hashes| !hashes.is_empty())
+                {
+                    for hash in hashes {
+                        writeln!(f, " \\")?;
+                        write!(f, "    --hash={hash}")?;
+                    }
+                }
+            }
+            writeln!(f)?;
+
+            // Display all dependencies.
             let mut edges = self
+                .resolution
                 .petgraph
                 .edges_directed(index, Direction::Incoming)
-                .map(|edge| &self.petgraph[edge.source()])
+                .map(|edge| &self.resolution.petgraph[edge.source()])
                 .collect::<Vec<_>>();
             edges.sort_unstable_by_key(|package| package.name());
 

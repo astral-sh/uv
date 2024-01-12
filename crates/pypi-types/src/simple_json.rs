@@ -85,8 +85,14 @@ impl Yanked {
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client, we
 /// only support SHA 256 atm.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Hashes {
     // TODO(charlie): Hashes should be optional.
     pub sha256: String,
+}
+
+impl std::fmt::Display for Hashes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "sha256:{}", self.sha256)
+    }
 }
