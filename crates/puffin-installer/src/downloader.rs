@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
@@ -191,54 +191,48 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
 
     /// Unzip a locally-available wheel into the cache.
     async fn unzip_wheel(download: LocalWheel) -> Result<CachedDist, Error> {
-        let remote = download.remote().clone();
-        let filename = download.filename().clone();
+        // Just an optimization: Avoid spawning a blocking task if there is no work to be done.
+        if matches!(download, LocalWheel::Unzipped(_)) {
+            return Ok(download.into_cached_dist());
+        }
+
+        // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
+        if download.target().is_dir() {
+            warn!("Wheel is already unpacked: {download}");
+            return Ok(download.into_cached_dist());
+        }
 
         // Unzip the wheel.
-        let normalized_path = if matches!(download, LocalWheel::Unzipped(_)) {
-            // Just an optimization: Avoid spawning a blocking task if there is no work to be done.
-            download.target().to_path_buf()
-        } else {
-            // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
-            if download.target().is_dir() {
-                warn!("Wheel is already unpacked: {remote}");
-                return Ok(CachedDist::from_remote(
-                    remote,
-                    filename,
-                    download.target().to_path_buf(),
-                ));
-            }
+        tokio::task::spawn_blocking({
+            let download = download.clone();
+            move || -> Result<(), puffin_extract::Error> {
+                // Unzip the wheel into a temporary directory.
+                let parent = download
+                    .target()
+                    .parent()
+                    .expect("Cache paths can't be root");
+                fs_err::create_dir_all(parent)?;
+                let staging = tempfile::tempdir_in(parent)?;
+                download.unzip(staging.path())?;
 
-            tokio::task::spawn_blocking({
-                move || -> Result<PathBuf, puffin_extract::Error> {
-                    // Unzip the wheel into a temporary directory.
-                    let parent = download
-                        .target()
-                        .parent()
-                        .expect("Cache paths can't be root");
-                    fs_err::create_dir_all(parent)?;
-                    let staging = tempfile::tempdir_in(parent)?;
-                    download.unzip(staging.path())?;
-
-                    // Move the unzipped wheel into the cache.
-                    if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
-                        // If another thread already unpacked the wheel, we can ignore the error.
-                        return if download.target().is_dir() {
-                            warn!("Wheel is already unpacked: {}", download.remote());
-                            Ok(download.target().to_path_buf())
-                        } else {
-                            Err(err.into())
-                        };
-                    }
-
-                    Ok(download.target().to_path_buf())
+                // Move the unzipped wheel into the cache.
+                if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
+                    // If another thread already unpacked the wheel, we can ignore the error.
+                    return if download.target().is_dir() {
+                        warn!("Wheel is already unpacked: {download}");
+                        Ok(())
+                    } else {
+                        Err(err.into())
+                    };
                 }
-            })
-            .await?
-            .map_err(|err| Error::Unzip(remote.clone(), err))?
-        };
 
-        Ok(CachedDist::from_remote(remote, filename, normalized_path))
+                Ok(())
+            }
+        })
+        .await?
+        .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
+
+        Ok(download.into_cached_dist())
     }
 }
 
