@@ -4,7 +4,7 @@ use anyhow::Result;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
-use distribution_types::Dist;
+use distribution_types::{CachedDist, Dist};
 use install_wheel_rs::read_dist_info;
 use pypi_types::Metadata21;
 
@@ -80,6 +80,21 @@ impl LocalWheel {
             LocalWheel::Unzipped(wheel) => &wheel.filename,
             LocalWheel::Disk(wheel) => &wheel.filename,
             LocalWheel::Built(wheel) => &wheel.filename,
+        }
+    }
+
+    /// Convert a [`LocalWheel`] into a [`CachedDist`].
+    pub fn into_cached_dist(self) -> CachedDist {
+        match self {
+            LocalWheel::Unzipped(wheel) => {
+                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+            }
+            LocalWheel::Disk(wheel) => {
+                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+            }
+            LocalWheel::Built(wheel) => {
+                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+            }
         }
     }
 }
