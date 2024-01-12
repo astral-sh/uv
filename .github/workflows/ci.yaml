@@ -67,10 +67,6 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
       - uses: rui314/setup-mold@v1
-      - name: "Install cargo insta"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-insta
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
