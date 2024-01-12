@@ -1,11 +1,12 @@
-import subprocess
-import sys
-from pathlib import Path
-import re
-import pytest
-import textwrap
 import importlib
 import os
+import re
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
 
 PROJECT_DIR = Path(__file__).parent.parent
 
@@ -21,6 +22,8 @@ SHUTDOWN = (
     ).lstrip(),
     "",
 )
+STDOUT = ("STDOUT .*", "STDOUT [PATH]")
+STDERR = ("STDERR .*", "STDERR [PATH]")
 
 
 def new() -> subprocess.Popen:
@@ -136,7 +139,7 @@ def test_run_build_wheel_ok():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -166,7 +169,7 @@ def test_run_build_sdist_ok():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -195,7 +198,7 @@ def test_run_get_requires_for_build_wheel_ok():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -225,7 +228,7 @@ def test_run_prepare_metadata_for_build_wheel_ok():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -253,7 +256,7 @@ def test_run_invalid_config_settings():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -287,7 +290,7 @@ def test_run_build_wheel_multiple_times():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -317,7 +320,7 @@ def test_run_build_wheel_error():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -358,7 +361,7 @@ def test_run_error_not_fatal():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -389,7 +392,7 @@ def test_run_missing_hook():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -421,7 +424,7 @@ def test_run_cls_backend(separator):
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -453,7 +456,7 @@ def test_run_obj_backend(separator):
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -484,7 +487,7 @@ def test_run_submodule_backend():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
     assert stderr == ""
     assert daemon.returncode == 0
@@ -508,8 +511,156 @@ def test_run_submodule_backend_invalid_import():
         EXPECT action
         SHUTDOWN
         """,
-        filters=[TIME],
+        filters=[TIME, STDOUT, STDERR],
     )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_stdout_capture():
+    """
+    Tests capture of stdout from a backend.
+    """
+    daemon = new()
+    send(daemon, ["run", "stdout_backend", "build_wheel", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG stdout_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK build_wheel_fake_path
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=[TIME, STDOUT, STDERR],
+    )
+    stdout_parts = stderr_parts = None
+    for line in stdout.splitlines():
+        parts = line.split()
+        if parts[0] == "STDOUT":
+            stdout_parts = parts
+        elif parts[0] == "STDERR":
+            stderr_parts = parts
+
+    assert len(stdout_parts) == 2
+    assert len(stderr_parts) == 2
+
+    assert_snapshot(
+        Path(stdout_parts[1]).read_text(),
+        """
+        hello
+        world
+        """,
+    )
+    assert Path(stderr_parts[1]).read_text() == ""
+
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_stderr_capture():
+    """
+    Tests capture of stderr from a backend.
+    """
+    daemon = new()
+    send(daemon, ["run", "stderr_backend", "build_wheel", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT hook-name
+        EXPECT wheel-directory
+        EXPECT config-settings
+        EXPECT metadata-directory
+        DEBUG stderr_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK build_wheel_fake_path
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=[TIME, STDOUT, STDERR],
+    )
+    stdout_parts = stderr_parts = None
+    for line in stdout.splitlines():
+        parts = line.split()
+        if parts[0] == "STDOUT":
+            stdout_parts = parts
+        elif parts[0] == "STDERR":
+            stderr_parts = parts
+
+    assert len(stdout_parts) == 2
+    assert len(stderr_parts) == 2
+    assert Path(stdout_parts[1]).read_text() == ""
+    assert_snapshot(
+        Path(stderr_parts[1]).read_text(),
+        """
+        hello
+        world
+        """,
+    )
+
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_stdout_capture_multiple_hook_runs():
+    """
+    Tests capture of stdout from a backend, each hook run should get a unique file
+    """
+    COUNT = 2
+    daemon = new()
+    for i in range(COUNT):
+        send(
+            daemon,
+            ["run", "stdout_backend", "build_wheel", "foo", f'{{"run": {i}}}', ""],
+        )
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    print(stdout)
+
+    all_stdout_parts = []
+    all_stderr_parts = []
+    for line in stdout.splitlines():
+        parts = line.split()
+        if parts[0] == "STDOUT":
+            all_stdout_parts.append(parts)
+        elif parts[0] == "STDERR":
+            all_stderr_parts.append(parts)
+
+    # We should have a result for each hook run
+    assert len(all_stdout_parts) == COUNT
+    assert len(all_stderr_parts) == COUNT
+
+    # Each run should write unique output to their file
+    for i, stdout_parts in enumerate(all_stdout_parts):
+        assert_snapshot(
+            Path(stdout_parts[1]).read_text(),
+            f"""
+            writing config_settings
+            run = {i}
+            """,
+        )
+    for i, stderr_parts in enumerate(all_stderr_parts):
+        assert Path(stderr_parts[1]).read_text() == ""
+
     assert stderr == ""
     assert daemon.returncode == 0
 

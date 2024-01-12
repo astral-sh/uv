@@ -5,18 +5,19 @@ See https://peps.python.org/pep-0517/
 """
 from __future__ import annotations
 
-import importlib
-import os
-import traceback
-import sys
-import time
-import json
 import enum
-from contextlib import contextmanager
-from typing import Self, TextIO, Any
-from types import ModuleType
-from pathlib import Path
+import importlib
+import io
+import json
+import os
+import sys
+import tempfile
+import time
+import traceback
+from contextlib import ExitStack, contextmanager
 from functools import cache
+from pathlib import Path
+from typing import Any, Literal, Self, TextIO
 
 DEBUG_ON = os.getenv("DAEMON_DEBUG") is not None
 
@@ -86,6 +87,17 @@ class MalformedBackendName(HookdError):
 
     def message(self) -> str:
         return f"Backend {self.name!r} is malformed"
+
+
+class BackendImportError(HookdError):
+    """A backend raised an exception on import"""
+
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        super().__init__()
+
+    def message(self) -> str:
+        return f"Backend threw an exception during import: {self.exc}"
 
 
 class InvalidHookName(HookdError):
@@ -167,24 +179,23 @@ class Hook(enum.StrEnum):
             raise InvalidHookName(name) from None
 
 
-def parse_build_backend(buffer: TextIO) -> tuple[object, str]:
-    """
-    See: https://peps.python.org/pep-0517/#source-trees
-    """
+def parse_build_backend(buffer: TextIO) -> str:
     # TODO: Add support for `build-path`
-    raw = buffer.readline().rstrip("\n")
+    name = buffer.readline().rstrip("\n")
 
-    if not raw:
-        # Default to the legacy build backend
-        raw = "setuptools.build_meta:__legacy__"
+    if not name:
+        # Default to the legacy build name
+        name = "setuptools.build_meta:__legacy__"
 
-    # The inner utility is cached, to avoid repeated imports
-    return (_parse_build_backend(raw), raw)
+    return name
 
 
 @cache
-def _parse_build_backend(raw: str) -> object:
-    parts = raw.split(":")
+def import_build_backend(backend_name: str) -> object:
+    """
+    See: https://peps.python.org/pep-0517/#source-trees
+    """
+    parts = backend_name.split(":")
     if len(parts) == 1:
         module_name = parts[0]
         attribute = None
@@ -194,9 +205,9 @@ def _parse_build_backend(raw: str) -> object:
 
         # Check for malformed attribute
         if not attribute:
-            raise MalformedBackendName(raw)
+            raise MalformedBackendName(backend_name)
     else:
-        raise MalformedBackendName(raw)
+        raise MalformedBackendName(backend_name)
 
     module = None
     backend = None
@@ -226,7 +237,7 @@ def _parse_build_backend(raw: str) -> object:
         try:
             backend = getattr(module, attribute)
         except AttributeError:
-            raise MissingBackendAttribute(module_name, raw)
+            raise MissingBackendAttribute(module_name, backend_name)
 
     if backend is None:
         backend = module
@@ -279,6 +290,8 @@ def parse_config_settings(buffer: TextIO) -> StringDict | None:
         return None
 
     try:
+        # TODO(zanieb): Consider using something faster than JSON here since we _should_
+        #               be restricted to strings
         return json.loads(data)
     except json.decoder.JSONDecodeError as exc:
         raise MalformedHookArgument(data, HookArgument.config_settings) from exc
@@ -289,7 +302,7 @@ def tmpchdir(path: str | Path) -> Path:
     """
     Temporarily change the working directory for this process.
 
-    WARNING: This function is not thread or async safe.
+    WARNING: This function is not safe to concurrent usage.
     """
     path = Path(path).resolve()
     cwd = os.getcwd()
@@ -299,6 +312,28 @@ def tmpchdir(path: str | Path) -> Path:
         yield path
     finally:
         os.chdir(cwd)
+
+
+@contextmanager
+def redirect_sys_stream(name: Literal["stdout", "stderr"]):
+    """
+    Redirect a system stream to a temporary file.
+
+    Deletion of the temporary file is deferred to the caller.
+
+    WARNING: This function is not safe to concurrent usage.
+    """
+    stream: TextIO = getattr(sys, name)
+
+    # We intentionally do not context manage this file so it is around
+    # as long as the parent needs to read from it
+    redirect_file = tempfile.NamedTemporaryFile(delete=False)
+
+    setattr(sys, name, io.TextIOWrapper(redirect_file))
+    yield redirect_file.name
+
+    # Restore to the previous stream
+    setattr(sys, name, stream)
 
 
 class HookArgument(enum.StrEnum):
@@ -339,8 +374,6 @@ HookArguments = {
     Hook.get_requires_for_build_wheel: (HookArgument.config_settings,),
 }
 
-HookDefaults = {}
-
 
 def send_expect(fd: TextIO, name: str):
     print("EXPECT", name.replace("_", "-"), file=fd)
@@ -364,32 +397,33 @@ def send_ok(fd: TextIO, result: str):
 
 def send_fatal(fd: TextIO, exc: BaseException):
     print("FATAL", type(exc).__name__, str(exc), file=fd)
-
-    if DEBUG_ON:
-        # TODO(zanieb): Figure out a better way to transport tracebacks
-        traceback.print_exception(exc, file=fd)
+    # TODO(zanieb): Figure out a better way to transport tracebacks
+    traceback.print_exception(exc, file=fd)
 
 
 def send_debug(fd: TextIO, *args):
     print("DEBUG", *args, file=fd)
 
 
+def send_redirect(fd: TextIO, name: Literal["stdout", "stderr"], path: str):
+    print(name.upper(), path, file=fd)
+
+
 def run_once(stdin: TextIO, stdout: TextIO):
     start = time.perf_counter()
 
     send_expect(stdout, "build-backend")
-    build_backend, build_backend_name = parse_build_backend(stdin)
+    build_backend_name = parse_build_backend(stdin)
 
     send_expect(stdout, "hook-name")
     hook_name = parse_hook_name(stdin)
+    if hook_name not in HookArguments:
+        raise FatalError(f"No arguments defined for hook {hook_name!r}")
 
     # Parse arguments for the given hook
     def parse(argument: str):
         send_expect(stdout, argument.name)
         return parse_hook_argument(argument, stdin)
-
-    if hook_name not in HookArguments:
-        raise FatalError(f"No arguments defined for hook {hook_name!r}")
 
     args = tuple(parse(argument) for argument in HookArguments[hook_name])
 
@@ -400,35 +434,47 @@ def run_once(stdin: TextIO, stdout: TextIO):
         *(f"{name}={value}" for name, value in zip(HookArguments[hook_name], args)),
     )
 
-    try:
-        hook = getattr(build_backend, hook_name)
-    except AttributeError:
-        raise UnsupportedHook(build_backend, hook_name)
-
     end = time.perf_counter()
     send_debug(stdout, f"parsed hook inputs in {(end - start)*1000.0:.2f}ms")
 
     # All hooks are run with working directory set to the root of the source tree
     # TODO(zanieb): Where do we get the path of the source tree?
 
-    # TODO(zanieb): Redirect stdout and err during this
-    #               We may want to start before importing anything
-    try:
-        result = hook(*args)
-    except BaseException as exc:
-        # Respect SIGTERM and SIGINT
-        if isinstance(exc, (SystemExit, KeyboardInterrupt)):
-            raise
+    with ExitStack() as hook_ctx:
+        hook_stdout = hook_ctx.enter_context(redirect_sys_stream("stdout"))
+        hook_stderr = hook_ctx.enter_context(redirect_sys_stream("stderr"))
+        send_redirect(stdout, "stdout", str(hook_stdout))
+        send_redirect(stdout, "stderr", str(hook_stderr))
 
-        raise HookRuntimeError(exc) from None
-    else:
-        send_ok(stdout, result)
+        try:
+            build_backend = import_build_backend(build_backend_name)
+        except Exception as exc:
+            raise BackendImportError(exc) from None
+
+        try:
+            hook = getattr(build_backend, hook_name)
+        except AttributeError:
+            raise UnsupportedHook(build_backend, hook_name)
+
+        try:
+            result = hook(*args)
+        except BaseException as exc:
+            # Respect SIGTERM and SIGINT
+            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                raise
+
+            raise HookRuntimeError(exc) from None
+        else:
+            send_ok(stdout, result)
 
 
 def main():
-    stdin = sys.stdin
+    # Create copies of standard streams since the `sys.<name>` will be redirected during
+    # hook execution
     stdout = sys.stdout
-    stderr = sys.stderr
+    stdin = sys.stdin
+
+    # TODO: Close `sys.stdin` and create a duplicate fd for ourselves so hooks don't read from our stream
 
     while True:
         try:
@@ -453,7 +499,7 @@ def main():
             # These errors are "handled" and non-fatal
             send_error(stdout, exc)
         except BaseException as exc:
-            # All other exception types result in a crash of the daemon
+            # All other exceptions result in a crash of the daemon
             send_fatal(stdout, exc)
             raise
 
