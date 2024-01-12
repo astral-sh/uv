@@ -10,15 +10,17 @@ import enum
 import importlib
 import io
 import json
+import errno
 import os
 import sys
-import tempfile
+import uuid
 import time
 import traceback
 from contextlib import ExitStack, contextmanager
 from functools import cache
 from pathlib import Path
 from typing import Any, Literal, Self, TextIO
+
 
 SOURCE_TREE = os.getenv("HOOKD_SOURCE_TREE")
 
@@ -314,12 +316,10 @@ def redirect_sys_stream(name: Literal["stdout", "stderr"]):
     """
     stream: TextIO = getattr(sys, name)
 
-    # We intentionally do not context manage this file so it is around
-    # as long as the parent needs to read from it
-    redirect_file = tempfile.NamedTemporaryFile(delete=False)
-
-    setattr(sys, name, io.TextIOWrapper(redirect_file))
-    yield redirect_file.name
+    # We use an optimized version of `NamedTemporaryFile`
+    fd, name = tmpfile()
+    setattr(sys, name, io.open(fd, "rt"))
+    yield name
 
     # Restore to the previous stream
     setattr(sys, name, stream)
@@ -468,6 +468,111 @@ def run_once(stdin: TextIO, stdout: TextIO):
             raise HookRuntimeError(exc) from exc
         else:
             send_ok(stdout, result)
+
+
+"""
+Optimized version of temporary file creation.
+Implemenation based on CPython.
+
+This implementation:
+
+- Uses UUIDs instead of the CPython random name generator
+- Finds a valid temporary directory at the same time as creating the temporary file
+    - Avoids having to unlink a file created just to test if the directory is valid
+- Only finds the default temporary directory _once_ then caches it
+"""
+
+_text_openflags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+if hasattr(os, "O_NOFOLLOW"):
+    _text_openflags |= os.O_NOFOLLOW
+
+
+def _candidate_tempdirs():
+    """
+    Generate a list of candidate temporary directories
+    """
+    dirlist = []
+
+    # First, try the environment.
+    for envname in "TMPDIR", "TEMP", "TMP":
+        dirname = os.getenv(envname)
+        if dirname:
+            dirlist.append(dirname)
+
+    # Failing that, try OS-specific locations.
+    if os.name == "nt":
+        dirlist.extend(
+            [
+                os.path.expanduser(r"~\AppData\Local\Temp"),
+                os.path.expandvars(r"%SYSTEMROOT%\Temp"),
+                r"c:\temp",
+                r"c:\tmp",
+                r"\temp",
+                r"\tmp",
+            ]
+        )
+    else:
+        dirlist.extend(["/tmp", "/var/tmp", "/usr/tmp"])
+
+    # As a last resort, the current directory.
+    try:
+        dirlist.append(os.getcwd())
+    except (AttributeError, OSError):
+        dirlist.append(os.curdir)
+
+    return dirlist
+
+
+_default_tmpdir = None
+_max_tmpfile_attempts = 10000
+
+
+def tmpfile():
+    global _default_tmpdir
+
+    # Use the default directory if previously found, otherwise we will
+    # find
+    if not _default_tmpdir:
+        tmpdir = None
+        candidate_tempdirs = iter(_candidate_tempdirs())
+    else:
+        tmpdir = _default_tmpdir
+        candidate_tempdirs = None
+
+    for attempt in range(_max_tmpfile_attempts):
+        name = uuid.uuid4().hex
+
+        # Every one hundred attempts, switch to another candidate directory
+        if not _default_tmpdir and attempt % 100 == 0:
+            try:
+                tmpdir = next(candidate_tempdirs)
+            except StopIteration:
+                raise FileNotFoundError(
+                    errno.ENOENT,
+                    f"No usable temporary directory found in {_candidate_tempdirs()}",
+                ) from None
+
+        file = os.path.join(tmpdir, name)
+        try:
+            fd = os.open(file, _text_openflags, 0o600)
+        except FileExistsError:
+            continue  # try again
+        except PermissionError:
+            # This exception is thrown when a directory with the chosen name
+            # already exists on windows.
+            if (
+                os.name == "nt"
+                and os.path.isdir(_default_tmpdir)
+                and os.access(dir, os.W_OK)
+            ):
+                continue
+            else:
+                raise
+
+        _default_tmpdir = tmpdir
+        return fd, file
+
+    raise FileExistsError(errno.EEXIST, "No usable temporary file name found")
 
 
 def main():
