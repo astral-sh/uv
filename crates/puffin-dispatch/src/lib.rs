@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexUrls, Name, Resolution};
+use distribution_types::{CachedDist, DistributionId, IndexUrls, Name, Resolution};
 use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
@@ -31,7 +31,7 @@ pub struct BuildDispatch<'a> {
     no_build: bool,
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
-    in_flight_unzips: OnceMap<PathBuf, Result<CachedDist, String>>,
+    in_flight: OnceMap<DistributionId, Result<CachedDist, String>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -54,7 +54,7 @@ impl<'a> BuildDispatch<'a> {
             no_build,
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
-            in_flight_unzips: OnceMap::default(),
+            in_flight: OnceMap::default(),
         }
     }
 
@@ -179,7 +179,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 );
 
                 downloader
-                    .download(remote, &self.in_flight_unzips)
+                    .download(remote, &self.in_flight)
                     .await
                     .context("Failed to download and build distributions")?
             };
