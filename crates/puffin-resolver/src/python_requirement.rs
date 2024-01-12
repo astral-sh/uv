@@ -29,9 +29,4 @@ impl<'a> PythonRequirement<'a> {
     pub(crate) fn target(&self) -> &'a Version {
         self.target
     }
-
-    /// Returns an iterator over the versions of Python to consider when resolving dependencies.
-    pub(crate) fn versions(&self) -> impl Iterator<Item = &'a Version> {
-        std::iter::once(self.installed).chain(std::iter::once(self.target))
-    }
 }

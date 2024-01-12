@@ -78,9 +78,7 @@ impl VersionMap {
                             file.requires_python
                                 .as_ref()
                                 .map_or(true, |requires_python| {
-                                    python_requirement
-                                        .versions()
-                                        .all(|version| requires_python.contains(version))
+                                    requires_python.contains(python_requirement.target())
                                 })
                         });
                         let dist = Dist::from_registry(
