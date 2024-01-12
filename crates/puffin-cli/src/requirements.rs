@@ -117,7 +117,7 @@ impl RequirementsSpecification {
             RequirementsSource::PyprojectToml(path) => {
                 let contents = fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
-                    .with_context(|| format!("Failed to read `{}`", path.display()))?;
+                    .with_context(|| format!("Failed to parse `{}`", path.display()))?;
                 let mut used_extras = FxHashSet::default();
                 let mut requirements = Vec::new();
                 let mut project_name = None;
