@@ -12,7 +12,7 @@ use url::Url;
 
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use pep440_rs::Version;
-use pep508_rs::{Requirement, VerbatimUrl};
+use pep508_rs::VerbatimUrl;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_traits::OnceMap;
 use pypi_types::{Hashes, Metadata21};
@@ -199,16 +199,6 @@ impl ResolutionGraph {
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
         self.petgraph.node_count() == 0
-    }
-
-    /// Return the set of [`Requirement`]s that this graph represents.
-    pub fn requirements(&self) -> Vec<Requirement> {
-        self.petgraph
-            .node_indices()
-            .map(|node| &self.petgraph[node])
-            .cloned()
-            .map(Requirement::from)
-            .collect()
     }
 
     /// Return the [`Diagnostic`]s that were encountered while building the graph.

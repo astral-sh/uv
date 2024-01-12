@@ -9,7 +9,7 @@ use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
 
-use distribution_types::IndexUrls;
+use distribution_types::{IndexUrls, Resolution};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
@@ -97,16 +97,15 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         write!(&mut writer, "{graphviz:?}")?;
     }
 
-    let mut resolution = resolution_graph.requirements();
-    resolution.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    let requirements = Resolution::from(resolution_graph).requirements();
 
-    #[allow(clippy::print_stderr, clippy::ignored_unit_patterns)]
+    #[allow(clippy::print_stderr)]
     match args.format {
         ResolveCliFormat::Compact => {
-            println!("{}", resolution.iter().map(ToString::to_string).join(" "));
+            println!("{}", requirements.iter().map(ToString::to_string).join(" "));
         }
         ResolveCliFormat::Expanded => {
-            for package in resolution {
+            for package in requirements {
                 println!("{}", package);
             }
         }
