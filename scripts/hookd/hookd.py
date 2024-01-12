@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 """
 A daemon process for PEP 517 build hook requests.
 
-See https://peps.python.org/pep-0517/
+See the `README` for details.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any, Literal, Self, TextIO
 
-DEBUG_ON = os.getenv("DAEMON_DEBUG") is not None
+SOURCE_TREE = os.getenv("HOOKD_SOURCE_TREE")
 
 # Arbitrary nesting is allowed, but all keys and terminal values are strings
 StringDict = dict[str, "str | StringDict"]
@@ -303,23 +304,6 @@ def parse_config_settings(buffer: TextIO) -> StringDict | None:
 
 
 @contextmanager
-def tmpchdir(path: str | Path) -> Path:
-    """
-    Temporarily change the working directory for this process.
-
-    WARNING: This function is not safe to concurrent usage.
-    """
-    path = Path(path).resolve()
-    cwd = os.getcwd()
-
-    try:
-        os.chdir(path)
-        yield path
-    finally:
-        os.chdir(cwd)
-
-
-@contextmanager
 def redirect_sys_stream(name: Literal["stdout", "stderr"]):
     """
     Redirect a system stream to a temporary file.
@@ -386,7 +370,7 @@ def write_safe(file: TextIO, *args: str):
 
 
 def send_expect(file: TextIO, name: str):
-    write_safe(file, "EXPECT", name.replace("_", "-"))
+    write_safe(file, "EXPECT", name)
 
 
 def send_ready(file: TextIO):
@@ -526,11 +510,26 @@ def main():
             send_fatal(stdout, exc)
             raise
 
-        # Do not run multiple iterations in debug mode
-        # TODO(zanieb): Probably remove this after development is stable
-        if DEBUG_ON:
-            return
-
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        print(
+            "Invalid usage. Expected one argument specifying the path to the source tree.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        source_tree = Path(sys.argv[1]).resolve()
+        os.chdir(source_tree)
+        send_debug(sys.stdout, "changed working directory to", source_tree)
+    except IndexError:
+        pass
+    except ValueError as exc:
+        print(
+            f"Invalid usage. Expected path argument but validation failed: {exc}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     main()
