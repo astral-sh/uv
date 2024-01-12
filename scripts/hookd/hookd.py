@@ -9,11 +9,9 @@ from __future__ import annotations
 import enum
 import importlib
 import io
-import json
 import errno
 import os
 import sys
-import uuid
 import time
 import traceback
 from contextlib import ExitStack, contextmanager
@@ -297,6 +295,10 @@ def parse_config_settings(buffer: TextIO) -> StringDict | None:
     if not data:
         return None
 
+    # We defer the import of `json` until someone actually passes us a `config_settings`
+    # object since it's not necessarily common
+    import json
+
     try:
         # TODO(zanieb): Consider using something faster than JSON here since we _should_
         #               be restricted to strings
@@ -540,7 +542,8 @@ def tmpfile():
         candidate_tempdirs = None
 
     for attempt in range(_max_tmpfile_attempts):
-        name = uuid.uuid4().hex
+        # Generate a random hex string, similar to a UUID without version and variant information
+        name = "%032x" % int.from_bytes(os.urandom(16))
 
         # Every one hundred attempts, switch to another candidate directory
         if not _default_tmpdir and attempt % 100 == 0:
