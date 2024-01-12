@@ -120,7 +120,9 @@ impl RegistryClient {
         for flat_index in self.index_locations.flat_indexes() {
             match flat_index {
                 FlatIndexLocation::Path(path) => {
-                    Self::read_flat_index_dir(&mut dists, path).map_err(Error::FindLinks)?;
+                    dists.extend_from_slice(
+                        &Self::read_flat_index_dir(path).map_err(Error::FindLinks)?,
+                    );
                 }
                 FlatIndexLocation::Url(_) => {
                     warn!("TODO(konstin): No yet implemented: Find links urls");
@@ -130,13 +132,10 @@ impl RegistryClient {
         Ok(dists)
     }
 
-    fn read_flat_index_dir(
-        dists: &mut Vec<(DistFilename, PathBuf)>,
-        path: &PathBuf,
-    ) -> Result<(), io::Error> {
-        // Absolut paths are required for the url conversion for the `Dist`
+    fn read_flat_index_dir(path: &PathBuf) -> Result<Vec<(DistFilename, PathBuf)>, io::Error> {
+        // Absolute paths are required for the url conversion for the `Dist`
         let path = fs_err::canonicalize(path)?;
-        let mut dir_dists = 0;
+        let mut dists = Vec::new();
         for entry in fs_err::read_dir(&path)? {
             let entry = entry?;
             let metadata = entry.metadata()?;
@@ -157,9 +156,8 @@ impl RegistryClient {
             };
             let path = entry.path().to_path_buf();
             dists.push((filename, path));
-            dir_dists += 1;
         }
-        if dir_dists == 0 {
+        if dists.is_empty() {
             warn!(
                 "No packages found in find links directory: {}",
                 path.display()
@@ -167,11 +165,11 @@ impl RegistryClient {
         } else {
             debug!(
                 "Found {} packages in find link directory: {}",
-                dir_dists,
+                dists.len(),
                 path.display()
             );
         }
-        Ok(())
+        Ok(dists)
     }
 
     /// Fetch a package from the `PyPI` simple API.

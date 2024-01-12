@@ -159,12 +159,11 @@ struct PipCompileArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
-    /// The path to a directory containing wheels or source distributions  to use in addition to
-    /// the indexes, or the URL of a page with package files.
+    /// The path to a directory containing wheels or source distributions to use in addition to the indexes, or the URL
+    /// of a page with package files.
     ///
-    /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or
-    /// source distribution (`.tar.gz`, `.zip`) at the top level. If a URL, the page must contain
-    /// a flat list of links to package files.
+    /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or source distribution
+    /// (`.tar.gz`, `.zip`) at the top level. If a URL, the page must contain a flat list of links to package files.
     #[clap(long)]
     find_links: Vec<FlatIndexLocation>,
 
@@ -239,7 +238,7 @@ struct PipSyncArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
-    /// The path to a directory containing wheels or source distributions  to use in addition to the indexes, or the URL
+    /// The path to a directory containing wheels or source distributions to use in addition to the indexes, or the URL
     /// of a page with package files.
     ///
     /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or source distribution
@@ -348,7 +347,7 @@ struct PipInstallArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
-    /// The path to a directory containing wheels or source distributions  to use in addition to the indexes, or the URL
+    /// The path to a directory containing wheels or source distributions to use in addition to the indexes, or the URL
     /// of a page with package files.
     ///
     /// If a path, the target must be a directory that contains the package as wheel (`.whl`) or source distribution

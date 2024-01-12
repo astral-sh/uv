@@ -1,6 +1,7 @@
 use distribution_filename::DistFilename;
-use distribution_types::prioritized_distribution::PrioritizedDistribution;
-use distribution_types::{BuiltDist, Dist, PathBuiltDist, PathSourceDist, SourceDist};
+use distribution_types::{
+    BuiltDist, Dist, PathBuiltDist, PathSourceDist, PrioritizedDistribution, SourceDist,
+};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
@@ -16,7 +17,6 @@ pub struct FlatIndex<T: Into<Version> + From<Version> + Ord>(
     pub BTreeMap<T, PrioritizedDistribution>,
 );
 
-// konstin: I don't understand why the default derive fails here
 impl<T: Into<Version> + From<Version> + Ord> Default for FlatIndex<T> {
     fn default() -> Self {
         Self(BTreeMap::default())
@@ -26,7 +26,7 @@ impl<T: Into<Version> + From<Version> + Ord> Default for FlatIndex<T> {
 impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
     /// Collect all the files from `--find-links` into a override hashmap we can pass into version map creation.
     #[instrument(skip_all)]
-    pub fn from_flat_index(
+    pub fn from_dists(
         dists: Vec<(DistFilename, PathBuf)>,
         tags: &Tags,
     ) -> FxHashMap<PackageName, Self> {
@@ -41,8 +41,6 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
             // lazily only when they are selected.
             match filename {
                 DistFilename::WheelFilename(filename) => {
-                    // To be compatible, the wheel must both have compatible tags _and_ have a
-                    // compatible Python requirement.
                     let priority = filename.compatibility(tags);
                     let version = filename.version.clone();
                     let dist = Dist::Built(BuiltDist::Path(PathBuiltDist {

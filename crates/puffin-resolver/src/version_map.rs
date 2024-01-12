@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use distribution_types::prioritized_distribution::{PrioritizedDistribution, ResolvableDist};
 use distribution_types::{Dist, IndexUrl};
+use distribution_types::{PrioritizedDistribution, ResolvableDist};
 use platform_tags::Tags;
 use puffin_client::{FlatIndex, SimpleMetadata};
 use puffin_normalize::PackageName;
