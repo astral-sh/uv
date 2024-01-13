@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use dashmap::DashMap;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt};
 use itertools::Itertools;
@@ -17,9 +18,10 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, RemoteSource, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, RemoteSource,
+    SourceDist, VersionOrUrl,
 };
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
@@ -64,6 +66,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     python_requirement: PythonRequirement<'a>,
     selector: CandidateSelector,
     index: Arc<Index>,
+    incompatibilities: DashMap<PackageId, VersionSpecifiers>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
@@ -155,6 +158,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         Self {
             index: Arc::new(index),
+            incompatibilities: DashMap::default(),
             selector,
             allowed_urls,
             project: manifest.project,
@@ -492,9 +496,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.index
-                        .incompatibilities
-                        .done(candidate.package_id(), requires_python.clone());
+                    self.incompatibilities
+                        .insert(candidate.package_id(), requires_python.clone());
                     return Ok(Some(candidate.version().clone()));
                 }
 
@@ -606,7 +609,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the package is known to be incompatible, return the Python version as an
                 // incompatibility, and skip fetching the metadata.
-                if let Some(entry) = self.index.incompatibilities.get(&package_id) {
+                if let Some(entry) = self.incompatibilities.get(&package_id) {
                     let requires_python = entry.value();
                     let version = requires_python
                         .iter()
@@ -765,9 +768,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.index
-                        .incompatibilities
-                        .done(candidate.package_id(), requires_python.clone());
+                    self.incompatibilities
+                        .insert(candidate.package_id(), requires_python.clone());
                     return Ok(None);
                 }
 
