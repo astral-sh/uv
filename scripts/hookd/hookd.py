@@ -14,11 +14,19 @@ import os
 import sys
 import time
 from contextlib import ExitStack, contextmanager
-from functools import cache
-from typing import Any, Literal, Self, TextIO
+from functools import lru_cache as cache
+from typing import Any, TextIO, TYPE_CHECKING
 
-# Alias for readability — we don't use `pathlib` for a modest speedup
-Path = str
+Path = str  # We don't use `pathlib` for a modest speedup
+
+if TYPE_CHECKING:
+    if sys.version_info > (3, 7):
+        from typing import Literal, Self
+
+        StreamName = Literal["stdout", "stderr"]
+    else:
+        StreamName = str
+        Self = Any
 
 
 def main():
@@ -83,8 +91,11 @@ def run_once(stdin: TextIO, stdout: TextIO):
     send_debug(
         stdout,
         build_backend_name,
-        hook_name,
-        *(f"{name}={value}" for name, value in zip(HookArguments[hook_name], args)),
+        hook_name.value,
+        *(
+            f"{name.value}={value}"
+            for name, value in zip(HookArguments[hook_name], args)
+        ),
     )
 
     end = time.perf_counter()
@@ -108,7 +119,7 @@ def run_once(stdin: TextIO, stdout: TextIO):
             raise
 
         try:
-            hook = getattr(build_backend, hook_name)
+            hook = getattr(build_backend, hook_name.value)
         except AttributeError:
             raise UnsupportedHook(build_backend, hook_name)
 
@@ -124,7 +135,7 @@ def run_once(stdin: TextIO, stdout: TextIO):
             send_ok(stdout, result)
 
 
-@cache
+@cache()
 def import_build_backend(backend_name: str) -> object:
     """
     See: https://peps.python.org/pep-0517/#source-trees
@@ -180,7 +191,7 @@ def import_build_backend(backend_name: str) -> object:
 
 
 @contextmanager
-def redirect_sys_stream(name: Literal["stdout", "stderr"]):
+def redirect_sys_stream(name: StreamName):
     """
     Redirect a system stream to a temporary file.
 
@@ -205,12 +216,12 @@ def redirect_sys_stream(name: Literal["stdout", "stderr"]):
 ######################
 
 
-class Hook(enum.StrEnum):
-    build_wheel = enum.auto()
-    build_sdist = enum.auto()
-    prepare_metadata_for_build_wheel = enum.auto()
-    get_requires_for_build_wheel = enum.auto()
-    get_requires_for_build_sdist = enum.auto()
+class Hook(enum.Enum):
+    build_wheel = "build_wheel"
+    build_sdist = "build_sdist"
+    prepare_metadata_for_build_wheel = "prepare_metadata_for_build_wheel"
+    get_requires_for_build_wheel = "get_requires_for_build_wheel"
+    get_requires_for_build_sdist = "get_requires_for_build_sdist"
 
     @classmethod
     def from_str(cls: type[Self], name: str) -> Self:
@@ -220,11 +231,11 @@ class Hook(enum.StrEnum):
             raise InvalidHookName(name) from None
 
 
-class HookArgument(enum.StrEnum):
-    wheel_directory = enum.auto()
-    config_settings = enum.auto()
-    metadata_directory = enum.auto()
-    sdist_directory = enum.auto()
+class HookArgument(enum.Enum):
+    wheel_directory = "wheel_directory"
+    config_settings = "config_settings"
+    metadata_directory = "metadata_directory"
+    sdist_directory = "sdist_directory"
 
 
 def parse_hook_argument(hook_arg: HookArgument, buffer: TextIO) -> Any:
@@ -259,9 +270,9 @@ HookArguments = {
 }
 
 
-class Action(enum.StrEnum):
-    run = enum.auto()
-    shutdown = enum.auto()
+class Action(enum.Enum):
+    run = "run"
+    shutdown = "shutdown"
 
     @classmethod
     def from_str(cls: type[Self], action: str) -> Self:
@@ -339,7 +350,7 @@ def send_expect(file: TextIO, name: str):
     write_safe(file, "EXPECT", name)
 
 
-def send_redirect(file: TextIO, name: Literal["stdout", "stderr"], path: str):
+def send_redirect(file: TextIO, name: StreamName, path: str):
     write_safe(file, name.upper(), path)
 
 
@@ -356,7 +367,11 @@ def send_traceback(file: TextIO, exc: BaseException):
     # Defer import of traceback until an exception occurs
     import traceback
 
-    tb = traceback.format_exception(exc)
+    if sys.version_info < (3, 8):
+        tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    else:
+        tb = traceback.format_exception(exc)
+
     write_safe(file, "TRACEBACK", "\n".join(tb))
 
 
@@ -604,7 +619,7 @@ def tmpfile():
 
     for attempt in range(_max_tmpfile_attempts):
         # Generate a random hex string, similar to a UUID without version and variant information
-        name = "%032x" % int.from_bytes(os.urandom(16))
+        name = "%032x" % int.from_bytes(os.urandom(16), sys.byteorder)
 
         # Every one hundred attempts, switch to another candidate directory
         if not _default_tmpdir and attempt % 100 == 0:
