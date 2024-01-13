@@ -2,8 +2,8 @@
 
 A daemon process for PEP 517 build hook requests.
 
-
 ## Example
+
 ```
 PYTHONPATH=scripts/hookd/backends ./scripts/hookd/hookd.py < scripts/hookd/example.in
 ```
@@ -22,7 +22,7 @@ The daemon communicates with bidirectional messages over STDIN and STDOUT.
 Each message is terminated with a newline.
 Newlines in values will be escaped as `\\n`.
 
-``````
+```
 READY
     
     Signals that the daemon is ready to do work.

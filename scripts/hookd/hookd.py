@@ -17,12 +17,371 @@ from contextlib import ExitStack, contextmanager
 from functools import cache
 from typing import Any, Literal, Self, TextIO
 
-
-# Arbitrary nesting is allowed, but all keys and terminal values are strings
-StringDict = dict[str, "str | StringDict"]
-
 # Alias for readability — we don't use `pathlib` for a modest speedup
 Path = str
+
+
+def main():
+    # Create copies of standard streams since the `sys.<name>` will be redirected during
+    # hook execution
+    stdout = sys.stdout
+    stdin = sys.stdin
+
+    # TODO: Close `sys.stdin` and create a duplicate file for ourselves so hooks don't read from our stream
+
+    while True:
+        try:
+            start = time.perf_counter()
+
+            if not stdin.readable():
+                raise UnreadableInput()
+
+            send_ready(stdout)
+
+            send_expect(stdout, "action")
+            action = parse_action(stdin)
+            if action == Action.shutdown:
+                send_shutdown(stdout)
+                break
+
+            run_once(stdin, stdout)
+            end = time.perf_counter()
+            send_debug(stdout, f"ran hook in {(end - start)*1000.0:.2f}ms")
+
+        except HookdError as exc:
+            # These errors are "handled" and non-fatal
+            try:
+                send_error(stdout, exc)
+            except Exception as exc:
+                # Failures to report errors are a fatal error
+                send_fatal(stdout, exc)
+                raise exc
+        except BaseException as exc:
+            # All other exceptions result in a crash of the daemon
+            send_fatal(stdout, exc)
+            raise
+
+
+def run_once(stdin: TextIO, stdout: TextIO):
+    start = time.perf_counter()
+
+    send_expect(stdout, "build_backend")
+    build_backend_name = parse_build_backend(stdin)
+
+    send_expect(stdout, "hook_name")
+    hook_name = parse_hook_name(stdin)
+    if hook_name not in HookArguments:
+        raise FatalError(f"No arguments defined for hook {hook_name!r}")
+
+    # Parse arguments for the given hook
+    def parse(argument: str):
+        send_expect(stdout, argument.name)
+        return parse_hook_argument(argument, stdin)
+
+    args = tuple(parse(argument) for argument in HookArguments[hook_name])
+
+    send_debug(
+        stdout,
+        build_backend_name,
+        hook_name,
+        *(f"{name}={value}" for name, value in zip(HookArguments[hook_name], args)),
+    )
+
+    end = time.perf_counter()
+    send_debug(stdout, f"parsed hook inputs in {(end - start)*1000.0:.2f}ms")
+
+    # All hooks are run with working directory set to the root of the source tree
+    # TODO(zanieb): Where do we get the path of the source tree?
+
+    with ExitStack() as hook_ctx:
+        hook_stdout = hook_ctx.enter_context(redirect_sys_stream("stdout"))
+        hook_stderr = hook_ctx.enter_context(redirect_sys_stream("stderr"))
+        send_redirect(stdout, "stdout", str(hook_stdout))
+        send_redirect(stdout, "stderr", str(hook_stderr))
+
+        try:
+            build_backend = import_build_backend(build_backend_name)
+        except Exception as exc:
+            if not isinstance(exc, HookdError):
+                # Wrap unhandled errors in a generic one
+                raise BackendImportError(exc) from exc
+            raise
+
+        try:
+            hook = getattr(build_backend, hook_name)
+        except AttributeError:
+            raise UnsupportedHook(build_backend, hook_name)
+
+        try:
+            result = hook(*args)
+        except BaseException as exc:
+            # Respect SIGTERM and SIGINT
+            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                raise
+
+            raise HookRuntimeError(exc) from exc
+        else:
+            send_ok(stdout, result)
+
+
+@cache
+def import_build_backend(backend_name: str) -> object:
+    """
+    See: https://peps.python.org/pep-0517/#source-trees
+    """
+    parts = backend_name.split(":")
+    if len(parts) == 1:
+        module_name = parts[0]
+        attribute = None
+    elif len(parts) == 2:
+        module_name = parts[0]
+        attribute = parts[1]
+
+        # Check for malformed attribute
+        if not attribute:
+            raise MalformedBackendName(backend_name)
+    else:
+        raise MalformedBackendName(backend_name)
+
+    module = None
+    backend = None
+
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError:
+        # If they could not have meant `<module>.<attribute>`, raise
+        if "." not in module_name:
+            raise MissingBackendModule(module_name)
+
+    if module is None:
+        # Otherwise, we'll try to load it as an attribute of a module
+        parent_name, child_name = module_name.rsplit(".", 1)
+
+        try:
+            module = importlib.import_module(parent_name)
+        except ImportError:
+            raise MissingBackendModule(module_name)
+
+        try:
+            backend = getattr(module, child_name)
+        except AttributeError:
+            raise MissingBackendAttribute(module_name, child_name)
+
+    if attribute is not None:
+        try:
+            backend = getattr(module, attribute)
+        except AttributeError:
+            raise MissingBackendAttribute(module_name, backend_name)
+
+    if backend is None:
+        backend = module
+
+    return backend
+
+
+@contextmanager
+def redirect_sys_stream(name: Literal["stdout", "stderr"]):
+    """
+    Redirect a system stream to a temporary file.
+
+    Deletion of the temporary file is deferred to the caller.
+
+    WARNING: This function is not safe to concurrent usage.
+    """
+    stream: TextIO = getattr(sys, name)
+
+    # We use an optimized version of `NamedTemporaryFile`
+    fd, path = tmpfile()
+    redirected_stream = io.open(fd, "wt")
+    setattr(sys, name, redirected_stream)
+    yield path
+
+    # Restore to the previous stream
+    setattr(sys, name, stream)
+
+
+######################
+###### PARSERS #######
+######################
+
+
+class Hook(enum.StrEnum):
+    build_wheel = enum.auto()
+    build_sdist = enum.auto()
+    prepare_metadata_for_build_wheel = enum.auto()
+    get_requires_for_build_wheel = enum.auto()
+    get_requires_for_build_sdist = enum.auto()
+
+    @classmethod
+    def from_str(cls: type[Self], name: str) -> Self:
+        try:
+            return Hook(name)
+        except ValueError:
+            raise InvalidHookName(name) from None
+
+
+class HookArgument(enum.StrEnum):
+    wheel_directory = enum.auto()
+    config_settings = enum.auto()
+    metadata_directory = enum.auto()
+    sdist_directory = enum.auto()
+
+
+def parse_hook_argument(hook_arg: HookArgument, buffer: TextIO) -> Any:
+    if hook_arg == HookArgument.wheel_directory:
+        return parse_path(buffer)
+    if hook_arg == HookArgument.metadata_directory:
+        return parse_optional_path(buffer)
+    if hook_arg == HookArgument.sdist_directory:
+        return parse_path(buffer)
+    if hook_arg == HookArgument.config_settings:
+        return parse_config_settings(buffer)
+
+    raise FatalError(f"No parser for hook argument kind {hook_arg.name!r}")
+
+
+HookArguments = {
+    Hook.build_sdist: (
+        HookArgument.sdist_directory,
+        HookArgument.config_settings,
+    ),
+    Hook.build_wheel: (
+        HookArgument.wheel_directory,
+        HookArgument.config_settings,
+        HookArgument.metadata_directory,
+    ),
+    Hook.prepare_metadata_for_build_wheel: (
+        HookArgument.metadata_directory,
+        HookArgument.config_settings,
+    ),
+    Hook.get_requires_for_build_sdist: (HookArgument.config_settings,),
+    Hook.get_requires_for_build_wheel: (HookArgument.config_settings,),
+}
+
+
+class Action(enum.StrEnum):
+    run = enum.auto()
+    shutdown = enum.auto()
+
+    @classmethod
+    def from_str(cls: type[Self], action: str) -> Self:
+        try:
+            return Action(action)
+        except ValueError:
+            raise InvalidAction(action) from None
+
+
+def parse_action(buffer: TextIO) -> Action:
+    action = buffer.readline().rstrip("\n")
+    return Action.from_str(action)
+
+
+def parse_hook_name(buffer: TextIO) -> Hook:
+    name = buffer.readline().rstrip("\n")
+    return Hook.from_str(name)
+
+
+def parse_path(buffer: TextIO) -> Path:
+    path = os.path.abspath(buffer.readline().rstrip("\n"))
+    # TODO(zanieb): Consider validating the path here
+    return path
+
+
+def parse_optional_path(buffer: TextIO) -> Path | None:
+    data = buffer.readline().rstrip("\n")
+    if not data:
+        return None
+    # TODO(zanieb): Consider validating the path here
+    return os.path.abspath(data)
+
+
+def parse_config_settings(buffer: TextIO) -> dict | None:
+    """
+    See https://peps.python.org/pep-0517/#config-settings
+    """
+    data = buffer.readline().rstrip("\n")
+    if not data:
+        return None
+
+    # We defer the import of `json` until someone actually passes us a `config_settings`
+    # object since it's not necessarily common
+    import json
+
+    try:
+        # TODO(zanieb): Consider using something faster than JSON here since we _should_
+        #               be restricted to strings
+        return json.loads(data)
+    except json.decoder.JSONDecodeError as exc:
+        raise MalformedHookArgument(data, HookArgument.config_settings) from exc
+
+
+def parse_build_backend(buffer: TextIO) -> str:
+    # TODO: Add support for `build-path`
+    name = buffer.readline().rstrip("\n")
+
+    if not name:
+        # Default to the legacy build name
+        name = "setuptools.build_meta:__legacy__"
+
+    return name
+
+
+######################
+####### OUTPUT #######
+######################
+
+
+def send_ready(file: TextIO):
+    write_safe(file, "READY")
+
+
+def send_expect(file: TextIO, name: str):
+    write_safe(file, "EXPECT", name)
+
+
+def send_redirect(file: TextIO, name: Literal["stdout", "stderr"], path: str):
+    write_safe(file, name.upper(), path)
+
+
+def send_ok(file: TextIO, result: str):
+    write_safe(file, "OK", result)
+
+
+def send_error(file: TextIO, exc: HookdError):
+    write_safe(file, "ERROR", type(exc).__name__, str(exc))
+    send_traceback(file, exc)
+
+
+def send_traceback(file: TextIO, exc: BaseException):
+    # Defer import of traceback until an exception occurs
+    import traceback
+
+    tb = traceback.format_exception(exc)
+    write_safe(file, "TRACEBACK", "\n".join(tb))
+
+
+def send_fatal(file: TextIO, exc: BaseException):
+    write_safe(file, "FATAL", type(exc).__name__, str(exc))
+    send_traceback(file, exc)
+
+
+def send_debug(file: TextIO, *args):
+    write_safe(file, "DEBUG", *args)
+
+
+def send_shutdown(file: TextIO):
+    write_safe(file, "SHUTDOWN")
+
+
+def write_safe(file: TextIO, *args: str):
+    # Ensures thre are no newlines in the output
+    args = [str(arg).replace("\n", "\\n") for arg in args]
+    print(*args, file=file)
+
+
+#######################
+####### ERRORS ########
+#######################
 
 
 class FatalError(Exception):
@@ -169,311 +528,9 @@ class HookRuntimeError(HookdError):
         return str(self.exc)
 
 
-class Hook(enum.StrEnum):
-    build_wheel = enum.auto()
-    build_sdist = enum.auto()
-    prepare_metadata_for_build_wheel = enum.auto()
-    get_requires_for_build_wheel = enum.auto()
-    get_requires_for_build_sdist = enum.auto()
-
-    @classmethod
-    def from_str(cls: type[Self], name: str) -> Self:
-        try:
-            return Hook(name)
-        except ValueError:
-            raise InvalidHookName(name) from None
-
-
-def parse_build_backend(buffer: TextIO) -> str:
-    # TODO: Add support for `build-path`
-    name = buffer.readline().rstrip("\n")
-
-    if not name:
-        # Default to the legacy build name
-        name = "setuptools.build_meta:__legacy__"
-
-    return name
-
-
-@cache
-def import_build_backend(backend_name: str) -> object:
-    """
-    See: https://peps.python.org/pep-0517/#source-trees
-    """
-    parts = backend_name.split(":")
-    if len(parts) == 1:
-        module_name = parts[0]
-        attribute = None
-    elif len(parts) == 2:
-        module_name = parts[0]
-        attribute = parts[1]
-
-        # Check for malformed attribute
-        if not attribute:
-            raise MalformedBackendName(backend_name)
-    else:
-        raise MalformedBackendName(backend_name)
-
-    module = None
-    backend = None
-
-    try:
-        module = importlib.import_module(module_name)
-    except ImportError:
-        # If they could not have meant `<module>.<attribute>`, raise
-        if "." not in module_name:
-            raise MissingBackendModule(module_name)
-
-    if module is None:
-        # Otherwise, we'll try to load it as an attribute of a module
-        parent_name, child_name = module_name.rsplit(".", 1)
-
-        try:
-            module = importlib.import_module(parent_name)
-        except ImportError:
-            raise MissingBackendModule(module_name)
-
-        try:
-            backend = getattr(module, child_name)
-        except AttributeError:
-            raise MissingBackendAttribute(module_name, child_name)
-
-    if attribute is not None:
-        try:
-            backend = getattr(module, attribute)
-        except AttributeError:
-            raise MissingBackendAttribute(module_name, backend_name)
-
-    if backend is None:
-        backend = module
-
-    return backend
-
-
-class Action(enum.StrEnum):
-    run = enum.auto()
-    shutdown = enum.auto()
-
-    @classmethod
-    def from_str(cls: type[Self], action: str) -> Self:
-        try:
-            return Action(action)
-        except ValueError:
-            raise InvalidAction(action) from None
-
-
-def parse_action(buffer: TextIO) -> Action:
-    action = buffer.readline().rstrip("\n")
-    return Action.from_str(action)
-
-
-def parse_hook_name(buffer: TextIO) -> Hook:
-    name = buffer.readline().rstrip("\n")
-    return Hook.from_str(name)
-
-
-def parse_path(buffer: TextIO) -> Path:
-    path = os.path.abspath(buffer.readline().rstrip("\n"))
-    # TODO(zanieb): Consider validating the path here
-    return path
-
-
-def parse_optional_path(buffer: TextIO) -> Path | None:
-    data = buffer.readline().rstrip("\n")
-    if not data:
-        return None
-    # TODO(zanieb): Consider validating the path here
-    return os.path.abspath(data)
-
-
-def parse_config_settings(buffer: TextIO) -> StringDict | None:
-    """
-    See https://peps.python.org/pep-0517/#config-settings
-    """
-    data = buffer.readline().rstrip("\n")
-    if not data:
-        return None
-
-    # We defer the import of `json` until someone actually passes us a `config_settings`
-    # object since it's not necessarily common
-    import json
-
-    try:
-        # TODO(zanieb): Consider using something faster than JSON here since we _should_
-        #               be restricted to strings
-        return json.loads(data)
-    except json.decoder.JSONDecodeError as exc:
-        raise MalformedHookArgument(data, HookArgument.config_settings) from exc
-
-
-@contextmanager
-def redirect_sys_stream(name: Literal["stdout", "stderr"]):
-    """
-    Redirect a system stream to a temporary file.
-
-    Deletion of the temporary file is deferred to the caller.
-
-    WARNING: This function is not safe to concurrent usage.
-    """
-    stream: TextIO = getattr(sys, name)
-
-    # We use an optimized version of `NamedTemporaryFile`
-    fd, name = tmpfile()
-    setattr(sys, name, io.open(fd, "rt"))
-    yield name
-
-    # Restore to the previous stream
-    setattr(sys, name, stream)
-
-
-class HookArgument(enum.StrEnum):
-    wheel_directory = enum.auto()
-    config_settings = enum.auto()
-    metadata_directory = enum.auto()
-    sdist_directory = enum.auto()
-
-
-def parse_hook_argument(hook_arg: HookArgument, buffer: TextIO) -> Any:
-    if hook_arg == HookArgument.wheel_directory:
-        return parse_path(buffer)
-    if hook_arg == HookArgument.metadata_directory:
-        return parse_optional_path(buffer)
-    if hook_arg == HookArgument.sdist_directory:
-        return parse_path(buffer)
-    if hook_arg == HookArgument.config_settings:
-        return parse_config_settings(buffer)
-
-    raise FatalError(f"No parser for hook argument kind {hook_arg.name!r}")
-
-
-HookArguments = {
-    Hook.build_sdist: (
-        HookArgument.sdist_directory,
-        HookArgument.config_settings,
-    ),
-    Hook.build_wheel: (
-        HookArgument.wheel_directory,
-        HookArgument.config_settings,
-        HookArgument.metadata_directory,
-    ),
-    Hook.prepare_metadata_for_build_wheel: (
-        HookArgument.metadata_directory,
-        HookArgument.config_settings,
-    ),
-    Hook.get_requires_for_build_sdist: (HookArgument.config_settings,),
-    Hook.get_requires_for_build_wheel: (HookArgument.config_settings,),
-}
-
-
-def write_safe(file: TextIO, *args: str):
-    args = [str(arg).replace("\n", "\\n") for arg in args]
-    print(*args, file=file)
-
-
-def send_expect(file: TextIO, name: str):
-    write_safe(file, "EXPECT", name)
-
-
-def send_ready(file: TextIO):
-    write_safe(file, "READY")
-
-
-def send_shutdown(file: TextIO):
-    write_safe(file, "SHUTDOWN")
-
-
-def send_error(file: TextIO, exc: HookdError):
-    write_safe(file, "ERROR", type(exc).__name__, str(exc))
-    send_traceback(file, exc)
-
-
-def send_traceback(file: TextIO, exc: BaseException):
-    # Defer import of traceback until an exception occurs
-    import traceback
-
-    tb = traceback.format_exception(exc)
-    write_safe(file, "TRACEBACK", "\n".join(tb))
-
-
-def send_ok(file: TextIO, result: str):
-    write_safe(file, "OK", result)
-
-
-def send_fatal(file: TextIO, exc: BaseException):
-    write_safe(file, "FATAL", type(exc).__name__, str(exc))
-    send_traceback(file, exc)
-
-
-def send_debug(file: TextIO, *args):
-    write_safe(file, "DEBUG", *args)
-
-
-def send_redirect(file: TextIO, name: Literal["stdout", "stderr"], path: str):
-    write_safe(file, name.upper(), path)
-
-
-def run_once(stdin: TextIO, stdout: TextIO):
-    start = time.perf_counter()
-
-    send_expect(stdout, "build-backend")
-    build_backend_name = parse_build_backend(stdin)
-
-    send_expect(stdout, "hook-name")
-    hook_name = parse_hook_name(stdin)
-    if hook_name not in HookArguments:
-        raise FatalError(f"No arguments defined for hook {hook_name!r}")
-
-    # Parse arguments for the given hook
-    def parse(argument: str):
-        send_expect(stdout, argument.name)
-        return parse_hook_argument(argument, stdin)
-
-    args = tuple(parse(argument) for argument in HookArguments[hook_name])
-
-    send_debug(
-        stdout,
-        build_backend_name,
-        hook_name,
-        *(f"{name}={value}" for name, value in zip(HookArguments[hook_name], args)),
-    )
-
-    end = time.perf_counter()
-    send_debug(stdout, f"parsed hook inputs in {(end - start)*1000.0:.2f}ms")
-
-    # All hooks are run with working directory set to the root of the source tree
-    # TODO(zanieb): Where do we get the path of the source tree?
-
-    with ExitStack() as hook_ctx:
-        hook_stdout = hook_ctx.enter_context(redirect_sys_stream("stdout"))
-        hook_stderr = hook_ctx.enter_context(redirect_sys_stream("stderr"))
-        send_redirect(stdout, "stdout", str(hook_stdout))
-        send_redirect(stdout, "stderr", str(hook_stderr))
-
-        try:
-            build_backend = import_build_backend(build_backend_name)
-        except Exception as exc:
-            if not isinstance(exc, HookdError):
-                # Wrap unhandled errors in a generic one
-                raise BackendImportError(exc) from exc
-            raise
-
-        try:
-            hook = getattr(build_backend, hook_name)
-        except AttributeError:
-            raise UnsupportedHook(build_backend, hook_name)
-
-        try:
-            result = hook(*args)
-        except BaseException as exc:
-            # Respect SIGTERM and SIGINT
-            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
-                raise
-
-            raise HookRuntimeError(exc) from exc
-        else:
-            send_ok(stdout, result)
-
-
+##########################
+#### TEMPORARY FILES #####
+##########################
 """
 Optimized version of temporary file creation based on CPython's `NamedTemporaryFile`.
 
@@ -582,45 +639,9 @@ def tmpfile():
     raise FileExistsError(errno.EEXIST, "No usable temporary file name found")
 
 
-def main():
-    # Create copies of standard streams since the `sys.<name>` will be redirected during
-    # hook execution
-    stdout = sys.stdout
-    stdin = sys.stdin
-
-    # TODO: Close `sys.stdin` and create a duplicate file for ourselves so hooks don't read from our stream
-
-    while True:
-        try:
-            start = time.perf_counter()
-
-            if not stdin.readable():
-                raise UnreadableInput()
-
-            send_ready(stdout)
-
-            send_expect(stdout, "action")
-            action = parse_action(stdin)
-            if action == Action.shutdown:
-                send_shutdown(stdout)
-                break
-
-            run_once(stdin, stdout)
-            end = time.perf_counter()
-            send_debug(stdout, f"ran hook in {(end - start)*1000.0:.2f}ms")
-
-        except HookdError as exc:
-            # These errors are "handled" and non-fatal
-            try:
-                send_error(stdout, exc)
-            except Exception as exc:
-                # Failures to report errors are a fatal error
-                send_fatal(stdout, exc)
-                raise exc
-        except BaseException as exc:
-            # All other exceptions result in a crash of the daemon
-            send_fatal(stdout, exc)
-            raise
+#########################
+#### CLI ENTRYPOINT #####
+#########################
 
 
 if __name__ == "__main__":

@@ -24,8 +24,9 @@ SHUTDOWN = (
 )
 STDOUT = ("STDOUT .*", "STDOUT [PATH]")
 STDERR = ("STDERR .*", "STDERR [PATH]")
+CWD = (re.escape(os.getcwd()), "[CWD]")
 TRACEBACK = ("TRACEBACK .*", "TRACEBACK [TRACEBACK]")
-DEFAULT_FILTERS = [TIME, STDOUT, STDERR, TRACEBACK]
+DEFAULT_FILTERS = [TIME, STDOUT, STDERR, TRACEBACK, CWD]
 
 
 def new(extra_backend_paths: list[str] | None = None) -> subprocess.Popen:
@@ -88,12 +89,12 @@ def test_run_invalid_backend():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG backend_does_not_exist build_wheel wheel_directory=. config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG backend_does_not_exist build_wheel wheel_directory=[CWD] config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -118,8 +119,8 @@ def test_run_invalid_hook():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
+        EXPECT build_backend
+        EXPECT hook_name
         ERROR InvalidHookName The name 'hook_does_not_exist' is not valid hook. Expected one of: 'build_wheel', 'build_sdist', 'prepare_metadata_for_build_wheel', 'get_requires_for_build_wheel', 'get_requires_for_build_sdist'
         TRACEBACK [TRACEBACK]
         READY
@@ -144,12 +145,12 @@ def test_run_build_wheel_ok():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG ok_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG ok_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -177,11 +178,11 @@ def test_run_build_sdist_ok():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT sdist-directory
-        EXPECT config-settings
-        DEBUG ok_backend build_sdist sdist_directory=foo config_settings=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT sdist_directory
+        EXPECT config_settings
+        DEBUG ok_backend build_sdist sdist_directory=[CWD]/foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -209,9 +210,9 @@ def test_run_get_requires_for_build_wheel_ok():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT config-settings
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT config_settings
         DEBUG ok_backend get_requires_for_build_wheel config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
@@ -240,11 +241,11 @@ def test_run_prepare_metadata_for_build_wheel_ok():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT metadata-directory
-        EXPECT config-settings
-        DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=foo config_settings=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT metadata_directory
+        EXPECT config_settings
+        DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=[CWD]/foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -262,11 +263,11 @@ def test_run_prepare_metadata_for_build_wheel_ok():
 
 def test_run_invalid_config_settings():
     """
-    Sends invalid JSON for the `config_settings` argument which should result in a non-fatal error.
+    Sends invalid JSON for the `config_settings` argument which should result in a non_fatal error.
     """
     daemon = new()
     send(
-        daemon, ["run", "ok_backend", "get_requires_for_build_wheel", "not-valid-json"]
+        daemon, ["run", "ok_backend", "get_requires_for_build_wheel", "not_valid_json"]
     )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
@@ -274,10 +275,10 @@ def test_run_invalid_config_settings():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT config-settings
-        ERROR MalformedHookArgument Malformed content for argument 'config_settings': 'not-valid-json'
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT config_settings
+        ERROR MalformedHookArgument Malformed content for argument 'config_settings': 'not_valid_json'
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
@@ -302,12 +303,12 @@ def test_run_build_wheel_multiple_times():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG ok_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG ok_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -337,12 +338,12 @@ def test_run_build_wheel_error():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -371,12 +372,12 @@ def test_run_error_not_fatal():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -384,12 +385,12 @@ def test_run_error_not_fatal():
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -427,12 +428,12 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG base_exc_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG base_exc_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -440,12 +441,12 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG base_exc_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG base_exc_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -474,12 +475,12 @@ def test_run_error_in_backend_module(tmp_path: Path):
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG import_err_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG import_err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -508,12 +509,12 @@ def test_run_unsupported_hook_empty(tmp_path: Path):
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG empty_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG empty_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -553,11 +554,11 @@ def test_run_unsupported_hook_partial(tmp_path: Path):
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT sdist-directory
-        EXPECT config-settings
-        DEBUG partial_backend build_sdist sdist_directory=foo config_settings=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT sdist_directory
+        EXPECT config_settings
+        DEBUG partial_backend build_sdist sdist_directory=[CWD]/foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -590,12 +591,12 @@ def test_run_cls_backend(separator):
         f"""
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG cls_backend{separator}Class build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG cls_backend{separator}Class build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -624,12 +625,12 @@ def test_run_obj_backend(separator):
         f"""
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG obj_backend{separator}obj build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG obj_backend{separator}obj build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -657,12 +658,12 @@ def test_run_submodule_backend():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG submodule_backend.submodule build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG submodule_backend.submodule build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -690,12 +691,12 @@ def test_run_submodule_backend_invalid_import():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG submodule_backend:submodule build_wheel wheel_directory=. config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG submodule_backend:submodule build_wheel wheel_directory=[CWD] config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -723,12 +724,12 @@ def test_run_stdout_capture():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG stdout_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG stdout_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -776,12 +777,12 @@ def test_run_stderr_capture():
         """
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG stderr_backend build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG stderr_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -877,12 +878,12 @@ def test_run_real_backend_build_wheel_error(backend: str):
         f"""
         READY
         EXPECT action
-        EXPECT build-backend
-        EXPECT hook-name
-        EXPECT wheel-directory
-        EXPECT config-settings
-        EXPECT metadata-directory
-        DEBUG {backend} build_wheel wheel_directory=foo config_settings=None metadata_directory=None
+        EXPECT build_backend
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG {backend} build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
