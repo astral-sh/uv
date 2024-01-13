@@ -1,3 +1,4 @@
+use dashmap::DashMap;
 use url::Url;
 
 use distribution_types::PackageId;
@@ -17,8 +18,10 @@ pub(crate) struct Index {
     /// A map from package ID to metadata for that distribution.
     pub(crate) distributions: OnceMap<PackageId, Metadata21>,
 
-    /// A map from source URL to precise URL.
-    pub(crate) redirects: OnceMap<Url, Url>,
+    /// A map from source URL to precise URL. For example, the source URL
+    /// `git+https://github.com/pallets/flask.git` could be redirected to
+    /// `git+https://github.com/pallets/flask.git@c2f65dd1cfff0672b902fd5b30815f0b4137214c`.
+    pub(crate) redirects: DashMap<Url, Url>,
 }
 
 impl Index {
@@ -28,6 +31,5 @@ impl Index {
     pub(crate) fn cancel_all(&self) {
         self.packages.cancel_all();
         self.distributions.cancel_all();
-        self.redirects.cancel_all();
     }
 }
