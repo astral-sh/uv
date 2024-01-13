@@ -1,6 +1,7 @@
 use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
+use dashmap::DashMap;
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
@@ -43,7 +44,7 @@ impl ResolutionGraph {
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionMap>,
         distributions: &OnceMap<PackageId, Metadata21>,
-        redirects: &OnceMap<Url, Url>,
+        redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
         editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     ) -> Result<Self, ResolveError> {

@@ -66,6 +66,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     python_requirement: PythonRequirement<'a>,
     selector: CandidateSelector,
     index: Arc<Index>,
+    /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
     incompatibilities: DashMap<PackageId, VersionSpecifiers>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
@@ -703,13 +704,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     if let Some(precise) = precise {
                         match distribution {
                             SourceDist::DirectUrl(sdist) => {
-                                self.index.redirects.done(sdist.url.to_url(), precise);
+                                self.index.redirects.insert(sdist.url.to_url(), precise);
                             }
                             SourceDist::Git(sdist) => {
-                                self.index.redirects.done(sdist.url.to_url(), precise);
+                                self.index.redirects.insert(sdist.url.to_url(), precise);
                             }
                             SourceDist::Path(sdist) => {
-                                self.index.redirects.done(sdist.url.to_url(), precise);
+                                self.index.redirects.insert(sdist.url.to_url(), precise);
                             }
                             SourceDist::Registry(_) => {}
                         }
