@@ -546,19 +546,7 @@ class HookRuntimeError(HookdError):
 ##########################
 #### TEMPORARY FILES #####
 ##########################
-"""
-Optimized version of temporary file creation based on CPython's `NamedTemporaryFile`.
 
-Profiling shows that temporary file creation for stdout and stderr is the most expensive
-part of running a build hook.
-
-Notable differences:
-- Uses UUIDs instead of the CPython random name generator
-- Finds a valid temporary directory at the same time as creating the temporary file
-    - Avoids having to unlink a file created just to test if the directory is valid
-- Only finds the default temporary directory _once_ then caches it
-- Does not manage deletion of the file
-"""
 
 _text_openflags = os.O_RDWR | os.O_CREAT | os.O_EXCL
 if hasattr(os, "O_NOFOLLOW"):
@@ -606,6 +594,20 @@ _max_tmpfile_attempts = 10000
 
 
 def tmpfile():
+    """
+    Optimized version of temporary file creation based on CPython's `NamedTemporaryFile`.
+
+    Profiling shows that temporary file creation for stdout and stderr is the most expensive
+    part of running a build hook.
+
+    Notable differences:
+
+    - Uses UUIDs instead of the CPython random name generator
+    - Finds a valid temporary directory at the same time as creating the temporary file
+        - Avoids having to unlink a file created just to test if the directory is valid
+    - Only finds the default temporary directory _once_ then caches it
+    - Does not manage deletion of the file
+    """
     global _default_tmpdir
 
     # Use the default directory if previously found, otherwise we will
