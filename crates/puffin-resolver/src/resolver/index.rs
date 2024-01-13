@@ -1,7 +1,6 @@
 use url::Url;
 
 use distribution_types::PackageId;
-use pep440_rs::VersionSpecifiers;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
 use pypi_types::Metadata21;
@@ -18,9 +17,6 @@ pub(crate) struct Index {
     /// A map from package ID to metadata for that distribution.
     pub(crate) distributions: OnceMap<PackageId, Metadata21>,
 
-    /// A map from package ID to required Python version.
-    pub(crate) incompatibilities: OnceMap<PackageId, VersionSpecifiers>,
-
     /// A map from source URL to precise URL.
     pub(crate) redirects: OnceMap<Url, Url>,
 }
@@ -32,7 +28,6 @@ impl Index {
     pub(crate) fn cancel_all(&self) {
         self.packages.cancel_all();
         self.distributions.cancel_all();
-        self.incompatibilities.cancel_all();
         self.redirects.cancel_all();
     }
 }
