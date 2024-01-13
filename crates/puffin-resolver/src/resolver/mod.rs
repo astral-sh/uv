@@ -235,7 +235,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let root = PubGrubPackage::Root(self.project.clone());
 
         // Keep track of the packages for which we've requested metadata.
-        let index = Index::default();
         let mut pins = FilePins::default();
         let mut priorities = PubGrubPriorities::default();
 
@@ -315,7 +314,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Retrieve that package dependencies.
                 let package = &next;
                 let dependencies = match self
-                    .get_dependencies(package, &version, &mut priorities, &index, request_sink)
+                    .get_dependencies(package, &version, &mut priorities, request_sink)
                     .await?
                 {
                     Dependencies::Unusable(reason) => {
@@ -360,9 +359,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
     fn visit_package(
+        &self,
         package: &PubGrubPackage,
         priorities: &mut PubGrubPriorities,
-        index: &Index,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
@@ -370,15 +369,19 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Python(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
-                if index.packages.register(package_name) {
+                if self.index.packages.register(package_name) {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
-                if index.redirects.register(url) {
-                    let distribution = Dist::from_url(package_name.clone(), url.clone())?;
+                let distribution = Dist::from_url(package_name.clone(), url.clone())?;
+                if self
+                    .index
+                    .distributions
+                    .register_owned(distribution.package_id())
+                {
                     priorities.add(distribution.name().clone());
                     request_sink.unbounded_send(Request::Dist(distribution))?;
                 }
@@ -553,7 +556,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         package: &PubGrubPackage,
         version: &PubGrubVersion,
         priorities: &mut PubGrubPriorities,
-        index: &Index,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
@@ -580,7 +582,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(package, priorities, index, request_sink)?;
+                    self.visit_package(package, priorities, request_sink)?;
                 }
 
                 for (editable, metadata) in self.editables.values() {
@@ -643,7 +645,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    Self::visit_package(package, priorities, index, request_sink)?;
+                    self.visit_package(package, priorities, request_sink)?;
                 }
 
                 // If a package has a `requires_python` field, add a constraint on the target
