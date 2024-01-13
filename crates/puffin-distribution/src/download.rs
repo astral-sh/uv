@@ -4,22 +4,20 @@ use anyhow::Result;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
-use distribution_types::Dist;
+use distribution_types::{CachedDist, Dist};
 use install_wheel_rs::read_dist_info;
 use pypi_types::Metadata21;
 
 use crate::error::Error;
 
-/// A downloaded wheel that's stored in-memory.
+/// A wheel that's been unzipped while downloading
 #[derive(Debug, Clone)]
-pub struct InMemoryWheel {
+pub struct UnzippedWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
-    /// The contents of the wheel.
-    pub(crate) buffer: Vec<u8>,
-    /// The expected path to the downloaded wheel's entry in the cache.
+    /// The path in the cache dir where the wheel was downloaded.
     pub(crate) target: PathBuf,
 }
 
@@ -52,7 +50,7 @@ pub struct BuiltWheel {
 /// A downloaded or built wheel.
 #[derive(Debug, Clone)]
 pub enum LocalWheel {
-    InMemory(InMemoryWheel),
+    Unzipped(UnzippedWheel),
     Disk(DiskWheel),
     Built(BuiltWheel),
 }
@@ -61,7 +59,7 @@ impl LocalWheel {
     /// Return the path to the downloaded wheel's entry in the cache.
     pub fn target(&self) -> &Path {
         match self {
-            LocalWheel::InMemory(wheel) => &wheel.target,
+            LocalWheel::Unzipped(wheel) => &wheel.target,
             LocalWheel::Disk(wheel) => &wheel.target,
             LocalWheel::Built(wheel) => &wheel.target,
         }
@@ -70,7 +68,7 @@ impl LocalWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         match self {
-            LocalWheel::InMemory(wheel) => wheel.remote(),
+            LocalWheel::Unzipped(wheel) => wheel.remote(),
             LocalWheel::Disk(wheel) => wheel.remote(),
             LocalWheel::Built(wheel) => wheel.remote(),
         }
@@ -79,21 +77,36 @@ impl LocalWheel {
     /// Return the [`WheelFilename`] of this wheel.
     pub fn filename(&self) -> &WheelFilename {
         match self {
-            LocalWheel::InMemory(wheel) => &wheel.filename,
+            LocalWheel::Unzipped(wheel) => &wheel.filename,
             LocalWheel::Disk(wheel) => &wheel.filename,
             LocalWheel::Built(wheel) => &wheel.filename,
         }
     }
+
+    /// Convert a [`LocalWheel`] into a [`CachedDist`].
+    pub fn into_cached_dist(self) -> CachedDist {
+        match self {
+            LocalWheel::Unzipped(wheel) => {
+                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+            }
+            LocalWheel::Disk(wheel) => {
+                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+            }
+            LocalWheel::Built(wheel) => {
+                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+            }
+        }
+    }
 }
 
-impl DiskWheel {
+impl UnzippedWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         &self.dist
     }
 }
 
-impl InMemoryWheel {
+impl DiskWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         &self.dist

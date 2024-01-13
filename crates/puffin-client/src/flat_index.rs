@@ -51,10 +51,12 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
                     }));
                     match version_map.0.entry(version.into()) {
                         Entry::Occupied(mut entry) => {
-                            entry.get_mut().insert_built(dist, None, priority);
+                            entry.get_mut().insert_built(dist, None, None, priority);
                         }
                         Entry::Vacant(entry) => {
-                            entry.insert(PrioritizedDistribution::from_built(dist, None, priority));
+                            entry.insert(PrioritizedDistribution::from_built(
+                                dist, None, None, priority,
+                            ));
                         }
                     }
                 }
@@ -68,10 +70,10 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
                     }));
                     match version_map.0.entry(filename.version.clone().into()) {
                         Entry::Occupied(mut entry) => {
-                            entry.get_mut().insert_source(dist, None);
+                            entry.get_mut().insert_source(dist, None, None);
                         }
                         Entry::Vacant(entry) => {
-                            entry.insert(PrioritizedDistribution::from_source(dist, None));
+                            entry.insert(PrioritizedDistribution::from_source(dist, None, None));
                         }
                     }
                 }

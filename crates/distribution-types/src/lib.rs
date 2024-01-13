@@ -59,9 +59,9 @@ pub use crate::file::*;
 pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
 pub use crate::traits::*;
-pub use prioritized_distribution::*;
 
 mod any;
 mod cached;

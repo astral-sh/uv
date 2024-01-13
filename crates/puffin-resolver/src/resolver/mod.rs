@@ -262,6 +262,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 return ResolutionGraph::from_state(
                     &selection,
                     &pins,
+                    &self.index.packages,
                     &self.index.distributions,
                     &self.index.redirects,
                     &state,
@@ -704,11 +705,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     // dist instead of hashing path/url for the package id.
                     let package_id = if is_registry {
                         // TODO(konstin): It feels wrong to reimplement the registry package id format here
-                        PackageId::new(format!(
-                            "{}-{}",
-                            dist.name().as_dist_info_name(),
-                            dist.version()
-                        ))
+                        PackageId::new(format!("{}-{}", dist.name(), dist.version()))
                     } else {
                         dist.package_id()
                     };
