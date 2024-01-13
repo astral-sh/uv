@@ -13,6 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+tokio-util = { workspace = true, features = ["compat"] }
+async_zip = { workspace = true, features = ["tokio"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 rayon = { workspace = true }

@@ -1,5 +1,6 @@
 use pep440_rs::VersionSpecifiers;
 use platform_tags::TagPriority;
+use pypi_types::Hashes;
 
 use crate::Dist;
 
@@ -19,6 +20,8 @@ pub struct PrioritizedDistribution {
     compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
     incompatible_wheel: Option<DistRequiresPython>,
+    /// The hashes for each distribution.
+    hashes: Vec<Hashes>,
 }
 
 impl PrioritizedDistribution {
@@ -26,29 +29,42 @@ impl PrioritizedDistribution {
     pub fn from_built(
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
+        hash: Option<Hashes>,
         priority: Option<TagPriority>,
     ) -> Self {
-        let dist_requires_python = DistRequiresPython {
-            dist,
-            requires_python,
-        };
         if let Some(priority) = priority {
             Self {
                 source: None,
-                compatible_wheel: Some((dist_requires_python, priority)),
+                compatible_wheel: Some((
+                    DistRequiresPython {
+                        dist,
+
+                        requires_python,
+                    },
+                    priority,
+                )),
                 incompatible_wheel: None,
+                hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
             }
         } else {
             Self {
                 source: None,
                 compatible_wheel: None,
-                incompatible_wheel: Some(dist_requires_python),
+                incompatible_wheel: Some(DistRequiresPython {
+                    dist,
+                    requires_python,
+                }),
+                hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
             }
         }
     }
 
     /// Create a new [`PrioritizedDistribution`] from the given source distribution.
-    pub fn from_source(dist: Dist, requires_python: Option<VersionSpecifiers>) -> Self {
+    pub fn from_source(
+        dist: Dist,
+        requires_python: Option<VersionSpecifiers>,
+        hash: Option<Hashes>,
+    ) -> Self {
         Self {
             source: Some(DistRequiresPython {
                 dist,
@@ -56,6 +72,7 @@ impl PrioritizedDistribution {
             }),
             compatible_wheel: None,
             incompatible_wheel: None,
+            hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
         }
     }
 
@@ -64,6 +81,7 @@ impl PrioritizedDistribution {
         &mut self,
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
+        hash: Option<Hashes>,
         priority: Option<TagPriority>,
     ) {
         // Prefer the highest-priority, platform-compatible wheel.
@@ -93,15 +111,28 @@ impl PrioritizedDistribution {
                 requires_python,
             });
         }
+
+        if let Some(hash) = hash {
+            self.hashes.push(hash);
+        }
     }
 
     /// Insert the given source distribution into the [`PrioritizedDistribution`].
-    pub fn insert_source(&mut self, dist: Dist, requires_python: Option<VersionSpecifiers>) {
+    pub fn insert_source(
+        &mut self,
+        dist: Dist,
+        requires_python: Option<VersionSpecifiers>,
+        hash: Option<Hashes>,
+    ) {
         if self.source.is_none() {
             self.source = Some(DistRequiresPython {
                 dist,
                 requires_python,
             });
+        }
+
+        if let Some(hash) = hash {
+            self.hashes.push(hash);
         }
     }
 
@@ -129,12 +160,19 @@ impl PrioritizedDistribution {
         }
     }
 
+    /// Return the source distribution, if any.
     pub fn source(&self) -> Option<&DistRequiresPython> {
         self.source.as_ref()
     }
 
+    /// Return the compatible wheel distribution, if any.
     pub fn compatible_wheel(&self) -> Option<&(DistRequiresPython, TagPriority)> {
         self.compatible_wheel.as_ref()
+    }
+
+    /// Return the hashes for each distribution.
+    pub fn hashes(&self) -> &[Hashes] {
+        &self.hashes
     }
 }
 

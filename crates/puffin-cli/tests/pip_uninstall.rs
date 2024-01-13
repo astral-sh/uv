@@ -142,7 +142,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `pyproject.toml`
+    error: Failed to parse `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -171,7 +171,7 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `pyproject.toml`
+    error: Failed to parse `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
       |
     1 | [project]
@@ -205,7 +205,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `pyproject.toml`
+    error: Failed to parse `pyproject.toml`
       Caused by: TOML parse error at line 3, column 16
       |
     3 | dependencies = ["flask==1.0.x"]

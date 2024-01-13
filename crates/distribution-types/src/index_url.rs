@@ -53,7 +53,7 @@ impl Deref for IndexUrl {
     }
 }
 
-/// A directory with distributions or a url to an html file with a flat listing of distributions
+/// A directory with distributions or a URL to an HTML file with a flat listing of distributions.
 ///
 /// Also known as `--find-links`.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]

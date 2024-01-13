@@ -1,8 +1,8 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
-use distribution_types::prioritized_distribution::{DistRequiresPython, ResolvableDist};
 use distribution_types::{Dist, DistributionMetadata, Name};
+use distribution_types::{DistRequiresPython, ResolvableDist};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;

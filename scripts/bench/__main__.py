@@ -261,7 +261,9 @@ class Poetry(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line) for line in fp if not line.lstrip().startswith("#")
+                Requirement(line)
+                for line in fp
+                if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
 
         # Create a Poetry project.
@@ -515,12 +517,6 @@ class Puffin(Suite):
 
 def main():
     """Run the benchmark."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     parser = argparse.ArgumentParser(
         description="Benchmark Puffin against other packaging tools."
     )
@@ -601,6 +597,11 @@ def main():
     )
 
     args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARN,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     verbose = args.verbose
     warmup = args.warmup

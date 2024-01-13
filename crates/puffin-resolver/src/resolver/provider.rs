@@ -68,7 +68,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         allowed_yanks: AllowedYanks,
     ) -> Result<Self, puffin_client::Error> {
         let flat_index_dists = client.flat_index()?;
-        let flat_index = FlatIndex::from_flat_index(flat_index_dists, tags);
+        let flat_index = FlatIndex::from_dists(flat_index_dists, tags);
 
         Ok(Self {
             client,

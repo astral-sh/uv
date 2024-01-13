@@ -22,7 +22,9 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::Downloader;
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::ExtraName;
-use puffin_resolver::{Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver};
+use puffin_resolver::{
+    DisplayResolutionGraph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
+};
 use puffin_traits::SetupPyStrategy;
 use requirements_txt::EditableRequirement;
 
@@ -44,6 +46,7 @@ pub(crate) async fn pip_compile(
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     upgrade_mode: UpgradeMode,
+    generate_hashes: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     no_build: bool,
@@ -275,7 +278,11 @@ pub(crate) async fn pip_compile(
         "{}",
         format!("#    puffin {}", env::args().skip(1).join(" ")).green()
     )?;
-    write!(writer, "{resolution}")?;
+    write!(
+        writer,
+        "{}",
+        DisplayResolutionGraph::new(&resolution, generate_hashes)
+    )?;
 
     Ok(ExitStatus::Success)
 }

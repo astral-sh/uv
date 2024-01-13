@@ -59,6 +59,7 @@ pub use crate::file::*;
 pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
 pub use crate::traits::*;
 
@@ -71,7 +72,7 @@ mod file;
 mod id;
 mod index_url;
 mod installed;
-pub mod prioritized_distribution;
+mod prioritized_distribution;
 mod resolution;
 mod traits;
 

@@ -5,13 +5,12 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use distribution_types::prioritized_distribution::{PrioritizedDistribution, ResolvableDist};
-use distribution_types::{Dist, IndexUrl};
+use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
 use platform_tags::Tags;
 use puffin_client::{FlatIndex, SimpleMetadata};
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
-use pypi_types::{BaseUrl, Yanked};
+use pypi_types::{BaseUrl, Hashes, Yanked};
 
 use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
@@ -44,7 +43,7 @@ impl VersionMap {
         for (version, files) in metadata {
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
-                // upload time information
+                // upload time information.
                 if let Some(exclude_newer) = exclude_newer {
                     match file.upload_time.as_ref() {
                         Some(upload_time) if upload_time >= exclude_newer => {
@@ -52,9 +51,8 @@ impl VersionMap {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {}",
+                                "{} is missing an upload date, but user provided: {exclude_newer}",
                                 file.filename,
-                                exclude_newer,
                             );
                             continue;
                         }
@@ -71,7 +69,9 @@ impl VersionMap {
                     }
                 }
 
+                // Prioritize amongst all available files.
                 let requires_python = file.requires_python.clone();
+                let hash = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         // To be compatible, the wheel must both have compatible tags _and_ have a
@@ -80,9 +80,7 @@ impl VersionMap {
                             file.requires_python
                                 .as_ref()
                                 .map_or(true, |requires_python| {
-                                    python_requirement
-                                        .versions()
-                                        .all(|version| requires_python.contains(version))
+                                    requires_python.contains(python_requirement.target())
                                 })
                         });
                         let dist = Dist::from_registry(
@@ -94,14 +92,18 @@ impl VersionMap {
                         );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
-                                entry
-                                    .get_mut()
-                                    .insert_built(dist, requires_python, priority);
+                                entry.get_mut().insert_built(
+                                    dist,
+                                    requires_python,
+                                    Some(hash),
+                                    priority,
+                                );
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(PrioritizedDistribution::from_built(
                                     dist,
                                     requires_python,
+                                    Some(hash),
                                     priority,
                                 ));
                             }
@@ -117,12 +119,15 @@ impl VersionMap {
                         );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
-                                entry.get_mut().insert_source(dist, requires_python);
+                                entry
+                                    .get_mut()
+                                    .insert_source(dist, requires_python, Some(hash));
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(PrioritizedDistribution::from_source(
                                     dist,
                                     requires_python,
+                                    Some(hash),
                                 ));
                             }
                         }
@@ -146,5 +151,13 @@ impl VersionMap {
         self.0
             .iter()
             .filter_map(|(version, dist)| Some((version, dist.get()?)))
+    }
+
+    /// Return the [`Hashes`] for the given version, if any.
+    pub(crate) fn hashes(&self, version: &PubGrubVersion) -> Vec<Hashes> {
+        self.0
+            .get(version)
+            .map(|file| file.hashes().to_vec())
+            .unwrap_or_default()
     }
 }

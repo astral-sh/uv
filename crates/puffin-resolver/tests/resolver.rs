@@ -18,7 +18,8 @@ use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
-    Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
+    DisplayResolutionGraph, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode,
+    ResolutionOptions, Resolver,
 };
 use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
@@ -140,7 +141,7 @@ async fn black() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -170,7 +171,7 @@ async fn black_colorama() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -202,7 +203,7 @@ async fn black_tensorboard() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -230,7 +231,7 @@ async fn black_python_310() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_310, &TAGS_310).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -271,7 +272,7 @@ async fn black_mypy_extensions() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -308,7 +309,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -345,7 +346,7 @@ async fn black_flake8() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -373,7 +374,7 @@ async fn black_lowest() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==22.1.0
     click==8.0.0
         # via black
@@ -401,7 +402,7 @@ async fn black_lowest_direct() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==22.1.0
     click==8.1.7
         # via black
@@ -436,7 +437,7 @@ async fn black_respect_preference() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.0
     click==8.1.7
         # via black
@@ -471,7 +472,7 @@ async fn black_ignore_preference() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     black==23.9.1
     click==8.1.7
         # via black
@@ -543,7 +544,7 @@ async fn pylint_disallow_prerelease() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     astroid==3.0.1
         # via pylint
     isort==5.12.0
@@ -567,7 +568,7 @@ async fn pylint_allow_prerelease() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     astroid==3.0.1
         # via pylint
     isort==6.0.0b2
@@ -594,7 +595,7 @@ async fn pylint_allow_explicit_prerelease_without_marker() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     astroid==3.0.1
         # via pylint
     isort==5.12.0
@@ -621,7 +622,7 @@ async fn pylint_allow_explicit_prerelease_with_marker() -> Result<()> {
 
     let resolution = resolve(manifest, options, &MARKERS_311, &TAGS_311).await?;
 
-    assert_snapshot!(resolution, @r###"
+    assert_snapshot!(DisplayResolutionGraph::from(&resolution), @r###"
     astroid==3.0.1
         # via pylint
     isort==6.0.0b2

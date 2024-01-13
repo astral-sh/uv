@@ -541,38 +541,6 @@ fn install_editable() -> Result<()> {
         "###);
     });
 
-    // Add another, editable dependency.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
-            .arg("-e")
-            .arg("../../scripts/editable-installs/poetry_editable")
-            .arg("black")
-            .arg("-e")
-            .arg("../../scripts/editable-installs/maturin_editable")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .arg("--exclude-newer")
-            .arg(EXCLUDE_NEWER)
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-
-        ----- stderr -----
-        Built 2 editables in [TIME]
-        Resolved 9 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable/)
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
-         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
-        "###);
-    });
-
     Ok(())
 }
 
