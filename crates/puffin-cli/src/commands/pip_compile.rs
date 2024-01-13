@@ -16,6 +16,7 @@ use tracing::debug;
 use distribution_types::{IndexUrls, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
+use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClientBuilder;
 use puffin_dispatch::BuildDispatch;
@@ -128,7 +129,14 @@ pub(crate) async fn pip_compile(
     );
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = interpreter.tags()?;
+    let tags = if let Some(python_version) = python_version.as_ref() {
+        Cow::Owned(Tags::from_env(
+            interpreter.platform(),
+            python_version.simple_version(),
+        )?)
+    } else {
+        Cow::Borrowed(interpreter.tags()?)
+    };
     let markers = python_version.map_or_else(
         || Cow::Borrowed(interpreter.markers()),
         |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
@@ -171,7 +179,7 @@ pub(crate) async fn pip_compile(
             })
             .collect::<Result<_>>()?;
 
-        let downloader = Downloader::new(&cache, tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
         let editable_wheel_dir = tempdir_in(cache.root())?;
@@ -217,7 +225,7 @@ pub(crate) async fn pip_compile(
         options,
         &markers,
         &interpreter,
-        tags,
+        &tags,
         &client,
         &build_dispatch,
     )

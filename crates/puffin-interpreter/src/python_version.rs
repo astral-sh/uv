@@ -84,12 +84,17 @@ impl PythonVersion {
     }
 
     /// Return the major version of this Python version.
-    pub fn major(&self) -> u64 {
-        self.0.release()[0]
+    pub fn major(&self) -> u8 {
+        u8::try_from(self.0.release()[0]).expect("invalid major version")
     }
 
     /// Return the minor version of this Python version.
-    pub fn minor(&self) -> u64 {
-        self.0.release()[1]
+    pub fn minor(&self) -> u8 {
+        u8::try_from(self.0.release()[1]).expect("invalid major version")
+    }
+
+    /// Returns the Python version as a simple tuple.
+    pub fn simple_version(&self) -> (u8, u8) {
+        (self.major(), self.minor())
     }
 }
