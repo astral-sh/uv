@@ -13,7 +13,6 @@ import errno
 import os
 import sys
 import time
-import traceback
 from contextlib import ExitStack, contextmanager
 from functools import cache
 from typing import Any, Literal, Self, TextIO
@@ -389,6 +388,9 @@ def send_error(file: TextIO, exc: HookdError):
 
 
 def send_traceback(file: TextIO, exc: BaseException):
+    # Defer import of traceback until an exception occurs
+    import traceback
+
     tb = traceback.format_exception(exc)
     write_safe(file, "TRACEBACK", "\n".join(tb))
 
@@ -473,15 +475,17 @@ def run_once(stdin: TextIO, stdout: TextIO):
 
 
 """
-Optimized version of temporary file creation.
-Implemenation based on CPython.
+Optimized version of temporary file creation based on CPython's `NamedTemporaryFile`.
 
-This implementation:
+Profiling shows that temporary file creation for stdout and stderr is the most expensive
+part of running a build hook.
 
+Notable differences:
 - Uses UUIDs instead of the CPython random name generator
 - Finds a valid temporary directory at the same time as creating the temporary file
     - Avoids having to unlink a file created just to test if the directory is valid
 - Only finds the default temporary directory _once_ then caches it
+- Does not manage deletion of the file
 """
 
 _text_openflags = os.O_RDWR | os.O_CREAT | os.O_EXCL
