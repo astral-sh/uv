@@ -108,11 +108,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ) -> Result<LocalWheel, DistributionDatabaseError> {
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
-                let url = wheel
-                    .base
-                    .join_relative(&wheel.file.url)
-                    .map_err(|err| DistributionDatabaseError::Url(wheel.file.url.clone(), err))?;
-
                 // Download and unzip on the same tokio task.
                 //
                 // In all wheels we've seen so far, unzipping while downloading is
@@ -128,7 +123,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // for downloading and unzipping (with a buffer in between) and switch
                 // to rayon if this buffer grows large by the time the file is fully
                 // downloaded.
-                let reader = self.client.stream_external(&url).await?;
+                let reader = self.client.stream_external(&wheel.file.url).await?;
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;

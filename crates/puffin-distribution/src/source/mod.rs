@@ -98,13 +98,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
-                let url = registry_source_dist
-                    .base
-                    .join_relative(&registry_source_dist.file.url)
-                    .map_err(|err| {
-                        SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
-                    })?;
-
                 // For registry source distributions, shard by package, then by SHA.
                 // Ex) `pypi/requests/a673187abc19fe6c`
                 let cache_shard = self.build_context.cache().shard(
@@ -117,7 +110,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 self.url(
                     source_dist,
                     &registry_source_dist.file.filename,
-                    &url,
+                    &registry_source_dist.file.url,
                     &cache_shard,
                     None,
                 )
@@ -161,13 +154,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
-                let url = registry_source_dist
-                    .base
-                    .join_relative(&registry_source_dist.file.url)
-                    .map_err(|err| {
-                        SourceDistError::UrlParse(registry_source_dist.file.url.clone(), err)
-                    })?;
-
                 // For registry source distributions, shard by package, then by SHA.
                 // Ex) `pypi/requests/a673187abc19fe6c`
                 let cache_shard = self.build_context.cache().shard(
@@ -180,7 +166,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 self.url_metadata(
                     source_dist,
                     &registry_source_dist.file.filename,
-                    &url,
+                    &registry_source_dist.file.url,
                     &cache_shard,
                     None,
                 )
