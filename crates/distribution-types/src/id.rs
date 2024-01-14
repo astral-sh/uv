@@ -18,6 +18,12 @@ impl DistributionId {
     }
 }
 
+impl DistributionId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// A unique identifier for a resource, like a URL or a Git repository.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ResourceId(String);

@@ -16,8 +16,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    DirectArchiveUrl, DirectGitUrl, Dist, GitSourceDist, LocalEditable, Name, PathSourceDist,
-    RemoteSource, SourceDist,
+    DirectArchiveUrl, DirectGitUrl, Dist, GitSourceDist, Identifier, LocalEditable, Name,
+    PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
@@ -104,7 +104,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
                         .remote_wheel_dir(registry_source_dist.name.as_ref())
-                        .join(&registry_source_dist.file.hashes.sha256[..16]),
+                        .join(&registry_source_dist.file.distribution_id().as_str()[..16]),
                 );
 
                 self.url(
@@ -160,7 +160,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
                         .remote_wheel_dir(registry_source_dist.name.as_ref())
-                        .join(&registry_source_dist.file.hashes.sha256[..16]),
+                        .join(&registry_source_dist.file.distribution_id().as_str()[..16]),
                 );
 
                 self.url_metadata(

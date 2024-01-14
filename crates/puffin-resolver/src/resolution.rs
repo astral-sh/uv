@@ -270,8 +270,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .filter(|hashes| !hashes.is_empty())
                 {
                     for hash in hashes {
-                        writeln!(f, " \\")?;
-                        write!(f, "    --hash={hash}")?;
+                        if let Some(hash) = hash.to_string() {
+                            writeln!(f, " \\")?;
+                            write!(f, "    --hash={hash}")?;
+                        }
                     }
                 }
             }
