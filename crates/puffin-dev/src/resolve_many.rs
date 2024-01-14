@@ -47,7 +47,7 @@ async fn find_latest_version(
     client: RegistryClient,
     package_name: &PackageName,
 ) -> Option<Version> {
-    let (_, _, simple_metadata) = client.simple(package_name).await.ok()?;
+    let (_, simple_metadata) = client.simple(package_name).await.ok()?;
     let (version, _) = simple_metadata.into_iter().next()?;
     Some(version.clone())
 }

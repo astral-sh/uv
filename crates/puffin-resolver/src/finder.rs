@@ -53,7 +53,7 @@ impl<'a> DistFinder<'a> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
-                let (index, base, metadata) = self.client.simple(&requirement.name).await?;
+                let (index, metadata) = self.client.simple(&requirement.name).await?;
 
                 // Pick a version that satisfies the requirement.
                 let Some(ParsedFile {
@@ -64,7 +64,7 @@ impl<'a> DistFinder<'a> {
                 else {
                     return Err(ResolveError::NotFound(requirement.clone()));
                 };
-                let distribution = Dist::from_registry(name, version, file, index, base);
+                let distribution = Dist::from_registry(name, version, file, index);
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&distribution);

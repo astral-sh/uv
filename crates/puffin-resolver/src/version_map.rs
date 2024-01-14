@@ -11,7 +11,7 @@ use platform_tags::{TagPriority, Tags};
 use puffin_client::SimpleMetadata;
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
-use pypi_types::{BaseUrl, Hashes, Yanked};
+use pypi_types::{Hashes, Yanked};
 
 use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
@@ -29,7 +29,6 @@ impl VersionMap {
         metadata: SimpleMetadata,
         package_name: &PackageName,
         index: &IndexUrl,
-        base: &BaseUrl,
         tags: &Tags,
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
@@ -87,7 +86,6 @@ impl VersionMap {
                             filename.version.clone(),
                             file,
                             index.clone(),
-                            base.clone(),
                         );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
@@ -111,7 +109,6 @@ impl VersionMap {
                             filename.version.clone(),
                             file,
                             index.clone(),
-                            base.clone(),
                         );
                         match version_map.entry(version.clone().into()) {
                             Entry::Occupied(mut entry) => {
