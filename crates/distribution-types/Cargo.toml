@@ -24,10 +24,12 @@ requirements-txt = { path = "../requirements-txt" }
 
 anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+data-encoding = { workspace = true }
 fs-err = { workspace = true }
 once_cell = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }

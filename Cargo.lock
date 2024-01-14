@@ -848,6 +848,7 @@ dependencies = [
  "anyhow",
  "cache-key",
  "chrono",
+ "data-encoding",
  "distribution-filename",
  "fs-err",
  "once_cell",
@@ -860,6 +861,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "url",
 ]

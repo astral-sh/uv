@@ -652,11 +652,19 @@ impl Identifier for Url {
 
 impl Identifier for File {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(self.hashes.sha256.clone())
+        if let Some(hash) = &self.hashes.sha256 {
+            DistributionId::new(hash)
+        } else {
+            self.url.distribution_id()
+        }
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::new(self.hashes.sha256.clone())
+        if let Some(hash) = &self.hashes.sha256 {
+            ResourceId::new(hash)
+        } else {
+            self.url.resource_id()
+        }
     }
 }
 
