@@ -171,15 +171,16 @@ impl RegistryClient {
                             let bytes = response.bytes().await?;
                             let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                                 .map_err(|err| Error::from_json_err(err, url.clone()))?;
-                            let metadata = SimpleMetadata::from_files(data.files, package_name);
                             let base = BaseUrl::from(url.clone());
+                            let metadata =
+                                SimpleMetadata::from_files(data.files, package_name, &base);
                             Ok((base, metadata))
                         }
                         MediaType::Html => {
                             let text = response.text().await?;
                             let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                                 .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                            let metadata = SimpleMetadata::from_files(files, package_name);
+                            let metadata = SimpleMetadata::from_files(files, package_name, &base);
                             Ok((base, metadata))
                         }
                     }
@@ -217,7 +218,7 @@ impl RegistryClient {
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => {
-                self.wheel_metadata_registry(&wheel.index, &wheel.base, &wheel.file)
+                self.wheel_metadata_registry(&wheel.index, &wheel.file)
                     .await?
             }
             BuiltDist::DirectUrl(wheel) => {
@@ -248,7 +249,6 @@ impl RegistryClient {
     async fn wheel_metadata_registry(
         &self,
         index: &IndexUrl,
-        base: &BaseUrl,
         file: &File,
     ) -> Result<Metadata21, Error> {
         if self.index_urls.no_index() {
@@ -256,14 +256,13 @@ impl RegistryClient {
         }
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        let url = base.join_relative(&file.url)?;
         let filename = WheelFilename::from_str(&file.filename)?;
         if file
             .dist_info_metadata
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{url}.metadata"))?;
+            let url = Url::parse(&format!("{}.metadata", file.url))?;
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
@@ -287,7 +286,7 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, &url, WheelCache::Index(index))
+            self.wheel_metadata_no_pep658(&filename, &file.url, WheelCache::Index(index))
                 .await
         }
     }
@@ -452,7 +451,11 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName) -> Self {
+    fn from_files(
+        files: Vec<pypi_types::File>,
+        package_name: &PackageName,
+        base: &BaseUrl,
+    ) -> Self {
         let mut metadata = Self::default();
 
         // Group the distributions by version and kind
@@ -465,7 +468,7 @@ impl SimpleMetadata {
                     DistFilename::WheelFilename(ref inner) => &inner.version,
                 };
 
-                let file = match file.try_into() {
+                let file = match File::try_from(file, base) {
                     Ok(file) => file,
                     Err(err) => {
                         // Ignore files with unparseable version specifiers.
@@ -526,9 +529,10 @@ impl MediaType {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use url::Url;
 
     use puffin_normalize::PackageName;
-    use pypi_types::SimpleJson;
+    use pypi_types::{BaseUrl, SimpleJson};
 
     use crate::SimpleMetadata;
 
@@ -568,8 +572,12 @@ mod tests {
         }
         "#;
         let data: SimpleJson = serde_json::from_str(response).unwrap();
-        let simple_metadata =
-            SimpleMetadata::from_files(data.files, &PackageName::from_str("pyflyby").unwrap());
+        let base = BaseUrl::from(Url::from_str("https://pypi.org/simple/pyflyby/").unwrap());
+        let simple_metadata = SimpleMetadata::from_files(
+            data.files,
+            &PackageName::from_str("pyflyby").unwrap(),
+            &base,
+        );
         let versions: Vec<String> = simple_metadata
             .iter()
             .map(|(version, _)| version.to_string())
