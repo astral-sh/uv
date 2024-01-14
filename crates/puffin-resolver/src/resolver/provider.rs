@@ -82,12 +82,11 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     ) -> impl Future<Output = VersionMapResponse> + Send + 'io {
         self.client
             .simple(package_name)
-            .map_ok(move |(index, base, metadata)| {
+            .map_ok(move |(index, metadata)| {
                 VersionMap::from_metadata(
                     metadata,
                     package_name,
                     &index,
-                    &base,
                     self.tags,
                     &self.python_requirement,
                     &self.allowed_yanks,

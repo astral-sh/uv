@@ -47,7 +47,6 @@ use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
-use pypi_types::BaseUrl;
 use requirements_txt::EditableRequirement;
 
 pub use crate::any::*;
@@ -153,7 +152,6 @@ pub struct RegistryBuiltDist {
     pub version: Version,
     pub file: File,
     pub index: IndexUrl,
-    pub base: BaseUrl,
 }
 
 /// A built distribution (wheel) that exists at an arbitrary URL.
@@ -180,7 +178,6 @@ pub struct RegistrySourceDist {
     pub version: Version,
     pub file: File,
     pub index: IndexUrl,
-    pub base: BaseUrl,
 }
 
 /// A source distribution that exists at an arbitrary URL.
@@ -210,13 +207,7 @@ pub struct PathSourceDist {
 
 impl Dist {
     /// Create a [`Dist`] for a registry-based distribution.
-    pub fn from_registry(
-        name: PackageName,
-        version: Version,
-        file: File,
-        index: IndexUrl,
-        base: BaseUrl,
-    ) -> Self {
+    pub fn from_registry(name: PackageName, version: Version, file: File, index: IndexUrl) -> Self {
         if Path::new(&file.filename)
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
@@ -226,7 +217,6 @@ impl Dist {
                 version,
                 file,
                 index,
-                base,
             }))
         } else {
             Self::Source(SourceDist::Registry(RegistrySourceDist {
@@ -234,7 +224,6 @@ impl Dist {
                 version,
                 file,
                 index,
-                base,
             }))
         }
     }

@@ -121,7 +121,7 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, BaseUrl, SimpleMetadata), Error> {
+    ) -> Result<(IndexUrl, SimpleMetadata), Error> {
         if self.index_urls.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
@@ -174,14 +174,14 @@ impl RegistryClient {
                             let base = BaseUrl::from(url.clone());
                             let metadata =
                                 SimpleMetadata::from_files(data.files, package_name, &base);
-                            Ok((base, metadata))
+                            Ok(metadata)
                         }
                         MediaType::Html => {
                             let text = response.text().await?;
                             let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                                 .map_err(|err| Error::from_html_err(err, url.clone()))?;
                             let metadata = SimpleMetadata::from_files(files, package_name, &base);
-                            Ok((base, metadata))
+                            Ok(metadata)
                         }
                     }
                 }
@@ -194,7 +194,7 @@ impl RegistryClient {
 
             // Fetch from the index.
             return match result {
-                Ok((base, metadata)) => Ok((index.clone(), base, metadata)),
+                Ok(metadata) => Ok((index.clone(), metadata)),
                 Err(CachedClientError::Client(Error::RequestError(err))) => {
                     if err.status() == Some(StatusCode::NOT_FOUND) {
                         continue;
