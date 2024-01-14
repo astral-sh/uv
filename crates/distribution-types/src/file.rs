@@ -9,7 +9,7 @@ use pypi_types::{BaseUrl, DistInfoMetadata, Hashes, Yanked};
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
 pub enum FileConversionError {
-    #[error("Invalid requires python version specifier")]
+    #[error("Invalid 'requires-python' value")]
     VersionSpecifiersParseError(#[from] VersionSpecifiersParseError),
     #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
