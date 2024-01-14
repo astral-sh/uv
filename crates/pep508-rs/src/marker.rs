@@ -11,6 +11,7 @@
 
 use crate::{Cursor, Pep508Error, Pep508ErrorSource};
 use pep440_rs::{Version, VersionPattern, VersionSpecifier};
+use puffin_normalize::ExtraName;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, PyAny, PyResult, Python,
@@ -552,7 +553,7 @@ impl MarkerExpression {
     fn evaluate(
         &self,
         env: &MarkerEnvironment,
-        extras: &[&str],
+        extras: &[ExtraName],
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
         match &self.l_value {
@@ -630,7 +631,15 @@ impl MarkerExpression {
                     }
                     MarkerValue::QuotedString(r_value_string) => r_value_string,
                 };
-                self.marker_compare(r_value_string, extras, reporter)
+                match ExtraName::from_str(r_value_string) {
+                    Ok(r_extra) => extras.contains(&r_extra),
+                    Err(err) => {
+                        reporter(MarkerWarningKind::ExtraInvalidComparison, format!(
+                            "Expected extra name, found '{r_value_string}', evaluating to false: {err}"
+                        ), self);
+                        false
+                    }
+                }
             }
             // This is either MarkerEnvVersion, MarkerEnvString or Extra inverted
             MarkerValue::QuotedString(l_string) => {
@@ -652,9 +661,9 @@ impl MarkerExpression {
                         let operator = match self.operator.to_pep440_operator() {
                             None => {
                                 reporter(MarkerWarningKind::Pep440Error, format!(
-                                "Expected PEP 440 version operator to compare '{}' with {}, found '{}', evaluating to false",
-                                l_string, r_key, self.operator
-                            ), self);
+                                    "Expected PEP 440 version operator to compare '{}' with {}, found '{}', evaluating to false",
+                                    l_string, r_key, self.operator
+                                ), self);
                                 return false;
                             }
                             Some(operator) => operator,
@@ -683,7 +692,15 @@ impl MarkerExpression {
                         self.compare_strings(l_string, r_string, reporter)
                     }
                     // `'...' == extra`
-                    MarkerValue::Extra => self.marker_compare(l_string, extras, reporter),
+                    MarkerValue::Extra => match ExtraName::from_str(l_string) {
+                        Ok(l_extra) => self.marker_compare(&l_extra, extras, reporter),
+                        Err(err) => {
+                            reporter(MarkerWarningKind::ExtraInvalidComparison, format!(
+                                    "Expected extra name, found '{l_string}', evaluating to false: {err}"
+                                ), self);
+                            false
+                        }
+                    },
                     // `'...' == '...'`, doesn't make much sense
                     MarkerValue::QuotedString(_) => {
                         // Not even pypa/packaging 22.0 supports this
@@ -730,25 +747,25 @@ impl MarkerExpression {
     /// ```
     fn evaluate_extras_and_python_version(
         &self,
-        extras: &HashSet<String>,
+        extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
         match (&self.l_value, &self.operator, &self.r_value) {
             // `extra == '...'`
             (MarkerValue::Extra, MarkerOperator::Equal, MarkerValue::QuotedString(r_string)) => {
-                extras.contains(r_string)
+                ExtraName::from_str(r_string).is_ok_and(|r_extra| extras.contains(&r_extra))
             }
             // `'...' == extra`
             (MarkerValue::QuotedString(l_string), MarkerOperator::Equal, MarkerValue::Extra) => {
-                extras.contains(l_string)
+                ExtraName::from_str(l_string).is_ok_and(|l_extra| extras.contains(&l_extra))
             }
             // `extra != '...'`
             (MarkerValue::Extra, MarkerOperator::NotEqual, MarkerValue::QuotedString(r_string)) => {
-                !extras.contains(r_string)
+                ExtraName::from_str(r_string).is_ok_and(|r_extra| !extras.contains(&r_extra))
             }
             // `'...' != extra`
             (MarkerValue::QuotedString(l_string), MarkerOperator::NotEqual, MarkerValue::Extra) => {
-                !extras.contains(l_string)
+                ExtraName::from_str(l_string).is_ok_and(|l_extra| !extras.contains(&l_extra))
             }
             (
                 MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
@@ -860,14 +877,13 @@ impl MarkerExpression {
     // The `marker <op> '...'` comparison
     fn marker_compare(
         &self,
-        value: &str,
-        extras: &[&str],
+        value: &ExtraName,
+        extras: &[ExtraName],
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
         match self.operator {
-            // TODO: normalize extras
-            MarkerOperator::Equal => extras.contains(&value),
-            MarkerOperator::NotEqual => !extras.contains(&value),
+            MarkerOperator::Equal => extras.contains(value),
+            MarkerOperator::NotEqual => !extras.contains(value),
             _ => {
                 reporter(MarkerWarningKind::ExtraInvalidComparison, "Comparing extra with something other than equal (`==`) or unequal (`!=`) is wrong, evaluating to false".to_string(), self);
                 false
@@ -926,7 +942,7 @@ impl FromStr for MarkerTree {
 
 impl MarkerTree {
     /// Does this marker apply in the given environment?
-    pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[&str]) -> bool {
+    pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         let mut reporter = |_kind, message, _marker_expression: &MarkerExpression| {
             warn!("{}", message);
         };
@@ -947,7 +963,7 @@ impl MarkerTree {
     pub fn evaluate_reporter(
         &self,
         env: &MarkerEnvironment,
-        extras: &[&str],
+        extras: &[ExtraName],
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
         self.report_deprecated_options(reporter);
@@ -957,7 +973,7 @@ impl MarkerTree {
     fn evaluate_reporter_impl(
         &self,
         env: &MarkerEnvironment,
-        extras: &[&str],
+        extras: &[ExtraName],
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
         match self {
@@ -981,7 +997,7 @@ impl MarkerTree {
     /// and forward all warnings.
     pub fn evaluate_extras_and_python_version(
         &self,
-        extras: &HashSet<String>,
+        extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
         match self {
@@ -1002,7 +1018,7 @@ impl MarkerTree {
     pub fn evaluate_collect_warnings(
         &self,
         env: &MarkerEnvironment,
-        extras: &[&str],
+        extras: &[ExtraName],
     ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
         let mut warnings = Vec::new();
         let mut reporter = |kind, warning, marker: &MarkerExpression| {
@@ -1131,7 +1147,7 @@ fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Er
                     start: cursor.pos(),
                     len: 1,
                     input: cursor.to_string(),
-                })
+                });
             }
             Some((_, whitespace)) if whitespace.is_whitespace() => {}
             Some((pos, other)) => {
@@ -1142,7 +1158,7 @@ fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Er
                     start: pos,
                     len: other.len_utf8(),
                     input: cursor.to_string(),
-                })
+                });
             }
         };
         cursor.eat_whitespace();
@@ -1415,7 +1431,7 @@ mod test {
         )
         .unwrap();
         let marker3 = MarkerTree::from_str(
-                "python_version == \"2.7\" and (sys_platform == \"win32\" or sys_platform == \"linux\")",
+            "python_version == \"2.7\" and (sys_platform == \"win32\" or sys_platform == \"linux\")",
         ).unwrap();
         assert!(marker1.evaluate(&env27, &[]));
         assert!(!marker1.evaluate(&env37, &[]));

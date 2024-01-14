@@ -41,6 +41,8 @@ pub use marker::{
     MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+#[cfg(feature = "pyo3")]
+use puffin_normalize::InvalidNameError;
 use puffin_normalize::{ExtraName, PackageName};
 pub use verbatim_url::VerbatimUrl;
 
@@ -192,6 +194,8 @@ impl Serialize for Requirement {
     }
 }
 
+type MarkerWarning = (MarkerWarningKind, String, String);
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Requirement {
@@ -266,11 +270,18 @@ impl Requirement {
     /// Returns whether the markers apply for the given environment
     #[allow(clippy::needless_pass_by_value)]
     #[pyo3(name = "evaluate_markers")]
-    pub fn py_evaluate_markers(&self, env: &MarkerEnvironment, extras: Vec<String>) -> bool {
-        self.evaluate_markers(
-            env,
-            &extras.iter().map(String::as_str).collect::<Vec<&str>>(),
-        )
+    pub fn py_evaluate_markers(
+        &self,
+        env: &MarkerEnvironment,
+        extras: Vec<String>,
+    ) -> PyResult<bool> {
+        let extras = extras
+            .into_iter()
+            .map(|extra| ExtraName::from_str(&extra))
+            .collect::<Result<Vec<_>, InvalidNameError>>()
+            .map_err(|err| PyPep508Error::new_err(err.to_string()))?;
+
+        Ok(self.evaluate_markers(env, &extras))
     }
 
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
@@ -285,14 +296,19 @@ impl Requirement {
         &self,
         extras: HashSet<String>,
         python_versions: Vec<PyVersion>,
-    ) -> bool {
-        self.evaluate_extras_and_python_version(
-            &extras,
-            &python_versions
-                .into_iter()
-                .map(|py_version| py_version.0)
-                .collect::<Vec<_>>(),
-        )
+    ) -> PyResult<bool> {
+        let extras = extras
+            .into_iter()
+            .map(|extra| ExtraName::from_str(&extra))
+            .collect::<Result<HashSet<_>, InvalidNameError>>()
+            .map_err(|err| PyPep508Error::new_err(err.to_string()))?;
+
+        let python_versions = python_versions
+            .into_iter()
+            .map(|py_version| py_version.0)
+            .collect::<Vec<_>>();
+
+        Ok(self.evaluate_extras_and_python_version(&extras, &python_versions))
     }
 
     /// Returns whether the markers apply for the given environment
@@ -302,8 +318,14 @@ impl Requirement {
         &self,
         env: &MarkerEnvironment,
         extras: Vec<String>,
-    ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
-        self.evaluate_markers_and_report(env, &extras)
+    ) -> PyResult<(bool, Vec<MarkerWarning>)> {
+        let extras = extras
+            .into_iter()
+            .map(|extra| ExtraName::from_str(&extra))
+            .collect::<Result<Vec<_>, InvalidNameError>>()
+            .map_err(|err| PyPep508Error::new_err(err.to_string()))?;
+
+        Ok(self.evaluate_markers_and_report(env, &extras))
     }
 }
 
@@ -326,7 +348,7 @@ impl Requirement {
     }
 
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[&str]) -> bool {
+    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         if let Some(marker) = &self.marker {
             marker.evaluate(env, extras)
         } else {
@@ -342,7 +364,7 @@ impl Requirement {
     /// with an environment and forward all warnings.
     pub fn evaluate_extras_and_python_version(
         &self,
-        extras: &HashSet<String>,
+        extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
         if let Some(marker) = &self.marker {
@@ -356,16 +378,10 @@ impl Requirement {
     pub fn evaluate_markers_and_report(
         &self,
         env: &MarkerEnvironment,
-        extras: &[String],
-    ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
+        extras: &[ExtraName],
+    ) -> (bool, Vec<MarkerWarning>) {
         if let Some(marker) = &self.marker {
-            marker.evaluate_collect_warnings(
-                env,
-                &extras
-                    .iter()
-                    .map(std::string::String::as_str)
-                    .collect::<Vec<&str>>(),
-            )
+            marker.evaluate_collect_warnings(env, extras)
         } else {
             (true, Vec::new())
         }
