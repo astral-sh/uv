@@ -144,12 +144,14 @@ impl Interpreter {
     }
 
     /// Returns the path to the Python virtual environment.
+    #[inline]
     pub fn platform(&self) -> &Platform {
         &self.platform
     }
 
     /// Returns the [`MarkerEnvironment`] for this Python executable.
-    pub fn markers(&self) -> &MarkerEnvironment {
+    #[inline]
+    pub const fn markers(&self) -> &MarkerEnvironment {
         &self.markers
     }
 
@@ -160,16 +162,26 @@ impl Interpreter {
     }
 
     /// Returns the Python version.
-    pub fn version(&self) -> &Version {
+    #[inline]
+    pub const fn version(&self) -> &Version {
         &self.markers.python_full_version.version
+    }
+
+    /// Return the major version of this Python version.
+    pub fn major(&self) -> u8 {
+        let major = self.version().release()[0];
+        u8::try_from(major).expect("invalid major version")
+    }
+
+    /// Return the minor version of this Python version.
+    pub fn minor(&self) -> u8 {
+        let minor = self.version().release()[1];
+        u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Returns the Python version as a simple tuple.
     pub fn simple_version(&self) -> (u8, u8) {
-        (
-            u8::try_from(self.version().release()[0]).expect("invalid major version"),
-            u8::try_from(self.version().release()[1]).expect("invalid minor version"),
-        )
+        (self.major(), self.minor())
     }
 
     pub fn base_exec_prefix(&self) -> &Path {

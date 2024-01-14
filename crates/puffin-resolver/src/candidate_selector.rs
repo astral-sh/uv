@@ -256,9 +256,7 @@ impl<'a> Candidate<'a> {
 
     /// If the candidate doesn't match the given requirement, return the version specifiers.
     pub(crate) fn validate(&self, requirement: &PythonRequirement) -> Option<&VersionSpecifiers> {
-        // Validate against the _installed_ file. It's fine if the _resolved_ file is incompatible,
-        // since it could be an incompatible wheel. (If the resolved file is an incompatible source
-        // distribution, then the resolved and installed file will be the same anyway.)
+        // Validate the _installed_ file.
         let requires_python = self.install().requires_python.as_ref()?;
 
         // If the candidate doesn't support the target Python version, return the failing version
@@ -270,6 +268,19 @@ impl<'a> Candidate<'a> {
         // If the candidate is a source distribution, and doesn't support the installed Python
         // version, return the failing version specifiers, since we won't be able to build it.
         if matches!(self.install().dist, Dist::Source(_)) {
+            if !requires_python.contains(requirement.installed()) {
+                return Some(requires_python);
+            }
+        }
+
+        // Validate the resolved file.
+        let requires_python = self.resolve().requires_python.as_ref()?;
+
+        // If the candidate is a source distribution, and doesn't support the installed Python
+        // version, return the failing version specifiers, since we won't be able to build it.
+        // This isn't strictly necessary, since if `self.resolve()` is a source distribution, it
+        // should be the same file as `self.install()` (validated above).
+        if matches!(self.resolve().dist, Dist::Source(_)) {
             if !requires_python.contains(requirement.installed()) {
                 return Some(requires_python);
             }
