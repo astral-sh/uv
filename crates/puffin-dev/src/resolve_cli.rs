@@ -81,7 +81,8 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         tags,
         &client,
         &build_dispatch,
-    )?;
+    )
+    .await?;
     let resolution_graph = resolver.resolve().await.with_context(|| {
         format!(
             "No solution found when resolving: {}",

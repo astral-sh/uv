@@ -119,7 +119,8 @@ async fn resolve(
         tags,
         &client,
         &build_context,
-    )?;
+    )
+    .await?;
     Ok(resolver.resolve().await?)
 }
 

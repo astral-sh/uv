@@ -77,7 +77,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
     /// Initialize a new resolver using the default backend doing real requests.
     ///
     /// Reads the flat index entries.
-    pub fn new(
+    pub async fn new(
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
@@ -97,7 +97,8 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .iter()
                 .chain(manifest.constraints.iter())
                 .collect(),
-        )?;
+        )
+        .await?;
         Ok(Self::new_custom_io(
             manifest,
             options,

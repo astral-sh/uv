@@ -23,9 +23,10 @@ use distribution_types::{
 };
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
-use pypi_types::{BaseUrl, Metadata21, SimpleJson};
+use pypi_types::{BaseUrl, Hashes, Metadata21, SimpleJson};
 
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -117,25 +118,93 @@ impl RegistryClient {
 
     /// Read the directories and flat remote indexes from `--find-links`.
     #[allow(clippy::result_large_err)]
-    pub fn flat_index(&self) -> Result<Vec<(DistFilename, PathBuf)>, Error> {
+    pub async fn flat_index(&self) -> Result<Vec<(DistFilename, File, IndexUrl)>, Error> {
         let mut dists = Vec::new();
+        // TODO(konstin): Parallelize reads over flat indexes.
         for flat_index in self.index_locations.flat_indexes() {
-            match flat_index {
+            let index_dists = match flat_index {
                 FlatIndexLocation::Path(path) => {
-                    dists.extend(Self::read_flat_index_dir(path).map_err(Error::FindLinks)?);
+                    Self::read_flat_index_dir(path).map_err(Error::FindLinks)?
                 }
-                FlatIndexLocation::Url(_) => {
-                    warn!("TODO(konstin): No yet implemented: Find links urls");
-                }
+                FlatIndexLocation::Url(url) => self.read_flat_url(url).await?,
+            };
+            if index_dists.is_empty() {
+                warn!("No packages found in `--find-links` entry: {}", flat_index);
+            } else {
+                debug!(
+                    "Found {} package{} in `--find-links` entry: {}",
+                    index_dists.len(),
+                    if index_dists.len() == 1 { "" } else { "s" },
+                    flat_index
+                );
             }
+            dists.extend(index_dists);
         }
         Ok(dists)
     }
 
-    /// Read a list of [`DistFilename`] entries from a `--find-links` directory..
-    fn read_flat_index_dir(path: &PathBuf) -> Result<Vec<(DistFilename, PathBuf)>, io::Error> {
+    /// Read a flat remote index from a `--find-links` URL.
+    async fn read_flat_url(&self, url: &Url) -> Result<Vec<(DistFilename, File, IndexUrl)>, Error> {
+        let cache_entry = self.cache.entry(
+            CacheBucket::FlatIndex,
+            "html",
+            format!("{}.msgpack", cache_key::digest(&url.to_string())),
+        );
+
+        let flat_index_request = self
+            .client
+            .uncached()
+            .get(url.clone())
+            .header("Accept-Encoding", "gzip")
+            .header("Accept", "text/html")
+            .build()?;
+        let parse_simple_response = |response: Response| {
+            async {
+                let text = response.text().await?;
+                let SimpleHtml { base, files } = SimpleHtml::parse(&text, url)
+                    .map_err(|err| Error::from_html_err(err, url.clone()))?;
+
+                let files: Vec<File> = files
+                    .into_iter()
+                    .filter_map(|file| {
+                        match File::try_from(file, &base) {
+                            Ok(file) => Some(file),
+                            Err(err) => {
+                                // Ignore files with unparseable version specifiers.
+                                warn!("Skipping file in {url}: {err}");
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+                Ok(files)
+            }
+            .instrument(info_span!("parse_flat_index_html", url = % url))
+        };
+        let files = self
+            .client
+            .get_cached_with_callback(flat_index_request, &cache_entry, parse_simple_response)
+            .await?;
+        Ok(files
+            .into_iter()
+            .filter_map(|file| {
+                Some((
+                    DistFilename::try_from_normalized_filename(&file.filename)?,
+                    file,
+                    IndexUrl::Url(url.clone()),
+                ))
+            })
+            .collect())
+    }
+
+    /// Read a flat remote index from a `--find-links` directory.
+    fn read_flat_index_dir(
+        path: &PathBuf,
+    ) -> Result<Vec<(DistFilename, File, IndexUrl)>, io::Error> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
+        let url = Url::from_directory_path(&path).expect("URL is already absolute");
+        let url = VerbatimUrl::unknown(url);
 
         let mut dists = Vec::new();
         for entry in fs_err::read_dir(&path)? {
@@ -152,6 +221,18 @@ impl RegistryClient {
                 );
                 continue;
             };
+
+            let file = File {
+                dist_info_metadata: None,
+                filename: filename.to_string(),
+                hashes: Hashes { sha256: None },
+                requires_python: None,
+                size: None,
+                upload_time: None,
+                url: FileLocation::Path(entry.path().to_path_buf(), url.clone()),
+                yanked: None,
+            };
+
             let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!(
                     "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
@@ -159,20 +240,7 @@ impl RegistryClient {
                 );
                 continue;
             };
-            let path = entry.path().to_path_buf();
-            dists.push((filename, path));
-        }
-        if dists.is_empty() {
-            warn!(
-                "No packages found in `--find-links` directory: {}",
-                path.display()
-            );
-        } else {
-            debug!(
-                "Found {} packages in `--find-links` directory: {}",
-                dists.len(),
-                path.display()
-            );
+            dists.push((filename, file, IndexUrl::Pypi));
         }
         Ok(dists)
     }
@@ -610,6 +678,7 @@ impl MediaType {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
     use url::Url;
 
     use puffin_normalize::PackageName;

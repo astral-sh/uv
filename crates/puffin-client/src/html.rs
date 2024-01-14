@@ -424,4 +424,68 @@ mod tests {
         let result = SimpleHtml::parse(text, &base).unwrap_err();
         insta::assert_display_snapshot!(result, @"Unsupported hash algorithm (expected `sha256`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
     }
+
+    #[test]
+    fn parse_flat_index_html() {
+        let text = r#"
+            <!DOCTYPE html>
+            <html>
+            <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head>
+            <body>
+                <a href="https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl">cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl</a><br>
+                <a href="https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl">cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl</a><br>
+            </body>
+            </hmtl>
+        "#;
+        let base = Url::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
+            .unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "storage.googleapis.com",
+                        ),
+                    ),
+                    port: None,
+                    path: "/jax-releases/jax_cuda_releases.html",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    dist_info_metadata: None,
+                    filename: "jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
+                    hashes: Hashes {
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
+                    hashes: Hashes {
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "###);
+    }
 }

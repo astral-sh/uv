@@ -156,3 +156,9 @@ impl VersionMap {
             .unwrap_or_default()
     }
 }
+
+impl From<FlatIndex<PubGrubVersion>> for VersionMap {
+    fn from(flat_index: FlatIndex<PubGrubVersion>) -> Self {
+        Self(flat_index.0)
+    }
+}
