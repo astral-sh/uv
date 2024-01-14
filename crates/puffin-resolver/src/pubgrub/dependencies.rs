@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use itertools::Itertools;
 use pubgrub::range::Range;
 use pubgrub::type_aliases::DependencyConstraints;
