@@ -46,7 +46,7 @@ import packaging.requirements
 from pathlib import Path
 
 
-PACKSE_COMMIT = "8826f9740703779911d0fcd6eba8d56af0eb3adb"
+PACKSE_COMMIT = "a9d2f659117693b89cba8a487200fd01444468af"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATE = TOOL_ROOT / "template.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
@@ -136,6 +136,7 @@ data = json.loads(
         [
             "packse",
             "inspect",
+            "--short-names",
             scenarios_path,
         ],
     )
