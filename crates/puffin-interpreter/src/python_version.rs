@@ -90,7 +90,7 @@ impl PythonVersion {
 
     /// Return the minor version of this Python version.
     pub fn minor(&self) -> u8 {
-        u8::try_from(self.0.release()[1]).expect("invalid major version")
+        u8::try_from(self.0.release()[1]).expect("invalid minor version")
     }
 
     /// Returns the Python version as a simple tuple.

@@ -176,7 +176,7 @@ impl Interpreter {
     /// Return the minor version of this Python version.
     pub fn minor(&self) -> u8 {
         let minor = self.version().release()[1];
-        u8::try_from(minor).expect("invalid major version")
+        u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Returns the Python version as a simple tuple.

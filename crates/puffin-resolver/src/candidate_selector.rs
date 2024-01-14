@@ -278,6 +278,8 @@ impl<'a> Candidate<'a> {
 
         // If the candidate is a source distribution, and doesn't support the installed Python
         // version, return the failing version specifiers, since we won't be able to build it.
+        // This isn't strictly necessary, since if `self.resolve()` is a source distribution, it
+        // should be the same file as `self.install()` (validated above).
         if matches!(self.resolve().dist, Dist::Source(_)) {
             if !requires_python.contains(requirement.installed()) {
                 return Some(requires_python);
