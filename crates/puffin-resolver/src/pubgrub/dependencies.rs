@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use itertools::Itertools;
 use pubgrub::range::Range;
 use pubgrub::type_aliases::DependencyConstraints;
@@ -37,7 +39,7 @@ impl PubGrubDependencies {
 
             // If the requirement isn't relevant for the current platform, skip it.
             if let Some(extra) = extra {
-                if !requirement.evaluate_markers(env, &[extra.as_ref()]) {
+                if !requirement.evaluate_markers(env, std::slice::from_ref(extra)) {
                     continue;
                 }
             } else {
@@ -89,7 +91,7 @@ impl PubGrubDependencies {
 
             // If the requirement isn't relevant for the current platform, skip it.
             if let Some(extra) = extra {
-                if !constraint.evaluate_markers(env, &[extra.as_ref()]) {
+                if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
                     continue;
                 }
             } else {

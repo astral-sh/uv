@@ -326,7 +326,7 @@ impl Requirement {
     }
 
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[&str]) -> bool {
+    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         if let Some(marker) = &self.marker {
             marker.evaluate(env, extras)
         } else {
@@ -342,7 +342,7 @@ impl Requirement {
     /// with an environment and forward all warnings.
     pub fn evaluate_extras_and_python_version(
         &self,
-        extras: &HashSet<String>,
+        extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
         if let Some(marker) = &self.marker {
@@ -356,16 +356,10 @@ impl Requirement {
     pub fn evaluate_markers_and_report(
         &self,
         env: &MarkerEnvironment,
-        extras: &[String],
+        extras: &[ExtraName],
     ) -> (bool, Vec<(MarkerWarningKind, String, String)>) {
         if let Some(marker) = &self.marker {
-            marker.evaluate_collect_warnings(
-                env,
-                &extras
-                    .iter()
-                    .map(std::string::String::as_str)
-                    .collect::<Vec<&str>>(),
-            )
+            marker.evaluate_collect_warnings(env, extras)
         } else {
             (true, Vec::new())
         }
