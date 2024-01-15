@@ -117,7 +117,7 @@ def test_run_invalid_backend():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG backend_does_not_exist build_wheel wheel_directory=[TREE] config_settings=None metadata_directory=None
+        DEBUG backend_does_not_exist.build_wheel(wheel_directory='[TREE]', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -177,7 +177,7 @@ def test_run_build_wheel_ok():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG ok_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG ok_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -211,7 +211,7 @@ def test_run_build_sdist_ok():
         EXPECT hook-name
         EXPECT sdist_directory
         EXPECT config_settings
-        DEBUG ok_backend build_sdist sdist_directory=[TREE]/foo config_settings=None
+        DEBUG ok_backend.build_sdist(sdist_directory='[TREE]/foo', config_settings=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -244,7 +244,7 @@ def test_run_get_requires_for_build_wheel_ok():
         EXPECT backend-path
         EXPECT hook-name
         EXPECT config_settings
-        DEBUG ok_backend get_requires_for_build_wheel config_settings=None
+        DEBUG ok_backend.get_requires_for_build_wheel(config_settings=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -280,7 +280,7 @@ def test_run_prepare_metadata_for_build_wheel_ok():
         EXPECT hook-name
         EXPECT metadata_directory
         EXPECT config_settings
-        DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=[TREE]/foo config_settings=None
+        DEBUG ok_backend.prepare_metadata_for_build_wheel(metadata_directory='[TREE]/foo', config_settings=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -350,7 +350,7 @@ def test_run_build_wheel_multiple_times():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG ok_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG ok_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -387,7 +387,7 @@ def test_run_build_wheel_error():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG err_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -423,7 +423,7 @@ def test_run_error_not_fatal():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG err_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -437,7 +437,7 @@ def test_run_error_not_fatal():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG err_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -482,7 +482,7 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG base_exc_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG base_exc_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -496,7 +496,7 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG base_exc_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG base_exc_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -532,7 +532,7 @@ def test_run_error_in_backend_module(tmp_path: Path):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG import_err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG import_err_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -568,7 +568,7 @@ def test_run_unsupported_hook_empty(tmp_path: Path):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG empty_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG empty_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -614,7 +614,7 @@ def test_run_unsupported_hook_partial(tmp_path: Path):
         EXPECT hook-name
         EXPECT sdist_directory
         EXPECT config_settings
-        DEBUG partial_backend build_sdist sdist_directory=[TREE]/foo config_settings=None
+        DEBUG partial_backend.build_sdist(sdist_directory='[TREE]/foo', config_settings=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -657,7 +657,7 @@ def test_run_cls_backend(separator):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG cls_backend{separator}Class build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG cls_backend{separator}Class.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -695,7 +695,7 @@ def test_run_obj_backend(separator):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG obj_backend{separator}obj build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG obj_backend{separator}obj.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -743,7 +743,7 @@ def test_run_in_tree_backend():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG in_tree build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG in_tree.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -780,7 +780,7 @@ def test_run_submodule_backend():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG submodule_backend.submodule build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG submodule_backend.submodule.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -826,7 +826,7 @@ def test_run_submodule_backend_invalid_import():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG submodule_backend:submodule build_wheel wheel_directory=[TREE] config_settings=None metadata_directory=None
+        DEBUG submodule_backend:submodule.build_wheel(wheel_directory='[TREE]', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -861,7 +861,7 @@ def test_run_stdout_capture():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG stdout_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG stdout_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -916,7 +916,7 @@ def test_run_stderr_capture():
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG stderr_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG stderr_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -1019,7 +1019,7 @@ def test_run_real_backend_build_wheel_error(backend: str):
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG {backend} build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG {backend}.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]

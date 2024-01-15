@@ -93,11 +93,13 @@ def run_once(stdin: TextIO, stdout: TextIO):
 
     send_debug(
         stdout,
-        build_backend_name,
-        hook_name.value,
-        *(
-            f"{name.value}={value}"
-            for name, value in zip(HookArguments[hook_name], args)
+        "{}.{}({})".format(
+            build_backend_name,
+            hook_name.value,
+            ", ".join(
+                f"{name.value}={value!r}"
+                for name, value in zip(HookArguments[hook_name], args)
+            ),
         ),
     )
 
