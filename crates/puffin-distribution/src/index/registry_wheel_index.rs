@@ -19,7 +19,7 @@ pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
-    index: FxHashMap<PackageName, BTreeMap<Version, CachedRegistryDist>>,
+    index: FxHashMap<&'a PackageName, BTreeMap<Version, CachedRegistryDist>>,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
@@ -38,7 +38,7 @@ impl<'a> RegistryWheelIndex<'a> {
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(
         &mut self,
-        name: &PackageName,
+        name: &'a PackageName,
     ) -> impl Iterator<Item = (&Version, &CachedRegistryDist)> {
         self.get_impl(name).iter().rev()
     }
@@ -48,15 +48,15 @@ impl<'a> RegistryWheelIndex<'a> {
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get_version(
         &mut self,
-        name: &PackageName,
+        name: &'a PackageName,
         version: &Version,
     ) -> Option<&CachedRegistryDist> {
         self.get_impl(name).get(version)
     }
 
     /// Get an entry in the index.
-    fn get_impl(&mut self, name: &PackageName) -> &BTreeMap<Version, CachedRegistryDist> {
-        let versions = match self.index.entry(name.clone()) {
+    fn get_impl(&mut self, name: &'a PackageName) -> &BTreeMap<Version, CachedRegistryDist> {
+        let versions = match self.index.entry(name) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(Self::index(
                 name,
