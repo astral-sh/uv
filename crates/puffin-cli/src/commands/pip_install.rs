@@ -31,8 +31,8 @@ use puffin_resolver::{
 use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
 
-use crate::commands::{ChangeEvent, ChangeEventKind, elapsed, ExitStatus};
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -477,8 +477,6 @@ async fn install(
         tags,
     )
     .context("Failed to determine installation plan")?;
-
-    println!("local: {:?}", local);
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {

@@ -8,6 +8,7 @@ use anyhow::Result;
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
@@ -688,18 +689,22 @@ fn install_editable_and_registry() -> Result<()> {
     Ok(())
 }
 
-/// Install a source distribution that uses the `setuptools` build system, along with `setuptools`
+/// Install a source distribution that uses the `flit` build system, along with `flit`
 /// at the top-level, along with `--reinstall` to force a re-download after resolution, to ensure
-/// that the `setuptools` install and the source distribution build don't conflict.
+/// that the `flit` install and the source distribution build don't conflict.
 #[test]
-fn install_setuptools() -> Result<()> {
+fn reinstall_build_system() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // Install devpi.
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str("setuptools\ndevpi @ https://files.pythonhosted.org/packages/e4/f3/e334eb4dc930ccb677363e1305a3730003d203efbb023329e4b610e4515b/devpi-2.2.0.tar.gz")?;
+    requirements_txt.write_str(indoc! {r"
+        flit_core<4.0.0
+        flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz
+        "
+    })?;
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -722,12 +727,13 @@ fn install_setuptools() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
+        Resolved 8 packages in [TIME]
+        Downloaded 8 packages in [TIME]
+        Installed 8 packages in [TIME]
          + blinker==1.7.0
          + click==8.1.7
-         + flask==3.0.0
+         + flask==3.0.0 (from https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz)
+         + flit-core==3.9.0
          + itsdangerous==2.1.2
          + jinja2==3.1.2
          + markupsafe==2.1.3
