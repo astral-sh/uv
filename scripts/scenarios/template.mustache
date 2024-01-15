@@ -55,19 +55,19 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 /// {{.}}
 {{/description_lines}}
 ///
-/// {{prefix}}
+/// {{version}}
 {{#tree}}
 /// {{.}}
 {{/tree}}
 #[test]
-fn {{normalized_name}}() -> Result<()> {
+fn {{module_name}}() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python{{environment.python}}");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"{{prefix}}-", ""));
+    filters.push((r"-{{version}}", ""));
 
     insta::with_settings!({
         filters => filters
@@ -76,7 +76,7 @@ fn {{normalized_name}}() -> Result<()> {
             .arg("pip")
             .arg("install")
             {{#root.requires}}
-            .arg("{{prefix}}-{{.}}")
+            .arg("{{requirement}}")
             {{/root.requires}}
             {{#environment.prereleases}}
             .arg("--prerelease=allow")
@@ -95,19 +95,19 @@ fn {{normalized_name}}() -> Result<()> {
     // {{.}}
     {{/expected.explanation_lines}}
     {{#expected.satisfiable}}
-    {{#expected.packages_list}}
+    {{#expected.packages}}
     assert_installed(
         &venv,
-        "{{prefix_module}}_{{package_module}}",
+        "{{module_name}}",
         "{{version}}",
         &temp_dir
     );
-    {{/expected.packages_list}}
+    {{/expected.packages}}
     {{/expected.satisfiable}}
     {{^expected.satisfiable}}
-    {{#root.requires_packages}}
-    assert_not_installed(&venv, "{{prefix_module}}_{{package_module}}", &temp_dir);
-    {{/root.requires_packages}}
+    {{#root.requires}}
+    assert_not_installed(&venv, "{{module_name}}", &temp_dir);
+    {{/root.requires}}
     {{/expected.satisfiable}}
 
     Ok(())

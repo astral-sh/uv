@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/a9d2f659117693b89cba8a487200fd01444468af/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/04c9bfdbbbd5b4dd8e9c5b10b868e4f14a89ab61/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -44,7 +44,7 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 ///
 /// The user requires any version of package `a` which does not exist.
 ///
-/// s57cd4136
+/// 57cd4136
 /// ├── environment
 /// │   └── python3.7
 /// └── root
@@ -56,9 +56,9 @@ fn requires_package_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s57cd4136-", ""));
+    filters.push((r"-57cd4136", ""));
 
     insta::with_settings!({
         filters => filters
@@ -66,7 +66,7 @@ fn requires_package_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s57cd4136-a")
+            .arg("a-57cd4136")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -83,7 +83,7 @@ fn requires_package_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "s57cd4136_a", &temp_dir);
+    assert_not_installed(&venv, "a_57cd4136", &temp_dir);
 
     Ok(())
 }
@@ -92,7 +92,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 ///
 /// The user requires an exact version of package `a` but only other versions exist
 ///
-/// seaa03067
+/// eaa03067
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -106,9 +106,9 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"seaa03067-", ""));
+    filters.push((r"-eaa03067", ""));
 
     insta::with_settings!({
         filters => filters
@@ -116,7 +116,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("seaa03067-a==2.0.0")
+            .arg("a-eaa03067==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -134,7 +134,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "seaa03067_a", &temp_dir);
+    assert_not_installed(&venv, "a_eaa03067", &temp_dir);
 
     Ok(())
 }
@@ -144,7 +144,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 /// The user requires a version of `a` greater than `1.0.0` but only smaller or
 /// equal versions exist
 ///
-/// s6e8e01df
+/// 6e8e01df
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -159,9 +159,9 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s6e8e01df-", ""));
+    filters.push((r"-6e8e01df", ""));
 
     insta::with_settings!({
         filters => filters
@@ -169,7 +169,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s6e8e01df-a>1.0.0")
+            .arg("a-6e8e01df>1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -187,7 +187,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "s6e8e01df_a", &temp_dir);
+    assert_not_installed(&venv, "a_6e8e01df", &temp_dir);
 
     Ok(())
 }
@@ -197,7 +197,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 /// The user requires a version of `a` less than `1.0.0` but only larger versions
 /// exist
 ///
-/// se45cec3c
+/// e45cec3c
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -213,9 +213,9 @@ fn requires_less_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"se45cec3c-", ""));
+    filters.push((r"-e45cec3c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -223,7 +223,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("se45cec3c-a<2.0.0")
+            .arg("a-e45cec3c<2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -241,7 +241,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "se45cec3c_a", &temp_dir);
+    assert_not_installed(&venv, "a_e45cec3c", &temp_dir);
 
     Ok(())
 }
@@ -250,7 +250,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 ///
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
-/// saca2796a
+/// aca2796a
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -266,9 +266,9 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"saca2796a-", ""));
+    filters.push((r"-aca2796a", ""));
 
     insta::with_settings!({
         filters => filters
@@ -276,7 +276,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("saca2796a-a")
+            .arg("a-aca2796a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -293,7 +293,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "saca2796a_a", &temp_dir);
+    assert_not_installed(&venv, "a_aca2796a", &temp_dir);
 
     Ok(())
 }
@@ -303,7 +303,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// Only one version of the requested package is available, but the user has banned
 /// that version.
 ///
-/// s7a9ed79c
+/// 7a9ed79c
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -317,9 +317,9 @@ fn excluded_only_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s7a9ed79c-", ""));
+    filters.push((r"-7a9ed79c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -327,7 +327,7 @@ fn excluded_only_version() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s7a9ed79c-a!=1.0.0")
+            .arg("a-7a9ed79c!=1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -352,7 +352,7 @@ fn excluded_only_version() -> Result<()> {
     });
 
     // Only `a==1.0.0` is available but the user excluded it.
-    assert_not_installed(&venv, "s7a9ed79c_a", &temp_dir);
+    assert_not_installed(&venv, "a_7a9ed79c", &temp_dir);
 
     Ok(())
 }
@@ -362,14 +362,14 @@ fn excluded_only_version() -> Result<()> {
 /// Only one version of the requested package `a` is compatible, but the user has
 /// banned that version.
 ///
-/// sd28c9e3c
+/// b6b89642
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
 /// │   ├── requires a!=2.0.0
 /// │   │   ├── satisfied by a-1.0.0
 /// │   │   └── satisfied by a-3.0.0
-/// │   └── requires b>=2.0.0,<3.0.0
+/// │   └── requires b<3.0.0,>=2.0.0
 /// │       └── satisfied by b-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
@@ -391,9 +391,9 @@ fn excluded_only_compatible_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sd28c9e3c-", ""));
+    filters.push((r"-b6b89642", ""));
 
     insta::with_settings!({
         filters => filters
@@ -401,8 +401,8 @@ fn excluded_only_compatible_version() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sd28c9e3c-a!=2.0.0")
-            .arg("sd28c9e3c-b>=2.0.0,<3.0.0")
+            .arg("a-b6b89642!=2.0.0")
+            .arg("b-b6b89642<3.0.0,>=2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -429,18 +429,18 @@ fn excluded_only_compatible_version() -> Result<()> {
                   b<=1.0.0
                   b>=3.0.0
 
-              And because root depends on b>=2.0.0,<3.0.0 and root depends on one of:
+              And because root depends on one of:
                   a<2.0.0
                   a>2.0.0
-              we can conclude that the requirements are unsatisfiable.
+              and root depends on b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
     // incompatible versions of `b`. The user has excluded that version of `a` so
     // resolution fails.
-    assert_not_installed(&venv, "sd28c9e3c_a", &temp_dir);
-    assert_not_installed(&venv, "sd28c9e3c_b", &temp_dir);
+    assert_not_installed(&venv, "a_b6b89642", &temp_dir);
+    assert_not_installed(&venv, "b_b6b89642", &temp_dir);
 
     Ok(())
 }
@@ -450,7 +450,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 /// There is a range of compatible versions for the requested package `a`, but
 /// another dependency `c` excludes that range.
 ///
-/// s2023222f
+/// 1cd99bd0
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -461,7 +461,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 /// │   │   ├── satisfied by a-2.2.0
 /// │   │   ├── satisfied by a-2.3.0
 /// │   │   └── satisfied by a-3.0.0
-/// │   ├── requires b>=2.0.0,<3.0.0
+/// │   ├── requires b<3.0.0,>=2.0.0
 /// │   │   └── satisfied by b-2.0.0
 /// │   └── requires c
 /// │       ├── satisfied by c-1.0.0
@@ -502,9 +502,9 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s2023222f-", ""));
+    filters.push((r"-1cd99bd0", ""));
 
     insta::with_settings!({
         filters => filters
@@ -512,9 +512,9 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s2023222f-a")
-            .arg("s2023222f-b>=2.0.0,<3.0.0")
-            .arg("s2023222f-c")
+            .arg("a-1cd99bd0")
+            .arg("b-1cd99bd0<3.0.0,>=2.0.0")
+            .arg("c-1cd99bd0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -528,18 +528,11 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because a==1.0.0 depends on b==1.0.0 and there are no versions of a that satisfy any of:
+          ╰─▶ Because there are no versions of a that satisfy any of:
                   a<1.0.0
                   a>1.0.0,<2.0.0
                   a>3.0.0
-              we can conclude that a<2.0.0 depends on b==1.0.0.
-              And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
-                  a<2.0.0
-                  a>=3.0.0
-              depends on one of:
-                  b<=1.0.0
-                  b>=3.0.0
-               (1)
+              and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
 
               Because there are no versions of c that satisfy any of:
                   c<1.0.0
@@ -550,13 +543,8 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                   a<2.0.0
                   a>=3.0.0
 
-              And because we know from (1) that any of:
-                  a<2.0.0
-                  a>=3.0.0
-              depends on one of:
-                  b<=1.0.0
-                  b>=3.0.0
-              we can conclude that all versions of c depends on one of:
+              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, b!=1.0.0, all versions of c are incompatible.
+              And because a==3.0.0 depends on b==3.0.0 we can conclude that all versions of c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
 
@@ -567,9 +555,9 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
     // require incompatible versions of `b`, but all available versions of `c` exclude
     // that range of `a` so resolution fails.
-    assert_not_installed(&venv, "s2023222f_a", &temp_dir);
-    assert_not_installed(&venv, "s2023222f_b", &temp_dir);
-    assert_not_installed(&venv, "s2023222f_c", &temp_dir);
+    assert_not_installed(&venv, "a_1cd99bd0", &temp_dir);
+    assert_not_installed(&venv, "b_1cd99bd0", &temp_dir);
+    assert_not_installed(&venv, "c_1cd99bd0", &temp_dir);
 
     Ok(())
 }
@@ -582,7 +570,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 /// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
-/// saece4208
+/// 0fd25b39
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -594,7 +582,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 /// │   │   ├── satisfied by a-2.3.0
 /// │   │   ├── satisfied by a-2.4.0
 /// │   │   └── satisfied by a-3.0.0
-/// │   ├── requires b>=2.0.0,<3.0.0
+/// │   ├── requires b<3.0.0,>=2.0.0
 /// │   │   └── satisfied by b-2.0.0
 /// │   └── requires c
 /// │       ├── satisfied by c-1.0.0
@@ -642,9 +630,9 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"saece4208-", ""));
+    filters.push((r"-0fd25b39", ""));
 
     insta::with_settings!({
         filters => filters
@@ -652,9 +640,9 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("saece4208-a")
-            .arg("saece4208-b>=2.0.0,<3.0.0")
-            .arg("saece4208-c")
+            .arg("a-0fd25b39")
+            .arg("b-0fd25b39<3.0.0,>=2.0.0")
+            .arg("c-0fd25b39")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -679,10 +667,10 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                   a>1.0.0,<2.0.0
               we can conclude that a<2.0.0 depends on b==1.0.0.
               And because we know from (1) that c<2.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on b==1.0.0.
-              And because c==2.0.0 depends on a>=3.0.0 we can conclude that !( a>=3.0.0 ), all versions of c, b!=1.0.0 are incompatible. (2)
+              And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c, b!=1.0.0, !( a>=3.0.0 ) are incompatible. (2)
 
               Because a==3.0.0 depends on b==3.0.0 and there are no versions of a that satisfy a>3.0.0, we can conclude that a>=3.0.0 depends on b==3.0.0.
-              And because we know from (2) that !( a>=3.0.0 ), all versions of c, b!=1.0.0 are incompatible, we can conclude that all versions of c depends on one of:
+              And because we know from (2) that all versions of c, b!=1.0.0, !( a>=3.0.0 ) are incompatible, we can conclude that all versions of c depends on one of:
                   b<=1.0.0
                   b>=3.0.0
 
@@ -693,9 +681,462 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
     // require incompatible versions of `b`, but all available versions of `c` exclude
     // that range of `a` so resolution fails.
-    assert_not_installed(&venv, "saece4208_a", &temp_dir);
-    assert_not_installed(&venv, "saece4208_b", &temp_dir);
-    assert_not_installed(&venv, "saece4208_c", &temp_dir);
+    assert_not_installed(&venv, "a_0fd25b39", &temp_dir);
+    assert_not_installed(&venv, "b_0fd25b39", &temp_dir);
+    assert_not_installed(&venv, "c_0fd25b39", &temp_dir);
+
+    Ok(())
+}
+
+/// extra-required
+///
+/// Optional dependencies are requested for the package.
+///
+/// 76e5355c
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a[extra]
+/// │       ├── satisfied by a-1.0.0
+/// │       └── satisfied by a-1.0.0[extra]
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   └── a-1.0.0[extra]
+/// │       └── requires b
+/// │           └── satisfied by b-1.0.0
+/// └── b
+///     └── b-1.0.0
+#[test]
+fn extra_required() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-76e5355c", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-76e5355c[extra]")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + a==1.0.0
+         + b==1.0.0
+        "###);
+    });
+
+    assert_installed(&venv, "a_76e5355c", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_76e5355c", "1.0.0", &temp_dir);
+
+    Ok(())
+}
+
+/// missing-extra
+///
+/// Optional dependencies are requested for the package, but the extra does not
+/// exist.
+///
+/// 0997c767
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a[extra]
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+#[test]
+fn missing_extra() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-0997c767", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-0997c767[extra]")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==1.0.0
+        "###);
+    });
+
+    assert_installed(&venv, "a_0997c767", "1.0.0", &temp_dir);
+
+    Ok(())
+}
+
+/// multiple-extras-required
+///
+/// Multiple optional dependencies are requested for the package.
+///
+/// e55f15c4
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a[extra_b,extra_c]
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-1.0.0[extra_b]
+/// │       └── satisfied by a-1.0.0[extra_c]
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   ├── a-1.0.0[extra_b]
+/// │   │   └── requires b
+/// │   │       └── satisfied by b-1.0.0
+/// │   └── a-1.0.0[extra_c]
+/// │       └── requires c
+/// │           └── satisfied by c-1.0.0
+/// ├── b
+/// │   └── b-1.0.0
+/// └── c
+///     └── c-1.0.0
+#[test]
+fn multiple_extras_required() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-e55f15c4", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-e55f15c4[extra_b,extra_c]")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 3 packages in [TIME]
+        Downloaded 3 packages in [TIME]
+        Installed 3 packages in [TIME]
+         + a==1.0.0
+         + b==1.0.0
+         + c==1.0.0
+        "###);
+    });
+
+    assert_installed(&venv, "a_e55f15c4", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_e55f15c4", "1.0.0", &temp_dir);
+    assert_installed(&venv, "c_e55f15c4", "1.0.0", &temp_dir);
+
+    Ok(())
+}
+
+/// extra-incompatible-with-extra
+///
+/// Multiple optional dependencies are requested for the package, but they have
+/// conflicting requirements with each other.
+///
+/// bf480858
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a[extra_b,extra_c]
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-1.0.0[extra_b]
+/// │       └── satisfied by a-1.0.0[extra_c]
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   ├── a-1.0.0[extra_b]
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   └── a-1.0.0[extra_c]
+/// │       └── requires b==2.0.0
+/// │           └── satisfied by b-2.0.0
+/// └── b
+///     ├── b-1.0.0
+///     └── b-2.0.0
+#[test]
+fn extra_incompatible_with_extra() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-bf480858", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-bf480858[extra_b,extra_c]")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because there are no versions of a[extra-b] that satisfy any of:
+                  a[extra-b]<1.0.0
+                  a[extra-b]>1.0.0
+              and a[extra-b]==1.0.0 depends on b==1.0.0, we can conclude that all versions of a[extra-b] depends on b==1.0.0.
+              And because a[extra-c]==1.0.0 depends on b==2.0.0 and there are no versions of a[extra-c] that satisfy any of:
+                  a[extra-c]<1.0.0
+                  a[extra-c]>1.0.0
+              we can conclude that all versions of a[extra-c] and all versions of a[extra-b] are incompatible.
+              And because root depends on a[extra-c] and root depends on a[extra-b], we can conclude that the requirements are unsatisfiable.
+        "###);
+    });
+
+    assert_not_installed(&venv, "a_bf480858", &temp_dir);
+
+    Ok(())
+}
+
+/// extra-incompatible-with-extra-not-requested
+///
+/// One of two incompatible optional dependencies are requested for the package.
+///
+/// 06ed3759
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a[extra_c]
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-1.0.0[extra_b]
+/// │       └── satisfied by a-1.0.0[extra_c]
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   ├── a-1.0.0[extra_b]
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   └── a-1.0.0[extra_c]
+/// │       └── requires b==2.0.0
+/// │           └── satisfied by b-2.0.0
+/// └── b
+///     ├── b-1.0.0
+///     └── b-2.0.0
+#[test]
+fn extra_incompatible_with_extra_not_requested() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-06ed3759", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-06ed3759[extra_c]")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + a==1.0.0
+         + b==2.0.0
+        "###);
+    });
+
+    assert_installed(&venv, "a_06ed3759", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_06ed3759", "2.0.0", &temp_dir);
+
+    Ok(())
+}
+
+/// extra-incompatible-with-root
+///
+/// Optional dependencies are requested for the package, but the extra is not
+/// compatible with other requested versions.
+///
+/// b3bfe512
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   ├── requires a[extra]
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-1.0.0[extra]
+/// │   └── requires b==2.0.0
+/// │       └── satisfied by b-2.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   └── a-1.0.0[extra]
+/// │       └── requires b==1.0.0
+/// │           └── satisfied by b-1.0.0
+/// └── b
+///     ├── b-1.0.0
+///     └── b-2.0.0
+#[test]
+fn extra_incompatible_with_root() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-b3bfe512", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-b3bfe512[extra]")
+            .arg("b-b3bfe512==2.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × No solution found when resolving dependencies:
+          ╰─▶ Because a[extra]==1.0.0 depends on b==1.0.0 and there are no versions of a[extra] that satisfy any of:
+                  a[extra]<1.0.0
+                  a[extra]>1.0.0
+              we can conclude that all versions of a[extra] depends on b==1.0.0.
+              And because root depends on a[extra] and root depends on b==2.0.0, we can conclude that the requirements are unsatisfiable.
+        "###);
+    });
+
+    assert_not_installed(&venv, "a_b3bfe512", &temp_dir);
+    assert_not_installed(&venv, "b_b3bfe512", &temp_dir);
+
+    Ok(())
+}
+
+/// extra-does-not-exist-backtrack
+///
+/// Optional dependencies are requested for the package, the extra is only available
+/// on an older version.
+///
+/// 49778327
+/// ├── environment
+/// │   └── python3.7
+/// ├── root
+/// │   └── requires a[extra]
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-1.0.0[extra]
+/// │       ├── satisfied by a-2.0.0
+/// │       └── satisfied by a-3.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   ├── a-1.0.0[extra]
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   ├── a-2.0.0
+/// │   └── a-3.0.0
+/// └── b
+///     └── b-1.0.0
+#[test]
+fn extra_does_not_exist_backtrack() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
+
+    // In addition to the standard filters, remove the scenario version
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"-49778327", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-49778327[extra]")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + a==3.0.0
+        "###);
+    });
+
+    assert_installed(&venv, "a_49778327", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_49778327", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -704,7 +1145,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 ///
 /// The user requires two incompatible, existing versions of package `a`
 ///
-/// s80d82ee8
+/// 80d82ee8
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -721,9 +1162,9 @@ fn direct_incompatible_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s80d82ee8-", ""));
+    filters.push((r"-80d82ee8", ""));
 
     insta::with_settings!({
         filters => filters
@@ -731,8 +1172,8 @@ fn direct_incompatible_versions() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s80d82ee8-a==1.0.0")
-            .arg("s80d82ee8-a==2.0.0")
+            .arg("a-80d82ee8==1.0.0")
+            .arg("a-80d82ee8==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -750,8 +1191,8 @@ fn direct_incompatible_versions() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "s80d82ee8_a", &temp_dir);
-    assert_not_installed(&venv, "s80d82ee8_a", &temp_dir);
+    assert_not_installed(&venv, "a_80d82ee8", &temp_dir);
+    assert_not_installed(&venv, "a_80d82ee8", &temp_dir);
 
     Ok(())
 }
@@ -761,7 +1202,7 @@ fn direct_incompatible_versions() -> Result<()> {
 /// The user requires packages `a` and `b` but `a` requires a different version of
 /// `b`
 ///
-/// sa967e815
+/// a967e815
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -782,9 +1223,9 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sa967e815-", ""));
+    filters.push((r"-a967e815", ""));
 
     insta::with_settings!({
         filters => filters
@@ -792,8 +1233,8 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sa967e815-a")
-            .arg("sa967e815-b==1.0.0")
+            .arg("a-a967e815")
+            .arg("b-a967e815==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -815,8 +1256,8 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "sa967e815_a", &temp_dir);
-    assert_not_installed(&venv, "sa967e815_b", &temp_dir);
+    assert_not_installed(&venv, "a_a967e815", &temp_dir);
+    assert_not_installed(&venv, "b_a967e815", &temp_dir);
 
     Ok(())
 }
@@ -826,7 +1267,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 /// The user requires package `a` and `b`; `a` and `b` require different versions of
 /// `c`
 ///
-/// s6866d8dc
+/// 6866d8dc
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -851,9 +1292,9 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s6866d8dc-", ""));
+    filters.push((r"-6866d8dc", ""));
 
     insta::with_settings!({
         filters => filters
@@ -861,8 +1302,8 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s6866d8dc-a")
-            .arg("s6866d8dc-b")
+            .arg("a-6866d8dc")
+            .arg("b-6866d8dc")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -876,20 +1317,20 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
-              and a==1.0.0 depends on c==1.0.0, we can conclude that all versions of a depends on c==1.0.0.
-              And because b==1.0.0 depends on c==2.0.0 and there are no versions of b that satisfy any of:
+          ╰─▶ Because there are no versions of b that satisfy any of:
                   b<1.0.0
                   b>1.0.0
-              we can conclude that all versions of a and all versions of b are incompatible.
-              And because root depends on a and root depends on b, we can conclude that the requirements are unsatisfiable.
+              and b==1.0.0 depends on c==2.0.0, we can conclude that all versions of b depends on c==2.0.0.
+              And because a==1.0.0 depends on c==1.0.0 and there are no versions of a that satisfy any of:
+                  a<1.0.0
+                  a>1.0.0
+              we can conclude that all versions of b and all versions of a are incompatible.
+              And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
-    assert_not_installed(&venv, "s6866d8dc_a", &temp_dir);
-    assert_not_installed(&venv, "s6866d8dc_b", &temp_dir);
+    assert_not_installed(&venv, "a_6866d8dc", &temp_dir);
+    assert_not_installed(&venv, "b_6866d8dc", &temp_dir);
 
     Ok(())
 }
@@ -899,7 +1340,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 /// The user requires any version of package `a` which only has prerelease versions
 /// available.
 ///
-/// s9a1b3dda
+/// 9a1b3dda
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -913,9 +1354,9 @@ fn package_only_prereleases() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s9a1b3dda-", ""));
+    filters.push((r"-9a1b3dda", ""));
 
     insta::with_settings!({
         filters => filters
@@ -923,7 +1364,7 @@ fn package_only_prereleases() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s9a1b3dda-a")
+            .arg("a-9a1b3dda")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -945,7 +1386,7 @@ fn package_only_prereleases() -> Result<()> {
 
     // Since there are only prerelease versions of `a` available, it should be
     // installed even though the user did not include a prerelease specifier.
-    assert_installed(&venv, "s9a1b3dda_a", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_9a1b3dda", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -955,7 +1396,7 @@ fn package_only_prereleases() -> Result<()> {
 /// The user requires a version of package `a` which only matches prerelease
 /// versions but they did not include a prerelease specifier.
 ///
-/// s19673198
+/// 19673198
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -970,9 +1411,9 @@ fn package_only_prereleases_in_range() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s19673198-", ""));
+    filters.push((r"-19673198", ""));
 
     insta::with_settings!({
         filters => filters
@@ -980,7 +1421,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s19673198-a>0.1.0")
+            .arg("a-19673198>0.1.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1002,7 +1443,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 
     // Since there are stable versions of `a` available, prerelease versions should not
     // be selected without explicit opt-in.
-    assert_not_installed(&venv, "s19673198_a", &temp_dir);
+    assert_not_installed(&venv, "a_19673198", &temp_dir);
 
     Ok(())
 }
@@ -1013,7 +1454,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 /// versions. They did not include a prerelease specifier for the package, but they
 /// opted into prereleases globally.
 ///
-/// s51f94da2
+/// 51f94da2
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1028,9 +1469,9 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s51f94da2-", ""));
+    filters.push((r"-51f94da2", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1038,7 +1479,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s51f94da2-a>0.1.0")
+            .arg("a-51f94da2>0.1.0")
             .arg("--prerelease=allow")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1059,7 +1500,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "s51f94da2_a", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_51f94da2", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1069,7 +1510,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 /// The user requires any version of package `a` has a prerelease version available
 /// and an older non-prerelease version.
 ///
-/// seebe53a6
+/// eebe53a6
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1084,9 +1525,9 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"seebe53a6-", ""));
+    filters.push((r"-eebe53a6", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1094,7 +1535,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("seebe53a6-a")
+            .arg("a-eebe53a6")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1116,7 +1557,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 
     // Since the user did not provide a prerelease specifier, the older stable version
     // should be selected.
-    assert_installed(&venv, "seebe53a6_a", "0.1.0", &temp_dir);
+    assert_installed(&venv, "a_eebe53a6", "0.1.0", &temp_dir);
 
     Ok(())
 }
@@ -1126,7 +1567,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and only stable
 /// releases are available.
 ///
-/// s9d4725eb
+/// 9d4725eb
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1144,9 +1585,9 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s9d4725eb-", ""));
+    filters.push((r"-9d4725eb", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1154,7 +1595,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s9d4725eb-a>=0.1.0a1")
+            .arg("a-9d4725eb>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1175,7 +1616,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
     });
 
     // The latest stable version should be selected.
-    assert_installed(&venv, "s9d4725eb_a", "0.3.0", &temp_dir);
+    assert_installed(&venv, "a_9d4725eb", "0.3.0", &temp_dir);
 
     Ok(())
 }
@@ -1185,7 +1626,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and only
 /// prerelease releases are available.
 ///
-/// s6cc95bc8
+/// 6cc95bc8
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1203,9 +1644,9 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s6cc95bc8-", ""));
+    filters.push((r"-6cc95bc8", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1213,7 +1654,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s6cc95bc8-a>=0.1.0a1")
+            .arg("a-6cc95bc8>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1234,7 +1675,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
     });
 
     // The latest prerelease version should be selected.
-    assert_installed(&venv, "s6cc95bc8_a", "0.3.0a1", &temp_dir);
+    assert_installed(&venv, "a_6cc95bc8", "0.3.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1244,7 +1685,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and both
 /// prerelease and stable releases are available.
 ///
-/// sc97845e2
+/// c97845e2
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1264,9 +1705,9 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sc97845e2-", ""));
+    filters.push((r"-c97845e2", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1274,7 +1715,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sc97845e2-a>=0.1.0a1")
+            .arg("a-c97845e2>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1296,7 +1737,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 
     // Since the user provided a prerelease specifier, the latest prerelease version
     // should be selected.
-    assert_installed(&venv, "sc97845e2_a", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_c97845e2", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1306,7 +1747,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 /// The user requires `a` which has multiple prereleases available with different
 /// labels.
 ///
-/// se290bf29
+/// e290bf29
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1324,9 +1765,9 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"se290bf29-", ""));
+    filters.push((r"-e290bf29", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1334,7 +1775,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("se290bf29-a>=1.0.0a1")
+            .arg("a-e290bf29>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1355,7 +1796,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
     });
 
     // Release candidates should be the highest precedence prerelease kind.
-    assert_installed(&venv, "se290bf29_a", "1.0.0rc1", &temp_dir);
+    assert_installed(&venv, "a_e290bf29", "1.0.0rc1", &temp_dir);
 
     Ok(())
 }
@@ -1364,7 +1805,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 ///
 /// The user requires `a` which has multiple alphas available.
 ///
-/// sf5948c28
+/// f5948c28
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1382,9 +1823,9 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sf5948c28-", ""));
+    filters.push((r"-f5948c28", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1392,7 +1833,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sf5948c28-a>=1.0.0a1")
+            .arg("a-f5948c28>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1413,7 +1854,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
     });
 
     // The latest alpha version should be selected.
-    assert_installed(&venv, "sf5948c28_a", "1.0.0a3", &temp_dir);
+    assert_installed(&venv, "a_f5948c28", "1.0.0a3", &temp_dir);
 
     Ok(())
 }
@@ -1423,7 +1864,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 /// The user requires any version of package `a` which requires `b` which only has
 /// prerelease versions available.
 ///
-/// s44ebef16
+/// 44ebef16
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1441,9 +1882,9 @@ fn transitive_package_only_prereleases() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s44ebef16-", ""));
+    filters.push((r"-44ebef16", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1451,7 +1892,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s44ebef16-a")
+            .arg("a-44ebef16")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1474,8 +1915,8 @@ fn transitive_package_only_prereleases() -> Result<()> {
 
     // Since there are only prerelease versions of `b` available, it should be selected
     // even though the user did not opt-in to prereleases.
-    assert_installed(&venv, "s44ebef16_a", "0.1.0", &temp_dir);
-    assert_installed(&venv, "s44ebef16_b", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_44ebef16", "0.1.0", &temp_dir);
+    assert_installed(&venv, "b_44ebef16", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1485,7 +1926,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
 /// The user requires package `a` which has a dependency on a package which only
 /// matches prerelease versions but they did not include a prerelease specifier.
 ///
-/// s27759187
+/// 27759187
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1504,9 +1945,9 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s27759187-", ""));
+    filters.push((r"-27759187", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1514,7 +1955,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s27759187-a")
+            .arg("a-27759187")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1541,7 +1982,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
     // Since there are stable versions of `b` available, the prerelease version should
     // not be selected without explicit opt-in. The available version is excluded by
     // the range requested by the user.
-    assert_not_installed(&venv, "s27759187_a", &temp_dir);
+    assert_not_installed(&venv, "a_27759187", &temp_dir);
 
     Ok(())
 }
@@ -1552,7 +1993,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 /// matches prerelease versions; the user has opted into allowing prereleases in `b`
 /// explicitly.
 ///
-/// s26efb6c5
+/// 26efb6c5
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1573,9 +2014,9 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s26efb6c5-", ""));
+    filters.push((r"-26efb6c5", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1583,8 +2024,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s26efb6c5-a")
-            .arg("s26efb6c5-b>0.0.0a1")
+            .arg("a-26efb6c5")
+            .arg("b-26efb6c5>0.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1607,8 +2048,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 
     // Since the user included a dependency on `b` with a prerelease specifier, a
     // prerelease version can be selected.
-    assert_installed(&venv, "s26efb6c5_a", "0.1.0", &temp_dir);
-    assert_installed(&venv, "s26efb6c5_b", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_26efb6c5", "0.1.0", &temp_dir);
+    assert_installed(&venv, "b_26efb6c5", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1618,7 +2059,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease
 ///
-/// sc7ad0310
+/// f8aeea37
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1632,7 +2073,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 /// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=1.0.0,<=3.0.0
+/// │       └── requires c<=3.0.0,>=1.0.0
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -1643,9 +2084,9 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sc7ad0310-", ""));
+    filters.push((r"-f8aeea37", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1653,8 +2094,8 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sc7ad0310-a")
-            .arg("sc7ad0310-b")
+            .arg("a-f8aeea37")
+            .arg("b-f8aeea37")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1679,8 +2120,8 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&venv, "sc7ad0310_a", &temp_dir);
-    assert_not_installed(&venv, "sc7ad0310_b", &temp_dir);
+    assert_not_installed(&venv, "a_f8aeea37", &temp_dir);
+    assert_not_installed(&venv, "b_f8aeea37", &temp_dir);
 
     Ok(())
 }
@@ -1691,7 +2132,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// only be satisfied by a prerelease. The user includes an opt-in to prereleases of
 /// the transitive dependency.
 ///
-/// sa05f7cb8
+/// 184fc65f
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1708,7 +2149,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=1.0.0,<=3.0.0
+/// │       └── requires c<=3.0.0,>=1.0.0
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -1719,9 +2160,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sa05f7cb8-", ""));
+    filters.push((r"-184fc65f", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1729,9 +2170,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sa05f7cb8-a")
-            .arg("sa05f7cb8-b")
-            .arg("sa05f7cb8-c>=0.0.0a1")
+            .arg("a-184fc65f")
+            .arg("b-184fc65f")
+            .arg("c-184fc65f>=0.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1754,9 +2195,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     });
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
-    assert_installed(&venv, "sa05f7cb8_a", "1.0.0", &temp_dir);
-    assert_installed(&venv, "sa05f7cb8_b", "1.0.0", &temp_dir);
-    assert_installed(&venv, "sa05f7cb8_c", "2.0.0b1", &temp_dir);
+    assert_installed(&venv, "a_184fc65f", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_184fc65f", "1.0.0", &temp_dir);
+    assert_installed(&venv, "c_184fc65f", "2.0.0b1", &temp_dir);
 
     Ok(())
 }
@@ -1766,7 +2207,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
-/// s02ae765c
+/// 7017673e
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1788,7 +2229,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// │           └── satisfied by c-2.0.0b9
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=1.0.0,<=3.0.0
+/// │       └── requires c<=3.0.0,>=1.0.0
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -1816,9 +2257,9 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s02ae765c-", ""));
+    filters.push((r"-7017673e", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1826,8 +2267,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s02ae765c-a")
-            .arg("s02ae765c-b")
+            .arg("a-7017673e")
+            .arg("b-7017673e")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1857,8 +2298,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&venv, "s02ae765c_a", &temp_dir);
-    assert_not_installed(&venv, "s02ae765c_b", &temp_dir);
+    assert_not_installed(&venv, "a_7017673e", &temp_dir);
+    assert_not_installed(&venv, "b_7017673e", &temp_dir);
 
     Ok(())
 }
@@ -1869,7 +2310,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 /// only be satisfied by a prerelease. There are many prerelease versions and some
 /// are excluded.
 ///
-/// sef9ce80f
+/// aaee5052
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1879,11 +2320,11 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5
+/// │       └── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
 /// │           └── unsatisfied: no matching version
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=1.0.0,<=3.0.0
+/// │       └── requires c<=3.0.0,>=1.0.0
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -1911,9 +2352,9 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sef9ce80f-", ""));
+    filters.push((r"-aaee5052", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1921,8 +2362,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sef9ce80f-a")
-            .arg("sef9ce80f-b")
+            .arg("a-aaee5052")
+            .arg("b-aaee5052")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1959,8 +2400,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&venv, "sef9ce80f_a", &temp_dir);
-    assert_not_installed(&venv, "sef9ce80f_b", &temp_dir);
+    assert_not_installed(&venv, "a_aaee5052", &temp_dir);
+    assert_not_installed(&venv, "b_aaee5052", &temp_dir);
 
     Ok(())
 }
@@ -1969,7 +2410,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 ///
 /// The user requires a package which requires a Python version that does not exist
 ///
-/// s0825b69c
+/// 0825b69c
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1984,9 +2425,9 @@ fn requires_python_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s0825b69c-", ""));
+    filters.push((r"-0825b69c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1994,7 +2435,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s0825b69c-a==1.0.0")
+            .arg("a-0825b69c==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2013,7 +2454,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "s0825b69c_a", &temp_dir);
+    assert_not_installed(&venv, "a_0825b69c", &temp_dir);
 
     Ok(())
 }
@@ -2023,7 +2464,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// The user requires a package which requires a Python version less than the
 /// current version
 ///
-/// sf9296b84
+/// f9296b84
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2038,9 +2479,9 @@ fn requires_python_version_less_than_current() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sf9296b84-", ""));
+    filters.push((r"-f9296b84", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2048,7 +2489,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sf9296b84-a==1.0.0")
+            .arg("a-f9296b84==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2067,7 +2508,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "sf9296b84_a", &temp_dir);
+    assert_not_installed(&venv, "a_f9296b84", &temp_dir);
 
     Ok(())
 }
@@ -2077,7 +2518,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// The user requires a package which requires a Python version greater than the
 /// current version
 ///
-/// sa11d5394
+/// a11d5394
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2092,9 +2533,9 @@ fn requires_python_version_greater_than_current() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sa11d5394-", ""));
+    filters.push((r"-a11d5394", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2102,7 +2543,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sa11d5394-a==1.0.0")
+            .arg("a-a11d5394==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2121,7 +2562,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "sa11d5394_a", &temp_dir);
+    assert_not_installed(&venv, "a_a11d5394", &temp_dir);
 
     Ok(())
 }
@@ -2131,7 +2572,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// The user requires a package which has many versions which all require a Python
 /// version greater than the current version
 ///
-/// s02dc550c
+/// 02dc550c
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2168,9 +2609,9 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s02dc550c-", ""));
+    filters.push((r"-02dc550c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2178,7 +2619,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s02dc550c-a==1.0.0")
+            .arg("a-02dc550c==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2196,7 +2637,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "s02dc550c_a", &temp_dir);
+    assert_not_installed(&venv, "a_02dc550c", &temp_dir);
 
     Ok(())
 }
@@ -2206,7 +2647,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an older version is compatible.
 ///
-/// sef060cef
+/// ef060cef
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2229,9 +2670,9 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"sef060cef-", ""));
+    filters.push((r"-ef060cef", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2239,7 +2680,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("sef060cef-a")
+            .arg("a-ef060cef")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2259,7 +2700,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "sef060cef_a", "1.0.0", &temp_dir);
+    assert_installed(&venv, "a_ef060cef", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -2269,7 +2710,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an excluded older version is compatible.
 ///
-/// s1bde0c18
+/// 1bde0c18
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2291,9 +2732,9 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s1bde0c18-", ""));
+    filters.push((r"-1bde0c18", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2301,7 +2742,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s1bde0c18-a>=2.0.0")
+            .arg("a-1bde0c18>=2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2336,7 +2777,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "s1bde0c18_a", &temp_dir);
+    assert_not_installed(&venv, "a_1bde0c18", &temp_dir);
 
     Ok(())
 }
@@ -2345,7 +2786,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 ///
 /// A wheel for a specific platform is available alongside the default.
 ///
-/// s74e4a459
+/// 74e4a459
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -2359,9 +2800,9 @@ fn specific_tag_and_default() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s74e4a459-", ""));
+    filters.push((r"-74e4a459", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2369,7 +2810,7 @@ fn specific_tag_and_default() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s74e4a459-a")
+            .arg("a-74e4a459")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2396,7 +2837,7 @@ fn specific_tag_and_default() -> Result<()> {
 ///
 /// No source distributions are available, only wheels.
 ///
-/// s4f019491
+/// 4f019491
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -2410,9 +2851,9 @@ fn only_wheels() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s4f019491-", ""));
+    filters.push((r"-4f019491", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2420,7 +2861,7 @@ fn only_wheels() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s4f019491-a")
+            .arg("a-4f019491")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2447,7 +2888,7 @@ fn only_wheels() -> Result<()> {
 ///
 /// No wheels are available, only source distributions.
 ///
-/// s614d801c
+/// 614d801c
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -2461,9 +2902,9 @@ fn no_wheels() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s614d801c-", ""));
+    filters.push((r"-614d801c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2471,7 +2912,7 @@ fn no_wheels() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s614d801c-a")
+            .arg("a-614d801c")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2498,7 +2939,7 @@ fn no_wheels() -> Result<()> {
 ///
 /// No wheels with valid tags are available, just source distributions.
 ///
-/// s737bbfd4
+/// 737bbfd4
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -2512,9 +2953,9 @@ fn no_wheels_with_matching_platform() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario prefix
+    // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"s737bbfd4-", ""));
+    filters.push((r"-737bbfd4", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2522,7 +2963,7 @@ fn no_wheels_with_matching_platform() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("s737bbfd4-a")
+            .arg("a-737bbfd4")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
