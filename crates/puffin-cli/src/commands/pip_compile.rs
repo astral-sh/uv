@@ -26,7 +26,7 @@ use puffin_normalize::ExtraName;
 use puffin_resolver::{
     DisplayResolutionGraph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::SetupPyStrategy;
+use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -154,6 +154,9 @@ pub(crate) async fn pip_compile(
         FlatIndex::from_entries(entries, &tags)
     };
 
+    // Track in-flight downloads, builds, etc., across resolutions.
+    let in_flight = InFlight::default();
+
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -161,6 +164,7 @@ pub(crate) async fn pip_compile(
         &interpreter,
         &index_locations,
         &flat_index,
+        &in_flight,
         interpreter.sys_executable().to_path_buf(),
         setup_py,
         no_build,
@@ -226,13 +230,6 @@ pub(crate) async fn pip_compile(
         project,
         editable_metadata,
     );
-
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
-        FlatIndex::from_entries(entries, &tags)
-    };
 
     // Resolve the dependencies.
     let resolver = Resolver::new(

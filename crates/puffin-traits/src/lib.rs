@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::Resolution;
+use distribution_types::{CachedDist, DistributionId, Resolution};
 pub use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
@@ -122,6 +122,12 @@ pub trait SourceBuildTrait {
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
     fn wheel<'a>(&'a self, wheel_dir: &'a Path)
         -> impl Future<Output = Result<String>> + Send + 'a;
+}
+
+#[derive(Default)]
+pub struct InFlight {
+    /// The in-flight distribution downloads.
+    pub downloads: OnceMap<DistributionId, Result<CachedDist, String>>,
 }
 
 /// The strategy to use when building source distributions that lack a `pyproject.toml`.

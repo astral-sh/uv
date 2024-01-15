@@ -28,7 +28,7 @@ use puffin_normalize::PackageName;
 use puffin_resolver::{
     Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::{OnceMap, SetupPyStrategy};
+use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -144,6 +144,9 @@ pub(crate) async fn pip_install(
         FlatIndex::from_entries(entries, tags)
     };
 
+    // Track in-flight downloads, builds, etc., across resolutions.
+    let in_flight = InFlight::default();
+
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
     let build_dispatch = BuildDispatch::new(
@@ -152,6 +155,7 @@ pub(crate) async fn pip_install(
         &interpreter,
         &index_locations,
         &flat_index,
+        &in_flight,
         venv.python_executable(),
         setup_py,
         no_build,
@@ -221,6 +225,7 @@ pub(crate) async fn pip_install(
         &index_locations,
         tags,
         &client,
+        &in_flight,
         &build_dispatch,
         &cache,
         &venv,
@@ -420,6 +425,7 @@ async fn install(
     index_urls: &IndexLocations,
     tags: &Tags,
     client: &RegistryClient,
+    in_flight: &InFlight,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &Virtualenv,
@@ -488,8 +494,9 @@ async fn install(
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
+        // STOPSHIP(charlie): This needs to be shared!
         let wheels = downloader
-            .download(remote, &OnceMap::default())
+            .download(remote, in_flight)
             .await
             .context("Failed to download distributions")?;
 

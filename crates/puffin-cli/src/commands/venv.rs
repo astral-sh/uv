@@ -15,7 +15,7 @@ use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Interpreter;
-use puffin_traits::{BuildContext, SetupPyStrategy};
+use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -139,6 +139,9 @@ async fn venv_impl(
             FlatIndex::from_entries(entries, tags)
         };
 
+        // Track in-flight downloads, builds, etc., across resolutions.
+        let in_flight = InFlight::default();
+
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
@@ -146,6 +149,7 @@ async fn venv_impl(
             interpreter,
             index_locations,
             &flat_index,
+            &in_flight,
             venv.python_executable(),
             SetupPyStrategy::default(),
             true,

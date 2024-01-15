@@ -12,7 +12,7 @@ use puffin_cache::{Cache, CacheArgs};
 use puffin_client::{FlatIndex, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
-use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy};
+use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -57,6 +57,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index_urls = IndexLocations::default();
     let flat_index = FlatIndex::default();
     let setup_py = SetupPyStrategy::default();
+    let in_flight = InFlight::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -64,6 +65,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         venv.interpreter(),
         &index_urls,
         &flat_index,
+        &in_flight,
         venv.python_executable(),
         setup_py,
         false,

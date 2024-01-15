@@ -25,7 +25,7 @@ use puffin_installer::Downloader;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::DistFinder;
-use puffin_traits::{BuildContext, OnceMap, SetupPyStrategy};
+use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -62,6 +62,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let index_locations = IndexLocations::default();
     let flat_index = FlatIndex::default();
     let setup_py = SetupPyStrategy::default();
+    let in_flight = InFlight::default();
     let tags = venv.interpreter().tags()?;
 
     let build_dispatch = BuildDispatch::new(
@@ -70,6 +71,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         venv.interpreter(),
         &index_locations,
         &flat_index,
+        &in_flight,
         venv.python_executable(),
         setup_py,
         args.no_build,
@@ -141,7 +143,7 @@ async fn install_chunk(
 
     let mut registry_index = RegistryWheelIndex::new(build_dispatch.cache(), tags, index_locations);
     let (cached, uncached): (Vec<_>, Vec<_>) = dists.into_iter().partition_map(|dist| {
-        // We always want the wheel for the latest version not whatever matching is in cache
+        // We always want the wheel for the latest version not whatever matching is in cache.
         let VersionOrUrl::Version(version) = dist.version_or_url() else {
             unreachable!();
         };
@@ -155,7 +157,7 @@ async fn install_chunk(
     info!("Cached: {}, Uncached {}", cached.len(), uncached.len());
 
     let downloader = Downloader::new(build_dispatch.cache(), tags, client, build_dispatch);
-    let in_flight = OnceMap::default();
+    let in_flight = InFlight::default();
     let fetches: Vec<_> = futures::stream::iter(uncached)
         .map(|dist| downloader.get_wheel(dist, &in_flight))
         .buffer_unordered(50)
