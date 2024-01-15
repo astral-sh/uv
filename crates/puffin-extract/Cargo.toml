@@ -16,9 +16,9 @@ workspace = true
 tokio-util = { workspace = true, features = ["compat"] }
 async_zip = { workspace = true, features = ["tokio"] }
 flate2 = { workspace = true }
-fs-err = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
 tar = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["io-util"] }
 zip = { workspace = true }

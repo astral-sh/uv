@@ -159,7 +159,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 );
                 fs::create_dir_all(&cache_entry.dir()).await?;
                 let target = cache_entry.into_path_buf();
-                tokio::fs::rename(temp_target, &target).await?;
+                fs_err::tokio::rename(temp_target, &target).await?;
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
@@ -184,7 +184,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 );
                 fs::create_dir_all(&cache_entry.dir()).await?;
                 let target = cache_entry.into_path_buf();
-                tokio::fs::rename(temp_target, &target).await?;
+                fs_err::tokio::rename(temp_target, &target).await?;
 
                 let local_wheel = LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
