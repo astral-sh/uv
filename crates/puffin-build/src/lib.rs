@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::process::Output;
+use std::process::{Output, Stdio};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -20,7 +20,10 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
-use tokio::process::Command;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
+use tokio::io::BufReader;
+use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, Instrument};
 
@@ -42,6 +45,8 @@ static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
 static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
 });
+
+static HOOKD_SOURCE: &'static str = include_str!("hookd.py");
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
@@ -73,6 +78,11 @@ pub enum Error {
     Gourgeist(#[from] gourgeist::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
+    #[error("{message}")]
+    DaemonError {
+        // TODO: Do not expose this
+        message: String,
+    },
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     BuildBackend {
         message: String,
@@ -192,6 +202,279 @@ struct Pep517Backend {
     backend_path: Option<Vec<String>>,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+enum Pep517DaemonResponse {
+    Debug(String),
+    Error(Pep517DaemonErrorKind, String),
+    Traceback(String),
+    Ok(String),
+    Stderr(PathBuf),
+    Stdout(PathBuf),
+    Expect(String),
+    Ready,
+    Fatal(String, String),
+    Shutdown,
+}
+
+impl Pep517DaemonResponse {
+    fn from_line(line: &str) -> Result<Self, Error> {
+        // Split on the first two spaces
+        let mut parts = line.splitn(3, ' ');
+        if let Some(kind) = parts.next() {
+            let response = match kind {
+                "DEBUG" => Self::Debug(parts.collect::<Vec<&str>>().join(" ")),
+                "EXPECT" => Self::Expect(parts.collect::<Vec<&str>>().join(" ")),
+                "OK" => Self::Ok(parts.collect::<Vec<&str>>().join(" ")),
+                "TRACEBACK" => Self::Traceback(parts.collect::<Vec<&str>>().join(" ")),
+                "ERROR" => Self::Error(
+                    Pep517DaemonErrorKind::from_str(parts.next().unwrap())?,
+                    parts.next().unwrap().to_string(),
+                ),
+                "STDOUT" => Self::Stdout(parts.next().unwrap().into()),
+                "STDERR" => Self::Stderr(parts.next().unwrap().into()),
+                "READY" => Self::Ready,
+                "FATAL" => Self::Fatal(
+                    parts.next().unwrap().to_string(),
+                    parts.next().unwrap().to_string(),
+                ),
+                "SHUTDOWN" => Self::Shutdown,
+                _ => {
+                    return Err(Error::DaemonError {
+                        message: "Unknown response".into(),
+                    })
+                }
+            };
+            Ok(response)
+        } else {
+            Err(Error::DaemonError {
+                message: "No kind in response.".into(),
+            })
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+enum Pep517DaemonErrorKind {
+    MissingBackendModule,
+    MissingBackendAttribute,
+    MalformedBackendName,
+    BackendImportError,
+    InvalidHookName,
+    InvalidAction,
+    UnsupportedHook,
+    MalformedHookArgument,
+    HookRuntimeError,
+}
+
+impl Pep517DaemonErrorKind {
+    fn from_str(name: &str) -> Result<Self, Error> {
+        match name {
+            "MissingBackendModule" => Ok(Self::MissingBackendModule),
+            "MissingBackendAttribute" => Ok(Self::MissingBackendAttribute),
+            "MalformedBackendName" => Ok(Self::MalformedBackendName),
+            "BackendImportError" => Ok(Self::BackendImportError),
+            "InvalidHookName" => Ok(Self::InvalidHookName),
+            "InvalidAction" => Ok(Self::InvalidAction),
+            "UnsupportedHook" => Ok(Self::UnsupportedHook),
+            "MalformedHookArgument" => Ok(Self::MalformedHookArgument),
+            "HookRuntimeError" => Ok(Self::HookRuntimeError),
+            _ => Err(Error::DaemonError {
+                message: "Unknown error kind".into(),
+            }),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Pep517Daemon {
+    script_path: PathBuf,
+    venv: Virtualenv,
+    source_tree: PathBuf,
+    stdout: Option<BufReader<ChildStdout>>,
+    stdin: Option<ChildStdin>,
+    handle: Option<Child>,
+    last_response: Option<Pep517DaemonResponse>,
+}
+
+impl Pep517Daemon {
+    async fn new(venv: &Virtualenv, source_tree: &Path) -> Result<Self, Error> {
+        // Write `hookd` to the virtual environment
+        let script_path = venv.bin_dir().join("hookd");
+        let mut file = File::create(&script_path).await?;
+        file.write_all(HOOKD_SOURCE.as_bytes()).await?;
+
+        Ok(Self {
+            script_path,
+            venv: venv.clone(),
+            source_tree: source_tree.to_path_buf(),
+            stdout: None,
+            stdin: None,
+            handle: None,
+            last_response: None,
+        })
+    }
+
+    async fn ensure_started(&mut self) -> Result<(), Error> {
+        if self.handle.is_some() {
+            // TODO: Ensure the process is still running
+            return Ok(());
+        }
+        let handle = self.start().await?;
+        self.handle = Some(handle);
+
+        let stdout = self
+            .handle
+            .as_mut()
+            .unwrap()
+            .stdout
+            .take()
+            .expect("stdout is available");
+
+        self.stdout = Some(BufReader::new(stdout));
+
+        self.stdin = Some(
+            self.handle
+                .as_mut()
+                .unwrap()
+                .stdin
+                .take()
+                .expect("stdin is available"),
+        );
+
+        if self.receive_until_actionable().await? == Pep517DaemonResponse::Ready {
+            Ok(())
+        } else {
+            Err(Error::DaemonError {
+                message: "did not recieve ready".into(),
+            })
+        }
+    }
+
+    async fn start(&mut self) -> Result<Child, Error> {
+        let mut new_path = self.venv.bin_dir().into_os_string();
+        if let Some(path) = env::var_os("PATH") {
+            new_path.push(":");
+            new_path.push(path);
+        };
+
+        let handle = Command::new(self.venv.python_executable())
+            .args([self.script_path.clone()])
+            .current_dir(self.source_tree.clone())
+            // Activate the venv
+            .env("VIRTUAL_ENV", self.venv.root())
+            .env("PATH", new_path)
+            // Create pipes for communication
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            // Stderr doesn't have anything we need unless debugging
+            .stderr(Stdio::null())
+            .spawn()?;
+
+        Ok(handle)
+    }
+
+    async fn receive_one(&mut self) -> Result<Pep517DaemonResponse, Error> {
+        let mut lines = tokio::io::AsyncBufReadExt::lines(self.stdout.as_mut().unwrap());
+
+        if let Some(line) = lines.next_line().await? {
+            let response = Pep517DaemonResponse::from_line(line.as_str())?;
+            self.last_response = Some(response.clone());
+            Ok(response)
+        } else {
+            Err(Error::DaemonError {
+                message: "no response".into(),
+            })
+        }
+    }
+
+    async fn receive_until_actionable(&mut self) -> Result<Pep517DaemonResponse, Error> {
+        loop {
+            let next = self.receive_one().await?;
+            match next {
+                Pep517DaemonResponse::Debug(_) => continue,
+                Pep517DaemonResponse::Expect(_) => continue,
+                _ => return Ok(next),
+            }
+        }
+    }
+
+    async fn run_hook(
+        &mut self,
+        backend: &Pep517Backend,
+        hook_name: &str,
+        mut args: Vec<&str>,
+    ) -> Result<String, Error> {
+        self.ensure_started().await?;
+
+        let stdin = self.stdin.as_mut().unwrap();
+
+        // Always send run and the backend name
+        let mut commands = vec!["run", backend.backend.as_str()];
+
+        // Send backend paths
+        if let Some(backend_paths) = backend.backend_path.as_ref() {
+            for backend_path in backend_paths.iter() {
+                commands.push(backend_path)
+            }
+        }
+        commands.push("");
+
+        // Specify the hook
+        commands.push(hook_name);
+
+        // Consume the arguments
+        commands.append(&mut args);
+
+        // Send a trailing newline
+        commands.push("");
+
+        stdin.write_all(commands.join("\n").as_bytes()).await?;
+        stdin.flush().await?;
+
+        // Read the responses
+        loop {
+            let next = self.receive_until_actionable().await?;
+            match next {
+                Pep517DaemonResponse::Stderr(_) => continue,
+                Pep517DaemonResponse::Stdout(_) => continue,
+                Pep517DaemonResponse::Ok(result) => return Ok(result),
+                Pep517DaemonResponse::Error(_kind, message) => {
+                    return Err(Error::DaemonError { message })
+                }
+                _ => break,
+            }
+        }
+
+        Err(Error::DaemonError {
+            message: "unexpected response".to_string(),
+        })
+    }
+
+    async fn prepare_metadata_for_build_wheel(
+        &mut self,
+        backend: &Pep517Backend,
+        metadata_directory: PathBuf,
+    ) -> Result<Option<PathBuf>, Error> {
+        let result = self
+            .run_hook(
+                backend,
+                "prepare_metadata_for_build_wheel",
+                vec![metadata_directory.to_str().unwrap(), ""],
+            )
+            .await?;
+        Ok(Some(PathBuf::from_str(result.as_str()).unwrap()))
+    }
+
+    async fn close(&mut self) -> Result<(), Error> {
+        if let Some(handle) = self.handle.take() {
+            let stdin = self.stdin.as_mut().unwrap();
+            stdin.write_all("shutdown\n".as_bytes()).await?;
+            handle.wait_with_output().await?;
+        }
+        Ok(())
+    }
+}
+
 impl Pep517Backend {
     fn backend_import(&self) -> String {
         let import = if let Some((path, object)) = self.backend.split_once(':') {
@@ -244,6 +527,8 @@ pub struct SourceBuild {
     source_tree: PathBuf,
     /// If performing a PEP 517 build, the backend to use.
     pep517_backend: Option<Pep517Backend>,
+    /// If performing a PEP 517 build, a stateful daemon to use for PEP 517 calls.
+    pep517_daemon: Pep517Daemon,
     /// The virtual environment in which to build the source distribution.
     venv: Virtualenv,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
@@ -406,10 +691,13 @@ impl SourceBuild {
             }
         }
 
+        let pep517_daemon = Pep517Daemon::new(&venv, &source_tree).await?;
+
         Ok(Self {
             temp_dir,
             source_tree,
             pep517_backend,
+            pep517_daemon,
             venv,
             build_kind,
             metadata_directory: None,
@@ -436,53 +724,19 @@ impl SourceBuild {
             "Calling `{}.prepare_metadata_for_build_wheel()`",
             pep517_backend.backend
         );
-        let script = formatdoc! {
-            r#"{}
-            import json
-
-            prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
-            if prepare_metadata_for_build_wheel:
-                print(prepare_metadata_for_build_wheel("{}"))
-            else:
-                print()
-            "#, pep517_backend.backend_import(), escape_path_for_python(&metadata_directory)
-        };
-        let span = info_span!(
-            "run_python_script",
-            script="prepare_metadata_for_build_wheel",
-            python_version = %self.venv.interpreter().version()
-        );
-        let output = run_python_script(&self.venv, &script, &self.source_tree)
-            .instrument(span)
+        let result = self
+            .pep517_daemon
+            .prepare_metadata_for_build_wheel(&pep517_backend, metadata_directory.clone())
             .await?;
-        if !output.status.success() {
-            return Err(Error::from_command_output(
-                "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
-                &output,
-                &self.package_id,
-            ));
+
+        self.pep517_daemon.close().await?;
+
+        if let Some(path) = result {
+            self.metadata_directory = Some(metadata_directory.join(path));
+            Ok(self.metadata_directory.clone())
+        } else {
+            Ok(None)
         }
-        let message = output
-            .stdout
-            .lines()
-            .last()
-            .transpose()
-            .map_err(|err| err.to_string())
-            .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
-            .map_err(|err| {
-                Error::from_command_output(
-                    format!(
-                        "Build backend failed to return metadata directory with `prepare_metadata_for_build_wheel`: {err}"
-                    ),
-                    &output,
-                    &self.package_id,
-                )
-            })?;
-        if message.is_empty() {
-            return Ok(None);
-        }
-        self.metadata_directory = Some(metadata_directory.join(message));
-        Ok(self.metadata_directory.clone())
     }
 
     /// Build a source distribution from an archive (`.zip` or `.tar.gz`), return the location of the
@@ -493,14 +747,14 @@ impl SourceBuild {
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip_all, fields(package_id = self.package_id))]
-    pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
+    pub async fn build(&mut self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
-        if let Some(pep517_backend) = &self.pep517_backend {
+        if let Some(pep517_backend) = self.pep517_backend.clone() {
             // Prevent clashes from two puffin processes building wheels in parallel.
             let tmp_dir = tempdir_in(&wheel_dir)?;
-            let filename = self.pep517_build(tmp_dir.path(), pep517_backend).await?;
+            let filename = self.pep517_build(tmp_dir.path(), &pep517_backend).await?;
 
             let from = tmp_dir.path().join(&filename);
             let to = wheel_dir.join(&filename);
@@ -552,7 +806,7 @@ impl SourceBuild {
     }
 
     async fn pep517_build(
-        &self,
+        &mut self,
         wheel_dir: &Path,
         pep517_backend: &Pep517Backend,
     ) -> Result<String, Error> {
@@ -566,45 +820,24 @@ impl SourceBuild {
             "Calling `{}.build_{}(metadata_directory={})`",
             pep517_backend.backend, self.build_kind, metadata_directory
         );
-        let escaped_wheel_dir = escape_path_for_python(wheel_dir);
-        let script = formatdoc! {
-            r#"{}
-            print(backend.build_{}("{}", metadata_directory={}))
-            "#, pep517_backend.backend_import(), self.build_kind, escaped_wheel_dir, metadata_directory 
-        };
-        let span = info_span!(
-            "run_python_script",
-            script=format!("build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().version()
-        );
-        let output = run_python_script(&self.venv, &script, &self.source_tree)
-            .instrument(span)
+
+        let distribution_filename = self
+            .pep517_daemon
+            .run_hook(
+                &pep517_backend,
+                format!("build_{}", self.build_kind).as_str(),
+                vec![metadata_directory.clone().as_str()],
+            )
             .await?;
-        if !output.status.success() {
-            return Err(Error::from_command_output(
-                format!(
-                    "Build backend failed to build wheel through `build_{}()`",
-                    self.build_kind
-                ),
-                &output,
-                &self.package_id,
-            ));
+
+        self.pep517_daemon.close().await?;
+        if wheel_dir.join(distribution_filename.clone()).is_file() {
+            Ok(distribution_filename)
+        } else {
+            Err(Error::DaemonError {
+                message: "failed to build wheel".to_string(),
+            })
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let distribution_filename = stdout.lines().last();
-        let Some(distribution_filename) =
-            distribution_filename.filter(|wheel| wheel_dir.join(wheel).is_file())
-        else {
-            return Err(Error::from_command_output(
-                format!(
-                    "Build backend failed to build wheel through `build_{}()`",
-                    self.build_kind
-                ),
-                &output,
-                &self.package_id,
-            ));
-        };
-        Ok(distribution_filename.to_string())
     }
 }
 
@@ -613,7 +846,7 @@ impl SourceBuildTrait for SourceBuild {
         Ok(self.get_metadata_without_build().await?)
     }
 
-    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
+    async fn wheel<'a>(&'a mut self, wheel_dir: &'a Path) -> anyhow::Result<String> {
         Ok(self.build(wheel_dir).await?)
     }
 }

@@ -74,7 +74,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         false,
     );
 
-    let builder = SourceBuild::setup(
+    let mut builder = SourceBuild::setup(
         &args.sdist,
         args.subdirectory.as_deref(),
         build_dispatch.interpreter(),

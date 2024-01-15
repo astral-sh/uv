@@ -88,7 +88,7 @@ impl SourceBuildTrait for DummyBuilder {
         panic!("The test should not need to build source distributions")
     }
 
-    async fn wheel<'a>(&'a self, _wheel_dir: &'a Path) -> Result<String> {
+    async fn wheel<'a>(&'a mut self, _wheel_dir: &'a Path) -> Result<String> {
         panic!("The test should not need to build source distributions")
     }
 }

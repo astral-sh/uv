@@ -118,8 +118,10 @@ pub trait SourceBuildTrait {
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
-    fn wheel<'a>(&'a self, wheel_dir: &'a Path)
-        -> impl Future<Output = Result<String>> + Send + 'a;
+    fn wheel<'a>(
+        &'a mut self,
+        wheel_dir: &'a Path,
+    ) -> impl Future<Output = Result<String>> + Send + 'a;
 }
 
 #[derive(Default)]
