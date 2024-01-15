@@ -34,29 +34,26 @@
 //!   the version matching needs to catch all sorts of special cases
 #![deny(missing_docs)]
 
+#[cfg(feature = "pyo3")]
+pub use version::PyVersion;
 pub use {
     version::{
         LocalSegment, Operator, OperatorParseError, PreRelease, Version, VersionParseError,
-        VersionPattern, VersionPatternParseError,
+        VersionPattern, VersionPatternParseError, MIN_VERSION,
     },
     version_specifier::{
         parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,
     },
 };
 
-#[cfg(feature = "pyo3")]
-use pyo3::{pymodule, types::PyModule, PyResult, Python};
-#[cfg(feature = "pyo3")]
-pub use version::PyVersion;
-
 mod version;
 mod version_specifier;
 
 /// Python bindings shipped as `pep440_rs`
 #[cfg(feature = "pyo3")]
-#[pymodule]
+#[pyo3::pymodule]
 #[pyo3(name = "_pep440_rs")]
-pub fn python_module(_py: Python, module: &PyModule) -> PyResult<()> {
+pub fn python_module(_py: pyo3::Python, module: &pyo3::types::PyModule) -> pyo3::PyResult<()> {
     module.add_class::<PyVersion>()?;
     module.add_class::<Operator>()?;
     module.add_class::<VersionSpecifier>()?;

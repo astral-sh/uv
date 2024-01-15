@@ -6,19 +6,19 @@ use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
+use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_client::{FlatIndex, SimpleMetadata};
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
 use pypi_types::{Hashes, Yanked};
 
-use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default, Clone)]
-pub struct VersionMap(BTreeMap<PubGrubVersion, PrioritizedDistribution>);
+pub struct VersionMap(BTreeMap<Version, PrioritizedDistribution>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
@@ -32,10 +32,10 @@ impl VersionMap {
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
-        flat_index: Option<FlatIndex<PubGrubVersion>>,
+        flat_index: Option<FlatIndex>,
     ) -> Self {
         // If we have packages of the same name from find links, gives them priority, otherwise start empty
-        let mut version_map: BTreeMap<PubGrubVersion, PrioritizedDistribution> =
+        let mut version_map: BTreeMap<Version, PrioritizedDistribution> =
             flat_index.map(|overrides| overrides.0).unwrap_or_default();
 
         // Collect compatible distributions.
@@ -87,7 +87,7 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        match version_map.entry(version.clone().into()) {
+                        match version_map.entry(version.clone()) {
                             Entry::Occupied(mut entry) => {
                                 entry.get_mut().insert_built(
                                     dist,
@@ -112,7 +112,7 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        match version_map.entry(version.clone().into()) {
+                        match version_map.entry(version.clone()) {
                             Entry::Occupied(mut entry) => {
                                 entry
                                     .get_mut()
@@ -135,21 +135,19 @@ impl VersionMap {
     }
 
     /// Return the [`DistFile`] for the given version, if any.
-    pub(crate) fn get(&self, version: &PubGrubVersion) -> Option<ResolvableDist> {
+    pub(crate) fn get(&self, version: &Version) -> Option<ResolvableDist> {
         self.0.get(version).and_then(PrioritizedDistribution::get)
     }
 
     /// Return an iterator over the versions and distributions.
-    pub(crate) fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (&PubGrubVersion, ResolvableDist)> {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, ResolvableDist)> {
         self.0
             .iter()
             .filter_map(|(version, dist)| Some((version, dist.get()?)))
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &PubGrubVersion) -> Vec<Hashes> {
+    pub(crate) fn hashes(&self, version: &Version) -> Vec<Hashes> {
         self.0
             .get(version)
             .map(|file| file.hashes().to_vec())
@@ -157,8 +155,8 @@ impl VersionMap {
     }
 }
 
-impl From<FlatIndex<PubGrubVersion>> for VersionMap {
-    fn from(flat_index: FlatIndex<PubGrubVersion>) -> Self {
+impl From<FlatIndex> for VersionMap {
+    fn from(flat_index: FlatIndex) -> Self {
         Self(flat_index.0)
     }
 }

@@ -1,17 +1,16 @@
 use distribution_types::{DistributionMetadata, Name, VersionOrUrl};
+use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
 
-use crate::pubgrub::PubGrubVersion;
-
 #[derive(Debug)]
 pub(crate) enum PubGrubDistribution<'a> {
-    Registry(&'a PackageName, &'a PubGrubVersion),
+    Registry(&'a PackageName, &'a Version),
     Url(&'a PackageName, &'a VerbatimUrl),
 }
 
 impl<'a> PubGrubDistribution<'a> {
-    pub(crate) fn from_registry(name: &'a PackageName, version: &'a PubGrubVersion) -> Self {
+    pub(crate) fn from_registry(name: &'a PackageName, version: &'a Version) -> Self {
         Self::Registry(name, version)
     }
 
@@ -32,7 +31,7 @@ impl Name for PubGrubDistribution<'_> {
 impl DistributionMetadata for PubGrubDistribution<'_> {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
-            Self::Registry(_, version) => VersionOrUrl::Version((*version).into()),
+            Self::Registry(_, version) => VersionOrUrl::Version(version),
             Self::Url(_, url) => VersionOrUrl::Url(url),
         }
     }

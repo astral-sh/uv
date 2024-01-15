@@ -19,7 +19,7 @@ use puffin_traits::OnceMap;
 use pypi_types::{Hashes, Metadata21};
 
 use crate::pins::FilePins;
-use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority, PubGrubVersion};
+use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
 use crate::version_map::VersionMap;
 use crate::ResolveError;
 
@@ -28,7 +28,7 @@ use crate::ResolveError;
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    petgraph: petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed>,
+    petgraph: petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The set of editable requirements in this resolution.
@@ -40,12 +40,12 @@ pub struct ResolutionGraph {
 impl ResolutionGraph {
     /// Create a new graph from the resolved `PubGrub` state.
     pub(crate) fn from_state(
-        selection: &SelectedDependencies<PubGrubPackage, PubGrubVersion>,
+        selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionMap>,
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &DashMap<Url, Url>,
-        state: &State<PubGrubPackage, Range<PubGrubVersion>, PubGrubPriority>,
+        state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
         editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
@@ -63,7 +63,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
                     let pinned_package = pins
-                        .get(package_name, &Version::from(version.clone()))
+                        .get(package_name, version)
                         .expect("Every package should be pinned")
                         .clone();
 
@@ -116,9 +116,8 @@ impl ResolutionGraph {
                     let metadata = entry.value();
 
                     if !metadata.provides_extras.contains(extra) {
-                        let version = Version::from(version.clone());
                         let pinned_package = pins
-                            .get(package_name, &version)
+                            .get(package_name, version)
                             .expect("Every package should be pinned")
                             .clone();
 
@@ -208,9 +207,7 @@ impl ResolutionGraph {
     }
 
     /// Return the underlying graph.
-    pub fn petgraph(
-        &self,
-    ) -> &petgraph::graph::Graph<Dist, Range<PubGrubVersion>, petgraph::Directed> {
+    pub fn petgraph(&self) -> &petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed> {
         &self.petgraph
     }
 }

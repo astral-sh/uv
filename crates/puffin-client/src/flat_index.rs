@@ -13,18 +13,10 @@ use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_normalize::PackageName;
 
-#[derive(Debug, Clone)]
-pub struct FlatIndex<T: Into<Version> + From<Version> + Ord>(
-    pub BTreeMap<T, PrioritizedDistribution>,
-);
+#[derive(Debug, Clone, Default)]
+pub struct FlatIndex(pub BTreeMap<Version, PrioritizedDistribution>);
 
-impl<T: Into<Version> + From<Version> + Ord> Default for FlatIndex<T> {
-    fn default() -> Self {
-        Self(BTreeMap::default())
-    }
-}
-
-impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
+impl FlatIndex {
     /// Collect all the files from `--find-links` into a override hashmap we can pass into version map creation.
     #[instrument(skip_all)]
     pub fn from_files(
@@ -44,7 +36,7 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
     }
 
     fn add_file(
-        version_map: &mut FlatIndex<T>,
+        version_map: &mut FlatIndex,
         file: File,
         filename: DistFilename,
         tags: &Tags,
@@ -62,7 +54,7 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
                     file,
                     index,
                 }));
-                match version_map.0.entry(version.into()) {
+                match version_map.0.entry(version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_built(dist, None, None, priority);
                     }
@@ -79,7 +71,7 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
                     file,
                     index,
                 }));
-                match version_map.0.entry(filename.version.clone().into()) {
+                match version_map.0.entry(filename.version.clone()) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_source(dist, None, None);
                     }
@@ -91,7 +83,7 @@ impl<T: Into<Version> + From<Version> + Ord> FlatIndex<T> {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&T, &PrioritizedDistribution)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDistribution)> {
         self.0.iter()
     }
 }
