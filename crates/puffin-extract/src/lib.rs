@@ -44,12 +44,12 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
 
         // Create dir or write file
         if is_dir {
-            tokio::fs::create_dir_all(path).await?;
+            fs_err::tokio::create_dir_all(path).await?;
         } else {
             if let Some(parent) = path.parent() {
-                tokio::fs::create_dir_all(parent).await?;
+                fs_err::tokio::create_dir_all(parent).await?;
             }
-            let file = tokio::fs::File::create(path).await?;
+            let file = fs_err::tokio::File::create(path).await?;
             let mut writer = tokio::io::BufWriter::new(file);
             let mut reader = entry.reader_mut().compat();
             tokio::io::copy(&mut reader, &mut writer).await?;

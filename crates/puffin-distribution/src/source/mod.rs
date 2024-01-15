@@ -834,7 +834,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Download the source distribution to a temporary file.
         let sdist_file = temp_dir.path().join(source_dist_filename);
         let mut writer = tokio::io::BufWriter::new(
-            tokio::fs::File::create(&sdist_file)
+            fs_err::tokio::File::create(&sdist_file)
                 .await
                 .map_err(puffin_client::Error::CacheWrite)?,
         );
