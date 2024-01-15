@@ -101,10 +101,10 @@ impl Display for FlatIndexLocation {
     }
 }
 
-/// The index URLs to use for fetching packages.
+/// The index locations to use for fetching packages.
 ///
 /// "pip treats all package sources equally" (<https://github.com/pypa/pip/issues/8606#issuecomment-788754817>),
-/// and so do we, i.e. you can't rely that on any particular order of querying indices.
+/// and so do we, i.e., you can't rely that on any particular order of querying indices.
 ///
 /// If the fields are none and empty, ignore the package index, instead rely on local archives and
 /// caches.
@@ -118,7 +118,7 @@ pub struct IndexLocations {
 }
 
 impl Default for IndexLocations {
-    /// Just pypi
+    /// By default, use the `PyPI` index.
     fn default() -> Self {
         Self {
             index: Some(IndexUrl::Pypi),
@@ -137,6 +137,7 @@ impl IndexLocations {
         no_index: bool,
     ) -> Self {
         if no_index {
+            // TODO(charlie): Warn if the user passes in arguments here alongside `--no-index`.
             Self {
                 index: None,
                 extra_index: Vec::new(),
@@ -150,10 +151,6 @@ impl IndexLocations {
             }
         }
     }
-
-    pub fn no_index(&self) -> bool {
-        self.index.is_none() && self.extra_index.is_empty()
-    }
 }
 
 impl<'a> IndexLocations {
@@ -163,5 +160,50 @@ impl<'a> IndexLocations {
 
     pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
         self.flat_index.iter()
+    }
+
+    pub fn index_urls(&'a self) -> IndexUrls {
+        IndexUrls {
+            index: self.index.clone(),
+            extra_index: self.extra_index.clone(),
+        }
+    }
+}
+
+/// The index URLs to use for fetching packages.
+///
+/// From a pip perspective, this type merges `--index-url` and `--extra-index-url`.
+#[derive(Debug, Clone)]
+pub struct IndexUrls {
+    index: Option<IndexUrl>,
+    extra_index: Vec<IndexUrl>,
+}
+
+impl Default for IndexUrls {
+    /// By default, use the `PyPI` index.
+    fn default() -> Self {
+        Self {
+            index: Some(IndexUrl::Pypi),
+            extra_index: Vec::new(),
+        }
+    }
+}
+
+impl<'a> IndexUrls {
+    pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+        self.index.iter().chain(self.extra_index.iter())
+    }
+
+    pub fn no_index(&self) -> bool {
+        self.index.is_none() && self.extra_index.is_empty()
+    }
+}
+
+impl From<IndexLocations> for IndexUrls {
+    fn from(locations: IndexLocations) -> Self {
+        Self {
+            index: locations.index,
+            extra_index: locations.extra_index,
+        }
     }
 }

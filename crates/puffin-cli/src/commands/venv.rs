@@ -12,7 +12,7 @@ use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::Cache;
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Interpreter;
 use puffin_traits::{BuildContext, SetupPyStrategy};
@@ -63,6 +63,14 @@ enum VenvError {
     #[error("Failed to install seed packages")]
     #[diagnostic(code(puffin::venv::seed))]
     SeedError(#[source] anyhow::Error),
+
+    #[error("Failed to extract interpreter tags")]
+    #[diagnostic(code(puffin::venv::tags))]
+    TagsError(#[source] platform_host::PlatformError),
+
+    #[error("Failed to resolve `--find-links` entry")]
+    #[diagnostic(code(puffin::venv::flat_index))]
+    FlatIndexError(#[source] puffin_client::Error),
 }
 
 /// Create a virtual environment.
@@ -114,15 +122,30 @@ async fn venv_impl(
 
     // Install seed packages.
     if seed {
+        // Extract the interpreter.
+        let interpreter = venv.interpreter();
+
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone()).build();
+
+        // Resolve the flat indexes from `--find-links`.
+        let flat_index = {
+            let tags = interpreter.tags().map_err(VenvError::TagsError)?;
+            let client = FlatIndexClient::new(&client, cache);
+            let entries = client
+                .fetch(index_locations.flat_indexes())
+                .await
+                .map_err(VenvError::FlatIndexError)?;
+            FlatIndex::from_entries(entries, tags)
+        };
 
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            venv.interpreter(),
+            interpreter,
             index_locations,
+            &flat_index,
             venv.python_executable(),
             SetupPyStrategy::default(),
             true,

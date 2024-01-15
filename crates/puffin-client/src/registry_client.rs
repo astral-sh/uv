@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
@@ -18,24 +17,21 @@ use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{
-    BuiltDist, File, FileLocation, FlatIndexLocation, IndexLocations, IndexUrl, Name,
-};
+use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
-use pypi_types::{BaseUrl, Hashes, Metadata21, SimpleJson};
+use pypi_types::{BaseUrl, Metadata21, SimpleJson};
 
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::{CachedClient, CachedClientError, Error, FlatIndexEntry};
+use crate::{CachedClient, CachedClientError, Error};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
-    index_locations: IndexLocations,
+    index_urls: IndexUrls,
     retries: u32,
     cache: Cache,
 }
@@ -43,7 +39,7 @@ pub struct RegistryClientBuilder {
 impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
-            index_locations: IndexLocations::default(),
+            index_urls: IndexUrls::default(),
             cache,
             retries: 3,
         }
@@ -52,8 +48,8 @@ impl RegistryClientBuilder {
 
 impl RegistryClientBuilder {
     #[must_use]
-    pub fn index_locations(mut self, index_urls: IndexLocations) -> Self {
-        self.index_locations = index_urls;
+    pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
+        self.index_urls = index_urls;
         self
     }
 
@@ -76,7 +72,7 @@ impl RegistryClientBuilder {
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(60 * 5));
 
-            client_core.build().expect("Fail to build HTTP client.")
+            client_core.build().expect("Failed to build HTTP client.")
         };
 
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(self.retries);
@@ -88,7 +84,7 @@ impl RegistryClientBuilder {
 
         let client = CachedClient::new(uncached_client.clone());
         RegistryClient {
-            index_locations: self.index_locations,
+            index_urls: self.index_urls,
             client_raw: client_raw.clone(),
             cache: self.cache,
             client,
@@ -100,7 +96,7 @@ impl RegistryClientBuilder {
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
-    index_locations: IndexLocations,
+    index_urls: IndexUrls,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Don't use this client, it only exists because `async_http_range_reader` needs
@@ -116,133 +112,6 @@ impl RegistryClient {
         &self.client
     }
 
-    /// Read the directories and flat remote indexes from `--find-links`.
-    #[allow(clippy::result_large_err)]
-    pub async fn flat_index(&self) -> Result<Vec<FlatIndexEntry>, Error> {
-        let mut dists = Vec::new();
-        // TODO(konstin): Parallelize reads over flat indexes.
-        for flat_index in self.index_locations.flat_indexes() {
-            let index_dists = match flat_index {
-                FlatIndexLocation::Path(path) => {
-                    Self::read_flat_index_dir(path).map_err(Error::FindLinks)?
-                }
-                FlatIndexLocation::Url(url) => self.read_flat_url(url).await?,
-            };
-            if index_dists.is_empty() {
-                warn!("No packages found in `--find-links` entry: {}", flat_index);
-            } else {
-                debug!(
-                    "Found {} package{} in `--find-links` entry: {}",
-                    index_dists.len(),
-                    if index_dists.len() == 1 { "" } else { "s" },
-                    flat_index
-                );
-            }
-            dists.extend(index_dists);
-        }
-        Ok(dists)
-    }
-
-    /// Read a flat remote index from a `--find-links` URL.
-    async fn read_flat_url(&self, url: &Url) -> Result<Vec<FlatIndexEntry>, Error> {
-        let cache_entry = self.cache.entry(
-            CacheBucket::FlatIndex,
-            "html",
-            format!("{}.msgpack", cache_key::digest(&url.to_string())),
-        );
-
-        let flat_index_request = self
-            .client
-            .uncached()
-            .get(url.clone())
-            .header("Accept-Encoding", "gzip")
-            .header("Accept", "text/html")
-            .build()?;
-        let parse_simple_response = |response: Response| {
-            async {
-                let text = response.text().await?;
-                let SimpleHtml { base, files } = SimpleHtml::parse(&text, url)
-                    .map_err(|err| Error::from_html_err(err, url.clone()))?;
-
-                let files: Vec<File> = files
-                    .into_iter()
-                    .filter_map(|file| {
-                        match File::try_from(file, &base) {
-                            Ok(file) => Some(file),
-                            Err(err) => {
-                                // Ignore files with unparseable version specifiers.
-                                warn!("Skipping file in {url}: {err}");
-                                None
-                            }
-                        }
-                    })
-                    .collect();
-                Ok(files)
-            }
-            .instrument(info_span!("parse_flat_index_html", url = % url))
-        };
-        let files = self
-            .client
-            .get_cached_with_callback(flat_index_request, &cache_entry, parse_simple_response)
-            .await?;
-        Ok(files
-            .into_iter()
-            .filter_map(|file| {
-                Some((
-                    DistFilename::try_from_normalized_filename(&file.filename)?,
-                    file,
-                    IndexUrl::Url(url.clone()),
-                ))
-            })
-            .collect())
-    }
-
-    /// Read a flat remote index from a `--find-links` directory.
-    fn read_flat_index_dir(path: &PathBuf) -> Result<Vec<FlatIndexEntry>, io::Error> {
-        // Absolute paths are required for the URL conversion.
-        let path = fs_err::canonicalize(path)?;
-        let url = Url::from_directory_path(&path).expect("URL is already absolute");
-        let url = VerbatimUrl::unknown(url);
-
-        let mut dists = Vec::new();
-        for entry in fs_err::read_dir(&path)? {
-            let entry = entry?;
-            let metadata = entry.metadata()?;
-            if !metadata.is_file() {
-                continue;
-            }
-
-            let Ok(filename) = entry.file_name().into_string() else {
-                warn!(
-                    "Skipping non-UTF-8 filename in `--find-links` directory: {}",
-                    entry.file_name().to_string_lossy()
-                );
-                continue;
-            };
-
-            let file = File {
-                dist_info_metadata: None,
-                filename: filename.to_string(),
-                hashes: Hashes { sha256: None },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: FileLocation::Path(entry.path().to_path_buf(), url.clone()),
-                yanked: None,
-            };
-
-            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
-                debug!(
-                    "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
-                    entry.path().display()
-                );
-                continue;
-            };
-            dists.push((filename, file, IndexUrl::Pypi));
-        }
-        Ok(dists)
-    }
-
     /// Fetch a package from the `PyPI` simple API.
     ///
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
@@ -253,11 +122,11 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
     ) -> Result<(IndexUrl, SimpleMetadata), Error> {
-        if self.index_locations.no_index() {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
-        for index in self.index_locations.indexes() {
+        for index in self.index_urls.indexes() {
             let result = self.simple_single_index(package_name, index).await?;
 
             return match result {
@@ -396,7 +265,7 @@ impl RegistryClient {
         file: &File,
         url: &Url,
     ) -> Result<Metadata21, Error> {
-        if self.index_locations.no_index() {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(file.filename.clone()));
         }
 
@@ -445,7 +314,7 @@ impl RegistryClient {
         url: &'data Url,
         cache_shard: WheelCache<'data>,
     ) -> Result<Metadata21, Error> {
-        if self.index_locations.no_index() {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(url.to_string()));
         }
 
@@ -511,7 +380,7 @@ impl RegistryClient {
         &self,
         url: &Url,
     ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
-        if self.index_locations.no_index() {
+        if self.index_urls.no_index() {
             return Err(Error::NoIndex(url.to_string()));
         }
 

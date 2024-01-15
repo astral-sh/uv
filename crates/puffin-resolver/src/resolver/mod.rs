@@ -77,19 +77,21 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
     /// Initialize a new resolver using the default backend doing real requests.
     ///
     /// Reads the flat index entries.
-    pub async fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
         interpreter: &'a Interpreter,
         tags: &'a Tags,
         client: &'a RegistryClient,
+        flat_index: &'a FlatIndex,
         build_context: &'a Context,
-    ) -> Result<Self, puffin_client::Error> {
+    ) -> Self {
         let provider = DefaultResolverProvider::new(
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
-            FlatIndex::from_files(client.flat_index().await?, tags),
+            flat_index,
             tags,
             PythonRequirement::new(interpreter, markers),
             options.exclude_newer,
@@ -99,13 +101,13 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .chain(manifest.constraints.iter())
                 .collect(),
         );
-        Ok(Self::new_custom_io(
+        Self::new_custom_io(
             manifest,
             options,
             markers,
             PythonRequirement::new(interpreter, markers),
             provider,
-        ))
+        )
     }
 }
 

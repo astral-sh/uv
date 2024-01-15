@@ -10,7 +10,7 @@ use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
+use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
@@ -60,8 +60,15 @@ pub(crate) async fn pip_sync(
 
     // Prep the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_locations(index_locations.clone())
+        .index_urls(index_locations.index_urls())
         .build();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, &cache);
+        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        FlatIndex::from_entries(entries, tags)
+    };
 
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
@@ -69,6 +76,7 @@ pub(crate) async fn pip_sync(
         &cache,
         venv.interpreter(),
         &index_locations,
+        &flat_index,
         venv.python_executable(),
         setup_py,
         no_build,
@@ -130,7 +138,7 @@ pub(crate) async fn pip_sync(
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_locations(index_locations.clone())
+        .index_urls(index_locations.index_urls())
         .build();
 
     // Resolve any registry-based requirements.
@@ -139,7 +147,12 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let flat_index = FlatIndex::from_files(client.flat_index().await?, tags);
+        // Resolve the flat indexes from `--find-links`.
+        let flat_index = {
+            let client = FlatIndexClient::new(&client, &cache);
+            let entries = client.fetch(index_locations.flat_indexes()).await?;
+            FlatIndex::from_entries(entries, tags)
+        };
 
         let wheel_finder =
             puffin_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index)
