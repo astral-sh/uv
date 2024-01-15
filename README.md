@@ -89,7 +89,6 @@ Puffin does not support the entire `pip` feature set. Namely, Puffin won't suppo
 On the other hand, Puffin plans to (but does not currently) support:
 
 - Hash checking
-- `--find-links` (though `--index-url` and `--extra-index-url` are supported)
 - ...
 
 Like `pip-compile`, Puffin generates a platform-specific `requirements.txt` file (unlike, e.g.,
