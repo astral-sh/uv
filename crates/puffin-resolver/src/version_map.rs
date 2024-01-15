@@ -8,7 +8,7 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_client::{FlatIndex, SimpleMetadata};
+use puffin_client::{FlatDistributions, SimpleMetadata};
 use puffin_normalize::PackageName;
 use puffin_warnings::warn_user_once;
 use pypi_types::{Hashes, Yanked};
@@ -32,11 +32,11 @@ impl VersionMap {
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
-        flat_index: Option<FlatIndex>,
+        flat_index: Option<FlatDistributions>,
     ) -> Self {
         // If we have packages of the same name from find links, gives them priority, otherwise start empty
         let mut version_map: BTreeMap<Version, PrioritizedDistribution> =
-            flat_index.map(|overrides| overrides.0).unwrap_or_default();
+            flat_index.map(Into::into).unwrap_or_default();
 
         // Collect compatible distributions.
         for (version, files) in metadata {
@@ -155,8 +155,8 @@ impl VersionMap {
     }
 }
 
-impl From<FlatIndex> for VersionMap {
-    fn from(flat_index: FlatIndex) -> Self {
-        Self(flat_index.0)
+impl From<FlatDistributions> for VersionMap {
+    fn from(flat_index: FlatDistributions) -> Self {
+        Self(flat_index.into())
     }
 }

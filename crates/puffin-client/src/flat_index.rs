@@ -13,30 +13,30 @@ use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_normalize::PackageName;
 
+pub type FlatIndexEntry = (DistFilename, File, IndexUrl);
+
+/// A set of [`PrioritizedDistribution`] from a `--find-links` entry, indexed by [`PackageName`]
+/// and [`Version`].
 #[derive(Debug, Clone, Default)]
-pub struct FlatIndex(pub BTreeMap<Version, PrioritizedDistribution>);
+pub struct FlatIndex(FxHashMap<PackageName, FlatDistributions>);
 
 impl FlatIndex {
-    /// Collect all the files from `--find-links` into a override hashmap we can pass into version map creation.
+    /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_files(
-        dists: Vec<(DistFilename, File, IndexUrl)>,
-        tags: &Tags,
-    ) -> FxHashMap<PackageName, Self> {
-        // If we have packages of the same name from find links, gives them priority, otherwise start empty
-        let mut flat_index: FxHashMap<PackageName, Self> = FxHashMap::default();
+    pub fn from_files(dists: Vec<FlatIndexEntry>, tags: &Tags) -> Self {
+        let mut flat_index = FxHashMap::default();
 
         // Collect compatible distributions.
         for (filename, file, index) in dists {
-            let version_map = flat_index.entry(filename.name().clone()).or_default();
-            Self::add_file(version_map, file, filename, tags, index);
+            let distributions = flat_index.entry(filename.name().clone()).or_default();
+            Self::add_file(distributions, file, filename, tags, index);
         }
 
-        flat_index
+        Self(flat_index)
     }
 
     fn add_file(
-        version_map: &mut FlatIndex,
+        distributions: &mut FlatDistributions,
         file: File,
         filename: DistFilename,
         tags: &Tags,
@@ -54,7 +54,7 @@ impl FlatIndex {
                     file,
                     index,
                 }));
-                match version_map.0.entry(version) {
+                match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_built(dist, None, None, priority);
                     }
@@ -71,7 +71,7 @@ impl FlatIndex {
                     file,
                     index,
                 }));
-                match version_map.0.entry(filename.version.clone()) {
+                match distributions.0.entry(filename.version.clone()) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_source(dist, None, None);
                     }
@@ -83,7 +83,25 @@ impl FlatIndex {
         }
     }
 
+    /// Get the [`FlatDistributions`] for the given package name.
+    pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
+        self.0.get(package_name)
+    }
+}
+
+/// A set of [`PrioritizedDistribution`] from a `--find-links` entry for a single package, indexed
+/// by [`Version`].
+#[derive(Debug, Clone, Default)]
+pub struct FlatDistributions(BTreeMap<Version, PrioritizedDistribution>);
+
+impl FlatDistributions {
     pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDistribution)> {
         self.0.iter()
+    }
+}
+
+impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDistribution> {
+    fn from(distributions: FlatDistributions) -> Self {
+        distributions.0
     }
 }

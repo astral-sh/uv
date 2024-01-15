@@ -10,7 +10,7 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_client::{FlatIndex, RegistryClient, SimpleMetadata};
+use puffin_client::{FlatDistributions, FlatIndex, RegistryClient, SimpleMetadata};
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 
@@ -21,7 +21,7 @@ pub struct DistFinder<'a> {
     client: &'a RegistryClient,
     reporter: Option<Box<dyn Reporter>>,
     interpreter: &'a Interpreter,
-    flat_index: &'a FxHashMap<PackageName, FlatIndex>,
+    flat_index: &'a FlatIndex,
 }
 
 impl<'a> DistFinder<'a> {
@@ -30,7 +30,7 @@ impl<'a> DistFinder<'a> {
         tags: &'a Tags,
         client: &'a RegistryClient,
         interpreter: &'a Interpreter,
-        flat_index: &'a FxHashMap<PackageName, FlatIndex>,
+        flat_index: &'a FlatIndex,
     ) -> Self {
         Self {
             tags,
@@ -56,7 +56,7 @@ impl<'a> DistFinder<'a> {
     async fn resolve_requirement(
         &self,
         requirement: &Requirement,
-        flat_index: Option<&FlatIndex>,
+        flat_index: Option<&FlatDistributions>,
     ) -> Result<(PackageName, Dist), ResolveError> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
@@ -118,7 +118,7 @@ impl<'a> DistFinder<'a> {
         requirement: &Requirement,
         metadata: SimpleMetadata,
         index: &IndexUrl,
-        flat_index: Option<&FlatIndex>,
+        flat_index: Option<&FlatDistributions>,
     ) -> Option<Dist> {
         // Prioritize the flat index by initializing the "best" matches with its entries.
         let matching_override = if let Some(flat_index) = flat_index {

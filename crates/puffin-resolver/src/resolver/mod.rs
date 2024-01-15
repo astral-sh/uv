@@ -24,7 +24,7 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use puffin_client::RegistryClient;
+use puffin_client::{FlatIndex, RegistryClient};
 use puffin_distribution::DistributionDatabase;
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
@@ -89,6 +89,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         let provider = DefaultResolverProvider::new(
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
+            FlatIndex::from_files(client.flat_index().await?, tags),
             tags,
             PythonRequirement::new(interpreter, markers),
             options.exclude_newer,
@@ -97,8 +98,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .iter()
                 .chain(manifest.constraints.iter())
                 .collect(),
-        )
-        .await?;
+        );
         Ok(Self::new_custom_io(
             manifest,
             options,
