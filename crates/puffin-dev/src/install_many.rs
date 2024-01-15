@@ -18,7 +18,7 @@ use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{RegistryClient, RegistryClientBuilder};
+use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_distribution::RegistryWheelIndex;
 use puffin_installer::Downloader;
@@ -104,7 +104,7 @@ async fn install_chunk(
     index_locations: &IndexLocations,
 ) -> Result<()> {
     let resolution: Vec<_> =
-        DistFinder::new(tags, client, venv.interpreter(), &FxHashMap::default())
+        DistFinder::new(tags, client, venv.interpreter(), &FlatIndex::default())
             .resolve_stream(requirements)
             .collect()
             .await;

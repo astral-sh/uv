@@ -139,8 +139,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let flat_index_files = client.flat_index().await?;
-        let flat_index = FlatIndex::from_files(flat_index_files, tags);
+        let flat_index = FlatIndex::from_files(client.flat_index().await?, tags);
 
         let wheel_finder =
             puffin_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index)

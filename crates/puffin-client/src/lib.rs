@@ -1,6 +1,6 @@
 pub use cached_client::{CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::Error;
-pub use flat_index::FlatIndex;
+pub use flat_index::{FlatDistributions, FlatIndex, FlatIndexEntry};
 pub use registry_client::{
     read_metadata_async, RegistryClient, RegistryClientBuilder, SimpleMetadata, VersionFiles,
 };

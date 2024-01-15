@@ -30,7 +30,7 @@ use pypi_types::{BaseUrl, Hashes, Metadata21, SimpleJson};
 
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::{CachedClient, CachedClientError, Error};
+use crate::{CachedClient, CachedClientError, Error, FlatIndexEntry};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -118,7 +118,7 @@ impl RegistryClient {
 
     /// Read the directories and flat remote indexes from `--find-links`.
     #[allow(clippy::result_large_err)]
-    pub async fn flat_index(&self) -> Result<Vec<(DistFilename, File, IndexUrl)>, Error> {
+    pub async fn flat_index(&self) -> Result<Vec<FlatIndexEntry>, Error> {
         let mut dists = Vec::new();
         // TODO(konstin): Parallelize reads over flat indexes.
         for flat_index in self.index_locations.flat_indexes() {
@@ -144,7 +144,7 @@ impl RegistryClient {
     }
 
     /// Read a flat remote index from a `--find-links` URL.
-    async fn read_flat_url(&self, url: &Url) -> Result<Vec<(DistFilename, File, IndexUrl)>, Error> {
+    async fn read_flat_url(&self, url: &Url) -> Result<Vec<FlatIndexEntry>, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
@@ -198,9 +198,7 @@ impl RegistryClient {
     }
 
     /// Read a flat remote index from a `--find-links` directory.
-    fn read_flat_index_dir(
-        path: &PathBuf,
-    ) -> Result<Vec<(DistFilename, File, IndexUrl)>, io::Error> {
+    fn read_flat_index_dir(path: &PathBuf) -> Result<Vec<FlatIndexEntry>, io::Error> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
         let url = Url::from_directory_path(&path).expect("URL is already absolute");
