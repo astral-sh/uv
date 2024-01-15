@@ -379,7 +379,8 @@ async fn resolve(
         tags,
         client,
         build_dispatch,
-    )?
+    )
+    .await?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
 

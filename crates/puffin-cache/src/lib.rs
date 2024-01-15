@@ -345,6 +345,13 @@ pub enum CacheBucket {
     /// }
     /// ```
     BuiltWheels,
+    /// Flat index responses, a format very similar to the simple metadata API.
+    ///
+    /// Cache structure:
+    ///  * `flat-index-v0/index/<digest(flat_index_url)>.msgpack`
+    ///
+    /// The response is stored as `Vec<File>`.
+    FlatIndex,
     /// Git repositories.
     Git,
     /// Information about an interpreter at a path.
@@ -400,6 +407,7 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             CacheBucket::BuiltWheels => "built-wheels-v0",
+            CacheBucket::FlatIndex => "flat-index-v0",
             CacheBucket::Git => "git-v0",
             CacheBucket::Interpreter => "interpreter-v0",
             CacheBucket::Simple => "simple-v0",
@@ -506,6 +514,14 @@ impl CacheBucket {
                     if remove(directory.join(format!("{name}.msgpack")))? {
                         count += 1;
                     }
+                }
+            }
+            CacheBucket::FlatIndex => {
+                // We can't know if the flat index includes a package, so we just remove the entire
+                // cache entry.
+                let root = cache.bucket(self);
+                if remove(root)? {
+                    count += 1;
                 }
             }
             CacheBucket::Git => {

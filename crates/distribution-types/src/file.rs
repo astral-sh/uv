@@ -54,9 +54,9 @@ impl File {
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileLocation {
-    /// URL relative to base
+    /// URL relative to the base URL.
     Url(Url),
-    /// Absolute path to file
+    /// Absolute path to a file.
     Path(PathBuf, VerbatimUrl),
 }
 

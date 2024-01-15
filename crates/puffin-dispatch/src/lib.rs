@@ -99,7 +99,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             tags,
             self.client,
             self,
-        )?;
+        )
+        .await?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",

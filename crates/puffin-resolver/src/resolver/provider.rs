@@ -2,11 +2,10 @@ use std::future::Future;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use futures::TryFutureExt;
+use futures::FutureExt;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use crate::pubgrub::PubGrubVersion;
 use distribution_types::Dist;
 use platform_tags::Tags;
 use puffin_client::{FlatIndex, RegistryClient};
@@ -15,6 +14,7 @@ use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
+use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
@@ -59,7 +59,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
-    pub fn new(
+    pub async fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
         tags: &'a Tags,
@@ -67,8 +67,8 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         exclude_newer: Option<DateTime<Utc>>,
         allowed_yanks: AllowedYanks,
     ) -> Result<Self, puffin_client::Error> {
-        let flat_index_dists = client.flat_index()?;
-        let flat_index = FlatIndex::from_dists(flat_index_dists, tags);
+        let flat_index_dists = client.flat_index().await?;
+        let flat_index = FlatIndex::from_files(flat_index_dists, tags);
 
         Ok(Self {
             client,
@@ -92,8 +92,8 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         let flat_index_override = self.flat_index.get(package_name).cloned();
         self.client
             .simple(package_name)
-            .map_ok(move |(index, metadata)| {
-                VersionMap::from_metadata(
+            .map(move |result| match result {
+                Ok((index, metadata)) => Ok(VersionMap::from_metadata(
                     metadata,
                     package_name,
                     &index,
@@ -102,7 +102,15 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                     &self.allowed_yanks,
                     self.exclude_newer.as_ref(),
                     flat_index_override,
-                )
+                )),
+                Err(err @ puffin_client::Error::PackageNotFound(_)) => {
+                    if let Some(flat_index) = flat_index_override {
+                        Ok(VersionMap::from(flat_index))
+                    } else {
+                        Err(err)
+                    }
+                }
+                Err(err) => Err(err),
             })
     }
 

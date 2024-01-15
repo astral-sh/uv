@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -89,6 +90,15 @@ pub enum FlatIndexError {
     Url(String, #[source] url::ParseError),
     #[error("Invalid `file://` path in URL: {0}")]
     FilePath(Url),
+}
+
+impl Display for FlatIndexLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FlatIndexLocation::Path(path) => Display::fmt(&path.display(), f),
+            FlatIndexLocation::Url(url) => Display::fmt(url, f),
+        }
+    }
 }
 
 /// The index URLs to use for fetching packages.

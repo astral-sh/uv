@@ -228,7 +228,8 @@ pub(crate) async fn pip_compile(
         &tags,
         &client,
         &build_dispatch,
-    )?
+    )
+    .await?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {
