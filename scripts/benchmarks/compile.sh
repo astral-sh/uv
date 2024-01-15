@@ -23,5 +23,5 @@ hyperfine --runs 20 --warmup 3 --prepare "rm -f /tmp/requirements.txt" \
 # Resolution with a warm cache.
 ###
 hyperfine --runs 20 --warmup 3 --prepare "rm -f /tmp/requirements.txt" \
-    "./target/release/puffin pip-compile ${TARGET} > /tmp/requirements.txt" \
+    "./target/release/puffin pip compile ${TARGET} > /tmp/requirements.txt" \
     "./target/release/main pip-compile ${TARGET} > /tmp/requirements.txt"

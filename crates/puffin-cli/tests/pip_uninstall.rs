@@ -17,7 +17,8 @@ fn no_arguments() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
@@ -27,7 +28,7 @@ fn no_arguments() -> Result<()> {
     error: the following required arguments were not provided:
       <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
-    Usage: puffin pip-uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
+    Usage: puffin pip uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
     For more information, try '--help'.
     "###);
@@ -40,7 +41,8 @@ fn invalid_requirement() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("flask==1.0.x")
         .current_dir(&temp_dir), @r###"
     success: false
@@ -62,7 +64,8 @@ fn missing_requirements_txt() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("-r")
         .arg("requirements.txt")
         .current_dir(&temp_dir), @r###"
@@ -86,7 +89,8 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     requirements_txt.write_str("flask==1.0.x")?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("-r")
         .arg("requirements.txt")
         .current_dir(&temp_dir), @r###"
@@ -109,7 +113,8 @@ fn missing_pyproject_toml() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("-r")
         .arg("pyproject.toml")
         .current_dir(&temp_dir), @r###"
@@ -133,7 +138,8 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     pyproject_toml.write_str("123 - 456")?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("-r")
         .arg("pyproject.toml")
         .current_dir(&temp_dir), @r###"
@@ -162,7 +168,8 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     pyproject_toml.write_str("[project]")?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("-r")
         .arg("pyproject.toml")
         .current_dir(&temp_dir), @r###"
@@ -196,7 +203,8 @@ dependencies = ["flask==1.0.x"]
     )?;
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-uninstall")
+        .arg("pip")
+        .arg("uninstall")
         .arg("-r")
         .arg("pyproject.toml")
         .current_dir(&temp_dir), @r###"
@@ -230,7 +238,8 @@ fn uninstall() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--cache-dir")
         .arg(cache_dir.path())
@@ -250,7 +259,8 @@ fn uninstall() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-uninstall")
+            .arg("pip")
+            .arg("uninstall")
             .arg("MarkupSafe")
             .arg("--cache-dir")
             .arg(cache_dir.path())
@@ -287,7 +297,8 @@ fn missing_record() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--cache-dir")
         .arg(cache_dir.path())
@@ -322,7 +333,8 @@ fn missing_record() -> Result<()> {
         filters => filters,
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-uninstall")
+            .arg("pip")
+            .arg("uninstall")
             .arg("MarkupSafe")
             .arg("--cache-dir")
             .arg(cache_dir.path())
@@ -358,7 +370,8 @@ fn uninstall_editable_by_name() -> Result<()> {
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg(requirements_txt.path())
         .arg("--cache-dir")
         .arg(cache_dir.path())
@@ -377,7 +390,8 @@ fn uninstall_editable_by_name() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-uninstall")
+            .arg("pip")
+            .arg("uninstall")
             .arg("poetry-editable")
             .arg("--cache-dir")
             .arg(cache_dir.path())
@@ -420,7 +434,8 @@ fn uninstall_editable_by_path() -> Result<()> {
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg(requirements_txt.path())
         .arg("--cache-dir")
         .arg(cache_dir.path())
@@ -439,7 +454,8 @@ fn uninstall_editable_by_path() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-uninstall")
+            .arg("pip")
+            .arg("uninstall")
             .arg("-e")
             .arg("../../scripts/editable-installs/poetry_editable")
             .arg("--cache-dir")
@@ -482,7 +498,8 @@ fn uninstall_duplicate_editable() -> Result<()> {
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg(requirements_txt.path())
         .arg("--cache-dir")
         .arg(cache_dir.path())
@@ -501,7 +518,8 @@ fn uninstall_duplicate_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-uninstall")
+            .arg("pip")
+            .arg("uninstall")
             .arg("poetry-editable")
             .arg("-e")
             .arg("../../scripts/editable-installs/poetry_editable")

@@ -73,7 +73,8 @@ fn {{normalized_name}}() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             {{#root.requires}}
             .arg("{{prefix}}-{{.}}")
             {{/root.requires}}

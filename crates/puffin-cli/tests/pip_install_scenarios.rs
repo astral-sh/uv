@@ -64,7 +64,8 @@ fn requires_package_does_not_exist() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s57cd4136-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -113,7 +114,8 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("seaa03067-a==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -165,7 +167,8 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s6e8e01df-a>1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -218,7 +221,8 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("se45cec3c-a<2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -270,7 +274,8 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("saca2796a-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -320,7 +325,8 @@ fn excluded_only_version() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s7a9ed79c-a!=1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -393,7 +399,8 @@ fn excluded_only_compatible_version() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sd28c9e3c-a!=2.0.0")
             .arg("sd28c9e3c-b>=2.0.0,<3.0.0")
             .arg("--extra-index-url")
@@ -503,7 +510,8 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s2023222f-a")
             .arg("s2023222f-b>=2.0.0,<3.0.0")
             .arg("s2023222f-c")
@@ -642,7 +650,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("saece4208-a")
             .arg("saece4208-b>=2.0.0,<3.0.0")
             .arg("saece4208-c")
@@ -720,7 +729,8 @@ fn direct_incompatible_versions() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s80d82ee8-a==1.0.0")
             .arg("s80d82ee8-a==2.0.0")
             .arg("--extra-index-url")
@@ -780,7 +790,8 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sa967e815-a")
             .arg("sa967e815-b==1.0.0")
             .arg("--extra-index-url")
@@ -848,7 +859,8 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s6866d8dc-a")
             .arg("s6866d8dc-b")
             .arg("--extra-index-url")
@@ -909,7 +921,8 @@ fn package_only_prereleases() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s9a1b3dda-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -965,7 +978,8 @@ fn package_only_prereleases_in_range() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s19673198-a>0.1.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1022,7 +1036,8 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s51f94da2-a>0.1.0")
             .arg("--prerelease=allow")
             .arg("--extra-index-url")
@@ -1077,7 +1092,8 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("seebe53a6-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1136,7 +1152,8 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s9d4725eb-a>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1194,7 +1211,8 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s6cc95bc8-a>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1254,7 +1272,8 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sc97845e2-a>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1313,7 +1332,8 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("se290bf29-a>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1370,7 +1390,8 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sf5948c28-a>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1428,7 +1449,8 @@ fn transitive_package_only_prereleases() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s44ebef16-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1490,7 +1512,8 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s27759187-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1558,7 +1581,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s26efb6c5-a")
             .arg("s26efb6c5-b>0.0.0a1")
             .arg("--extra-index-url")
@@ -1627,7 +1651,8 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sc7ad0310-a")
             .arg("sc7ad0310-b")
             .arg("--extra-index-url")
@@ -1702,7 +1727,8 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sa05f7cb8-a")
             .arg("sa05f7cb8-b")
             .arg("sa05f7cb8-c>=0.0.0a1")
@@ -1798,7 +1824,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s02ae765c-a")
             .arg("s02ae765c-b")
             .arg("--extra-index-url")
@@ -1892,7 +1919,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sef9ce80f-a")
             .arg("sef9ce80f-b")
             .arg("--extra-index-url")
@@ -1964,7 +1992,8 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s0825b69c-a==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2017,7 +2046,8 @@ fn requires_python_version_less_than_current() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sf9296b84-a==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2070,7 +2100,8 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sa11d5394-a==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2145,7 +2176,8 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s02dc550c-a==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2205,7 +2237,8 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("sef060cef-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2266,7 +2299,8 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s1bde0c18-a>=2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2333,7 +2367,8 @@ fn specific_tag_and_default() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s74e4a459-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2383,7 +2418,8 @@ fn only_wheels() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s4f019491-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2433,7 +2469,8 @@ fn no_wheels() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s614d801c-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -2483,7 +2520,8 @@ fn no_wheels_with_matching_platform() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("s737bbfd4-a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")

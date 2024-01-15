@@ -328,7 +328,7 @@ async fn build_editables(
     Ok(editables)
 }
 
-/// Resolve a set of requirements, similar to running `pip-compile`.
+/// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
     requirements: Vec<Requirement>,

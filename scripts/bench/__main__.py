@@ -10,7 +10,7 @@ To set up the required environment, run:
 
     cargo build --release
     ./target/release/puffin venv
-    ./target/release/puffin pip-sync ./scripts/bench/requirements.txt
+    ./target/release/puffin pip sync ./scripts/bench/requirements.txt
     source .venv/bin/activate
 
 Example usage:
@@ -453,7 +453,8 @@ class Puffin(Suite):
             prepare=f"rm -rf {cwd} && rm -f {output_file}",
             command=[
                 self.path,
-                "pip-compile",
+                "pip",
+                "compile",
                 os.path.abspath(requirements_file),
                 "--cache-dir",
                 cache_dir,
@@ -471,7 +472,8 @@ class Puffin(Suite):
             prepare=f"rm -f {output_file}",
             command=[
                 self.path,
-                "pip-compile",
+                "pip",
+                "compile",
                 os.path.abspath(requirements_file),
                 "--cache-dir",
                 cache_dir,
@@ -490,7 +492,8 @@ class Puffin(Suite):
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
-                "pip-sync",
+                "pip",
+                "sync",
                 os.path.abspath(requirements_file),
                 "--cache-dir",
                 cache_dir,
@@ -507,7 +510,8 @@ class Puffin(Suite):
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
-                "pip-sync",
+                "pip",
+                "sync",
                 os.path.abspath(requirements_file),
                 "--cache-dir",
                 cache_dir,

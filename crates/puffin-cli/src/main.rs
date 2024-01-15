@@ -63,18 +63,10 @@ struct Cli {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
-    /// Compile a `requirements.in` file to a `requirements.txt` file.
-    PipCompile(PipCompileArgs),
-    /// Sync dependencies from a `requirements.txt` file.
-    PipSync(PipSyncArgs),
-    /// Install packages into the current environment.
-    PipInstall(PipInstallArgs),
-    /// Uninstall packages from the current environment.
-    PipUninstall(PipUninstallArgs),
-    /// Enumerate the installed packages in the current environment.
-    PipFreeze(PipFreezeArgs),
+    /// Resolve and install Python packages.
+    Pip(PipArgs),
     /// Create a virtual environment.
-    #[clap(alias = "virtualenv")]
+    #[clap(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
     /// Clear the cache.
     Clean(CleanArgs),
@@ -84,6 +76,26 @@ enum Commands {
     /// Remove a dependency from the workspace.
     #[clap(hide = true)]
     Remove(RemoveArgs),
+}
+
+#[derive(Args)]
+struct PipArgs {
+    #[clap(subcommand)]
+    command: PipCommand,
+}
+
+#[derive(Subcommand)]
+enum PipCommand {
+    /// Compile a `requirements.in` file to a `requirements.txt` file.
+    Compile(PipCompileArgs),
+    /// Sync dependencies from a `requirements.txt` file.
+    Sync(PipSyncArgs),
+    /// Install packages into the current environment.
+    Install(PipInstallArgs),
+    /// Uninstall packages from the current environment.
+    Uninstall(PipUninstallArgs),
+    /// Enumerate the installed packages in the current environment.
+    Freeze(PipFreezeArgs),
 }
 
 /// Clap parser for the union of date and datetime
@@ -509,7 +521,9 @@ async fn inner() -> Result<ExitStatus> {
     let cache = Cache::try_from(cli.cache_args)?;
 
     match cli.command {
-        Commands::PipCompile(args) => {
+        Commands::Pip(PipArgs {
+            command: PipCommand::Compile(args),
+        }) => {
             let requirements = args
                 .src_file
                 .into_iter()
@@ -562,7 +576,9 @@ async fn inner() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::PipSync(args) => {
+        Commands::Pip(PipArgs {
+            command: PipCommand::Sync(args),
+        }) => {
             let index_urls = IndexLocations::from_args(
                 args.index_url,
                 args.extra_index_url,
@@ -592,7 +608,9 @@ async fn inner() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::PipInstall(args) => {
+        Commands::Pip(PipArgs {
+            command: PipCommand::Install(args),
+        }) => {
             let requirements = args
                 .package
                 .into_iter()
@@ -647,7 +665,9 @@ async fn inner() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::PipUninstall(args) => {
+        Commands::Pip(PipArgs {
+            command: PipCommand::Uninstall(args),
+        }) => {
             let sources = args
                 .package
                 .into_iter()
@@ -657,8 +677,10 @@ async fn inner() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await
         }
+        Commands::Pip(PipArgs {
+            command: PipCommand::Freeze(args),
+        }) => commands::freeze(&cache, args.strict, printer),
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
-        Commands::PipFreeze(args) => commands::freeze(&cache, args.strict, printer),
         Commands::Venv(args) => {
             let index_locations = IndexLocations::from_args(
                 args.index_url,
