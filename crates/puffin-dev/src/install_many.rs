@@ -103,10 +103,11 @@ async fn install_chunk(
     venv: &Virtualenv,
     index_locations: &IndexLocations,
 ) -> Result<()> {
-    let resolution: Vec<_> = DistFinder::new(tags, client, venv.interpreter())
-        .resolve_stream(requirements)
-        .collect()
-        .await;
+    let resolution: Vec<_> =
+        DistFinder::new(tags, client, venv.interpreter(), &FxHashMap::default())
+            .resolve_stream(requirements)
+            .collect()
+            .await;
     let (resolution, failures): (FxHashMap<PackageName, Dist>, Vec<_>) =
         resolution.into_iter().partition_result();
     for failure in &failures {

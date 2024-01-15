@@ -10,7 +10,7 @@ use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::{RegistryClient, RegistryClientBuilder};
+use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
@@ -139,8 +139,12 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::DistFinder::new(tags, &client, venv.interpreter())
-            .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let flat_index_files = client.flat_index().await?;
+        let flat_index = FlatIndex::from_files(flat_index_files, tags);
+
+        let wheel_finder =
+            puffin_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index)
+                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };

@@ -7,6 +7,8 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use assert_fs::TempDir;
+use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
@@ -2659,6 +2661,57 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
+        "###);
+    });
+
+    Ok(())
+}
+
+/// Sync using `--find-links` with a local directory.
+#[test]
+fn find_links() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        markupsafe==2.1.3
+        numpy==1.26.3
+        tqdm==1000.0.0
+        werkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl
+    "})?;
+
+    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
+    let project_root_string = project_root.display().to_string();
+    let filters: Vec<_> = iter::once((project_root_string.as_str(), "[PROJECT_ROOT]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip-sync")
+            .arg("requirements.txt")
+            .arg("--find-links")
+            .arg(project_root.join("scripts/wheels/"))
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
+        Downloaded 4 packages in [TIME]
+        Installed 4 packages in [TIME]
+         + markupsafe==2.1.3
+         + numpy==1.26.3
+         + tqdm==1000.0.0
+         + werkzeug==3.0.1 (from https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl)
         "###);
     });
 
