@@ -31,8 +31,8 @@ use puffin_resolver::{
 use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
 
+use crate::commands::{ChangeEvent, ChangeEventKind, elapsed, ExitStatus};
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -149,7 +149,7 @@ pub(crate) async fn pip_install(
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
-    let build_dispatch = BuildDispatch::new(
+    let resolve_dispatch = BuildDispatch::new(
         &client,
         &cache,
         &interpreter,
@@ -176,7 +176,7 @@ pub(crate) async fn pip_install(
             &cache,
             tags,
             &client,
-            &build_dispatch,
+            &resolve_dispatch,
             printer,
         )
         .await?
@@ -196,7 +196,7 @@ pub(crate) async fn pip_install(
         markers,
         &client,
         &flat_index,
-        &build_dispatch,
+        &resolve_dispatch,
         options,
         printer,
     )
@@ -215,6 +215,27 @@ pub(crate) async fn pip_install(
         Err(err) => return Err(err.into()),
     };
 
+    // Re-initialize the in-flight map.
+    let in_flight = InFlight::default();
+
+    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
+    // end up removing some distributions from the environment.
+    let install_dispatch = if reinstall.is_none() {
+        resolve_dispatch
+    } else {
+        BuildDispatch::new(
+            &client,
+            &cache,
+            &interpreter,
+            &index_locations,
+            &flat_index,
+            &in_flight,
+            venv.python_executable(),
+            setup_py,
+            no_build,
+        )
+    };
+
     // Sync the environment.
     install(
         &resolution,
@@ -226,7 +247,7 @@ pub(crate) async fn pip_install(
         tags,
         &client,
         &in_flight,
-        &build_dispatch,
+        &install_dispatch,
         &cache,
         &venv,
         printer,
@@ -456,6 +477,8 @@ async fn install(
         tags,
     )
     .context("Failed to determine installation plan")?;
+
+    println!("local: {:?}", local);
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {

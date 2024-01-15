@@ -687,3 +687,53 @@ fn install_editable_and_registry() -> Result<()> {
 
     Ok(())
 }
+
+/// Install a source distribution that uses the `setuptools` build system, along with `setuptools`
+/// at the top-level, along with `--reinstall` to force a re-download after resolution, to ensure
+/// that the `setuptools` install and the source distribution build don't conflict.
+#[test]
+fn install_setuptools() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Install devpi.
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str("setuptools\ndevpi @ https://files.pythonhosted.org/packages/e4/f3/e334eb4dc930ccb677363e1305a3730003d203efbb023329e4b610e4515b/devpi-2.2.0.tar.gz")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("--reinstall")
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + blinker==1.7.0
+         + click==8.1.7
+         + flask==3.0.0
+         + itsdangerous==2.1.2
+         + jinja2==3.1.2
+         + markupsafe==2.1.3
+         + werkzeug==3.0.1
+        "###);
+    });
+
+    Ok(())
+}
