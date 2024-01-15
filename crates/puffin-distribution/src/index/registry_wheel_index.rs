@@ -4,7 +4,9 @@ use std::path::Path;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CachedRegistryDist, CachedWheel, IndexLocations};
+use distribution_types::{
+    CachedRegistryDist, CachedWheel, FlatIndexLocation, IndexLocations, IndexUrl,
+};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
@@ -75,7 +77,16 @@ impl<'a> RegistryWheelIndex<'a> {
     ) -> BTreeMap<Version, CachedRegistryDist> {
         let mut versions = BTreeMap::new();
 
-        for index_url in index_locations.indexes() {
+        // Collect into owned `IndexUrl`
+        let flat_index_urls: Vec<IndexUrl> = index_locations
+            .flat_indexes()
+            .filter_map(|flat_index| match flat_index {
+                FlatIndexLocation::Path(_) => None,
+                FlatIndexLocation::Url(url) => Some(IndexUrl::Url(url.clone())),
+            })
+            .collect();
+
+        for index_url in index_locations.indexes().chain(flat_index_urls.iter()) {
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
