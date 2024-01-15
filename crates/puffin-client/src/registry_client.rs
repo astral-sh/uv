@@ -265,10 +265,6 @@ impl RegistryClient {
         file: &File,
         url: &Url,
     ) -> Result<Metadata21, Error> {
-        if self.index_urls.no_index() {
-            return Err(Error::NoIndex(file.filename.clone()));
-        }
-
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename)?;
         if file
@@ -314,10 +310,6 @@ impl RegistryClient {
         url: &'data Url,
         cache_shard: WheelCache<'data>,
     ) -> Result<Metadata21, Error> {
-        if self.index_urls.no_index() {
-            return Err(Error::NoIndex(url.to_string()));
-        }
-
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
@@ -380,10 +372,6 @@ impl RegistryClient {
         &self,
         url: &Url,
     ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
-        if self.index_urls.no_index() {
-            return Err(Error::NoIndex(url.to_string()));
-        }
-
         Ok(Box::new(
             self.client
                 .uncached()
