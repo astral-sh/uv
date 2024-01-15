@@ -137,11 +137,10 @@ impl IndexLocations {
         no_index: bool,
     ) -> Self {
         if no_index {
-            // TODO(charlie): Warn if the user passes in arguments here alongside `--no-index`.
             Self {
                 index: None,
                 extra_index: Vec::new(),
-                flat_index: Vec::new(),
+                flat_index,
             }
         } else {
             Self {
@@ -154,14 +153,17 @@ impl IndexLocations {
 }
 
 impl<'a> IndexLocations {
+    /// Return an iterator over the [`IndexUrl`] entries.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
         self.index.iter().chain(self.extra_index.iter())
     }
 
+    /// Return an iterator over the [`FlatIndexLocation`] entries.
     pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
         self.flat_index.iter()
     }
 
+    /// Clone the index locations into a [`IndexUrls`] instance.
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {
             index: self.index.clone(),
@@ -190,10 +192,12 @@ impl Default for IndexUrls {
 }
 
 impl<'a> IndexUrls {
+    /// Return an iterator over the [`IndexUrl`] entries.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
         self.index.iter().chain(self.extra_index.iter())
     }
 
+    /// Return `true` if no index is configured.
     pub fn no_index(&self) -> bool {
         self.index.is_none() && self.extra_index.is_empty()
     }

@@ -100,7 +100,10 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                     self.exclude_newer.as_ref(),
                     self.flat_index.get(package_name).cloned(),
                 )),
-                Err(err @ puffin_client::Error::PackageNotFound(_)) => {
+                Err(
+                    err @ (puffin_client::Error::PackageNotFound(_)
+                    | puffin_client::Error::NoIndex(_)),
+                ) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
                         Ok(VersionMap::from(flat_index))
                     } else {
