@@ -73,13 +73,13 @@ def main():
 def run_once(stdin: TextIO, stdout: TextIO):
     start = time.perf_counter()
 
-    send_expect(stdout, "build_backend")
+    send_expect(stdout, "build-backend")
     build_backend_name = parse_build_backend(stdin)
 
-    send_expect(stdout, "backend_path")
+    send_expect(stdout, "backend-path")
     backend_path = parse_backend_path(stdin)
 
-    send_expect(stdout, "hook_name")
+    send_expect(stdout, "hook-name")
     hook_name = parse_hook_name(stdin)
     if hook_name not in HookArguments:
         raise FatalError(f"No arguments defined for hook {hook_name!r}")

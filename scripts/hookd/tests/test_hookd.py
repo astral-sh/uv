@@ -111,9 +111,9 @@ def test_run_invalid_backend():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -143,9 +143,9 @@ def test_run_invalid_hook():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         ERROR InvalidHookName The name 'hook_does_not_exist' is not valid hook. Expected one of: 'build_wheel', 'build_sdist', 'prepare_metadata_for_build_wheel', 'get_requires_for_build_wheel', 'get_requires_for_build_sdist'
         TRACEBACK [TRACEBACK]
         READY
@@ -171,9 +171,9 @@ def test_run_build_wheel_ok():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -206,9 +206,9 @@ def test_run_build_sdist_ok():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT sdist_directory
         EXPECT config_settings
         DEBUG ok_backend build_sdist sdist_directory=[TREE]/foo config_settings=None
@@ -240,9 +240,9 @@ def test_run_get_requires_for_build_wheel_ok():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT config_settings
         DEBUG ok_backend get_requires_for_build_wheel config_settings=None
         DEBUG parsed hook inputs in [TIME]
@@ -275,9 +275,9 @@ def test_run_prepare_metadata_for_build_wheel_ok():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT metadata_directory
         EXPECT config_settings
         DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=[TREE]/foo config_settings=None
@@ -312,9 +312,9 @@ def test_run_invalid_config_settings():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT config_settings
         ERROR MalformedHookArgument Malformed content for argument 'config_settings': 'not_valid_json'
         TRACEBACK [TRACEBACK]
@@ -344,9 +344,9 @@ def test_run_build_wheel_multiple_times():
         + """
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -381,9 +381,9 @@ def test_run_build_wheel_error():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -417,9 +417,9 @@ def test_run_error_not_fatal():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -431,9 +431,9 @@ def test_run_error_not_fatal():
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -476,9 +476,9 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -490,9 +490,9 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -526,9 +526,9 @@ def test_run_error_in_backend_module(tmp_path: Path):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -562,9 +562,9 @@ def test_run_unsupported_hook_empty(tmp_path: Path):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -609,9 +609,9 @@ def test_run_unsupported_hook_partial(tmp_path: Path):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT sdist_directory
         EXPECT config_settings
         DEBUG partial_backend build_sdist sdist_directory=[TREE]/foo config_settings=None
@@ -651,9 +651,9 @@ def test_run_cls_backend(separator):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -689,9 +689,9 @@ def test_run_obj_backend(separator):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -737,9 +737,9 @@ def test_run_in_tree_backend():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -774,9 +774,9 @@ def test_run_submodule_backend():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -820,9 +820,9 @@ def test_run_submodule_backend_invalid_import():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -855,9 +855,9 @@ def test_run_stdout_capture():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -910,9 +910,9 @@ def test_run_stderr_capture():
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
@@ -1013,9 +1013,9 @@ def test_run_real_backend_build_wheel_error(backend: str):
         DEBUG changed working directory to [TREE]
         READY
         EXPECT action
-        EXPECT build_backend
-        EXPECT backend_path
-        EXPECT hook_name
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
