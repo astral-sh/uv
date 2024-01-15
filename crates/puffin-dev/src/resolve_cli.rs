@@ -13,7 +13,7 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
@@ -58,14 +58,20 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let index_locations =
         IndexLocations::from_args(args.index_url, args.extra_index_url, args.find_links, false);
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_locations(index_locations.clone())
+        .index_urls(index_locations.index_urls())
         .build();
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, &cache);
+        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        FlatIndex::from_entries(entries, venv.interpreter().tags()?)
+    };
 
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
         venv.interpreter(),
         &index_locations,
+        &flat_index,
         venv.python_executable(),
         SetupPyStrategy::default(),
         args.no_build,
@@ -80,9 +86,9 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         venv.interpreter(),
         tags,
         &client,
+        &flat_index,
         &build_dispatch,
-    )
-    .await?;
+    );
     let resolution_graph = resolver.resolve().await.with_context(|| {
         format!(
             "No solution found when resolving: {}",

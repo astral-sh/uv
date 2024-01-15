@@ -50,7 +50,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
-    flat_index: FlatIndex,
+    flat_index: &'a FlatIndex,
     tags: &'a Tags,
     python_requirement: PythonRequirement<'a>,
     exclude_newer: Option<DateTime<Utc>>,
@@ -62,7 +62,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
     pub fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
-        flat_index: FlatIndex,
+        flat_index: &'a FlatIndex,
         tags: &'a Tags,
         python_requirement: PythonRequirement<'a>,
         exclude_newer: Option<DateTime<Utc>>,

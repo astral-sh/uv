@@ -60,6 +60,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_locations = IndexLocations::default();
+    let flat_index = FlatIndex::default();
     let setup_py = SetupPyStrategy::default();
     let tags = venv.interpreter().tags()?;
 
@@ -68,6 +69,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &cache,
         venv.interpreter(),
         &index_locations,
+        &flat_index,
         venv.python_executable(),
         setup_py,
         args.no_build,

@@ -18,7 +18,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::{RegistryClient, RegistryClientBuilder};
+use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{
     BuiltEditable, Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages,
@@ -134,8 +134,15 @@ pub(crate) async fn pip_install(
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_locations(index_locations.clone())
+        .index_urls(index_locations.index_urls())
         .build();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, &cache);
+        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        FlatIndex::from_entries(entries, tags)
+    };
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
 
@@ -144,6 +151,7 @@ pub(crate) async fn pip_install(
         &cache,
         &interpreter,
         &index_locations,
+        &flat_index,
         venv.python_executable(),
         setup_py,
         no_build,
@@ -183,6 +191,7 @@ pub(crate) async fn pip_install(
         tags,
         markers,
         &client,
+        &flat_index,
         &build_dispatch,
         options,
         printer,
@@ -333,6 +342,7 @@ async fn resolve(
     tags: &Tags,
     markers: &MarkerEnvironment,
     client: &RegistryClient,
+    flat_index: &FlatIndex,
     build_dispatch: &BuildDispatch<'_>,
     options: ResolutionOptions,
     mut printer: Printer,
@@ -378,9 +388,9 @@ async fn resolve(
         interpreter,
         tags,
         client,
+        flat_index,
         build_dispatch,
     )
-    .await?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
 

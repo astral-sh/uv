@@ -9,7 +9,7 @@ use distribution_types::IndexLocations;
 use platform_host::Platform;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::{Cache, CacheArgs};
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{FlatIndex, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy};
@@ -55,6 +55,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let venv = Virtualenv::from_env(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexLocations::default();
+    let flat_index = FlatIndex::default();
     let setup_py = SetupPyStrategy::default();
 
     let build_dispatch = BuildDispatch::new(
@@ -62,6 +63,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &cache,
         venv.interpreter(),
         &index_urls,
+        &flat_index,
         venv.python_executable(),
         setup_py,
         false,

@@ -18,7 +18,7 @@ use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::Downloader;
 use puffin_interpreter::{Interpreter, PythonVersion};
@@ -144,8 +144,15 @@ pub(crate) async fn pip_compile(
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_locations(index_locations.clone())
+        .index_urls(index_locations.index_urls())
         .build();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, &cache);
+        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        FlatIndex::from_entries(entries, &tags)
+    };
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
     let build_dispatch = BuildDispatch::new(
@@ -153,6 +160,7 @@ pub(crate) async fn pip_compile(
         &cache,
         &interpreter,
         &index_locations,
+        &flat_index,
         interpreter.sys_executable().to_path_buf(),
         setup_py,
         no_build,
@@ -219,6 +227,13 @@ pub(crate) async fn pip_compile(
         editable_metadata,
     );
 
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, &cache);
+        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        FlatIndex::from_entries(entries, &tags)
+    };
+
     // Resolve the dependencies.
     let resolver = Resolver::new(
         manifest,
@@ -227,9 +242,9 @@ pub(crate) async fn pip_compile(
         &interpreter,
         &tags,
         &client,
+        &flat_index,
         &build_dispatch,
     )
-    .await?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {

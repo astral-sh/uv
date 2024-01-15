@@ -15,7 +15,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::RegistryClientBuilder;
+use puffin_client::{FlatIndex, RegistryClientBuilder};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
     DisplayResolutionGraph, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode,
@@ -100,6 +100,7 @@ async fn resolve(
     tags: &Tags,
 ) -> Result<ResolutionGraph> {
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
+    let flat_index = FlatIndex::default();
     let interpreter = Interpreter::artificial(
         Platform::current()?,
         markers.clone(),
@@ -118,9 +119,9 @@ async fn resolve(
         &interpreter,
         tags,
         &client,
+        &flat_index,
         &build_context,
-    )
-    .await?;
+    );
     Ok(resolver.resolve().await?)
 }
 

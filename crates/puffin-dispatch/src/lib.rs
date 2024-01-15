@@ -13,7 +13,7 @@ use distribution_types::{CachedDist, DistributionId, IndexLocations, Name, Resol
 use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
-use puffin_client::RegistryClient;
+use puffin_client::{FlatIndex, RegistryClient};
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
@@ -26,6 +26,7 @@ pub struct BuildDispatch<'a> {
     cache: &'a Cache,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
+    flat_index: &'a FlatIndex,
     base_python: PathBuf,
     setup_py: SetupPyStrategy,
     no_build: bool,
@@ -35,11 +36,13 @@ pub struct BuildDispatch<'a> {
 }
 
 impl<'a> BuildDispatch<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
+        flat_index: &'a FlatIndex,
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
         no_build: bool,
@@ -49,6 +52,7 @@ impl<'a> BuildDispatch<'a> {
             cache,
             interpreter,
             index_locations,
+            flat_index,
             base_python,
             setup_py,
             no_build,
@@ -98,9 +102,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.interpreter,
             tags,
             self.client,
+            self.flat_index,
             self,
-        )
-        .await?;
+        );
         let graph = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
