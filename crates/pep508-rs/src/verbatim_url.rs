@@ -4,11 +4,13 @@ use std::path::Path;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
 #[derive(Debug, Clone, Eq, derivative::Derivative)]
 #[derivative(PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: Url,

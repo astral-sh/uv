@@ -16,8 +16,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    DirectArchiveUrl, DirectGitUrl, Dist, GitSourceDist, Identifier, LocalEditable, Name,
-    PathSourceDist, RemoteSource, SourceDist,
+    DirectArchiveUrl, DirectGitUrl, Dist, FileLocation, GitSourceDist, Identifier, LocalEditable,
+    Name, PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
 use platform_tags::Tags;
@@ -98,19 +98,32 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
+                let url = match &registry_source_dist.file.url {
+                    FileLocation::Url(url) => url,
+                    FileLocation::Path(path, url) => {
+                        let path_source_dist = PathSourceDist {
+                            name: registry_source_dist.filename.name.clone(),
+                            url: url.clone(),
+                            path: path.clone(),
+                            editable: false,
+                        };
+                        return self.path(source_dist, &path_source_dist).await;
+                    }
+                };
+
                 // For registry source distributions, shard by package, then by SHA.
                 // Ex) `pypi/requests/a673187abc19fe6c`
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
-                        .remote_wheel_dir(registry_source_dist.name.as_ref())
+                        .remote_wheel_dir(registry_source_dist.filename.name.as_ref())
                         .join(&registry_source_dist.file.distribution_id().as_str()[..16]),
                 );
 
                 self.url(
                     source_dist,
                     &registry_source_dist.file.filename,
-                    &registry_source_dist.file.url,
+                    url,
                     &cache_shard,
                     None,
                 )
@@ -154,19 +167,32 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
+                let url = match &registry_source_dist.file.url {
+                    FileLocation::Url(url) => url,
+                    FileLocation::Path(path, url) => {
+                        let path_source_dist = PathSourceDist {
+                            name: registry_source_dist.filename.name.clone(),
+                            url: url.clone(),
+                            path: path.clone(),
+                            editable: false,
+                        };
+                        return self.path_metadata(source_dist, &path_source_dist).await;
+                    }
+                };
+
                 // For registry source distributions, shard by package, then by SHA.
                 // Ex) `pypi/requests/a673187abc19fe6c`
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
-                        .remote_wheel_dir(registry_source_dist.name.as_ref())
+                        .remote_wheel_dir(registry_source_dist.filename.name.as_ref())
                         .join(&registry_source_dist.file.distribution_id().as_str()[..16]),
                 );
 
                 self.url_metadata(
                     source_dist,
                     &registry_source_dist.file.filename,
-                    &registry_source_dist.file.url,
+                    url,
                     &cache_shard,
                     None,
                 )

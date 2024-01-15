@@ -3,6 +3,7 @@
 //! This is similar to running `pip install` with the `--no-deps` flag.
 
 use anyhow::Result;
+use distribution_filename::DistFilename;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 
@@ -56,15 +57,10 @@ impl<'a> DistFinder<'a> {
                 let (index, metadata) = self.client.simple(&requirement.name).await?;
 
                 // Pick a version that satisfies the requirement.
-                let Some(ParsedFile {
-                    name,
-                    version,
-                    file,
-                }) = self.select(requirement, metadata)
-                else {
+                let Some(ParsedFile { filename, file }) = self.select(requirement, metadata) else {
                     return Err(ResolveError::NotFound(requirement.clone()));
                 };
-                let distribution = Dist::from_registry(name, version, file, index);
+                let distribution = Dist::from_registry(filename, file, index);
 
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&distribution);
@@ -152,8 +148,7 @@ impl<'a> DistFinder<'a> {
                     {
                         best_wheel = Some((
                             ParsedFile {
-                                name: wheel.name,
-                                version: wheel.version,
+                                filename: DistFilename::WheelFilename(wheel),
                                 file,
                             },
                             priority,
@@ -181,8 +176,7 @@ impl<'a> DistFinder<'a> {
 
                     best_version = Some(sdist.version.clone());
                     best_sdist = Some(ParsedFile {
-                        name: sdist.name,
-                        version: sdist.version,
+                        filename: DistFilename::SourceDistFilename(sdist),
                         file,
                     });
                 }
@@ -195,10 +189,8 @@ impl<'a> DistFinder<'a> {
 
 #[derive(Debug)]
 struct ParsedFile {
-    /// The [`PackageName`] extracted from the [`File`].
-    name: PackageName,
-    /// The version extracted from the [`File`].
-    version: Version,
+    /// The wheel or source dist filename extracted from the [`File`].
+    filename: DistFilename,
     /// The underlying [`File`].
     file: File,
 }

@@ -12,7 +12,9 @@ use tracing::instrument;
 use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
-use distribution_types::{BuiltDist, DirectGitUrl, Dist, LocalEditable, Name, SourceDist};
+use distribution_types::{
+    BuiltDist, DirectGitUrl, Dist, FileLocation, LocalEditable, Name, SourceDist,
+};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
@@ -108,6 +110,24 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ) -> Result<LocalWheel, DistributionDatabaseError> {
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
+                let url = match &wheel.file.url {
+                    FileLocation::Url(url) => url,
+                    FileLocation::Path(path, url) => {
+                        let cache_entry = self.cache.entry(
+                            CacheBucket::Wheels,
+                            WheelCache::Url(url).remote_wheel_dir(wheel.name().as_ref()),
+                            wheel.filename.stem(),
+                        );
+
+                        return Ok(LocalWheel::Disk(DiskWheel {
+                            dist: dist.clone(),
+                            path: path.clone(),
+                            target: cache_entry.into_path_buf(),
+                            filename: wheel.filename.clone(),
+                        }));
+                    }
+                };
+
                 // Download and unzip on the same tokio task.
                 //
                 // In all wheels we've seen so far, unzipping while downloading is
@@ -123,7 +143,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // for downloading and unzipping (with a buffer in between) and switch
                 // to rayon if this buffer grows large by the time the file is fully
                 // downloaded.
-                let reader = self.client.stream_external(&wheel.file.url).await?;
+                let reader = self.client.stream_external(url).await?;
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;

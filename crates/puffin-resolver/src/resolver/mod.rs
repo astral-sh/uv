@@ -75,6 +75,8 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
 
 impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvider<'a, Context>> {
     /// Initialize a new resolver using the default backend doing real requests.
+    ///
+    /// Reads the flat index entries.
     pub fn new(
         manifest: Manifest,
         options: ResolutionOptions,
@@ -83,7 +85,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         tags: &'a Tags,
         client: &'a RegistryClient,
         build_context: &'a Context,
-    ) -> Self {
+    ) -> Result<Self, puffin_client::Error> {
         let provider = DefaultResolverProvider::new(
             client,
             DistributionDatabase::new(build_context.cache(), tags, client, build_context),
@@ -95,14 +97,14 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .iter()
                 .chain(manifest.constraints.iter())
                 .collect(),
-        );
-        Self::new_custom_io(
+        )?;
+        Ok(Self::new_custom_io(
             manifest,
             options,
             markers,
             PythonRequirement::new(interpreter, markers),
             provider,
-        )
+        ))
     }
 }
 
@@ -377,14 +379,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
-                let distribution = Dist::from_url(package_name.clone(), url.clone())?;
-                if self
-                    .index
-                    .distributions
-                    .register_owned(distribution.package_id())
-                {
-                    priorities.add(distribution.name().clone());
-                    request_sink.unbounded_send(Request::Dist(distribution))?;
+                let dist = Dist::from_url(package_name.clone(), url.clone())?;
+                if self.index.distributions.register_owned(dist.package_id()) {
+                    priorities.add(dist.name().clone());
+                    request_sink.unbounded_send(Request::Dist(dist))?;
                 }
             }
         }
@@ -542,8 +540,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .distributions
                     .register_owned(candidate.package_id())
                 {
-                    let distribution = candidate.resolve().dist.clone();
-                    request_sink.unbounded_send(Request::Dist(distribution))?;
+                    let dist = candidate.resolve().dist.clone();
+                    request_sink.unbounded_send(Request::Dist(dist))?;
                 }
 
                 Ok(Some(version))
@@ -690,13 +688,19 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     trace!("Received package metadata for: {package_name}");
                     self.index.packages.done(package_name, version_map);
                 }
-                Some(Response::Dist(Dist::Built(distribution), metadata, ..)) => {
-                    trace!("Received built distribution metadata for: {distribution}");
-                    self.index
-                        .distributions
-                        .done(distribution.package_id(), metadata);
+                Some(Response::Dist {
+                    dist: Dist::Built(dist),
+                    metadata,
+                    precise: _,
+                }) => {
+                    trace!("Received built distribution metadata for: {dist}");
+                    self.index.distributions.done(dist.package_id(), metadata);
                 }
-                Some(Response::Dist(Dist::Source(distribution), metadata, precise)) => {
+                Some(Response::Dist {
+                    dist: Dist::Source(distribution),
+                    metadata,
+                    precise,
+                }) => {
                     trace!("Received source distribution metadata for: {distribution}");
                     self.index
                         .distributions
@@ -753,7 +757,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)
                         }
                     })?;
-                Ok(Some(Response::Dist(dist, metadata, precise)))
+                Ok(Some(Response::Dist {
+                    dist,
+                    metadata,
+                    precise,
+                }))
             }
 
             // Pre-fetch the package and distribution metadata.
@@ -804,7 +812,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             }
                         })?;
 
-                    Ok(Some(Response::Dist(dist, metadata, precise)))
+                    Ok(Some(Response::Dist {
+                        dist,
+                        metadata,
+                        precise,
+                    }))
                 } else {
                     Ok(None)
                 }
@@ -852,7 +864,11 @@ enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, VersionMap),
     /// The returned metadata for a distribution.
-    Dist(Dist, Metadata21, Option<Url>),
+    Dist {
+        dist: Dist,
+        metadata: Metadata21,
+        precise: Option<Url>,
+    },
 }
 
 /// An enum used by [`DependencyProvider`] that holds information about package dependencies.

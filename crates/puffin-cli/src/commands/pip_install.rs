@@ -11,7 +11,7 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    IndexUrls, InstalledMetadata, LocalDist, LocalEditable, Name, Resolution,
+    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -45,7 +45,7 @@ pub(crate) async fn pip_install(
     extras: &ExtrasSpecification<'_>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
-    index_urls: IndexUrls,
+    index_locations: IndexLocations,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     setup_py: SetupPyStrategy,
@@ -134,7 +134,7 @@ pub(crate) async fn pip_install(
 
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_urls.clone())
+        .index_locations(index_locations.clone())
         .build();
 
     let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
@@ -143,7 +143,7 @@ pub(crate) async fn pip_install(
         &client,
         &cache,
         &interpreter,
-        &index_urls,
+        &index_locations,
         venv.python_executable(),
         setup_py,
         no_build,
@@ -209,7 +209,7 @@ pub(crate) async fn pip_install(
         site_packages,
         reinstall,
         link_mode,
-        &index_urls,
+        &index_locations,
         tags,
         &client,
         &build_dispatch,
@@ -379,7 +379,7 @@ async fn resolve(
         tags,
         client,
         build_dispatch,
-    )
+    )?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
 
@@ -406,7 +406,7 @@ async fn install(
     site_packages: SitePackages<'_>,
     reinstall: &Reinstall,
     link_mode: LinkMode,
-    index_urls: &IndexUrls,
+    index_urls: &IndexLocations,
     tags: &Tags,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
@@ -602,6 +602,9 @@ fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) ->
 enum Error {
     #[error(transparent)]
     Resolve(#[from] puffin_resolver::ResolveError),
+
+    #[error(transparent)]
+    Client(#[from] puffin_client::Error),
 
     #[error(transparent)]
     Platform(#[from] platform_host::PlatformError),

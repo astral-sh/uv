@@ -8,7 +8,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{DistributionMetadata, IndexUrls, Name};
+use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::Cache;
@@ -25,12 +25,12 @@ use crate::printer::Printer;
 pub(crate) async fn venv(
     path: &Path,
     base_python: Option<&Path>,
-    index_urls: &IndexUrls,
+    index_locations: &IndexLocations,
     seed: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    match venv_impl(path, base_python, index_urls, seed, cache, printer).await {
+    match venv_impl(path, base_python, index_locations, seed, cache, printer).await {
         Ok(status) => Ok(status),
         Err(err) => {
             #[allow(clippy::print_stderr)]
@@ -69,7 +69,7 @@ enum VenvError {
 async fn venv_impl(
     path: &Path,
     base_python: Option<&Path>,
-    index_urls: &IndexUrls,
+    index_locations: &IndexLocations,
     seed: bool,
     cache: &Cache,
     mut printer: Printer,
@@ -122,7 +122,7 @@ async fn venv_impl(
             &client,
             cache,
             venv.interpreter(),
-            index_urls,
+            index_locations,
             venv.python_executable(),
             SetupPyStrategy::default(),
             true,

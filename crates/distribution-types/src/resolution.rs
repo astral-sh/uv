@@ -65,11 +65,11 @@ impl From<Dist> for Requirement {
     fn from(dist: Dist) -> Self {
         match dist {
             Dist::Built(BuiltDist::Registry(wheel)) => Requirement {
-                name: wheel.name,
+                name: wheel.filename.name,
                 extras: None,
                 version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
                     pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(wheel.version),
+                        pep440_rs::VersionSpecifier::equals_version(wheel.filename.version),
                     ),
                 )),
                 marker: None,
@@ -87,11 +87,11 @@ impl From<Dist> for Requirement {
                 marker: None,
             },
             Dist::Source(SourceDist::Registry(sdist)) => Requirement {
-                name: sdist.name,
+                name: sdist.filename.name,
                 extras: None,
                 version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
                     pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(sdist.version),
+                        pep440_rs::VersionSpecifier::equals_version(sdist.filename.version),
                     ),
                 )),
                 marker: None,
