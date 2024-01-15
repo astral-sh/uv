@@ -22,6 +22,15 @@ use pypi_types::Hashes;
 use crate::html::SimpleHtml;
 use crate::{Error, RegistryClient};
 
+#[derive(Debug, thiserror::Error)]
+pub enum FlatIndexError {
+    #[error("Failed to read `--find-links` directory: {0}")]
+    FindLinksDirectory(PathBuf, #[source] std::io::Error),
+
+    #[error("Failed to read `--find-links` URL: {0}")]
+    FindLinksUrl(Url, #[source] Error),
+}
+
 type FlatIndexEntry = (DistFilename, File, IndexUrl);
 
 /// A client for reading distributions from `--find-links` entries (either local directories or
@@ -43,15 +52,17 @@ impl<'a> FlatIndexClient<'a> {
     pub async fn fetch(
         &self,
         indexes: impl Iterator<Item = &FlatIndexLocation>,
-    ) -> Result<Vec<FlatIndexEntry>, Error> {
+    ) -> Result<Vec<FlatIndexEntry>, FlatIndexError> {
         let mut dists = Vec::new();
         // TODO(konstin): Parallelize reads over flat indexes.
         for flat_index in indexes {
             let index_dists = match flat_index {
-                FlatIndexLocation::Path(path) => {
-                    Self::read_from_directory(path).map_err(Error::FindLinks)?
-                }
-                FlatIndexLocation::Url(url) => self.read_from_url(url).await?,
+                FlatIndexLocation::Path(path) => Self::read_from_directory(path)
+                    .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))?,
+                FlatIndexLocation::Url(url) => self
+                    .read_from_url(url)
+                    .await
+                    .map_err(|err| FlatIndexError::FindLinksUrl(url.clone(), err))?,
             };
             if index_dists.is_empty() {
                 warn!("No packages found in `--find-links` entry: {}", flat_index);

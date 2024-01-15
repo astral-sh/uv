@@ -1,15 +1,13 @@
-use std::io;
-
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
-use thiserror::Error;
 use url::Url;
 
-use crate::html;
 use distribution_filename::{WheelFilename, WheelFilenameError};
 use puffin_normalize::PackageName;
 
-#[derive(Debug, Error)]
+use crate::html;
+
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// An invalid URL was provided.
     #[error(transparent)]
@@ -72,10 +70,10 @@ pub enum Error {
     Zip(WheelFilename, #[source] ZipError),
 
     #[error("Failed to write to the client cache")]
-    CacheWrite(#[source] io::Error),
+    CacheWrite(#[source] std::io::Error),
 
     #[error(transparent)]
-    Io(#[from] io::Error),
+    Io(#[from] std::io::Error),
 
     #[error("Cache deserialization failed")]
     Decode(#[from] rmp_serde::decode::Error),
@@ -95,9 +93,6 @@ pub enum Error {
 
     #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
     UnsupportedMediaType(Url, String),
-
-    #[error("Failed to read find links directory")]
-    FindLinks(#[source] io::Error),
 }
 
 impl Error {

@@ -70,7 +70,7 @@ enum VenvError {
 
     #[error("Failed to resolve `--find-links` entry")]
     #[diagnostic(code(puffin::venv::flat_index))]
-    FlatIndexError(#[source] puffin_client::Error),
+    FlatIndexError(#[source] puffin_client::FlatIndexError),
 }
 
 /// Create a virtual environment.
