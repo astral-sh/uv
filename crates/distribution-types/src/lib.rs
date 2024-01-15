@@ -1,6 +1,6 @@
 //! ## Type hierarchy
 //!
-//! When we receive the requirements from `pip-sync`, we check which requirements already fulfilled
+//! When we receive the requirements from `pip sync`, we check which requirements already fulfilled
 //! in the users environment ([`InstalledDist`]), whether the matching package is in our wheel cache
 //! ([`CachedDist`]) or whether we need to download, (potentially build) and install it ([`Dist`]).
 //! These three variants make up [`BuiltDist`].

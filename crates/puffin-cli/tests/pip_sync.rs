@@ -34,7 +34,8 @@ fn missing_requirements_txt() -> Result<()> {
     let requirements_txt = temp_dir.child("requirements.txt");
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -61,7 +62,8 @@ fn missing_venv() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -98,7 +100,8 @@ fn install() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -137,7 +140,8 @@ fn install_copy() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--link-mode")
             .arg("copy")
@@ -178,7 +182,8 @@ fn install_hardlink() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--link-mode")
             .arg("hardlink")
@@ -219,7 +224,8 @@ fn install_many() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -256,7 +262,8 @@ fn noop() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -270,7 +277,8 @@ fn noop() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -304,7 +312,8 @@ fn link() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -331,7 +340,8 @@ fn link() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -366,7 +376,8 @@ fn add_remove() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -384,7 +395,8 @@ fn add_remove() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -430,7 +442,8 @@ fn install_sequential() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -448,7 +461,8 @@ fn install_sequential() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -485,7 +499,8 @@ fn upgrade() -> Result<()> {
     requirements_txt.write_str("tomli==2.0.0")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -503,7 +518,8 @@ fn upgrade() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -546,7 +562,8 @@ fn install_url() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -588,7 +605,8 @@ fn install_git_commit() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -630,7 +648,8 @@ fn install_git_tag() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -672,7 +691,8 @@ fn install_git_subdirectories() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -716,7 +736,8 @@ fn install_sdist() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -757,7 +778,8 @@ fn install_sdist_url() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -794,7 +816,8 @@ fn install_url_then_install_url() -> Result<()> {
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -810,7 +833,8 @@ fn install_url_then_install_url() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -844,7 +868,8 @@ fn install_url_then_install_version() -> Result<()> {
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -864,7 +889,8 @@ fn install_url_then_install_version() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -898,7 +924,8 @@ fn install_version_then_install_url() -> Result<()> {
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
     Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-sync")
+        .arg("pip")
+        .arg("sync")
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
@@ -918,7 +945,8 @@ fn install_version_then_install_url() -> Result<()> {
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -973,7 +1001,8 @@ fn install_numpy_py38() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1013,7 +1042,8 @@ fn warn_on_yanked_version() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1061,7 +1091,8 @@ fn install_local_wheel() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1110,7 +1141,8 @@ fn install_local_source_distribution() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1157,7 +1189,8 @@ fn install_ujson() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1207,7 +1240,8 @@ fn install_build_system_no_backend() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1246,7 +1280,8 @@ fn install_url_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1275,7 +1310,8 @@ fn install_url_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1321,7 +1357,8 @@ fn install_url_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1361,7 +1398,8 @@ fn install_git_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1390,7 +1428,8 @@ fn install_git_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1436,7 +1475,8 @@ fn install_git_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1475,7 +1515,8 @@ fn install_registry_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1504,7 +1545,8 @@ fn install_registry_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1550,7 +1592,8 @@ fn install_registry_source_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1599,7 +1642,8 @@ fn install_path_source_dist_cached() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1628,7 +1672,8 @@ fn install_path_source_dist_cached() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1674,7 +1719,8 @@ fn install_path_source_dist_cached() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1723,7 +1769,8 @@ fn install_path_built_dist_cached() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1752,7 +1799,8 @@ fn install_path_built_dist_cached() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1798,7 +1846,8 @@ fn install_path_built_dist_cached() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1837,7 +1886,8 @@ fn install_url_built_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1866,7 +1916,8 @@ fn install_url_built_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1912,7 +1963,8 @@ fn install_url_built_dist_cached() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1951,7 +2003,8 @@ fn duplicate_package_overlap() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -1986,7 +2039,8 @@ fn duplicate_package_disjoint() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -2023,7 +2077,8 @@ fn reinstall() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -2051,7 +2106,8 @@ fn reinstall() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--reinstall")
             .arg("--strict")
@@ -2096,7 +2152,8 @@ fn reinstall_package() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -2124,7 +2181,8 @@ fn reinstall_package() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--reinstall-package")
             .arg("tomli")
@@ -2169,7 +2227,8 @@ fn reinstall_git() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -2195,7 +2254,8 @@ fn reinstall_git() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--reinstall-package")
             .arg("WerkZeug")
@@ -2263,7 +2323,8 @@ fn sync_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--strict")
             .arg("--cache-dir")
@@ -2291,7 +2352,8 @@ fn sync_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--reinstall-package")
             .arg("poetry-editable")
@@ -2355,7 +2417,8 @@ fn sync_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--strict")
             .arg("--cache-dir")
@@ -2403,7 +2466,8 @@ fn sync_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--strict")
             .arg("--cache-dir")
@@ -2448,7 +2512,8 @@ fn sync_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--strict")
             .arg("--cache-dir")
@@ -2489,7 +2554,8 @@ fn sync_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--strict")
             .arg("--cache-dir")
@@ -2525,7 +2591,8 @@ fn sync_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg(requirements_txt.path())
             .arg("--strict")
             .arg("--cache-dir")
@@ -2576,7 +2643,8 @@ fn incompatible_wheel() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--strict")
             .arg("--cache-dir")
@@ -2610,7 +2678,8 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.in")
             .arg("--cache-dir")
             .arg(cache_dir.path())
@@ -2645,7 +2714,8 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.in")
             .arg("--legacy-setup-py")
             .arg("--cache-dir")
@@ -2692,7 +2762,8 @@ fn find_links() -> Result<()> {
         filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-sync")
+            .arg("pip")
+            .arg("sync")
             .arg("requirements.txt")
             .arg("--find-links")
             .arg(project_root.join("scripts/wheels/"))

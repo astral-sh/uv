@@ -197,7 +197,7 @@ pub enum CacheBucket {
     /// flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
     /// ```
     ///
-    /// When we run `pip-compile`, it will only fetch and cache the metadata (and cache policy), it
+    /// When we run `pip compile`, it will only fetch and cache the metadata (and cache policy), it
     /// doesn't need the actual wheels yet:
     /// ```text
     /// wheel-v0
@@ -212,7 +212,7 @@ pub enum CacheBucket {
     ///             └── flask-3.0.0-py3-none-any.msgpack
     /// ```
     ///
-    /// We get the following `requirement.txt` from `pip-compile`:
+    /// We get the following `requirement.txt` from `pip compile`:
     ///
     /// ```text
     /// [...]
@@ -222,7 +222,7 @@ pub enum CacheBucket {
     /// [...]
     /// ```
     ///
-    /// If we run `pip-sync` on `requirements.txt` on a different machine, it also fetches the
+    /// If we run `pip sync` on `requirements.txt` on a different machine, it also fetches the
     /// wheels:
     ///
     /// TODO(konstin): This is still wrong, we need to store the cache policy too!
@@ -244,7 +244,7 @@ pub enum CacheBucket {
     ///                     └── ...
     /// ```
     ///
-    /// If we run first `pip-compile` and then `pip-sync` on the same machine, we get both:
+    /// If we run first `pip compile` and then `pip sync` on the same machine, we get both:
     ///
     /// ```text
     /// wheels-v0

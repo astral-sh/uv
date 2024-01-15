@@ -33,7 +33,8 @@ fn missing_requirements_txt() -> Result<()> {
     let requirements_txt = temp_dir.child("requirements.txt");
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-install")
+        .arg("pip")
+        .arg("install")
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict")
@@ -61,7 +62,8 @@ fn no_solution() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip-install")
+        .arg("pip")
+        .arg("install")
         .arg("flask>=3.0.0")
         .arg("WerkZeug<1.0.0")
         .arg("--strict")
@@ -99,7 +101,8 @@ fn install_package() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("Flask")
             .arg("--strict")
             .arg("--cache-dir")
@@ -146,7 +149,8 @@ fn install_requirements_txt() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -184,7 +188,8 @@ fn install_requirements_txt() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -224,7 +229,8 @@ fn respect_installed() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -263,7 +269,8 @@ fn respect_installed() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -293,7 +300,8 @@ fn respect_installed() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -325,7 +333,8 @@ fn respect_installed() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--reinstall-package")
@@ -369,7 +378,8 @@ fn allow_incompatibilities() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -408,7 +418,8 @@ fn allow_incompatibilities() -> Result<()> {
         filters => INSTA_FILTERS.to_vec()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-r")
             .arg("requirements.txt")
             .arg("--strict")
@@ -457,7 +468,8 @@ fn install_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-e")
             .arg("../../scripts/editable-installs/poetry_editable")
             .arg("--strict")
@@ -486,7 +498,8 @@ fn install_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-e")
             .arg("../../scripts/editable-installs/poetry_editable")
             .arg("--strict")
@@ -510,7 +523,8 @@ fn install_editable() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-e")
             .arg("../../scripts/editable-installs/poetry_editable")
             .arg("black")
@@ -562,7 +576,8 @@ fn install_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("black")
             .arg("--strict")
             .arg("--cache-dir")
@@ -593,7 +608,8 @@ fn install_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("-e")
             .arg("../../scripts/editable-installs/black_editable")
             .arg("--strict")
@@ -622,7 +638,8 @@ fn install_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("black")
             .arg("--strict")
             .arg("--cache-dir")
@@ -645,7 +662,8 @@ fn install_editable_and_registry() -> Result<()> {
         filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip-install")
+            .arg("pip")
+            .arg("install")
             .arg("black==23.10.0")
             .arg("--strict")
             .arg("--cache-dir")
