@@ -55,10 +55,12 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 /// {{.}}
 {{/description_lines}}
 ///
+/// ```
 /// {{version}}
 {{#tree}}
 /// {{.}}
 {{/tree}}
+/// ```
 #[test]
 fn {{module_name}}() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;

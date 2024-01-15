@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/04c9bfdbbbd5b4dd8e9c5b10b868e4f14a89ab61/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/a065ed443458556d77956baf9392f7626da9c0ef/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -44,12 +44,14 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 ///
 /// The user requires any version of package `a` which does not exist.
 ///
+/// ```
 /// 57cd4136
 /// ├── environment
 /// │   └── python3.7
 /// └── root
 ///     └── requires a
 ///         └── unsatisfied: no versions for package
+/// ```
 #[test]
 fn requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -92,6 +94,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 ///
 /// The user requires an exact version of package `a` but only other versions exist
 ///
+/// ```
 /// eaa03067
 /// ├── environment
 /// │   └── python3.7
@@ -100,6 +103,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn requires_exact_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -144,6 +148,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 /// The user requires a version of `a` greater than `1.0.0` but only smaller or
 /// equal versions exist
 ///
+/// ```
 /// 6e8e01df
 /// ├── environment
 /// │   └── python3.7
@@ -153,6 +158,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 /// └── a
 ///     ├── a-0.1.0
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn requires_greater_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -197,6 +203,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 /// The user requires a version of `a` less than `1.0.0` but only larger versions
 /// exist
 ///
+/// ```
 /// e45cec3c
 /// ├── environment
 /// │   └── python3.7
@@ -207,6 +214,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 ///     ├── a-2.0.0
 ///     ├── a-3.0.0
 ///     └── a-4.0.0
+/// ```
 #[test]
 fn requires_less_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -250,6 +258,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 ///
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
+/// ```
 /// aca2796a
 /// ├── environment
 /// │   └── python3.7
@@ -260,6 +269,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 ///     └── a-1.0.0
 ///         └── requires b
 ///             └── unsatisfied: no versions for package
+/// ```
 #[test]
 fn transitive_requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -303,6 +313,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// Only one version of the requested package is available, but the user has banned
 /// that version.
 ///
+/// ```
 /// 7a9ed79c
 /// ├── environment
 /// │   └── python3.7
@@ -311,6 +322,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn excluded_only_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -362,6 +374,7 @@ fn excluded_only_version() -> Result<()> {
 /// Only one version of the requested package `a` is compatible, but the user has
 /// banned that version.
 ///
+/// ```
 /// b6b89642
 /// ├── environment
 /// │   └── python3.7
@@ -385,6 +398,7 @@ fn excluded_only_version() -> Result<()> {
 ///     ├── b-1.0.0
 ///     ├── b-2.0.0
 ///     └── b-3.0.0
+/// ```
 #[test]
 fn excluded_only_compatible_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -450,6 +464,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 /// There is a range of compatible versions for the requested package `a`, but
 /// another dependency `c` excludes that range.
 ///
+/// ```
 /// 1cd99bd0
 /// ├── environment
 /// │   └── python3.7
@@ -496,6 +511,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 ///     └── c-2.0.0
 ///         └── requires a>=3.0.0
 ///             └── satisfied by a-3.0.0
+/// ```
 #[test]
 fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -570,6 +586,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 /// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
+/// ```
 /// 0fd25b39
 /// ├── environment
 /// │   └── python3.7
@@ -624,6 +641,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 ///     └── c-2.0.0
 ///         └── requires a>=3.0.0
 ///             └── satisfied by a-3.0.0
+/// ```
 #[test]
 fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -692,6 +710,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 ///
 /// Optional dependencies are requested for the package.
 ///
+/// ```
 /// 76e5355c
 /// ├── environment
 /// │   └── python3.7
@@ -706,6 +725,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     └── b-1.0.0
+/// ```
 #[test]
 fn extra_required() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -754,6 +774,7 @@ fn extra_required() -> Result<()> {
 /// Optional dependencies are requested for the package, but the extra does not
 /// exist.
 ///
+/// ```
 /// 0997c767
 /// ├── environment
 /// │   └── python3.7
@@ -762,6 +783,7 @@ fn extra_required() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn missing_extra() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -807,6 +829,7 @@ fn missing_extra() -> Result<()> {
 ///
 /// Multiple optional dependencies are requested for the package.
 ///
+/// ```
 /// e55f15c4
 /// ├── environment
 /// │   └── python3.7
@@ -827,6 +850,7 @@ fn missing_extra() -> Result<()> {
 /// │   └── b-1.0.0
 /// └── c
 ///     └── c-1.0.0
+/// ```
 #[test]
 fn multiple_extras_required() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -877,6 +901,7 @@ fn multiple_extras_required() -> Result<()> {
 /// Multiple optional dependencies are requested for the package, but they have
 /// conflicting requirements with each other.
 ///
+/// ```
 /// bf480858
 /// ├── environment
 /// │   └── python3.7
@@ -896,6 +921,7 @@ fn multiple_extras_required() -> Result<()> {
 /// └── b
 ///     ├── b-1.0.0
 ///     └── b-2.0.0
+/// ```
 #[test]
 fn extra_incompatible_with_extra() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -947,6 +973,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
 ///
 /// One of two incompatible optional dependencies are requested for the package.
 ///
+/// ```
 /// 06ed3759
 /// ├── environment
 /// │   └── python3.7
@@ -966,6 +993,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
 /// └── b
 ///     ├── b-1.0.0
 ///     └── b-2.0.0
+/// ```
 #[test]
 fn extra_incompatible_with_extra_not_requested() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1014,6 +1042,7 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 /// Optional dependencies are requested for the package, but the extra is not
 /// compatible with other requested versions.
 ///
+/// ```
 /// b3bfe512
 /// ├── environment
 /// │   └── python3.7
@@ -1031,6 +1060,7 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 /// └── b
 ///     ├── b-1.0.0
 ///     └── b-2.0.0
+/// ```
 #[test]
 fn extra_incompatible_with_root() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1081,6 +1111,7 @@ fn extra_incompatible_with_root() -> Result<()> {
 /// Optional dependencies are requested for the package, the extra is only available
 /// on an older version.
 ///
+/// ```
 /// 49778327
 /// ├── environment
 /// │   └── python3.7
@@ -1099,6 +1130,7 @@ fn extra_incompatible_with_root() -> Result<()> {
 /// │   └── a-3.0.0
 /// └── b
 ///     └── b-1.0.0
+/// ```
 #[test]
 fn extra_does_not_exist_backtrack() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1145,6 +1177,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 ///
 /// The user requires two incompatible, existing versions of package `a`
 ///
+/// ```
 /// 80d82ee8
 /// ├── environment
 /// │   └── python3.7
@@ -1156,6 +1189,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 /// └── a
 ///     ├── a-1.0.0
 ///     └── a-2.0.0
+/// ```
 #[test]
 fn direct_incompatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1202,6 +1236,7 @@ fn direct_incompatible_versions() -> Result<()> {
 /// The user requires packages `a` and `b` but `a` requires a different version of
 /// `b`
 ///
+/// ```
 /// a967e815
 /// ├── environment
 /// │   └── python3.7
@@ -1217,6 +1252,7 @@ fn direct_incompatible_versions() -> Result<()> {
 /// └── b
 ///     ├── b-1.0.0
 ///     └── b-2.0.0
+/// ```
 #[test]
 fn transitive_incompatible_with_root_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1267,6 +1303,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 /// The user requires package `a` and `b`; `a` and `b` require different versions of
 /// `c`
 ///
+/// ```
 /// 6866d8dc
 /// ├── environment
 /// │   └── python3.7
@@ -1286,6 +1323,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 /// └── c
 ///     ├── c-1.0.0
 ///     └── c-2.0.0
+/// ```
 #[test]
 fn transitive_incompatible_with_transitive() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1340,6 +1378,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 /// The user requires any version of package `a` which only has prerelease versions
 /// available.
 ///
+/// ```
 /// 9a1b3dda
 /// ├── environment
 /// │   └── python3.7
@@ -1348,6 +1387,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0a1
+/// ```
 #[test]
 fn package_only_prereleases() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1396,6 +1436,7 @@ fn package_only_prereleases() -> Result<()> {
 /// The user requires a version of package `a` which only matches prerelease
 /// versions but they did not include a prerelease specifier.
 ///
+/// ```
 /// 19673198
 /// ├── environment
 /// │   └── python3.7
@@ -1405,6 +1446,7 @@ fn package_only_prereleases() -> Result<()> {
 /// └── a
 ///     ├── a-0.1.0
 ///     └── a-1.0.0a1
+/// ```
 #[test]
 fn package_only_prereleases_in_range() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1454,6 +1496,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 /// versions. They did not include a prerelease specifier for the package, but they
 /// opted into prereleases globally.
 ///
+/// ```
 /// 51f94da2
 /// ├── environment
 /// │   └── python3.7
@@ -1463,6 +1506,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 /// └── a
 ///     ├── a-0.1.0
 ///     └── a-1.0.0a1
+/// ```
 #[test]
 fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1510,6 +1554,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 /// The user requires any version of package `a` has a prerelease version available
 /// and an older non-prerelease version.
 ///
+/// ```
 /// eebe53a6
 /// ├── environment
 /// │   └── python3.7
@@ -1519,6 +1564,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 /// └── a
 ///     ├── a-0.1.0
 ///     └── a-1.0.0a1
+/// ```
 #[test]
 fn requires_package_prerelease_and_final_any() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1567,6 +1613,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and only stable
 /// releases are available.
 ///
+/// ```
 /// 9d4725eb
 /// ├── environment
 /// │   └── python3.7
@@ -1579,6 +1626,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 ///     ├── a-0.1.0
 ///     ├── a-0.2.0
 ///     └── a-0.3.0
+/// ```
 #[test]
 fn package_prerelease_specified_only_final_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1626,6 +1674,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and only
 /// prerelease releases are available.
 ///
+/// ```
 /// 6cc95bc8
 /// ├── environment
 /// │   └── python3.7
@@ -1638,6 +1687,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 ///     ├── a-0.1.0a1
 ///     ├── a-0.2.0a1
 ///     └── a-0.3.0a1
+/// ```
 #[test]
 fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1685,6 +1735,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and both
 /// prerelease and stable releases are available.
 ///
+/// ```
 /// c97845e2
 /// ├── environment
 /// │   └── python3.7
@@ -1699,6 +1750,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 ///     ├── a-0.2.0a1
 ///     ├── a-0.3.0
 ///     └── a-1.0.0a1
+/// ```
 #[test]
 fn package_prerelease_specified_mixed_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1747,6 +1799,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 /// The user requires `a` which has multiple prereleases available with different
 /// labels.
 ///
+/// ```
 /// e290bf29
 /// ├── environment
 /// │   └── python3.7
@@ -1759,6 +1812,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 ///     ├── a-1.0.0a1
 ///     ├── a-1.0.0b1
 ///     └── a-1.0.0rc1
+/// ```
 #[test]
 fn package_multiple_prereleases_kinds() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1805,6 +1859,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 ///
 /// The user requires `a` which has multiple alphas available.
 ///
+/// ```
 /// f5948c28
 /// ├── environment
 /// │   └── python3.7
@@ -1817,6 +1872,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 ///     ├── a-1.0.0a1
 ///     ├── a-1.0.0a2
 ///     └── a-1.0.0a3
+/// ```
 #[test]
 fn package_multiple_prereleases_numbers() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1864,6 +1920,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 /// The user requires any version of package `a` which requires `b` which only has
 /// prerelease versions available.
 ///
+/// ```
 /// 44ebef16
 /// ├── environment
 /// │   └── python3.7
@@ -1876,6 +1933,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 /// │           └── unsatisfied: no matching version
 /// └── b
 ///     └── b-1.0.0a1
+/// ```
 #[test]
 fn transitive_package_only_prereleases() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1926,6 +1984,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
 /// The user requires package `a` which has a dependency on a package which only
 /// matches prerelease versions but they did not include a prerelease specifier.
 ///
+/// ```
 /// 27759187
 /// ├── environment
 /// │   └── python3.7
@@ -1939,6 +1998,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
 /// └── b
 ///     ├── b-0.1.0
 ///     └── b-1.0.0a1
+/// ```
 #[test]
 fn transitive_package_only_prereleases_in_range() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -1993,6 +2053,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 /// matches prerelease versions; the user has opted into allowing prereleases in `b`
 /// explicitly.
 ///
+/// ```
 /// 26efb6c5
 /// ├── environment
 /// │   └── python3.7
@@ -2008,6 +2069,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 /// └── b
 ///     ├── b-0.1.0
 ///     └── b-1.0.0a1
+/// ```
 #[test]
 fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2059,6 +2121,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease
 ///
+/// ```
 /// f8aeea37
 /// ├── environment
 /// │   └── python3.7
@@ -2078,6 +2141,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 /// └── c
 ///     ├── c-1.0.0
 ///     └── c-2.0.0b1
+/// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2132,6 +2196,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// only be satisfied by a prerelease. The user includes an opt-in to prereleases of
 /// the transitive dependency.
 ///
+/// ```
 /// 184fc65f
 /// ├── environment
 /// │   └── python3.7
@@ -2154,6 +2219,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// └── c
 ///     ├── c-1.0.0
 ///     └── c-2.0.0b1
+/// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2207,6 +2273,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
+/// ```
 /// 7017673e
 /// ├── environment
 /// │   └── python3.7
@@ -2251,6 +2318,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 ///     ├── c-2.0.0b7
 ///     ├── c-2.0.0b8
 ///     └── c-2.0.0b9
+/// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2310,6 +2378,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 /// only be satisfied by a prerelease. There are many prerelease versions and some
 /// are excluded.
 ///
+/// ```
 /// aaee5052
 /// ├── environment
 /// │   └── python3.7
@@ -2346,6 +2415,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 ///     ├── c-2.0.0b7
 ///     ├── c-2.0.0b8
 ///     └── c-2.0.0b9
+/// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2410,6 +2480,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 ///
 /// The user requires a package which requires a Python version that does not exist
 ///
+/// ```
 /// 0825b69c
 /// ├── environment
 /// │   └── python3.7
@@ -2419,6 +2490,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 /// └── a
 ///     └── a-1.0.0
 ///         └── requires python>=4.0 (incompatible with environment)
+/// ```
 #[test]
 fn requires_python_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2464,6 +2536,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// The user requires a package which requires a Python version less than the
 /// current version
 ///
+/// ```
 /// f9296b84
 /// ├── environment
 /// │   └── python3.9
@@ -2473,6 +2546,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// └── a
 ///     └── a-1.0.0
 ///         └── requires python<=3.8 (incompatible with environment)
+/// ```
 #[test]
 fn requires_python_version_less_than_current() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2518,6 +2592,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// The user requires a package which requires a Python version greater than the
 /// current version
 ///
+/// ```
 /// a11d5394
 /// ├── environment
 /// │   └── python3.9
@@ -2527,6 +2602,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// └── a
 ///     └── a-1.0.0
 ///         └── requires python>=3.10 (incompatible with environment)
+/// ```
 #[test]
 fn requires_python_version_greater_than_current() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2572,6 +2648,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// The user requires a package which has many versions which all require a Python
 /// version greater than the current version
 ///
+/// ```
 /// 02dc550c
 /// ├── environment
 /// │   └── python3.9
@@ -2603,6 +2680,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 ///     │   └── requires python>=3.11 (incompatible with environment)
 ///     └── a-3.5.0
 ///         └── requires python>=3.11 (incompatible with environment)
+/// ```
 #[test]
 fn requires_python_version_greater_than_current_many() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2647,6 +2725,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an older version is compatible.
 ///
+/// ```
 /// ef060cef
 /// ├── environment
 /// │   └── python3.9
@@ -2664,6 +2743,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 ///     │   └── requires python>=3.11 (incompatible with environment)
 ///     └── a-4.0.0
 ///         └── requires python>=3.12 (incompatible with environment)
+/// ```
 #[test]
 fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2710,6 +2790,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an excluded older version is compatible.
 ///
+/// ```
 /// 1bde0c18
 /// ├── environment
 /// │   └── python3.9
@@ -2726,6 +2807,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 ///     │   └── requires python>=3.11 (incompatible with environment)
 ///     └── a-4.0.0
 ///         └── requires python>=3.12 (incompatible with environment)
+/// ```
 #[test]
 fn requires_python_version_greater_than_current_excluded() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2786,6 +2868,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 ///
 /// A wheel for a specific platform is available alongside the default.
 ///
+/// ```
 /// 74e4a459
 /// ├── environment
 /// │   └── python3.7
@@ -2794,6 +2877,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn specific_tag_and_default() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2837,6 +2921,7 @@ fn specific_tag_and_default() -> Result<()> {
 ///
 /// No source distributions are available, only wheels.
 ///
+/// ```
 /// 4f019491
 /// ├── environment
 /// │   └── python3.7
@@ -2845,6 +2930,7 @@ fn specific_tag_and_default() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn only_wheels() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2888,6 +2974,7 @@ fn only_wheels() -> Result<()> {
 ///
 /// No wheels are available, only source distributions.
 ///
+/// ```
 /// 614d801c
 /// ├── environment
 /// │   └── python3.7
@@ -2896,6 +2983,7 @@ fn only_wheels() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn no_wheels() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -2939,6 +3027,7 @@ fn no_wheels() -> Result<()> {
 ///
 /// No wheels with valid tags are available, just source distributions.
 ///
+/// ```
 /// 737bbfd4
 /// ├── environment
 /// │   └── python3.7
@@ -2947,6 +3036,7 @@ fn no_wheels() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
+/// ```
 #[test]
 fn no_wheels_with_matching_platform() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
