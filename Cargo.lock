@@ -2045,6 +2045,8 @@ name = "pep440_rs"
 version = "0.3.12"
 dependencies = [
  "indoc",
+ "once_cell",
+ "pubgrub",
  "pyo3",
  "serde",
  "tracing",

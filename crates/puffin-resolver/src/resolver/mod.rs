@@ -21,7 +21,7 @@ use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, RemoteSource,
     SourceDist, VersionOrUrl,
 };
-use pep440_rs::VersionSpecifiers;
+use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use puffin_client::RegistryClient;
@@ -38,7 +38,7 @@ use crate::overrides::Overrides;
 use crate::pins::FilePins;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
-    PubGrubSpecifier, PubGrubVersion, MIN_VERSION,
+    PubGrubSpecifier,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -244,7 +244,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         // Start the solve.
         let mut state = State::init(root.clone(), MIN_VERSION.clone());
-        let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<PubGrubVersion>> =
+        let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>> =
             FxHashMap::default();
         let mut next = root;
 
@@ -393,7 +393,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
     /// metadata for all of the packages in parallel.
     fn pre_visit<'data>(
-        packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<PubGrubVersion>)>,
+        packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
@@ -412,26 +412,26 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     async fn choose_version(
         &self,
         package: &PubGrubPackage,
-        range: &Range<PubGrubVersion>,
+        range: &Range<Version>,
         pins: &mut FilePins,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
-    ) -> Result<Option<PubGrubVersion>, ResolveError> {
+    ) -> Result<Option<Version>, ResolveError> {
         return match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
             PubGrubPackage::Python(PubGrubPython::Installed) => {
-                let version = PubGrubVersion::from(self.python_requirement.installed().clone());
-                if range.contains(&version) {
-                    Ok(Some(version))
+                let version = self.python_requirement.installed();
+                if range.contains(version) {
+                    Ok(Some(version.clone()))
                 } else {
                     Ok(None)
                 }
             }
 
             PubGrubPackage::Python(PubGrubPython::Target) => {
-                let version = PubGrubVersion::from(self.python_requirement.target().clone());
-                if range.contains(&version) {
-                    Ok(Some(version))
+                let version = self.python_requirement.target();
+                if range.contains(version) {
+                    Ok(Some(version.clone()))
                 } else {
                     Ok(None)
                 }
@@ -458,7 +458,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 if let Ok(wheel_filename) = WheelFilename::try_from(url.raw()) {
                     // If the URL is that of a wheel, extract the version.
-                    let version = PubGrubVersion::from(wheel_filename.version);
+                    let version = wheel_filename.version;
                     if range.contains(&version) {
                         Ok(Some(version))
                     } else {
@@ -469,9 +469,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     let dist = PubGrubDistribution::from_url(package_name, url);
                     let entry = self.index.distributions.wait(&dist.package_id()).await;
                     let metadata = entry.value();
-                    let version = PubGrubVersion::from(metadata.version.clone());
-                    if range.contains(&version) {
-                        Ok(Some(version))
+                    let version = &metadata.version;
+                    if range.contains(version) {
+                        Ok(Some(version.clone()))
                     } else {
                         Ok(None)
                     }
@@ -554,7 +554,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     async fn get_dependencies(
         &self,
         package: &PubGrubPackage,
-        version: &PubGrubVersion,
+        version: &Version,
         priorities: &mut PubGrubPriorities,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
@@ -592,7 +592,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             None,
                             Some(editable.url().clone()),
                         ),
-                        Range::singleton(PubGrubVersion::from(metadata.version.clone())),
+                        Range::singleton(metadata.version.clone()),
                     );
                 }
 
@@ -825,7 +825,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         }
     }
 
-    fn on_progress(&self, package: &PubGrubPackage, version: &PubGrubVersion) {
+    fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
         if let Some(reporter) = self.reporter.as_ref() {
             match package {
                 PubGrubPackage::Root(_) => {}
@@ -834,7 +834,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     reporter.on_progress(package_name, VersionOrUrl::Url(url));
                 }
                 PubGrubPackage::Package(package_name, _extra, None) => {
-                    reporter.on_progress(package_name, VersionOrUrl::Version(version.into()));
+                    reporter.on_progress(package_name, VersionOrUrl::Version(version));
                 }
             }
         }
@@ -856,7 +856,7 @@ enum Request {
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
-    Prefetch(PackageName, Range<PubGrubVersion>),
+    Prefetch(PackageName, Range<Version>),
 }
 
 #[derive(Debug)]
@@ -879,5 +879,5 @@ enum Dependencies {
     /// Package dependencies are not usable
     Unusable(Option<String>),
     /// Container for all available package versions.
-    Known(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>),
+    Known(DependencyConstraints<PubGrubPackage, Range<Version>>),
 }

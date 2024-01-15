@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use pep440_rs::Version;
 use pubgrub::range::Range;
 use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
@@ -8,11 +9,11 @@ use puffin_normalize::{ExtraName, PackageName};
 
 use crate::overrides::Overrides;
 use crate::pubgrub::specifier::PubGrubSpecifier;
-use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
+use crate::pubgrub::PubGrubPackage;
 use crate::ResolveError;
 
 #[derive(Debug)]
-pub struct PubGrubDependencies(DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>>);
+pub struct PubGrubDependencies(DependencyConstraints<PubGrubPackage, Range<Version>>);
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
@@ -24,8 +25,7 @@ impl PubGrubDependencies {
         source: Option<&PackageName>,
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
-        let mut dependencies =
-            DependencyConstraints::<PubGrubPackage, Range<PubGrubVersion>>::default();
+        let mut dependencies = DependencyConstraints::<PubGrubPackage, Range<Version>>::default();
 
         // Iterate over all declared requirements.
         for requirement in overrides.apply(requirements) {
@@ -126,23 +126,23 @@ impl PubGrubDependencies {
         Ok(Self(dependencies))
     }
 
-    /// Insert a [`PubGrubPackage`] and [`PubGrubVersion`] range into the set of dependencies.
+    /// Insert a [`PubGrubPackage`] and [`Version`] range into the set of dependencies.
     pub(crate) fn insert(
         &mut self,
         package: PubGrubPackage,
-        version: Range<PubGrubVersion>,
-    ) -> Option<Range<PubGrubVersion>> {
+        version: Range<Version>,
+    ) -> Option<Range<Version>> {
         self.0.insert(package, version)
     }
 
     /// Iterate over the dependencies.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&PubGrubPackage, &Range<PubGrubVersion>)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&PubGrubPackage, &Range<Version>)> {
         self.0.iter()
     }
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for DependencyConstraints<PubGrubPackage, Range<PubGrubVersion>> {
+impl From<PubGrubDependencies> for DependencyConstraints<PubGrubPackage, Range<Version>> {
     fn from(dependencies: PubGrubDependencies) -> Self {
         dependencies.0
     }
@@ -152,7 +152,7 @@ impl From<PubGrubDependencies> for DependencyConstraints<PubGrubPackage, Range<P
 fn to_pubgrub(
     requirement: &Requirement,
     extra: Option<ExtraName>,
-) -> Result<(PubGrubPackage, Range<PubGrubVersion>), ResolveError> {
+) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
@@ -180,12 +180,12 @@ fn to_pubgrub(
     }
 }
 
-/// Merge two [`PubGrubVersion`] ranges.
+/// Merge two [`Version`] ranges.
 fn merge_versions(
     package: &PubGrubPackage,
-    left: &Range<PubGrubVersion>,
-    right: &Range<PubGrubVersion>,
-) -> Result<Range<PubGrubVersion>, ResolveError> {
+    left: &Range<Version>,
+    right: &Range<Version>,
+) -> Result<Range<Version>, ResolveError> {
     let result = left.intersection(right);
     if result.is_empty() {
         Err(ResolveError::ConflictingVersions(

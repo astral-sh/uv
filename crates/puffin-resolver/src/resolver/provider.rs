@@ -14,7 +14,6 @@ use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::Metadata21;
 
-use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
@@ -49,7 +48,7 @@ pub trait ResolverProvider: Send + Sync {
 pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     client: &'a RegistryClient,
     /// These are the entries from `--find-links` that act as overrides for index responses.
-    flat_index: FxHashMap<PackageName, FlatIndex<PubGrubVersion>>,
+    flat_index: FxHashMap<PackageName, FlatIndex>,
     fetcher: DistributionDatabase<'a, Context>,
     tags: &'a Tags,
     python_requirement: PythonRequirement<'a>,

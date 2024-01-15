@@ -3,12 +3,11 @@ use rustc_hash::FxHashMap;
 
 use distribution_types::{Dist, DistributionMetadata, Name};
 use distribution_types::{DistRequiresPython, ResolvableDist};
-use pep440_rs::VersionSpecifiers;
+use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-use crate::pubgrub::PubGrubVersion;
 use crate::python_requirement::PythonRequirement;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::VersionMap;
@@ -52,10 +51,10 @@ impl CandidateSelector {
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
 #[derive(Debug, Clone)]
-struct Preferences(FxHashMap<PackageName, PubGrubVersion>);
+struct Preferences(FxHashMap<PackageName, Version>);
 
 impl Preferences {
-    fn get(&self, package_name: &PackageName) -> Option<&PubGrubVersion> {
+    fn get(&self, package_name: &PackageName) -> Option<&Version> {
         self.0.get(package_name)
     }
 }
@@ -74,8 +73,10 @@ impl From<&[Requirement]> for Preferences {
                     let [version_specifier] = version_specifiers.as_ref() else {
                         return None;
                     };
-                    let version = PubGrubVersion::from(version_specifier.version().clone());
-                    Some((requirement.name.clone(), version))
+                    Some((
+                        requirement.name.clone(),
+                        version_specifier.version().clone(),
+                    ))
                 })
                 .collect(),
         )
@@ -94,7 +95,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<PubGrubVersion>,
+        range: &Range<Version>,
         version_map: &'a VersionMap,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
@@ -161,15 +162,15 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a PubGrubVersion, ResolvableDist<'a>)>,
+        versions: impl Iterator<Item = (&'a Version, ResolvableDist<'a>)>,
         package_name: &'a PackageName,
-        range: &Range<PubGrubVersion>,
+        range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
     ) -> Option<Candidate<'a>> {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a PubGrubVersion, ResolvableDist<'a>),
+            IfNecessary(&'a Version, ResolvableDist<'a>),
         }
 
         let mut prerelease = None;
@@ -221,13 +222,13 @@ pub(crate) struct Candidate<'a> {
     /// The name of the package.
     name: &'a PackageName,
     /// The version of the package.
-    version: &'a PubGrubVersion,
+    version: &'a Version,
     /// The file to use for resolving and installing the package.
     dist: ResolvableDist<'a>,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a PubGrubVersion, dist: ResolvableDist<'a>) -> Self {
+    fn new(name: &'a PackageName, version: &'a Version, dist: ResolvableDist<'a>) -> Self {
         Self {
             name,
             version,
@@ -241,7 +242,7 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the version of the package.
-    pub(crate) fn version(&self) -> &PubGrubVersion {
+    pub(crate) fn version(&self) -> &Version {
         self.version
     }
 
@@ -299,6 +300,6 @@ impl Name for Candidate<'_> {
 
 impl DistributionMetadata for Candidate<'_> {
     fn version_or_url(&self) -> distribution_types::VersionOrUrl {
-        distribution_types::VersionOrUrl::Version(self.version.into())
+        distribution_types::VersionOrUrl::Version(self.version)
     }
 }

@@ -8,13 +8,14 @@ use thiserror::Error;
 use url::Url;
 
 use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
+use pep440_rs::Version;
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 use puffin_traits::OnceMap;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter, PubGrubVersion};
+use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
@@ -76,7 +77,7 @@ pub enum ResolveError {
         /// Package whose dependencies we want.
         package: Box<PubGrubPackage>,
         /// Version of the package for which we want the dependencies.
-        version: Box<PubGrubVersion>,
+        version: Box<Version>,
     },
 
     /// Something unexpected happened.
@@ -90,11 +91,11 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
     }
 }
 
-impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, Infallible>>
+impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallible>>
     for ResolveError
 {
     fn from(
-        value: pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, Infallible>,
+        value: pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallible>,
     ) -> Self {
         match value {
             // These are all never type variant that can never match, but never is experimental
@@ -124,8 +125,8 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<PubGrubVersion>, In
 /// A wrapper around [`pubgrub::error::PubGrubError::NoSolution`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct NoSolutionError {
-    derivation_tree: DerivationTree<PubGrubPackage, Range<PubGrubVersion>>,
-    available_versions: FxHashMap<PubGrubPackage, Vec<PubGrubVersion>>,
+    derivation_tree: DerivationTree<PubGrubPackage, Range<Version>>,
+    available_versions: FxHashMap<PubGrubPackage, Vec<Version>>,
     selector: Option<CandidateSelector>,
 }
 
@@ -169,14 +170,12 @@ impl NoSolutionError {
                 PubGrubPackage::Python(PubGrubPython::Installed) => {
                     available_versions.insert(
                         package.clone(),
-                        vec![PubGrubVersion::from(python_requirement.installed().clone())],
+                        vec![python_requirement.installed().clone()],
                     );
                 }
                 PubGrubPackage::Python(PubGrubPython::Target) => {
-                    available_versions.insert(
-                        package.clone(),
-                        vec![PubGrubVersion::from(python_requirement.target().clone())],
-                    );
+                    available_versions
+                        .insert(package.clone(), vec![python_requirement.target().clone()]);
                 }
                 PubGrubPackage::Package(name, ..) => {
                     if let Some(entry) = package_versions.get(name) {
