@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, DistributionId, IndexLocations, Name, Resolution};
+use distribution_types::{IndexLocations, Name, Resolution};
 use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
@@ -17,7 +17,7 @@ use puffin_client::{FlatIndex, RegistryClient};
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
-use puffin_traits::{BuildContext, BuildKind, OnceMap, SetupPyStrategy};
+use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -27,12 +27,12 @@ pub struct BuildDispatch<'a> {
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     flat_index: &'a FlatIndex,
+    in_flight: &'a InFlight,
     base_python: PathBuf,
     setup_py: SetupPyStrategy,
     no_build: bool,
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
-    in_flight: OnceMap<DistributionId, Result<CachedDist, String>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -43,6 +43,7 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
+        in_flight: &'a InFlight,
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
         no_build: bool,
@@ -53,12 +54,12 @@ impl<'a> BuildDispatch<'a> {
             interpreter,
             index_locations,
             flat_index,
+            in_flight,
             base_python,
             setup_py,
             no_build,
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
-            in_flight: OnceMap::default(),
         }
     }
 
@@ -184,7 +185,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 );
 
                 downloader
-                    .download(remote, &self.in_flight)
+                    .download(remote, self.in_flight)
                     .await
                     .context("Failed to download and build distributions")?
             };

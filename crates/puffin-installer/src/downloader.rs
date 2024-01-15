@@ -7,14 +7,12 @@ use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
 
-use distribution_types::{
-    CachedDist, Dist, DistributionId, Identifier, LocalEditable, RemoteSource, SourceDist,
-};
+use distribution_types::{CachedDist, Dist, Identifier, LocalEditable, RemoteSource, SourceDist};
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, LocalWheel, Unzip};
-use puffin_traits::{BuildContext, OnceMap};
+use puffin_traits::{BuildContext, InFlight};
 
 use crate::editable::BuiltEditable;
 
@@ -66,7 +64,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub fn download_stream<'stream>(
         &'stream self,
         distributions: Vec<Dist>,
-        in_flight: &'stream OnceMap<DistributionId, Result<CachedDist, String>>,
+        in_flight: &'stream InFlight,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         futures::stream::iter(distributions)
             .map(|dist| async {
@@ -86,7 +84,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub async fn download(
         &self,
         mut distributions: Vec<Dist>,
-        in_flight: &OnceMap<DistributionId, Result<CachedDist, String>>,
+        in_flight: &InFlight,
     ) -> Result<Vec<CachedDist>, Error> {
         // Sort the distributions by size.
         distributions
@@ -154,13 +152,9 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
 
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(|file| file.url.to_string()).unwrap_or_default()))]
-    pub async fn get_wheel(
-        &self,
-        dist: Dist,
-        in_flight: &OnceMap<DistributionId, Result<CachedDist, String>>,
-    ) -> Result<CachedDist, Error> {
+    pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
-        let wheel = if in_flight.register(&id) {
+        let wheel = if in_flight.downloads.register(&id) {
             let download: LocalWheel = self
                 .database
                 .get_or_build_wheel(dist.clone())
@@ -169,16 +163,17 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             let result = Self::unzip_wheel(download).await;
             match result {
                 Ok(cached) => {
-                    in_flight.done(id, Ok(cached.clone()));
+                    in_flight.downloads.done(id, Ok(cached.clone()));
                     cached
                 }
                 Err(err) => {
-                    in_flight.done(id, Err(err.to_string()));
+                    in_flight.downloads.done(id, Err(err.to_string()));
                     return Err(err);
                 }
             }
         } else {
             in_flight
+                .downloads
                 .wait(&id)
                 .await
                 .value()

@@ -14,7 +14,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBu
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
-use puffin_traits::{OnceMap, SetupPyStrategy};
+use puffin_traits::{InFlight, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
@@ -70,6 +70,9 @@ pub(crate) async fn pip_sync(
         FlatIndex::from_entries(entries, tags)
     };
 
+    // Track in-flight downloads, builds, etc., across resolutions.
+    let in_flight = InFlight::default();
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -77,6 +80,7 @@ pub(crate) async fn pip_sync(
         venv.interpreter(),
         &index_locations,
         &flat_index,
+        &in_flight,
         venv.python_executable(),
         setup_py,
         no_build,
@@ -211,7 +215,7 @@ pub(crate) async fn pip_sync(
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
-            .download(remote, &OnceMap::default())
+            .download(remote, &in_flight)
             .await
             .context("Failed to download distributions")?;
 

@@ -17,7 +17,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
-use puffin_traits::SetupPyStrategy;
+use puffin_traits::{InFlight, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -65,6 +65,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         let entries = client.fetch(index_locations.flat_indexes()).await?;
         FlatIndex::from_entries(entries, venv.interpreter().tags()?)
     };
+    let in_flight = InFlight::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -72,6 +73,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         venv.interpreter(),
         &index_locations,
         &flat_index,
+        &in_flight,
         venv.python_executable(),
         SetupPyStrategy::default(),
         args.no_build,
