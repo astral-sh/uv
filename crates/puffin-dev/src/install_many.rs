@@ -142,16 +142,16 @@ async fn install_chunk(
         .collect::<Vec<_>>();
 
     let mut registry_index = RegistryWheelIndex::new(build_dispatch.cache(), tags, index_locations);
-    let (cached, uncached): (Vec<_>, Vec<_>) = dists.into_iter().partition_map(|dist| {
+    let (cached, uncached): (Vec<_>, Vec<_>) = dists.iter().partition_map(|dist| {
         // We always want the wheel for the latest version not whatever matching is in cache.
         let VersionOrUrl::Version(version) = dist.version_or_url() else {
-            unreachable!();
+            unreachable!("Only registry distributions are supported");
         };
 
         if let Some(cached) = registry_index.get_version(dist.name(), version) {
             Either::Left(CachedDist::Registry(cached.clone()))
         } else {
-            Either::Right(dist)
+            Either::Right(dist.clone())
         }
     });
     info!("Cached: {}, Uncached {}", cached.len(), uncached.len());
