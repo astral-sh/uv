@@ -76,6 +76,9 @@ def run_once(stdin: TextIO, stdout: TextIO):
     send_expect(stdout, "build_backend")
     build_backend_name = parse_build_backend(stdin)
 
+    send_expect(stdout, "backend_path")
+    backend_path = parse_backend_path(stdin)
+
     send_expect(stdout, "hook_name")
     hook_name = parse_hook_name(stdin)
     if hook_name not in HookArguments:
@@ -105,13 +108,14 @@ def run_once(stdin: TextIO, stdout: TextIO):
     # TODO(zanieb): Where do we get the path of the source tree?
 
     with ExitStack() as hook_ctx:
+        hook_ctx.enter_context(update_sys_path(backend_path))
         hook_stdout = hook_ctx.enter_context(redirect_sys_stream("stdout"))
         hook_stderr = hook_ctx.enter_context(redirect_sys_stream("stderr"))
         send_redirect(stdout, "stdout", str(hook_stdout))
         send_redirect(stdout, "stderr", str(hook_stderr))
 
         try:
-            build_backend = import_build_backend(build_backend_name)
+            build_backend = import_build_backend(build_backend_name, backend_path)
         except Exception as exc:
             if not isinstance(exc, HookdError):
                 # Wrap unhandled errors in a generic one
@@ -136,7 +140,7 @@ def run_once(stdin: TextIO, stdout: TextIO):
 
 
 @cache()
-def import_build_backend(backend_name: str) -> object:
+def import_build_backend(backend_name: str, backend_path: tuple[str]) -> object:
     """
     See: https://peps.python.org/pep-0517/#source-trees
     """
@@ -188,6 +192,24 @@ def import_build_backend(backend_name: str) -> object:
         backend = module
 
     return backend
+
+
+@contextmanager
+def update_sys_path(extensions: tuple[Path]):
+    """
+    Temporarily update `sys.path`.
+
+    WARNING: This function is not safe to concurrent usage.
+    """
+    if not extensions:
+        yield
+        return
+
+    previous_path = sys.path.copy()
+
+    sys.path = list(extensions) + sys.path
+    yield
+    sys.path = previous_path
 
 
 @contextmanager
@@ -294,7 +316,6 @@ def parse_hook_name(buffer: TextIO) -> Hook:
 
 def parse_path(buffer: TextIO) -> Path:
     path = os.path.abspath(buffer.readline().rstrip("\n"))
-    # TODO(zanieb): Consider validating the path here
     return path
 
 
@@ -327,7 +348,6 @@ def parse_config_settings(buffer: TextIO) -> dict | None:
 
 
 def parse_build_backend(buffer: TextIO) -> str:
-    # TODO: Add support for `build-path`
     name = buffer.readline().rstrip("\n")
 
     if not name:
@@ -335,6 +355,21 @@ def parse_build_backend(buffer: TextIO) -> str:
         name = "setuptools.build_meta:__legacy__"
 
     return name
+
+
+def parse_backend_path(buffer: TextIO) -> tuple[Path]:
+    """
+    Directories in backend-path are interpreted as relative to the project root, and MUST refer to a location within the source tree (after relative paths and symbolic links have been resolved).
+    The backend code MUST be loaded from one of the directories specified in backend-path (i.e., it is not permitted to specify backend-path and not have in-tree backend code).
+    """
+    paths = []
+
+    while True:
+        path = parse_optional_path(buffer)
+        if not path:
+            return tuple(paths)
+
+        paths.append(path)
 
 
 ######################

@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 
 PROJECT_DIR = Path(__file__).parent.parent
+TREE_DIR = PROJECT_DIR / "tests" / "tree"
 
 # Snapshot filters
 TIME = (r"(\d+.)?\d+(ms|s)", "[TIME]")
 SHUTDOWN = (
     textwrap.dedent(
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         SHUTDOWN
@@ -26,12 +28,17 @@ SHUTDOWN = (
 )
 STDOUT = ("STDOUT .*", "STDOUT [PATH]")
 STDERR = ("STDERR .*", "STDERR [PATH]")
+
+TREE = (re.escape(str(TREE_DIR)), "[TREE]")
 CWD = (re.escape(os.getcwd()), "[CWD]")
 TRACEBACK = ("TRACEBACK .*", "TRACEBACK [TRACEBACK]")
-DEFAULT_FILTERS = [TIME, STDOUT, STDERR, TRACEBACK, CWD]
+DEFAULT_FILTERS = [TIME, STDOUT, STDERR, TRACEBACK, TREE, CWD]
 
 
-def new(extra_backend_paths: list[str] | None = None) -> subprocess.Popen:
+def new(
+    extra_backend_paths: list[str] | None = None,
+    tree_path: Path | None = TREE_DIR,
+) -> subprocess.Popen:
     extra_backend_paths = extra_backend_paths or []
 
     env = os.environ.copy()
@@ -41,7 +48,8 @@ def new(extra_backend_paths: list[str] | None = None) -> subprocess.Popen:
     )
 
     return subprocess.Popen(
-        [sys.executable, str(PROJECT_DIR / "hookd.py")],
+        [sys.executable, str(PROJECT_DIR / "hookd.py")]
+        + ([str(tree_path)] if tree_path is not None else []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -84,19 +92,32 @@ def test_sigterm():
 
 def test_run_invalid_backend():
     daemon = new()
-    send(daemon, ["run", "backend_does_not_exist", "build_wheel", "", "", ""])
+    send(
+        daemon,
+        [
+            "run",
+            "backend_does_not_exist",
+            "",
+            "build_wheel",
+            "",
+            "",
+            "",
+        ],
+    )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG backend_does_not_exist build_wheel wheel_directory=[CWD] config_settings=None metadata_directory=None
+        DEBUG backend_does_not_exist build_wheel wheel_directory=[TREE] config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -114,14 +135,16 @@ def test_run_invalid_backend():
 
 def test_run_invalid_hook():
     daemon = new()
-    send(daemon, ["run", "ok_backend", "hook_does_not_exist"])
+    send(daemon, ["run", "ok_backend", "", "hook_does_not_exist"])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         ERROR InvalidHookName The name 'hook_does_not_exist' is not valid hook. Expected one of: 'build_wheel', 'build_sdist', 'prepare_metadata_for_build_wheel', 'get_requires_for_build_wheel', 'get_requires_for_build_sdist'
         TRACEBACK [TRACEBACK]
@@ -140,19 +163,21 @@ def test_run_build_wheel_ok():
     Uses a mock backend to test the `build_wheel` hook.
     """
     daemon = new()
-    send(daemon, ["run", "ok_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "ok_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG ok_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG ok_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -173,18 +198,20 @@ def test_run_build_sdist_ok():
     Uses a mock backend to test the `build_sdist` hook.
     """
     daemon = new()
-    send(daemon, ["run", "ok_backend", "build_sdist", "foo", ""])
+    send(daemon, ["run", "ok_backend", "", "build_sdist", "foo", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT sdist_directory
         EXPECT config_settings
-        DEBUG ok_backend build_sdist sdist_directory=[CWD]/foo config_settings=None
+        DEBUG ok_backend build_sdist sdist_directory=[TREE]/foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -205,14 +232,16 @@ def test_run_get_requires_for_build_wheel_ok():
     Uses a mock backend to test the `get_requires_for_build_wheel` hook.
     """
     daemon = new()
-    send(daemon, ["run", "ok_backend", "get_requires_for_build_wheel", ""])
+    send(daemon, ["run", "ok_backend", "", "get_requires_for_build_wheel", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT config_settings
         DEBUG ok_backend get_requires_for_build_wheel config_settings=None
@@ -236,18 +265,22 @@ def test_run_prepare_metadata_for_build_wheel_ok():
     Uses a mock backend to test the `prepare_metadata_for_build_wheel` hook.
     """
     daemon = new()
-    send(daemon, ["run", "ok_backend", "prepare_metadata_for_build_wheel", "foo", ""])
+    send(
+        daemon, ["run", "ok_backend", "", "prepare_metadata_for_build_wheel", "foo", ""]
+    )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT metadata_directory
         EXPECT config_settings
-        DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=[CWD]/foo config_settings=None
+        DEBUG ok_backend prepare_metadata_for_build_wheel metadata_directory=[TREE]/foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -269,15 +302,18 @@ def test_run_invalid_config_settings():
     """
     daemon = new()
     send(
-        daemon, ["run", "ok_backend", "get_requires_for_build_wheel", "not_valid_json"]
+        daemon,
+        ["run", "ok_backend", "", "get_requires_for_build_wheel", "not_valid_json"],
     )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT config_settings
         ERROR MalformedHookArgument Malformed content for argument 'config_settings': 'not_valid_json'
@@ -298,19 +334,23 @@ def test_run_build_wheel_multiple_times():
     """
     daemon = new()
     for _ in range(5):
-        send(daemon, ["run", "ok_backend", "build_wheel", "foo", "", ""])
+        send(daemon, ["run", "ok_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
+        """.rstrip()
+        + """
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG ok_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG ok_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -333,19 +373,21 @@ def test_run_build_wheel_error():
     Uses a mock backend that throws an error to test error reporting.
     """
     daemon = new()
-    send(daemon, ["run", "err_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "err_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -366,20 +408,22 @@ def test_run_error_not_fatal():
     Uses a mock backend that throws an error to ensure errors are not fatal and another hook can be run.
     """
     daemon = new()
-    send(daemon, ["run", "err_backend", "build_wheel", "foo", "", ""])
-    send(daemon, ["run", "err_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "err_backend", "", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "err_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -388,11 +432,12 @@ def test_run_error_not_fatal():
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -422,20 +467,22 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
     )
 
     daemon = new(extra_backend_paths=[tmp_path])
-    send(daemon, ["run", "base_exc_backend", "build_wheel", "foo", "", ""])
-    send(daemon, ["run", "base_exc_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "base_exc_backend", "", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "base_exc_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG base_exc_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG base_exc_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -444,11 +491,12 @@ def test_run_base_exception_error_not_fatal(tmp_path: Path):
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG base_exc_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG base_exc_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -470,19 +518,21 @@ def test_run_error_in_backend_module(tmp_path: Path):
     """
     (tmp_path / "import_err_backend.py").write_text("raise RuntimeError('oh no')")
     daemon = new(extra_backend_paths=[tmp_path])
-    send(daemon, ["run", "import_err_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "import_err_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG import_err_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG import_err_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -504,19 +554,21 @@ def test_run_unsupported_hook_empty(tmp_path: Path):
     """
     (tmp_path / "empty_backend.py").write_text("")
     daemon = new(extra_backend_paths=[tmp_path])
-    send(daemon, ["run", "empty_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "empty_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG empty_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG empty_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -549,18 +601,20 @@ def test_run_unsupported_hook_partial(tmp_path: Path):
     )
 
     daemon = new(extra_backend_paths=[tmp_path])
-    send(daemon, ["run", "partial_backend", "build_sdist", "foo", "", ""])
+    send(daemon, ["run", "partial_backend", "", "build_sdist", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT sdist_directory
         EXPECT config_settings
-        DEBUG partial_backend build_sdist sdist_directory=[CWD]/foo config_settings=None
+        DEBUG partial_backend build_sdist sdist_directory=[TREE]/foo config_settings=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -586,19 +640,24 @@ def test_run_cls_backend(separator):
     Tests a backend namespaced to a class.
     """
     daemon = new()
-    send(daemon, ["run", f"cls_backend{separator}Class", "build_wheel", "foo", "", ""])
+    send(
+        daemon,
+        ["run", f"cls_backend{separator}Class", "", "build_wheel", "foo", "", ""],
+    )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         f"""
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG cls_backend{separator}Class build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG cls_backend{separator}Class build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -620,19 +679,71 @@ def test_run_obj_backend(separator):
     Tests a backend namespaced to an object.
     """
     daemon = new()
-    send(daemon, ["run", f"obj_backend{separator}obj", "build_wheel", "foo", "", ""])
+    send(
+        daemon, ["run", f"obj_backend{separator}obj", "", "build_wheel", "foo", "", ""]
+    )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         f"""
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG obj_backend{separator}obj build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG obj_backend{separator}obj build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK build_wheel_fake_path
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_in_tree_backend():
+    """
+    Tests a backend in the source tree
+    """
+    daemon = new()
+    send(
+        daemon,
+        [
+            "run",
+            "in_tree",
+            "directory_does_not_exist",
+            "in_tree_backend",
+            "",
+            "build_wheel",
+            "foo",
+            "",
+            "",
+        ],
+    )
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        DEBUG changed working directory to [TREE]
+        READY
+        EXPECT action
+        EXPECT build_backend
+        EXPECT backend_path
+        EXPECT hook_name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG in_tree build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -653,19 +764,23 @@ def test_run_submodule_backend():
     Tests a backend namespaced to an submodule.
     """
     daemon = new()
-    send(daemon, ["run", "submodule_backend.submodule", "build_wheel", "foo", "", ""])
+    send(
+        daemon, ["run", "submodule_backend.submodule", "", "build_wheel", "foo", "", ""]
+    )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG submodule_backend.submodule build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG submodule_backend.submodule build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -686,19 +801,32 @@ def test_run_submodule_backend_invalid_import():
     Tests a backend namespaced to an submodule but imported as an attribute
     """
     daemon = new()
-    send(daemon, ["run", "submodule_backend:submodule", "build_wheel", "", "", ""])
+    send(
+        daemon,
+        [
+            "run",
+            "submodule_backend:submodule",
+            "",
+            "build_wheel",
+            "",
+            "",
+            "",
+        ],
+    )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG submodule_backend:submodule build_wheel wheel_directory=[CWD] config_settings=None metadata_directory=None
+        DEBUG submodule_backend:submodule build_wheel wheel_directory=[TREE] config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -719,19 +847,21 @@ def test_run_stdout_capture():
     Tests capture of stdout from a backend.
     """
     daemon = new()
-    send(daemon, ["run", "stdout_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "stdout_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG stdout_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG stdout_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -772,19 +902,21 @@ def test_run_stderr_capture():
     Tests capture of stderr from a backend.
     """
     daemon = new()
-    send(daemon, ["run", "stderr_backend", "build_wheel", "foo", "", ""])
+    send(daemon, ["run", "stderr_backend", "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         """
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG stderr_backend build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG stderr_backend build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
@@ -828,7 +960,7 @@ def test_run_stdout_capture_multiple_hook_runs():
     for i in range(COUNT):
         send(
             daemon,
-            ["run", "stdout_backend", "build_wheel", "foo", f'{{"run": {i}}}', ""],
+            ["run", "stdout_backend", "", "build_wheel", "foo", f'{{"run": {i}}}', ""],
         )
     stdout, stderr = daemon.communicate(input="shutdown\n")
     print(stdout)
@@ -873,19 +1005,21 @@ def test_run_real_backend_build_wheel_error(backend: str):
         pytest.skip(f"build backend {backend!r} is not installed")
 
     daemon = new()
-    send(daemon, ["run", backend, "build_wheel", "foo", "", ""])
+    send(daemon, ["run", backend, "", "build_wheel", "foo", "", ""])
     stdout, stderr = daemon.communicate(input="shutdown\n")
     assert_snapshot(
         stdout,
         f"""
+        DEBUG changed working directory to [TREE]
         READY
         EXPECT action
         EXPECT build_backend
+        EXPECT backend_path
         EXPECT hook_name
         EXPECT wheel_directory
         EXPECT config_settings
         EXPECT metadata_directory
-        DEBUG {backend} build_wheel wheel_directory=[CWD]/foo config_settings=None metadata_directory=None
+        DEBUG {backend} build_wheel wheel_directory=[TREE]/foo config_settings=None metadata_directory=None
         DEBUG parsed hook inputs in [TIME]
         STDOUT [PATH]
         STDERR [PATH]
