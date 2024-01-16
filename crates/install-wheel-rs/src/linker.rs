@@ -6,6 +6,7 @@ use std::path::Path;
 use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::File;
+use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
 use pypi_types::DirectUrl;
@@ -398,11 +399,18 @@ fn hardlink_wheel_files(
                 if let Err(err) = fs::hard_link(path, &out_path) {
                     // If the file already exists, remove it and try again.
                     if err.kind() == std::io::ErrorKind::AlreadyExists {
-                        fs::remove_file(&out_path)?;
-                        if fs::hard_link(path, &out_path).is_err() {
+                        debug!(
+                            "File already exists (initial attempt), overwriting: {}",
+                            out_path.display()
+                        );
+                        // Removing and recreating would lead to race conditions.
+                        let tempdir = tempdir_in(&site_packages)?;
+                        let tempfile = tempdir.path().join(entry.file_name());
+                        if fs::hard_link(path, &tempfile).is_err() {
                             fs::copy(path, &out_path)?;
                             attempt = Attempt::UseCopyFallback;
                         }
+                        fs_err::rename(&tempfile, &out_path)?;
                     } else {
                         fs::copy(path, &out_path)?;
                         attempt = Attempt::UseCopyFallback;
@@ -413,8 +421,15 @@ fn hardlink_wheel_files(
                 if let Err(err) = fs::hard_link(path, &out_path) {
                     // If the file already exists, remove it and try again.
                     if err.kind() == std::io::ErrorKind::AlreadyExists {
-                        fs::remove_file(&out_path)?;
-                        fs::hard_link(path, &out_path)?;
+                        debug!(
+                            "File already exists (subsequent attempt), overwriting: {}",
+                            out_path.display()
+                        );
+                        // Removing and recreating would lead to race conditions.
+                        let tempdir = tempdir_in(&site_packages)?;
+                        let tempfile = tempdir.path().join(entry.file_name());
+                        fs::hard_link(path, &tempfile)?;
+                        fs_err::rename(&tempfile, &out_path)?;
                     } else {
                         return Err(err.into());
                     }
