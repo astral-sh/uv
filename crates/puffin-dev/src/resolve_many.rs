@@ -20,6 +20,7 @@ use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
+use puffin_resolver::InMemoryIndex;
 use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
 #[derive(Parser)]
@@ -75,6 +76,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_locations = IndexLocations::default();
     let flat_index = FlatIndex::default();
+    let index = InMemoryIndex::default();
     let setup_py = SetupPyStrategy::default();
     let in_flight = InFlight::default();
 
@@ -84,6 +86,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
         venv.interpreter(),
         &index_locations,
         &flat_index,
+        &index,
         &in_flight,
         venv.python_executable(),
         setup_py,

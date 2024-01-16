@@ -24,7 +24,7 @@ use puffin_distribution::RegistryWheelIndex;
 use puffin_installer::Downloader;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
-use puffin_resolver::DistFinder;
+use puffin_resolver::{DistFinder, InMemoryIndex};
 use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
 #[derive(Parser)]
@@ -61,6 +61,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_locations = IndexLocations::default();
     let flat_index = FlatIndex::default();
+    let index = InMemoryIndex::default();
     let setup_py = SetupPyStrategy::default();
     let in_flight = InFlight::default();
     let tags = venv.interpreter().tags()?;
@@ -71,6 +72,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         venv.interpreter(),
         &index_locations,
         &flat_index,
+        &index,
         &in_flight,
         venv.python_executable(),
         setup_py,

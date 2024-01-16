@@ -10,7 +10,7 @@ use crate::version_map::VersionMap;
 
 /// In-memory index of package metadata.
 #[derive(Default)]
-pub(crate) struct Index {
+pub struct InMemoryIndex {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
     pub(crate) packages: OnceMap<PackageName, VersionMap>,
@@ -24,7 +24,7 @@ pub(crate) struct Index {
     pub(crate) redirects: DashMap<Url, Url>,
 }
 
-impl Index {
+impl InMemoryIndex {
     /// Cancel all waiting tasks.
     ///
     /// Warning: waiting on tasks that have been canceled will cause the index to hang.
