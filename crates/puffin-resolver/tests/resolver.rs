@@ -18,8 +18,8 @@ use puffin_cache::Cache;
 use puffin_client::{FlatIndex, RegistryClientBuilder};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{
-    DisplayResolutionGraph, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode,
-    ResolutionOptions, Resolver,
+    DisplayResolutionGraph, InMemoryIndex, Manifest, PreReleaseMode, ResolutionGraph,
+    ResolutionMode, ResolutionOptions, Resolver,
 };
 use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
@@ -101,6 +101,7 @@ async fn resolve(
 ) -> Result<ResolutionGraph> {
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
     let flat_index = FlatIndex::default();
+    let index = InMemoryIndex::default();
     let interpreter = Interpreter::artificial(
         Platform::current()?,
         markers.clone(),
@@ -120,6 +121,7 @@ async fn resolve(
         tags,
         &client,
         &flat_index,
+        &index,
         &build_context,
     );
     Ok(resolver.resolve().await?)

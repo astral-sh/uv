@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env;
 use std::fmt::Write;
 use std::io::stdout;
+use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -24,7 +25,8 @@ use puffin_installer::Downloader;
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::ExtraName;
 use puffin_resolver::{
-    DisplayResolutionGraph, Manifest, PreReleaseMode, ResolutionMode, ResolutionOptions, Resolver,
+    DisplayResolutionGraph, InMemoryIndex, Manifest, PreReleaseMode, ResolutionMode,
+    ResolutionOptions, Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
@@ -128,6 +130,18 @@ pub(crate) async fn pip_compile(
         interpreter.sys_executable().display()
     );
 
+    // Create a shared in-memory index.
+    let source_index = InMemoryIndex::default();
+
+    // If we're resolving against a different Python version, use a separate index. Source
+    // distributions will be built against the installed version, and so the index may contain
+    // different package priorities than in the top-level resolution.
+    let top_level_index = if python_version.is_some() {
+        InMemoryIndexRef::Owned(InMemoryIndex::default())
+    } else {
+        InMemoryIndexRef::Borrowed(&source_index)
+    };
+
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = if let Some(python_version) = python_version.as_ref() {
         Cow::Owned(Tags::from_env(
@@ -164,6 +178,7 @@ pub(crate) async fn pip_compile(
         &interpreter,
         &index_locations,
         &flat_index,
+        &source_index,
         &in_flight,
         interpreter.sys_executable().to_path_buf(),
         setup_py,
@@ -240,6 +255,7 @@ pub(crate) async fn pip_compile(
         &tags,
         &client,
         &flat_index,
+        &top_level_index,
         &build_dispatch,
     )
     .with_reporter(ResolverReporter::from(printer));
@@ -340,4 +356,21 @@ pub(crate) fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
             contain -, _, ., and alphanumeric characters"
         )
     })
+}
+
+/// An owned or unowned [`InMemoryIndex`].
+enum InMemoryIndexRef<'a> {
+    Owned(InMemoryIndex),
+    Borrowed(&'a InMemoryIndex),
+}
+
+impl Deref for InMemoryIndexRef<'_> {
+    type Target = InMemoryIndex;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(index) => index,
+            Self::Borrowed(index) => index,
+        }
+    }
 }

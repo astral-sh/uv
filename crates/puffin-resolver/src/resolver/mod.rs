@@ -43,7 +43,7 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 use crate::resolver::allowed_urls::AllowedUrls;
-use crate::resolver::index::Index;
+pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::provider::DefaultResolverProvider;
 pub use crate::resolver::provider::ResolverProvider;
 use crate::resolver::reporter::Facade;
@@ -65,7 +65,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement<'a>,
     selector: CandidateSelector,
-    index: Arc<Index>,
+    index: &'a InMemoryIndex,
     /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
     incompatibilities: DashMap<PackageId, VersionSpecifiers>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
@@ -86,6 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         tags: &'a Tags,
         client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
+        index: &'a InMemoryIndex,
         build_context: &'a Context,
     ) -> Self {
         let provider = DefaultResolverProvider::new(
@@ -106,6 +107,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             options,
             markers,
             PythonRequirement::new(interpreter, markers),
+            index,
             provider,
         )
     }
@@ -118,11 +120,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
         python_requirement: PythonRequirement<'a>,
+        index: &'a InMemoryIndex,
         provider: Provider,
     ) -> Self {
         let selector = CandidateSelector::for_resolution(&manifest, options);
-
-        let index = Index::default();
 
         // Determine all the editable requirements.
         let mut editables = FxHashMap::default();
@@ -163,7 +164,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             .collect();
 
         Self {
-            index: Arc::new(index),
+            index,
             incompatibilities: DashMap::default(),
             selector,
             allowed_urls,

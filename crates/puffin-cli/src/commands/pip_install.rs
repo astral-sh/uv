@@ -26,7 +26,8 @@ use puffin_installer::{
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
 use puffin_resolver::{
-    Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions, Resolver,
+    InMemoryIndex, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions,
+    Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
@@ -144,6 +145,9 @@ pub(crate) async fn pip_install(
         FlatIndex::from_entries(entries, tags)
     };
 
+    // Create a shared in-memory index.
+    let index = InMemoryIndex::default();
+
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
@@ -155,6 +159,7 @@ pub(crate) async fn pip_install(
         &interpreter,
         &index_locations,
         &flat_index,
+        &index,
         &in_flight,
         venv.python_executable(),
         setup_py,
@@ -196,6 +201,7 @@ pub(crate) async fn pip_install(
         markers,
         &client,
         &flat_index,
+        &index,
         &resolve_dispatch,
         options,
         printer,
@@ -229,6 +235,7 @@ pub(crate) async fn pip_install(
             &interpreter,
             &index_locations,
             &flat_index,
+            &index,
             &in_flight,
             venv.python_executable(),
             setup_py,
@@ -369,6 +376,7 @@ async fn resolve(
     markers: &MarkerEnvironment,
     client: &RegistryClient,
     flat_index: &FlatIndex,
+    index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
     options: ResolutionOptions,
     mut printer: Printer,
@@ -415,6 +423,7 @@ async fn resolve(
         tags,
         client,
         flat_index,
+        index,
         build_dispatch,
     )
     .with_reporter(ResolverReporter::from(printer));

@@ -16,7 +16,7 @@ use puffin_cache::Cache;
 use puffin_client::{FlatIndex, RegistryClient};
 use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_resolver::{Manifest, ResolutionOptions, Resolver};
+use puffin_resolver::{InMemoryIndex, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -27,6 +27,7 @@ pub struct BuildDispatch<'a> {
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     flat_index: &'a FlatIndex,
+    index: &'a InMemoryIndex,
     in_flight: &'a InFlight,
     base_python: PathBuf,
     setup_py: SetupPyStrategy,
@@ -43,6 +44,7 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
+        index: &'a InMemoryIndex,
         in_flight: &'a InFlight,
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
@@ -54,6 +56,7 @@ impl<'a> BuildDispatch<'a> {
             interpreter,
             index_locations,
             flat_index,
+            index,
             in_flight,
             base_python,
             setup_py,
@@ -104,6 +107,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             tags,
             self.client,
             self.flat_index,
+            self.index,
             self,
         );
         let graph = resolver.resolve().await.with_context(|| {

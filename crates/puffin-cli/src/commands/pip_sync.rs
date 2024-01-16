@@ -14,6 +14,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBu
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
+use puffin_resolver::InMemoryIndex;
 use puffin_traits::{InFlight, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
@@ -70,6 +71,9 @@ pub(crate) async fn pip_sync(
         FlatIndex::from_entries(entries, tags)
     };
 
+    // Create a shared in-memory index.
+    let index = InMemoryIndex::default();
+
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
@@ -80,6 +84,7 @@ pub(crate) async fn pip_sync(
         venv.interpreter(),
         &index_locations,
         &flat_index,
+        &index,
         &in_flight,
         venv.python_executable(),
         setup_py,
