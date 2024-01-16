@@ -45,7 +45,7 @@ import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "a065ed443458556d77956baf9392f7626da9c0ef"
+PACKSE_COMMIT = "b6cb1f6310a40937dc68a59c82460fea58957b70"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATE = TOOL_ROOT / "template.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"

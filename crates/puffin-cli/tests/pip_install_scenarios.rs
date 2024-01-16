@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/a065ed443458556d77956baf9392f7626da9c0ef/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/b6cb1f6310a40937dc68a59c82460fea58957b70/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -44,7 +44,7 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 ///
 /// The user requires any version of package `a` which does not exist.
 ///
-/// ```
+/// ```text
 /// 57cd4136
 /// ├── environment
 /// │   └── python3.7
@@ -94,7 +94,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 ///
 /// The user requires an exact version of package `a` but only other versions exist
 ///
-/// ```
+/// ```text
 /// eaa03067
 /// ├── environment
 /// │   └── python3.7
@@ -148,7 +148,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 /// The user requires a version of `a` greater than `1.0.0` but only smaller or
 /// equal versions exist
 ///
-/// ```
+/// ```text
 /// 6e8e01df
 /// ├── environment
 /// │   └── python3.7
@@ -203,7 +203,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 /// The user requires a version of `a` less than `1.0.0` but only larger versions
 /// exist
 ///
-/// ```
+/// ```text
 /// e45cec3c
 /// ├── environment
 /// │   └── python3.7
@@ -258,7 +258,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 ///
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
-/// ```
+/// ```text
 /// aca2796a
 /// ├── environment
 /// │   └── python3.7
@@ -313,7 +313,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// Only one version of the requested package is available, but the user has banned
 /// that version.
 ///
-/// ```
+/// ```text
 /// 7a9ed79c
 /// ├── environment
 /// │   └── python3.7
@@ -374,7 +374,7 @@ fn excluded_only_version() -> Result<()> {
 /// Only one version of the requested package `a` is compatible, but the user has
 /// banned that version.
 ///
-/// ```
+/// ```text
 /// b6b89642
 /// ├── environment
 /// │   └── python3.7
@@ -464,7 +464,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 /// There is a range of compatible versions for the requested package `a`, but
 /// another dependency `c` excludes that range.
 ///
-/// ```
+/// ```text
 /// 1cd99bd0
 /// ├── environment
 /// │   └── python3.7
@@ -586,7 +586,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 /// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
-/// ```
+/// ```text
 /// 0fd25b39
 /// ├── environment
 /// │   └── python3.7
@@ -710,7 +710,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 ///
 /// Optional dependencies are requested for the package.
 ///
-/// ```
+/// ```text
 /// 76e5355c
 /// ├── environment
 /// │   └── python3.7
@@ -774,8 +774,8 @@ fn extra_required() -> Result<()> {
 /// Optional dependencies are requested for the package, but the extra does not
 /// exist.
 ///
-/// ```
-/// 0997c767
+/// ```text
+/// 06e7489c
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -792,7 +792,7 @@ fn missing_extra() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-0997c767", ""));
+    filters.push((r"-06e7489c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -800,7 +800,7 @@ fn missing_extra() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-0997c767[extra]")
+            .arg("a-06e7489c[extra]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -820,7 +820,8 @@ fn missing_extra() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_0997c767", "1.0.0", &temp_dir);
+    // Missing extras are ignored during resolution.
+    assert_installed(&venv, "a_06e7489c", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -829,7 +830,7 @@ fn missing_extra() -> Result<()> {
 ///
 /// Multiple optional dependencies are requested for the package.
 ///
-/// ```
+/// ```text
 /// e55f15c4
 /// ├── environment
 /// │   └── python3.7
@@ -901,8 +902,8 @@ fn multiple_extras_required() -> Result<()> {
 /// Multiple optional dependencies are requested for the package, but they have
 /// conflicting requirements with each other.
 ///
-/// ```
-/// bf480858
+/// ```text
+/// 492741b0
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -930,7 +931,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-bf480858", ""));
+    filters.push((r"-492741b0", ""));
 
     insta::with_settings!({
         filters => filters
@@ -938,7 +939,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-bf480858[extra_b,extra_c]")
+            .arg("a-492741b0[extra_b,extra_c]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -952,19 +953,21 @@ fn extra_incompatible_with_extra() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a[extra-b] that satisfy any of:
-                  a[extra-b]<1.0.0
-                  a[extra-b]>1.0.0
-              and a[extra-b]==1.0.0 depends on b==1.0.0, we can conclude that all versions of a[extra-b] depends on b==1.0.0.
-              And because a[extra-c]==1.0.0 depends on b==2.0.0 and there are no versions of a[extra-c] that satisfy any of:
+          ╰─▶ Because there are no versions of a[extra-c] that satisfy any of:
                   a[extra-c]<1.0.0
                   a[extra-c]>1.0.0
-              we can conclude that all versions of a[extra-c] and all versions of a[extra-b] are incompatible.
+              and a[extra-c]==1.0.0 depends on b==2.0.0, we can conclude that all versions of a[extra-c] depends on b==2.0.0.
+              And because a[extra-b]==1.0.0 depends on b==1.0.0 and there are no versions of a[extra-b] that satisfy any of:
+                  a[extra-b]<1.0.0
+                  a[extra-b]>1.0.0
+              we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
               And because root depends on a[extra-c] and root depends on a[extra-b], we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
-    assert_not_installed(&venv, "a_bf480858", &temp_dir);
+    // Because both `extra_b` and `extra_c` are requested and they require incompatible
+    // versions of `b`, `a` cannot be installed.
+    assert_not_installed(&venv, "a_492741b0", &temp_dir);
 
     Ok(())
 }
@@ -973,8 +976,8 @@ fn extra_incompatible_with_extra() -> Result<()> {
 ///
 /// One of two incompatible optional dependencies are requested for the package.
 ///
-/// ```
-/// 06ed3759
+/// ```text
+/// f0b0089a
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1002,7 +1005,7 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-06ed3759", ""));
+    filters.push((r"-f0b0089a", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1010,7 +1013,7 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-06ed3759[extra_c]")
+            .arg("a-f0b0089a[extra_c]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1031,8 +1034,10 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_06ed3759", "1.0.0", &temp_dir);
-    assert_installed(&venv, "b_06ed3759", "2.0.0", &temp_dir);
+    // Because the user does not request both extras, it is okay that one is
+    // incompatible with the other.
+    assert_installed(&venv, "a_f0b0089a", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_f0b0089a", "2.0.0", &temp_dir);
 
     Ok(())
 }
@@ -1042,8 +1047,8 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 /// Optional dependencies are requested for the package, but the extra is not
 /// compatible with other requested versions.
 ///
-/// ```
-/// b3bfe512
+/// ```text
+/// 9d588075
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1069,7 +1074,7 @@ fn extra_incompatible_with_root() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-b3bfe512", ""));
+    filters.push((r"-9d588075", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1077,8 +1082,8 @@ fn extra_incompatible_with_root() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-b3bfe512[extra]")
-            .arg("b-b3bfe512==2.0.0")
+            .arg("a-9d588075[extra]")
+            .arg("b-9d588075==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1100,8 +1105,10 @@ fn extra_incompatible_with_root() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_b3bfe512", &temp_dir);
-    assert_not_installed(&venv, "b_b3bfe512", &temp_dir);
+    // Because the user requested `b==2.0.0` but the requested extra requires
+    // `b==1.0.0`, the dependencies cannot be satisfied.
+    assert_not_installed(&venv, "a_9d588075", &temp_dir);
+    assert_not_installed(&venv, "b_9d588075", &temp_dir);
 
     Ok(())
 }
@@ -1111,8 +1118,8 @@ fn extra_incompatible_with_root() -> Result<()> {
 /// Optional dependencies are requested for the package, the extra is only available
 /// on an older version.
 ///
-/// ```
-/// 49778327
+/// ```text
+/// f1877db3
 /// ├── environment
 /// │   └── python3.7
 /// ├── root
@@ -1139,7 +1146,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 
     // In addition to the standard filters, remove the scenario version
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-49778327", ""));
+    filters.push((r"-f1877db3", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1147,7 +1154,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-49778327[extra]")
+            .arg("a-f1877db3[extra]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1167,8 +1174,9 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_49778327", "1.0.0", &temp_dir);
-    assert_installed(&venv, "b_49778327", "1.0.0", &temp_dir);
+    // The resolver should not backtrack to `a==1.0.0` because missing extras are
+    // allowed during resolution. `b` should not be installed.
+    assert_installed(&venv, "a_f1877db3", "3.0.0", &temp_dir);
 
     Ok(())
 }
@@ -1177,7 +1185,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 ///
 /// The user requires two incompatible, existing versions of package `a`
 ///
-/// ```
+/// ```text
 /// 80d82ee8
 /// ├── environment
 /// │   └── python3.7
@@ -1236,7 +1244,7 @@ fn direct_incompatible_versions() -> Result<()> {
 /// The user requires packages `a` and `b` but `a` requires a different version of
 /// `b`
 ///
-/// ```
+/// ```text
 /// a967e815
 /// ├── environment
 /// │   └── python3.7
@@ -1303,7 +1311,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 /// The user requires package `a` and `b`; `a` and `b` require different versions of
 /// `c`
 ///
-/// ```
+/// ```text
 /// 6866d8dc
 /// ├── environment
 /// │   └── python3.7
@@ -1378,7 +1386,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 /// The user requires any version of package `a` which only has prerelease versions
 /// available.
 ///
-/// ```
+/// ```text
 /// 9a1b3dda
 /// ├── environment
 /// │   └── python3.7
@@ -1436,7 +1444,7 @@ fn package_only_prereleases() -> Result<()> {
 /// The user requires a version of package `a` which only matches prerelease
 /// versions but they did not include a prerelease specifier.
 ///
-/// ```
+/// ```text
 /// 19673198
 /// ├── environment
 /// │   └── python3.7
@@ -1496,7 +1504,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 /// versions. They did not include a prerelease specifier for the package, but they
 /// opted into prereleases globally.
 ///
-/// ```
+/// ```text
 /// 51f94da2
 /// ├── environment
 /// │   └── python3.7
@@ -1554,7 +1562,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 /// The user requires any version of package `a` has a prerelease version available
 /// and an older non-prerelease version.
 ///
-/// ```
+/// ```text
 /// eebe53a6
 /// ├── environment
 /// │   └── python3.7
@@ -1613,7 +1621,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and only stable
 /// releases are available.
 ///
-/// ```
+/// ```text
 /// 9d4725eb
 /// ├── environment
 /// │   └── python3.7
@@ -1674,7 +1682,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and only
 /// prerelease releases are available.
 ///
-/// ```
+/// ```text
 /// 6cc95bc8
 /// ├── environment
 /// │   └── python3.7
@@ -1735,7 +1743,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 /// The user requires a version of `a` with a prerelease specifier and both
 /// prerelease and stable releases are available.
 ///
-/// ```
+/// ```text
 /// c97845e2
 /// ├── environment
 /// │   └── python3.7
@@ -1799,7 +1807,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 /// The user requires `a` which has multiple prereleases available with different
 /// labels.
 ///
-/// ```
+/// ```text
 /// e290bf29
 /// ├── environment
 /// │   └── python3.7
@@ -1859,7 +1867,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 ///
 /// The user requires `a` which has multiple alphas available.
 ///
-/// ```
+/// ```text
 /// f5948c28
 /// ├── environment
 /// │   └── python3.7
@@ -1920,7 +1928,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 /// The user requires any version of package `a` which requires `b` which only has
 /// prerelease versions available.
 ///
-/// ```
+/// ```text
 /// 44ebef16
 /// ├── environment
 /// │   └── python3.7
@@ -1984,7 +1992,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
 /// The user requires package `a` which has a dependency on a package which only
 /// matches prerelease versions but they did not include a prerelease specifier.
 ///
-/// ```
+/// ```text
 /// 27759187
 /// ├── environment
 /// │   └── python3.7
@@ -2053,7 +2061,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 /// matches prerelease versions; the user has opted into allowing prereleases in `b`
 /// explicitly.
 ///
-/// ```
+/// ```text
 /// 26efb6c5
 /// ├── environment
 /// │   └── python3.7
@@ -2121,7 +2129,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease
 ///
-/// ```
+/// ```text
 /// f8aeea37
 /// ├── environment
 /// │   └── python3.7
@@ -2196,7 +2204,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// only be satisfied by a prerelease. The user includes an opt-in to prereleases of
 /// the transitive dependency.
 ///
-/// ```
+/// ```text
 /// 184fc65f
 /// ├── environment
 /// │   └── python3.7
@@ -2273,7 +2281,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
-/// ```
+/// ```text
 /// 7017673e
 /// ├── environment
 /// │   └── python3.7
@@ -2378,7 +2386,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 /// only be satisfied by a prerelease. There are many prerelease versions and some
 /// are excluded.
 ///
-/// ```
+/// ```text
 /// aaee5052
 /// ├── environment
 /// │   └── python3.7
@@ -2480,7 +2488,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 ///
 /// The user requires a package which requires a Python version that does not exist
 ///
-/// ```
+/// ```text
 /// 0825b69c
 /// ├── environment
 /// │   └── python3.7
@@ -2536,7 +2544,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// The user requires a package which requires a Python version less than the
 /// current version
 ///
-/// ```
+/// ```text
 /// f9296b84
 /// ├── environment
 /// │   └── python3.9
@@ -2592,7 +2600,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// The user requires a package which requires a Python version greater than the
 /// current version
 ///
-/// ```
+/// ```text
 /// a11d5394
 /// ├── environment
 /// │   └── python3.9
@@ -2648,7 +2656,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// The user requires a package which has many versions which all require a Python
 /// version greater than the current version
 ///
-/// ```
+/// ```text
 /// 02dc550c
 /// ├── environment
 /// │   └── python3.9
@@ -2725,7 +2733,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an older version is compatible.
 ///
-/// ```
+/// ```text
 /// ef060cef
 /// ├── environment
 /// │   └── python3.9
@@ -2790,7 +2798,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an excluded older version is compatible.
 ///
-/// ```
+/// ```text
 /// 1bde0c18
 /// ├── environment
 /// │   └── python3.9
@@ -2868,7 +2876,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 ///
 /// A wheel for a specific platform is available alongside the default.
 ///
-/// ```
+/// ```text
 /// 74e4a459
 /// ├── environment
 /// │   └── python3.7
@@ -2921,7 +2929,7 @@ fn specific_tag_and_default() -> Result<()> {
 ///
 /// No source distributions are available, only wheels.
 ///
-/// ```
+/// ```text
 /// 4f019491
 /// ├── environment
 /// │   └── python3.7
@@ -2974,7 +2982,7 @@ fn only_wheels() -> Result<()> {
 ///
 /// No wheels are available, only source distributions.
 ///
-/// ```
+/// ```text
 /// 614d801c
 /// ├── environment
 /// │   └── python3.7
@@ -3027,7 +3035,7 @@ fn no_wheels() -> Result<()> {
 ///
 /// No wheels with valid tags are available, just source distributions.
 ///
-/// ```
+/// ```text
 /// 737bbfd4
 /// ├── environment
 /// │   └── python3.7
