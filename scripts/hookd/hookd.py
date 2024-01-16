@@ -307,7 +307,10 @@ class Action(enum.Enum):
 
 
 def parse_action(buffer: TextIO) -> Action:
-    action = buffer.readline().rstrip("\n")
+    # Wait until we receive non-empty content
+    action = None
+    while not action:
+        action = buffer.readline().rstrip("\n")
     return Action.from_str(action)
 
 
@@ -428,7 +431,7 @@ def send_shutdown(file: TextIO):
 def write_safe(file: TextIO, *args: str):
     # Ensures thre are no newlines in the output
     args = [str(arg).replace("\n", "\\n") for arg in args]
-    print(*args, file=file)
+    print(*args, file=file, flush=True)
 
 
 #######################
