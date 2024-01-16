@@ -242,9 +242,14 @@ def redirect_sys_stream(name: StreamName):
 
 class Hook(enum.Enum):
     build_wheel = "build_wheel"
-    build_sdist = "build_sdist"
     prepare_metadata_for_build_wheel = "prepare_metadata_for_build_wheel"
     get_requires_for_build_wheel = "get_requires_for_build_wheel"
+
+    build_editable = "build_editable"
+    prepare_metadata_for_build_editable = "prepare_metadata_for_build_editable"
+    get_requires_for_build_editable = "get_requires_for_build_editable"
+
+    build_sdist = "build_sdist"
     get_requires_for_build_sdist = "get_requires_for_build_sdist"
 
     @classmethod
@@ -280,6 +285,7 @@ HookArguments = {
         HookArgument.sdist_directory,
         HookArgument.config_settings,
     ),
+    Hook.get_requires_for_build_sdist: (HookArgument.config_settings,),
     Hook.build_wheel: (
         HookArgument.wheel_directory,
         HookArgument.config_settings,
@@ -289,8 +295,17 @@ HookArguments = {
         HookArgument.metadata_directory,
         HookArgument.config_settings,
     ),
-    Hook.get_requires_for_build_sdist: (HookArgument.config_settings,),
     Hook.get_requires_for_build_wheel: (HookArgument.config_settings,),
+    Hook.build_editable: (
+        HookArgument.wheel_directory,
+        HookArgument.config_settings,
+        HookArgument.metadata_directory,
+    ),
+    Hook.prepare_metadata_for_build_editable: (
+        HookArgument.metadata_directory,
+        HookArgument.config_settings,
+    ),
+    Hook.get_requires_for_build_editable: (HookArgument.config_settings,),
 }
 
 

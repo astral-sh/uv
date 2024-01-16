@@ -146,7 +146,7 @@ def test_run_invalid_hook():
         EXPECT build-backend
         EXPECT backend-path
         EXPECT hook-name
-        ERROR InvalidHookName The name 'hook_does_not_exist' is not valid hook. Expected one of: 'build_wheel', 'build_sdist', 'prepare_metadata_for_build_wheel', 'get_requires_for_build_wheel', 'get_requires_for_build_sdist'
+        ERROR InvalidHookName The name 'hook_does_not_exist' is not valid hook. Expected one of: 'build_wheel', 'prepare_metadata_for_build_wheel', 'get_requires_for_build_wheel', 'build_editable', 'prepare_metadata_for_build_editable', 'get_requires_for_build_editable', 'build_sdist', 'get_requires_for_build_sdist'
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
@@ -227,6 +227,41 @@ def test_run_build_sdist_ok():
     assert daemon.returncode == 0
 
 
+def test_run_build_editable_ok():
+    """
+    Uses a mock backend to test the `build_editable` hook.
+    """
+    daemon = new()
+    send(daemon, ["run", "ok_backend", "", "build_editable", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        DEBUG changed working directory to [TREE]
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG ok_backend.build_editable(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK build_editable_fake_path
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
 def test_run_get_requires_for_build_wheel_ok():
     """
     Uses a mock backend to test the `get_requires_for_build_wheel` hook.
@@ -285,6 +320,109 @@ def test_run_prepare_metadata_for_build_wheel_ok():
         STDOUT [PATH]
         STDERR [PATH]
         OK prepare_metadata_fake_dist_info_path
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_get_requires_for_build_editable_ok():
+    """
+    Uses a mock backend to test the `get_requires_for_build_editable` hook.
+    """
+    daemon = new()
+    send(daemon, ["run", "ok_backend", "", "get_requires_for_build_editable", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        DEBUG changed working directory to [TREE]
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
+        EXPECT config_settings
+        DEBUG ok_backend.get_requires_for_build_editable(config_settings=None)
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK ['fake', 'build', 'editable', 'requires']
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_prepare_metadata_for_build_editable_ok():
+    """
+    Uses a mock backend to test the `prepare_metadata_for_build_editable` hook.
+    """
+    daemon = new()
+    send(
+        daemon,
+        ["run", "ok_backend", "", "prepare_metadata_for_build_editable", "foo", ""],
+    )
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        DEBUG changed working directory to [TREE]
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
+        EXPECT metadata_directory
+        EXPECT config_settings
+        DEBUG ok_backend.prepare_metadata_for_build_editable(metadata_directory='[TREE]/foo', config_settings=None)
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK prepare_metadata_fake_dist_info_path
+        DEBUG ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
+def test_run_get_requires_for_build_sdist_ok():
+    """
+    Uses a mock backend to test the `get_requires_for_build_sdist` hook.
+    """
+    daemon = new()
+    send(daemon, ["run", "ok_backend", "", "get_requires_for_build_sdist", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        DEBUG changed working directory to [TREE]
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
+        EXPECT config_settings
+        DEBUG ok_backend.get_requires_for_build_sdist(config_settings=None)
+        DEBUG parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK ['fake', 'build', 'sdist', 'requires']
         DEBUG ran hook in [TIME]
         READY
         EXPECT action
@@ -619,10 +757,6 @@ def test_run_unsupported_hook_partial(tmp_path: Path):
         STDOUT [PATH]
         STDERR [PATH]
         ERROR UnsupportedHook The hook 'build_sdist' is not supported by the backend. The backend supports: 'build_wheel'
-        TRACEBACK [TRACEBACK]
-        READY
-        EXPECT action
-        ERROR InvalidAction Received invalid action ''. Expected one of: 'run', 'shutdown'
         TRACEBACK [TRACEBACK]
         READY
         EXPECT action
