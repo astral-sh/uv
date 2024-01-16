@@ -404,8 +404,7 @@ fn hardlink_wheel_files(
                             out_path.display()
                         );
                         // Removing and recreating would lead to race conditions.
-                        // Unwrap safety: This is a file in a directory, the parent exists as the directory.
-                        let tempdir = tempdir_in(path.parent().unwrap())?;
+                        let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
                         if fs::hard_link(path, &tempfile).is_err() {
                             fs::copy(path, &out_path)?;
@@ -427,8 +426,7 @@ fn hardlink_wheel_files(
                             out_path.display()
                         );
                         // Removing and recreating would lead to race conditions.
-                        // Unwrap safety: This is a file in a directory, the parent exists as the directory.
-                        let tempdir = tempdir_in(path.parent().unwrap())?;
+                        let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
                         fs::hard_link(path, &tempfile)?;
                         fs_err::rename(&tempfile, &out_path)?;
