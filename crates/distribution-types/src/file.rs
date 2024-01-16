@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::VerbatimUrl;
@@ -42,10 +41,11 @@ impl File {
             requires_python: file.requires_python.transpose()?,
             size: file.size,
             upload_time: file.upload_time,
-            url: FileLocation::Url(
-                base.join_relative(&file.url)
-                    .map_err(|err| FileConversionError::Url(file.url.clone(), err))?,
-            ),
+            url: if file.url.contains("://") {
+                FileLocation::AbsoluteUrl(file.url)
+            } else {
+                FileLocation::RelativeUrl(base.clone(), file.url)
+            },
             yanked: file.yanked,
         })
     }
@@ -55,7 +55,9 @@ impl File {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileLocation {
     /// URL relative to the base URL.
-    Url(Url),
+    RelativeUrl(BaseUrl, String),
+    /// Absolute URL.
+    AbsoluteUrl(String),
     /// Absolute path to a file.
     Path(PathBuf, VerbatimUrl),
 }
@@ -63,7 +65,8 @@ pub enum FileLocation {
 impl Display for FileLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileLocation::Url(url) => Display::fmt(url, f),
+            FileLocation::RelativeUrl(_base, url) => Display::fmt(&url, f),
+            FileLocation::AbsoluteUrl(url) => Display::fmt(&url, f),
             FileLocation::Path(path, _url) => Display::fmt(&path.display(), f),
         }
     }

@@ -225,8 +225,14 @@ impl RegistryClient {
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
-                FileLocation::Url(url) => {
-                    self.wheel_metadata_registry(&wheel.index, &wheel.file, url)
+                FileLocation::RelativeUrl(base, url) => {
+                    let url = base.join_relative(url)?;
+                    self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                        .await?
+                }
+                FileLocation::AbsoluteUrl(url) => {
+                    let url = Url::parse(url)?;
+                    self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
                         .await?
                 }
                 FileLocation::Path(path, _url) => {

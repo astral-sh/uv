@@ -111,7 +111,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 let url = match &wheel.file.url {
-                    FileLocation::Url(url) => url,
+                    FileLocation::RelativeUrl(base, url) => base
+                        .join_relative(url)
+                        .map_err(|err| DistributionDatabaseError::Url(url.clone(), err))?,
+                    FileLocation::AbsoluteUrl(url) => Url::parse(url)
+                        .map_err(|err| DistributionDatabaseError::Url(url.clone(), err))?,
                     FileLocation::Path(path, url) => {
                         let cache_entry = self.cache.entry(
                             CacheBucket::Wheels,
@@ -143,7 +147,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // for downloading and unzipping (with a buffer in between) and switch
                 // to rayon if this buffer grows large by the time the file is fully
                 // downloaded.
-                let reader = self.client.stream_external(url).await?;
+                let reader = self.client.stream_external(&url).await?;
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;

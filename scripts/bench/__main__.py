@@ -448,14 +448,16 @@ class Puffin(Suite):
         cache_dir = os.path.join(cwd, ".cache")
         output_file = os.path.join(cwd, "requirements.txt")
 
+        inner = ["pip-compile"] if self.path == "./target/release/relative" else ["pip", "compile"]
+
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
             prepare=f"rm -rf {cwd} && rm -f {output_file}",
-            command=[
+            command= [
                 self.path,
-                "pip",
-                "compile",
+                *inner,
                 os.path.abspath(requirements_file),
+                # "--index-url", "https://download.pytorch.org/whl",
                 "--cache-dir",
                 cache_dir,
                 "--output-file",
@@ -467,14 +469,17 @@ class Puffin(Suite):
         cache_dir = os.path.join(cwd, ".cache")
         output_file = os.path.join(cwd, "requirements.txt")
 
+        inner = ["pip-compile"] if self.path == "./target/release/relative" else ["pip",
+                                                                                  "compile"]
+
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
             prepare=f"rm -f {output_file}",
             command=[
                 self.path,
-                "pip",
-                "compile",
+                *inner,
                 os.path.abspath(requirements_file),
+#                 "--index-url", "https://download.pytorch.org/whl",
                 "--cache-dir",
                 cache_dir,
                 "--output-file",
