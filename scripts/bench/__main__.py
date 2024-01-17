@@ -10,8 +10,8 @@ To set up the required environment, run:
 
     cargo build --release
     ./target/release/puffin venv
-    ./target/release/puffin pip sync ./scripts/bench/requirements.txt
     source .venv/bin/activate
+    ./target/release/puffin pip sync ./scripts/bench/requirements.txt
 
 Example usage:
 
