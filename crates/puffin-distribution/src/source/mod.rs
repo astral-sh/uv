@@ -430,12 +430,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheels,
-            WheelCache::Path(&path_source_dist.url)
-                .remote_wheel_dir(path_source_dist.name().as_ref()),
-            METADATA,
-        );
+        let cache_entry = self
+            .build_context
+            .cache()
+            .fresh_entry(
+                CacheBucket::BuiltWheels,
+                WheelCache::Path(&path_source_dist.url)
+                    .remote_wheel_dir(path_source_dist.name().as_ref()),
+                METADATA,
+                path_source_dist.name(),
+            )
+            .await?;
 
         // Determine the last-modified time of the source distribution.
         let file_metadata = fs_err::metadata(&path_source_dist.path)?;
@@ -526,12 +531,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
     ) -> Result<Metadata21, SourceDistError> {
-        let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheels,
-            WheelCache::Path(&path_source_dist.url)
-                .remote_wheel_dir(path_source_dist.name().as_ref()),
-            METADATA,
-        );
+        let cache_entry = self
+            .build_context
+            .cache()
+            .fresh_entry(
+                CacheBucket::BuiltWheels,
+                WheelCache::Path(&path_source_dist.url)
+                    .remote_wheel_dir(path_source_dist.name().as_ref()),
+                METADATA,
+                path_source_dist.name(),
+            )
+            .await?;
 
         // Determine the last-modified time of the source distribution.
         let file_metadata = fs_err::metadata(&path_source_dist.path)?;
@@ -633,12 +643,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // TODO(konstin): Do we want to delete old built wheels when the git sha changed?
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
-        let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheels,
-            WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
-                .remote_wheel_dir(git_source_dist.name().as_ref()),
-            METADATA,
-        );
+        let cache_entry = self
+            .build_context
+            .cache()
+            .fresh_entry(
+                CacheBucket::BuiltWheels,
+                WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
+                    .remote_wheel_dir(git_source_dist.name().as_ref()),
+                METADATA,
+                git_source_dist.name(),
+            )
+            .await?;
 
         // Read the existing metadata from the cache.
         let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();
@@ -703,12 +718,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
-        let cache_entry = self.build_context.cache().entry(
-            CacheBucket::BuiltWheels,
-            WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
-                .remote_wheel_dir(git_source_dist.name().as_ref()),
-            METADATA,
-        );
+        let cache_entry = self
+            .build_context
+            .cache()
+            .fresh_entry(
+                CacheBucket::BuiltWheels,
+                WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
+                    .remote_wheel_dir(git_source_dist.name().as_ref()),
+                METADATA,
+                git_source_dist.name(),
+            )
+            .await?;
 
         // Read the existing metadata from the cache.
         let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();

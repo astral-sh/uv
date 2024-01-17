@@ -103,7 +103,7 @@ impl Cache {
     pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
         Ok(Self {
             root: Self::init(root)?,
-            refresh: Refresh::None,
+            refresh: Refresh::All(Default::default()),
             _temp_dir_drop: None,
         })
     }
@@ -149,6 +149,19 @@ impl Cache {
         CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
     }
 
+    /// Compute an entry in the cache, and refresh it if necessary based on the [`Refresh`] policy.
+    pub async fn fresh_entry(
+        &self,
+        cache_bucket: CacheBucket,
+        dir: impl AsRef<Path>,
+        file: impl AsRef<Path>,
+        name: &PackageName,
+    ) -> Result<CacheEntry, io::Error> {
+        let entry = self.entry(cache_bucket, dir, file);
+        self.refresh(name, &entry).await?;
+        Ok(entry)
+    }
+
     /// Initialize a directory for use as a cache.
     fn init(root: impl Into<PathBuf>) -> Result<PathBuf, io::Error> {
         let root = root.into();
@@ -188,7 +201,7 @@ impl Cache {
 
     /// Refresh the cache for the given package, if necessary.
     pub async fn refresh(&self, name: &PackageName, entry: &CacheEntry) -> Result<(), io::Error> {
-        // Determine whether the entry should be refreshed.
+        // Determine whether the entry is eligible for refresh.
         let entries = match &self.refresh {
             Refresh::None => return Ok(()),
             Refresh::Packages(packages, entries) => {
@@ -200,9 +213,11 @@ impl Cache {
             Refresh::All(entries) => entries,
         };
 
-        // Refresh the entry.
+        // Refresh the entry, if it wasn't refreshed already.
         if entries.register(entry) {
-            force_remove_all(entry.path())?;
+            if force_remove_all(entry.path())? {
+                debug!("Removed entry for {}: {}", name, entry.path().display());
+            }
             entries.done(entry.clone(), ());
             Ok(())
         } else {

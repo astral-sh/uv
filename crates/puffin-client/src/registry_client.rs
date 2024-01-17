@@ -126,8 +126,6 @@ impl RegistryClient {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
-        // STOPSHIP: Purge from the cache.
-
         for index in self.index_urls.indexes() {
             let result = self.simple_single_index(package_name, index).await?;
 
@@ -160,14 +158,18 @@ impl RegistryClient {
 
         trace!("Fetching metadata for {package_name} from {url}");
 
-        let cache_entry = self.cache.entry(
-            CacheBucket::Simple,
-            Path::new(&match index {
-                IndexUrl::Pypi => "pypi".to_string(),
-                IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
-            }),
-            format!("{package_name}.msgpack"),
-        );
+        let cache_entry = self
+            .cache
+            .fresh_entry(
+                CacheBucket::Simple,
+                Path::new(&match index {
+                    IndexUrl::Pypi => "pypi".to_string(),
+                    IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
+                }),
+                format!("{package_name}.msgpack"),
+                package_name,
+            )
+            .await?;
 
         let simple_request = self
             .client
@@ -225,12 +227,12 @@ impl RegistryClient {
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip(self))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
-        // STOPSHIP: Purge from the cache.
+        // STOPSHIP(charlie): Purge from the cache.
 
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::Url(url) => {
-                    self.wheel_metadata_registry(&wheel.index, &wheel.file, url)
+                    self.wheel_metadata_registry(wheel.name(), &wheel.index, &wheel.file, url)
                         .await?
                 }
                 FileLocation::Path(path, _url) => {
@@ -240,6 +242,7 @@ impl RegistryClient {
             },
             BuiltDist::DirectUrl(wheel) => {
                 self.wheel_metadata_no_pep658(
+                    wheel.name(),
                     &wheel.filename,
                     &wheel.url,
                     WheelCache::Url(&wheel.url),
@@ -265,6 +268,7 @@ impl RegistryClient {
     /// Fetch the metadata from a wheel file.
     async fn wheel_metadata_registry(
         &self,
+        package_name: &PackageName,
         index: &IndexUrl,
         file: &File,
         url: &Url,
@@ -278,11 +282,15 @@ impl RegistryClient {
         {
             let url = Url::parse(&format!("{}.metadata", url))?;
 
-            let cache_entry = self.cache.entry(
-                CacheBucket::Wheels,
-                WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
-                format!("{}.msgpack", filename.stem()),
-            );
+            let cache_entry = self
+                .cache
+                .fresh_entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
+                    format!("{}.msgpack", filename.stem()),
+                    package_name,
+                )
+                .await?;
 
             let response_callback = |response: Response| async {
                 let bytes = response.bytes().await?;
@@ -302,7 +310,7 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, url, WheelCache::Index(index))
+            self.wheel_metadata_no_pep658(package_name, &filename, url, WheelCache::Index(index))
                 .await
         }
     }
@@ -310,15 +318,20 @@ impl RegistryClient {
     /// Get the wheel metadata if it isn't available in an index through PEP 658
     async fn wheel_metadata_no_pep658<'data>(
         &self,
+        package_name: &'data PackageName,
         filename: &'data WheelFilename,
         url: &'data Url,
         cache_shard: WheelCache<'data>,
     ) -> Result<Metadata21, Error> {
-        let cache_entry = self.cache.entry(
-            CacheBucket::Wheels,
-            cache_shard.remote_wheel_dir(filename.name.as_ref()),
-            format!("{}.msgpack", filename.stem()),
-        );
+        let cache_entry = self
+            .cache
+            .fresh_entry(
+                CacheBucket::Wheels,
+                cache_shard.remote_wheel_dir(filename.name.as_ref()),
+                format!("{}.msgpack", filename.stem()),
+                package_name,
+            )
+            .await?;
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.

@@ -524,7 +524,6 @@ async fn install(
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
-        // STOPSHIP(charlie): This needs to be shared!
         let wheels = downloader
             .download(remote, in_flight)
             .await

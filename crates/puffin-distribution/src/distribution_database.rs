@@ -108,7 +108,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: Dist,
     ) -> Result<LocalWheel, DistributionDatabaseError> {
-        // STOPSHIP: Purge the cache.
+        // STOPSHIP(charlie): Purge the cache.
 
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
@@ -152,7 +152,24 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let temp_target = temp_dir.path().join(&wheel.file.filename);
                 unzip_no_seek(reader.compat(), &temp_target).await?;
 
-                // Move the temporary file to the cache.
+                // Move the temporary directory to the cache.
+                // So... this doesn't technically need to use fresh_entry, because it immediately
+                // overwrites (and doesn't read from) the cache entry. I could think of two
+                // strategies for dealing with this in the install plan:
+                // 1. When we try to read in the install plan, use `fresh_entry` somehow. That seems
+                //    like the best strategy, but perhaps the most complex, since it now becomes
+                //    async.
+                // 2. When we generate the install plan, ignore entries based on the refresh policy.
+                //    Then they'll be replaced here.
+                // The problem with (2) is: what happens when we do a source distribution build?
+                // I mean, what happens with that _today_ even? Oh, we just ignore the reinstall
+                // plan. That makes sense for reinstall but not for refresh.
+
+                // With (2)... I'm not sure what we would do. We could just ignore the refresh
+                // policy for source distributions, but that seems like a bad idea. We could
+                // pass it down, but that means we'll ignore the "once"-like nature and _always_
+                // refresh. That seems bad too.
+
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
@@ -238,7 +255,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: &Dist,
     ) -> Result<(Metadata21, Option<Url>), DistributionDatabaseError> {
-        // STOPSHIP: Purge the cache.
+        // STOPSHIP(charlie): Purge the cache.
 
         match dist {
             Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
