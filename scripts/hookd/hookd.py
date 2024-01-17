@@ -108,8 +108,9 @@ def run_once(stdin: TextIO, stdout: TextIO):
     end = time.perf_counter()
     send_debug(stdout, f"Parsed hook inputs in {(end - start)*1000.0:.2f}ms")
 
-    # All hooks are run with working directory set to the root of the source tree
-    # TODO(zanieb): Where do we get the path of the source tree?
+    # We must invalidate caches or dependencies that were installed since the daemon
+    # started may be ignored
+    importlib.invalidate_caches()
 
     with ExitStack() as hook_ctx:
         hook_ctx.enter_context(update_sys_path(backend_path))
