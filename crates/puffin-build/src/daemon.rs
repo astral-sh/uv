@@ -386,6 +386,11 @@ impl Pep517Daemon {
     }
 
     /// Run a wheel or editable build hook.
+    ///
+    /// Note the daemon also support the `build_sdist` hook but it is not supported by [`BuildKind`].
+    ///
+    /// <https://peps.python.org/pep-0517/#build-wheel>
+    /// <https://peps.python.org/pep-0660/#build-editable>
     pub(crate) async fn build(
         &mut self,
         backend: &Pep517Backend,
