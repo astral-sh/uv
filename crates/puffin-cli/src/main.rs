@@ -17,7 +17,7 @@ use puffin_resolver::{PreReleaseMode, ResolutionMode};
 use puffin_traits::SetupPyStrategy;
 use requirements::ExtrasSpecification;
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
 use crate::requirements::RequirementsSource;
 
 #[cfg(target_os = "windows")]
@@ -187,6 +187,11 @@ struct PipCompileArgs {
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[clap(long)]
     upgrade: bool,
+
+    /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
+    /// file.
+    #[clap(long)]
+    upgrade_package: Vec<PackageName>,
 
     /// Include distribution hashes in the output file.
     #[clap(long)]
@@ -552,6 +557,7 @@ async fn inner() -> Result<ExitStatus> {
             } else {
                 ExtrasSpecification::Some(&args.extra)
             };
+            let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -560,7 +566,7 @@ async fn inner() -> Result<ExitStatus> {
                 args.output_file.as_deref(),
                 args.resolution,
                 args.prerelease,
-                args.upgrade.into(),
+                upgrade,
                 args.generate_hashes,
                 index_urls,
                 if args.legacy_setup_py {

@@ -11,6 +11,7 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tempfile::tempdir_in;
 use tracing::debug;
 
@@ -23,7 +24,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::Downloader;
 use puffin_interpreter::{Interpreter, PythonVersion};
-use puffin_normalize::ExtraName;
+use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, PreReleaseMode, ResolutionMode,
     ResolutionOptions, Resolver,
@@ -48,7 +49,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
-    upgrade_mode: UpgradeMode,
+    upgrade: Upgrade,
     generate_hashes: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
@@ -110,7 +111,8 @@ pub(crate) async fn pip_compile(
     }
 
     let preferences: Vec<Requirement> = output_file
-        .filter(|_| upgrade_mode.is_prefer_pinned())
+        // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
+        .filter(|_| !upgrade.is_all())
         .filter(|output_file| output_file.exists())
         .map(Path::to_path_buf)
         .map(RequirementsSource::from)
@@ -118,6 +120,17 @@ pub(crate) async fn pip_compile(
         .map(|source| RequirementsSpecification::from_source(source, &extras))
         .transpose()?
         .map(|spec| spec.requirements)
+        .map(|requirements| match upgrade {
+            // Respect all pinned versions from the existing lockfile.
+            Upgrade::None => requirements,
+            // Ignore all pinned versions from the existing lockfile.
+            Upgrade::All => vec![],
+            // Ignore pinned versions for the specified packages.
+            Upgrade::Packages(packages) => requirements
+                .into_iter()
+                .filter(|requirement| !packages.contains(&requirement.name))
+                .collect(),
+        })
         .unwrap_or_default();
 
     // Detect the current Python interpreter.
@@ -325,27 +338,33 @@ pub(crate) async fn pip_compile(
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UpgradeMode {
-    /// Allow package upgrades, ignoring the existing lockfile.
-    AllowUpgrades,
+#[derive(Debug)]
+pub(crate) enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
-    PreferPinned,
+    None,
+
+    /// Allow package upgrades for all packages, ignoring the existing lockfile.
+    All,
+
+    /// Allow package upgrades, but only for the specified packages.
+    Packages(FxHashSet<PackageName>),
 }
 
-impl UpgradeMode {
-    fn is_prefer_pinned(self) -> bool {
-        self == Self::PreferPinned
-    }
-}
-
-impl From<bool> for UpgradeMode {
-    fn from(value: bool) -> Self {
-        if value {
-            Self::AllowUpgrades
+impl Upgrade {
+    /// Determine the upgrade strategy from the command-line arguments.
+    pub(crate) fn from_args(upgrade: bool, upgrade_package: Vec<PackageName>) -> Self {
+        if upgrade {
+            Self::All
+        } else if !upgrade_package.is_empty() {
+            Self::Packages(upgrade_package.into_iter().collect())
         } else {
-            Self::PreferPinned
+            Self::None
         }
+    }
+
+    /// Returns `true` if all packages should be upgraded.
+    pub(crate) fn is_all(&self) -> bool {
+        matches!(self, Self::All)
     }
 }
 
