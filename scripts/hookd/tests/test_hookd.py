@@ -1128,6 +1128,60 @@ def test_run_stdout_capture_multiple_hook_runs():
     assert daemon.returncode == 0
 
 
+def test_run_stdout_capture_subprocess():
+    """
+    Tests capture of stdout from a backend that writes to stdout from a subprocess.
+    """
+    daemon = new()
+    send(daemon, ["run", "stdout_subprocess_backend", "", "build_wheel", "foo", "", ""])
+    stdout, stderr = daemon.communicate(input="shutdown\n")
+    assert_snapshot(
+        stdout,
+        """
+        DEBUG Changed working directory to [TREE]
+        READY
+        EXPECT action
+        EXPECT build-backend
+        EXPECT backend-path
+        EXPECT hook-name
+        EXPECT wheel_directory
+        EXPECT config_settings
+        EXPECT metadata_directory
+        DEBUG Calling stdout_subprocess_backend.build_wheel(wheel_directory='[TREE]/foo', config_settings=None, metadata_directory=None)
+        DEBUG Parsed hook inputs in [TIME]
+        STDOUT [PATH]
+        STDERR [PATH]
+        OK build_wheel_fake_path
+        DEBUG Ran hook in [TIME]
+        READY
+        EXPECT action
+        SHUTDOWN
+        """,
+        filters=DEFAULT_FILTERS,
+    )
+    stdout_parts = stderr_parts = None
+    for line in stdout.splitlines():
+        parts = line.split()
+        if parts[0] == "STDOUT":
+            stdout_parts = parts
+        elif parts[0] == "STDERR":
+            stderr_parts = parts
+
+    assert len(stdout_parts) == 2
+    assert len(stderr_parts) == 2
+
+    assert_snapshot(
+        Path(stdout_parts[1]).read_text(),
+        """
+        hello world
+        """,
+    )
+    assert Path(stderr_parts[1]).read_text() == ""
+
+    assert stderr == ""
+    assert daemon.returncode == 0
+
+
 @pytest.mark.parametrize("backend", ["hatchling.build", "poetry.core.masonry.api"])
 def test_run_real_backend_build_wheel_error(backend: str):
     """
