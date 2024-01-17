@@ -5,7 +5,6 @@
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::io::BufRead;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
@@ -13,8 +12,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use fs_err as fs;
-use indoc::formatdoc;
-use itertools::Itertools;
 use once_cell::sync::Lazy;
 use pyproject_toml::{BuildSystem, Project};
 use regex::Regex;
@@ -419,9 +416,10 @@ impl Pep517Daemon {
                 Pep517DaemonResponse::Debug(message) => debug!("{message}"),
                 Pep517DaemonResponse::Expect(_) => continue,
                 Pep517DaemonResponse::Fatal(kind, message) => {
-                    return Err(Error::DaemonError {
-                        message: format!("Fatal error {}: {}", kind, message),
-                    })
+                    if let Pep517DaemonResponse::Traceback(traceback) = self.receive_one().await? {
+                        error!("{}", traceback.replace("\\n", "\n").replace("\n\n", "\n"))
+                    }
+                    return Err(Error::DaemonError { message });
                 }
                 _ => return Ok(next),
             }
@@ -565,7 +563,7 @@ impl Pep517Daemon {
         self.closed = true;
         if let Some(mut handle) = self.handle.take() {
             if handle.try_wait()?.is_none() {
-                // Already closed, don't bother sending the exit signal
+                // Send a shutdown command if it's not closed yet
                 let stdin = self.stdin.as_mut().unwrap();
                 stdin.write_all("shutdown\n".as_bytes()).await?;
             }
@@ -581,40 +579,6 @@ impl Drop for Pep517Daemon {
         if !self.closed {
             panic!("`Pep517Daemon::close()` not called before drop.");
         }
-    }
-}
-
-impl Pep517Backend {
-    fn backend_import(&self) -> String {
-        let import = if let Some((path, object)) = self.backend.split_once(':') {
-            format!("from {path} import {object} as backend")
-        } else {
-            format!("import {} as backend", self.backend)
-        };
-
-        let backend_path_encoded = self
-            .backend_path
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|path| {
-                // Turn into properly escaped python string
-                '"'.to_string()
-                    + &path.replace('\\', "\\\\").replace('"', "\\\"")
-                    + &'"'.to_string()
-            })
-            .join(", ");
-
-        // > Projects can specify that their backend code is hosted in-tree by including the
-        // > backend-path key in pyproject.toml. This key contains a list of directories, which the
-        // > frontend will add to the start of sys.path when loading the backend, and running the
-        // > backend hooks.
-        formatdoc! {r#"
-            import sys
-            sys.path = [{backend_path}] + sys.path
-
-            {import} 
-        "#, backend_path = backend_path_encoded}
     }
 }
 
@@ -954,13 +918,6 @@ impl SourceBuildTrait for SourceBuild {
         Ok(())
     }
 }
-
-fn escape_path_for_python(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-}
-
 /// Not a method because we call it before the builder is completely initialized
 async fn create_pep517_build_environment(
     source_tree: &Path,
@@ -1002,29 +959,6 @@ async fn create_pep517_build_environment(
     }
 
     Ok(())
-}
-
-/// It is the caller's responsibility to create an informative span.
-async fn run_python_script(
-    venv: &Virtualenv,
-    script: &str,
-    source_tree: &Path,
-) -> Result<Output, Error> {
-    // `OsString` doesn't impl `Add`
-    let mut new_path = venv.bin_dir().into_os_string();
-    if let Some(path) = env::var_os("PATH") {
-        new_path.push(":");
-        new_path.push(path);
-    }
-    Command::new(venv.python_executable())
-        .args(["-c", script])
-        .current_dir(source_tree)
-        // Activate the venv
-        .env("VIRTUAL_ENV", venv.root())
-        .env("PATH", new_path)
-        .output()
-        .await
-        .map_err(|err| Error::CommandFailed(venv.python_executable(), err))
 }
 
 #[cfg(test)]
