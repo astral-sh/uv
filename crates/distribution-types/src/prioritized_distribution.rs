@@ -12,8 +12,12 @@ pub struct DistRequiresPython {
     pub requires_python: Option<VersionSpecifiers>,
 }
 
+// Boxed because `Dist` is large.
 #[derive(Debug, Clone)]
-pub struct PrioritizedDistribution {
+pub struct PrioritizedDistribution(Box<PrioritizedDistributionInner>);
+
+#[derive(Debug, Clone)]
+struct PrioritizedDistributionInner {
     /// An arbitrary source distribution for the package version.
     source: Option<DistRequiresPython>,
     /// The highest-priority, platform-compatible wheel for the package version.
@@ -33,7 +37,7 @@ impl PrioritizedDistribution {
         priority: Option<TagPriority>,
     ) -> Self {
         if let Some(priority) = priority {
-            Self {
+            Self(Box::new(PrioritizedDistributionInner {
                 source: None,
                 compatible_wheel: Some((
                     DistRequiresPython {
@@ -45,9 +49,9 @@ impl PrioritizedDistribution {
                 )),
                 incompatible_wheel: None,
                 hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
-            }
+            }))
         } else {
-            Self {
+            Self(Box::new(PrioritizedDistributionInner {
                 source: None,
                 compatible_wheel: None,
                 incompatible_wheel: Some(DistRequiresPython {
@@ -55,7 +59,7 @@ impl PrioritizedDistribution {
                     requires_python,
                 }),
                 hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
-            }
+            }))
         }
     }
 
@@ -65,7 +69,7 @@ impl PrioritizedDistribution {
         requires_python: Option<VersionSpecifiers>,
         hash: Option<Hashes>,
     ) -> Self {
-        Self {
+        Self(Box::new(PrioritizedDistributionInner {
             source: Some(DistRequiresPython {
                 dist,
                 requires_python,
@@ -73,7 +77,7 @@ impl PrioritizedDistribution {
             compatible_wheel: None,
             incompatible_wheel: None,
             hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
-        }
+        }))
     }
 
     /// Insert the given built distribution into the [`PrioritizedDistribution`].
@@ -86,9 +90,9 @@ impl PrioritizedDistribution {
     ) {
         // Prefer the highest-priority, platform-compatible wheel.
         if let Some(priority) = priority {
-            if let Some((.., existing_priority)) = &self.compatible_wheel {
+            if let Some((.., existing_priority)) = &self.0.compatible_wheel {
                 if priority > *existing_priority {
-                    self.compatible_wheel = Some((
+                    self.0.compatible_wheel = Some((
                         DistRequiresPython {
                             dist,
                             requires_python,
@@ -97,7 +101,7 @@ impl PrioritizedDistribution {
                     ));
                 }
             } else {
-                self.compatible_wheel = Some((
+                self.0.compatible_wheel = Some((
                     DistRequiresPython {
                         dist,
                         requires_python,
@@ -105,15 +109,15 @@ impl PrioritizedDistribution {
                     priority,
                 ));
             }
-        } else if self.incompatible_wheel.is_none() {
-            self.incompatible_wheel = Some(DistRequiresPython {
+        } else if self.0.incompatible_wheel.is_none() {
+            self.0.incompatible_wheel = Some(DistRequiresPython {
                 dist,
                 requires_python,
             });
         }
 
         if let Some(hash) = hash {
-            self.hashes.push(hash);
+            self.0.hashes.push(hash);
         }
     }
 
@@ -124,24 +128,24 @@ impl PrioritizedDistribution {
         requires_python: Option<VersionSpecifiers>,
         hash: Option<Hashes>,
     ) {
-        if self.source.is_none() {
-            self.source = Some(DistRequiresPython {
+        if self.0.source.is_none() {
+            self.0.source = Some(DistRequiresPython {
                 dist,
                 requires_python,
             });
         }
 
         if let Some(hash) = hash {
-            self.hashes.push(hash);
+            self.0.hashes.push(hash);
         }
     }
 
     /// Return the highest-priority distribution for the package version, if any.
     pub fn get(&self) -> Option<ResolvableDist> {
         match (
-            &self.compatible_wheel,
-            &self.source,
-            &self.incompatible_wheel,
+            &self.0.compatible_wheel,
+            &self.0.source,
+            &self.0.incompatible_wheel,
         ) {
             // Prefer the highest-priority, platform-compatible wheel.
             (Some((wheel, tag_priority)), _, _) => {
@@ -162,17 +166,17 @@ impl PrioritizedDistribution {
 
     /// Return the source distribution, if any.
     pub fn source(&self) -> Option<&DistRequiresPython> {
-        self.source.as_ref()
+        self.0.source.as_ref()
     }
 
     /// Return the compatible built distribution, if any.
     pub fn compatible_wheel(&self) -> Option<&(DistRequiresPython, TagPriority)> {
-        self.compatible_wheel.as_ref()
+        self.0.compatible_wheel.as_ref()
     }
 
     /// Return the hashes for each distribution.
     pub fn hashes(&self) -> &[Hashes] {
-        &self.hashes
+        &self.0.hashes
     }
 }
 
