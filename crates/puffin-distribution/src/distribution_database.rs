@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use fs_err::tokio as fs;
+use futures::FutureExt;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -219,7 +220,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let lock = self.locks.acquire(&dist).await;
                 let _guard = lock.lock().await;
 
-                let built_wheel = self.builder.download_and_build(source_dist).await?;
+                let built_wheel = self.builder.download_and_build(source_dist).boxed().await?;
                 Ok(LocalWheel::Built(BuiltWheel {
                     dist: dist.clone(),
                     path: built_wheel.path,
@@ -242,7 +243,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         dist: &Dist,
     ) -> Result<(Metadata21, Option<Url>), DistributionDatabaseError> {
         match dist {
-            Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
+            Dist::Built(built_dist) => {
+                Ok((self.client.wheel_metadata(built_dist).boxed().await?, None))
+            }
             Dist::Source(source_dist) => {
                 // Optimization: Skip source dist download when we must not build them anyway.
                 if self.build_context.no_build() {
@@ -263,6 +266,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let metadata = self
                     .builder
                     .download_and_build_metadata(&source_dist)
+                    .boxed()
                     .await?;
                 Ok((metadata, precise))
             }

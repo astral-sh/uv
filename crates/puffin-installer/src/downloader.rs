@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::path::Path;
 use std::sync::Arc;
 
-use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
 use tokio::task::JoinError;
 use tracing::{instrument, warn};
 use url::Url;
@@ -68,7 +68,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         futures::stream::iter(distributions)
             .map(|dist| async {
-                let wheel = self.get_wheel(dist, in_flight).await?;
+                let wheel = self.get_wheel(dist, in_flight).boxed().await?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -158,6 +158,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             let download: LocalWheel = self
                 .database
                 .get_or_build_wheel(dist.clone())
+                .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await?;
             let result = Self::unzip_wheel(download).await;
