@@ -17,39 +17,43 @@ use puffin_normalize::PackageName;
 
 use crate::{ResolvedEditable, SitePackages};
 
-#[derive(Debug, Default)]
-pub struct InstallPlan {
-    /// The distributions that are not already installed in the current environment, but are
-    /// available in the local cache.
-    pub local: Vec<CachedDist>,
-
-    /// The distributions that are not already installed in the current environment, and are
-    /// not available in the local cache.
-    pub remote: Vec<Requirement>,
-
-    /// Any distributions that are already installed in the current environment, but will be
-    /// re-installed (including upgraded) to satisfy the requirements.
-    pub reinstalls: Vec<InstalledDist>,
-
-    /// Any distributions that are already installed in the current environment, and are
-    /// _not_ necessary to satisfy the requirements.
-    pub extraneous: Vec<InstalledDist>,
+/// A planner to generate an [`Plan`] based on a set of requirements.
+#[derive(Debug)]
+pub struct Planner<'a> {
+    requirements: &'a [Requirement],
+    editable_requirements: Vec<ResolvedEditable>,
 }
 
-impl InstallPlan {
+impl<'a> Planner<'a> {
+    /// Set the requirements use in the [`Plan`].
+    #[must_use]
+    pub fn with_requirements(requirements: &'a [Requirement]) -> Self {
+        Self {
+            requirements,
+            editable_requirements: Vec::new(),
+        }
+    }
+
+    /// Set the editable requirements use in the [`Plan`].
+    #[must_use]
+    pub fn with_editable_requirements(self, editable_requirements: Vec<ResolvedEditable>) -> Self {
+        Self {
+            editable_requirements,
+            ..self
+        }
+    }
+
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_requirements(
-        requirements: &[Requirement],
-        editable_requirements: Vec<ResolvedEditable>,
+    pub fn build(
+        self,
         mut site_packages: SitePackages,
         reinstall: &Reinstall,
         index_locations: &IndexLocations,
         cache: &Cache,
         venv: &Virtualenv,
         tags: &Tags,
-    ) -> Result<Self> {
+    ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations);
 
@@ -57,11 +61,13 @@ impl InstallPlan {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
-        let mut seen =
-            FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+        let mut seen = FxHashSet::with_capacity_and_hasher(
+            self.requirements.len(),
+            BuildHasherDefault::default(),
+        );
 
         // Remove any editable requirements.
-        for requirement in editable_requirements {
+        for requirement in self.editable_requirements {
             // If we see the same requirement twice, then we have a conflict.
             if !seen.insert(requirement.name().clone()) {
                 bail!(
@@ -99,7 +105,7 @@ impl InstallPlan {
             }
         }
 
-        for requirement in requirements {
+        for requirement in self.requirements {
             // Filter out incompatible requirements.
             if !requirement.evaluate_markers(venv.interpreter().markers(), &[]) {
                 continue;
@@ -322,13 +328,32 @@ impl InstallPlan {
             }
         }
 
-        Ok(InstallPlan {
+        Ok(Plan {
             local,
             remote,
             reinstalls,
             extraneous,
         })
     }
+}
+
+#[derive(Debug, Default)]
+pub struct Plan {
+    /// The distributions that are not already installed in the current environment, but are
+    /// available in the local cache.
+    pub local: Vec<CachedDist>,
+
+    /// The distributions that are not already installed in the current environment, and are
+    /// not available in the local cache.
+    pub remote: Vec<Requirement>,
+
+    /// Any distributions that are already installed in the current environment, but will be
+    /// re-installed (including upgraded) to satisfy the requirements.
+    pub reinstalls: Vec<InstalledDist>,
+
+    /// Any distributions that are already installed in the current environment, and are
+    /// _not_ necessary to satisfy the requirements.
+    pub extraneous: Vec<InstalledDist>,
 }
 
 #[derive(Debug)]
