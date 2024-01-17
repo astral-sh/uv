@@ -218,7 +218,7 @@ impl FlatIndex {
 
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
-                    file,
+                    file: Box::new(file),
                     index,
                 }));
                 match distributions.0.entry(version) {
@@ -235,7 +235,7 @@ impl FlatIndex {
             DistFilename::SourceDistFilename(filename) => {
                 let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
                     filename: filename.clone(),
-                    file,
+                    file: Box::new(file),
                     index,
                 }));
                 match distributions.0.entry(filename.version.clone()) {
