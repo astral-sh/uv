@@ -6,9 +6,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use fs_err as fs;
+use rustc_hash::FxHashSet;
 use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
+use once_map::OnceMap;
 use puffin_fs::{directories, force_remove_all};
 use puffin_normalize::PackageName;
 
@@ -23,7 +25,7 @@ mod cli;
 mod wheel;
 
 /// A [`CacheEntry`] which may or may not exist yet.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry(PathBuf);
 
 impl CacheEntry {
@@ -57,6 +59,13 @@ impl CacheEntry {
     }
 }
 
+impl From<&CacheEntry> for CacheEntry {
+    /// Required for `WaitMap::wait`.
+    fn from(value: &CacheEntry) -> Self {
+        value.clone()
+    }
+}
+
 /// A subdirectory within the cache.
 #[derive(Debug, Clone)]
 pub struct CacheShard(PathBuf);
@@ -80,6 +89,8 @@ impl Deref for CacheShard {
 pub struct Cache {
     /// The cache directory.
     root: PathBuf,
+    /// The set of packages to refresh prior to reading from the cache.
+    refresh: Refresh,
     /// A temporary cache directory, if the user requested `--no-cache`.
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
@@ -92,8 +103,15 @@ impl Cache {
     pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
         Ok(Self {
             root: Self::init(root)?,
+            refresh: Refresh::None,
             _temp_dir_drop: None,
         })
+    }
+
+    /// Set the [`Refresh`] policy for the cache.
+    #[must_use]
+    pub fn with_refresh(self, refresh: Refresh) -> Self {
+        Self { refresh, ..self }
     }
 
     /// Create a temporary cache directory.
@@ -101,6 +119,7 @@ impl Cache {
         let temp_dir = tempdir()?;
         Ok(Self {
             root: Self::init(temp_dir.path())?,
+            refresh: Refresh::None,
             _temp_dir_drop: Some(Arc::new(temp_dir)),
         })
     }
@@ -165,6 +184,31 @@ impl Cache {
             count += bucket.purge(self, name)?;
         }
         Ok(count)
+    }
+
+    /// Refresh the cache for the given package, if necessary.
+    pub async fn refresh(&self, name: &PackageName, entry: &CacheEntry) -> Result<(), io::Error> {
+        // Determine whether the entry should be refreshed.
+        let entries = match &self.refresh {
+            Refresh::None => return Ok(()),
+            Refresh::Packages(packages, entries) => {
+                if !packages.contains(name) {
+                    return Ok(());
+                }
+                entries
+            }
+            Refresh::All(entries) => entries,
+        };
+
+        // Refresh the entry.
+        if entries.register(entry) {
+            force_remove_all(entry.path())?;
+            entries.done(entry.clone(), ());
+            Ok(())
+        } else {
+            entries.wait(entry).await;
+            Ok(())
+        }
     }
 }
 
@@ -540,3 +584,26 @@ impl Display for CacheBucket {
         f.write_str(self.to_str())
     }
 }
+
+/// A refresh policy for cache entries.
+#[derive(Clone)]
+pub enum Refresh {
+    /// Do not refresh any entries.
+    None,
+    /// Refresh entries linked to the given packages.
+    Packages(FxHashSet<PackageName>, RefreshMap),
+    /// Refresh all entries.
+    All(RefreshMap),
+}
+
+impl std::fmt::Debug for Refresh {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Refresh::None => write!(f, "Refresh::None"),
+            Refresh::Packages(packages, _) => write!(f, "Refresh::Packages({:?})", packages),
+            Refresh::All(_) => write!(f, "Refresh::All"),
+        }
+    }
+}
+
+type RefreshMap = Arc<OnceMap<CacheEntry, ()>>;

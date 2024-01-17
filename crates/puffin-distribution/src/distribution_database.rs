@@ -108,6 +108,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: Dist,
     ) -> Result<LocalWheel, DistributionDatabaseError> {
+        // STOPSHIP: Purge the cache.
+
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 let url = match &wheel.file.url {
@@ -236,6 +238,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: &Dist,
     ) -> Result<(Metadata21, Option<Url>), DistributionDatabaseError> {
+        // STOPSHIP: Purge the cache.
+
         match dist {
             Dist::Built(built_dist) => Ok((self.client.wheel_metadata(built_dist).await?, None)),
             Dist::Source(source_dist) => {

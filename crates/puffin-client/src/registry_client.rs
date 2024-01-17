@@ -126,6 +126,8 @@ impl RegistryClient {
             return Err(Error::NoIndex(package_name.as_ref().to_string()));
         }
 
+        // STOPSHIP: Purge from the cache.
+
         for index in self.index_urls.indexes() {
             let result = self.simple_single_index(package_name, index).await?;
 
@@ -223,6 +225,8 @@ impl RegistryClient {
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip(self))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
+        // STOPSHIP: Purge from the cache.
+
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::Url(url) => {

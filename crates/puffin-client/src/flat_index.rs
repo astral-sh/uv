@@ -87,6 +87,7 @@ impl<'a> FlatIndexClient<'a> {
 
     /// Read a flat remote index from a `--find-links` URL.
     async fn read_from_url(&self, url: &Url) -> Result<Vec<FlatIndexEntry>, Error> {
+        // STOPSHIP(charlie): Ignore the cache if `--refresh` is provided?
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
