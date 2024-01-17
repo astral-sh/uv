@@ -31,6 +31,7 @@ import enum
 import logging
 import os.path
 import shlex
+import shutil
 import subprocess
 import tempfile
 import typing
@@ -45,6 +46,7 @@ class Benchmark(enum.Enum):
 
     RESOLVE_COLD = "resolve-cold"
     RESOLVE_WARM = "resolve-warm"
+    RESOLVE_INCREMENTAL = "resolve-incremental"
     INSTALL_COLD = "install-cold"
     INSTALL_WARM = "install-warm"
 
@@ -102,6 +104,12 @@ class Hyperfine(typing.NamedTuple):
         subprocess.check_call(args)
 
 
+# The requirement to use when benchmarking an incremental resolution.
+# Ideally, this requirement is compatible with all requirements files, but does not
+# appear in any resolutions.
+INCREMENTAL_REQUIREMENT = "django"
+
+
 class Suite(abc.ABC):
     """Abstract base class for packaging tools."""
 
@@ -118,6 +126,8 @@ class Suite(abc.ABC):
                 return self.resolve_cold(requirements_file, cwd=cwd)
             case Benchmark.RESOLVE_WARM:
                 return self.resolve_warm(requirements_file, cwd=cwd)
+            case Benchmark.RESOLVE_INCREMENTAL:
+                return self.resolve_incremental(requirements_file, cwd=cwd)
             case Benchmark.INSTALL_COLD:
                 return self.install_cold(requirements_file, cwd=cwd)
             case Benchmark.INSTALL_WARM:
@@ -139,6 +149,15 @@ class Suite(abc.ABC):
 
         The resolution is performed from scratch, i.e., without an existing lock file;
         however, the cache directory is _not_ cleared between runs.
+        """
+
+    @abc.abstractmethod
+    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+        """Resolve a modified lockfile using pip-tools, from a warm cache.
+
+        The resolution is performed with an existing lock file, and the cache directory
+        is _not_ cleared between runs. However, a new dependency is added to the set
+        of input requirements, which does not appear in the lock file.
         """
 
     @abc.abstractmethod
@@ -198,6 +217,49 @@ class PipCompile(Suite):
             ],
         )
 
+    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        baseline = os.path.join(cwd, "baseline.txt")
+
+        # First, perform a cold resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [
+                self.path,
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                baseline,
+            ],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(baseline), f"Lock file doesn't exist at: {baseline}"
+
+        input_file = os.path.join(cwd, "requirements.in")
+        output_file = os.path.join(cwd, "requirements.txt")
+
+        # Add a dependency to the requirements file.
+        with open(input_file, "w") as fp1:
+            fp1.write(f"{INCREMENTAL_REQUIREMENT}\n")
+            with open(requirements_file) as fp2:
+                fp1.writelines(fp2.readlines())
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
+            prepare=f"rm -f {output_file} && cp {baseline} {output_file}",
+            command=[
+                self.path,
+                input_file,
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
+
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
@@ -206,6 +268,7 @@ class PipCompile(Suite):
 
 
 class PipSync(Suite):
+
     def __init__(self, path: str | None = None) -> None:
         self.name = path or "pip-sync"
         self.path = path or "pip-sync"
@@ -214,6 +277,9 @@ class PipSync(Suite):
         ...
 
     def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        ...
+
+    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
@@ -341,6 +407,62 @@ class Poetry(Suite):
                 f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
+                "--directory",
+                cwd,
+            ],
+        )
+
+    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        assert not os.path.exists(
+            poetry_lock
+        ), f"Lock file already exists at: {poetry_lock}"
+
+        # Run a resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
+
+        # Add a dependency to the requirements file.
+        with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
+            pyproject = tomli.load(fp)
+
+        # Add the dependencies to the pyproject.toml.
+        pyproject["tool"]["poetry"]["dependencies"].update(
+            {
+                INCREMENTAL_REQUIREMENT: "*",
+            }
+        )
+
+        with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
+            tomli_w.dump(pyproject, fp)
+
+        # Store the baseline lock file.
+        baseline = os.path.join(cwd, "baseline.lock")
+        shutil.copyfile(poetry_lock, baseline)
+
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        config_dir = os.path.join(cwd, "config", "pypoetry")
+        cache_dir = os.path.join(cwd, "cache", "pypoetry")
+        data_dir = os.path.join(cwd, "data", "pypoetry")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
+            prepare=f"rm -f {poetry_lock} && cp {baseline} {poetry_lock}",
+            command=[
+                f"POETRY_CONFIG_DIR={config_dir}",
+                f"POETRY_CACHE_DIR={cache_dir}",
+                f"POETRY_DATA_DIR={data_dir}",
+                self.path,
+                "lock",
+                "--no-update",
                 "--directory",
                 cwd,
             ],
@@ -475,6 +597,53 @@ class Puffin(Suite):
                 "pip",
                 "compile",
                 os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
+
+    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        baseline = os.path.join(cwd, "baseline.txt")
+
+        # First, perform a cold resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [
+                self.path,
+                "pip",
+                "compile",
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                baseline,
+            ],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(baseline), f"Lock file doesn't exist at: {baseline}"
+
+        input_file = os.path.join(cwd, "requirements.in")
+        output_file = os.path.join(cwd, "requirements.txt")
+
+        # Add a dependency to the requirements file.
+        with open(input_file, "w") as fp1:
+            fp1.write(f"{INCREMENTAL_REQUIREMENT}\n")
+            with open(requirements_file) as fp2:
+                fp1.writelines(fp2.readlines())
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
+            prepare=f"rm -f {output_file} && cp {baseline} {output_file}",
+            command=[
+                self.path,
+                "pip",
+                "compile",
+                input_file,
                 "--cache-dir",
                 cache_dir,
                 "--output-file",
