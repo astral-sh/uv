@@ -32,12 +32,12 @@ DEBUG = os.getenv("HOOKD_DEBUG")
 
 
 def main():
-    # Create copies of standard streams since the `sys.<name>` will be redirected during
-    # hook execution
-    stdout = sys.stdout
-    stdin = sys.stdin
+    # First, duplicate the original stdout since it will be redirected later
+    stdout_fd = os.dup(sys.stdout.fileno())
+    stdout = os.fdopen(stdout_fd, "wt")
 
     # TODO: Close `sys.stdin` and create a duplicate file for ourselves so hooks don't read from our stream
+    stdin = sys.stdin
 
     while True:
         try:
@@ -136,7 +136,11 @@ def run_once(stdin: TextIO, stdout: TextIO):
             result = hook(*args)
         except BaseException as exc:
             # Respect SIGTERM and SIGINT
-            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+
+            if (
+                isinstance(exc, (SystemExit, KeyboardInterrupt))
+                and build_backend_name != "setuptools.build_meta:__legacy__"
+            ):
                 raise
 
             raise HookRuntimeError(exc) from exc
@@ -231,12 +235,19 @@ def redirect_sys_stream(name: StreamName):
 
     # We use an optimized version of `NamedTemporaryFile`
     fd, path = tmpfile()
-    redirected_stream = io.open(fd, "wt")
-    setattr(sys, name, redirected_stream)
+
+    # Copy the temporary fd to sys.stdout's fd
+    # Using `dup2` instead of `setatrr(sys, name, open(fd, "wt"))` ensures that
+    # subprocess write to the redirected file
+    os.dup2(fd, stream.fileno())
+
     yield path
 
-    # Restore to the previous stream
-    setattr(sys, name, stream)
+    # Ensure the stream is fully written at the end
+    stream.flush()
+
+    # Restore the previous stream
+    os.dup2(stream.fileno(), fd)
 
 
 ######################
