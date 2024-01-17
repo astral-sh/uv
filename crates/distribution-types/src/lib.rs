@@ -865,3 +865,16 @@ impl Identifier for Dist {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{BuiltDist, Dist, SourceDist};
+
+    /// Ensure that we don't accidentally grow the `Dist` sizes.
+    #[test]
+    fn dist_size() {
+        assert!(std::mem::size_of::<Dist>() <= 240);
+        assert!(std::mem::size_of::<BuiltDist>() <= 240);
+        assert!(std::mem::size_of::<SourceDist>() <= 168);
+    }
+}
