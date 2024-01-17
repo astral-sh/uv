@@ -21,7 +21,7 @@ use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{
-    BuiltEditable, Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages,
+    BuiltEditable, Downloader, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
@@ -470,22 +470,16 @@ async fn install(
         .into_iter()
         .map(ResolvedEditable::Built)
         .collect::<Vec<_>>();
-    let InstallPlan {
+
+    let Plan {
         local,
         remote,
         reinstalls,
         extraneous: _,
-    } = InstallPlan::from_requirements(
-        &requirements,
-        editables,
-        site_packages,
-        reinstall,
-        index_urls,
-        cache,
-        venv,
-        tags,
-    )
-    .context("Failed to determine installation plan")?;
+    } = Planner::with_requirements(&requirements)
+        .with_editable_requirements(editables)
+        .build(site_packages, reinstall, index_urls, cache, venv, tags)
+        .context("Failed to determine installation plan")?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
@@ -524,7 +518,6 @@ async fn install(
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
-        // STOPSHIP(charlie): This needs to be shared!
         let wheels = downloader
             .download(remote, in_flight)
             .await

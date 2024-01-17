@@ -14,7 +14,7 @@ use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, RegistryClient};
-use puffin_installer::{Downloader, InstallPlan, Installer, Reinstall, SitePackages};
+use puffin_installer::{Downloader, Installer, Plan, Planner, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{InMemoryIndex, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
@@ -149,14 +149,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let site_packages =
                 SitePackages::from_executable(venv).context("Failed to list installed packages")?;
 
-            let InstallPlan {
+            let Plan {
                 local,
                 remote,
                 reinstalls,
                 extraneous,
-            } = InstallPlan::from_requirements(
-                &resolution.requirements(),
-                Vec::new(),
+            } = Planner::with_requirements(&resolution.requirements()).build(
                 site_packages,
                 &Reinstall::None,
                 self.index_locations,

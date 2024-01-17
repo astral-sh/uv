@@ -12,7 +12,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Downloader, InstallPlan, Reinstall, ResolvedEditable, SitePackages};
+use puffin_installer::{Downloader, Plan, Planner, Reinstall, ResolvedEditable, SitePackages};
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{InFlight, SetupPyStrategy};
@@ -111,22 +111,22 @@ pub(crate) async fn pip_sync(
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let InstallPlan {
+    let Plan {
         local,
         remote,
         reinstalls,
         extraneous,
-    } = InstallPlan::from_requirements(
-        &requirements,
-        resolved_editables.editables,
-        site_packages,
-        reinstall,
-        &index_locations,
-        &cache,
-        &venv,
-        tags,
-    )
-    .context("Failed to determine installation plan")?;
+    } = Planner::with_requirements(&requirements)
+        .with_editable_requirements(resolved_editables.editables)
+        .build(
+            site_packages,
+            reinstall,
+            &index_locations,
+            &cache,
+            &venv,
+            tags,
+        )
+        .context("Failed to determine installation plan")?;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
