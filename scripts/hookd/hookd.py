@@ -138,9 +138,13 @@ def run_once(stdin: TextIO, stdout: TextIO):
             # Respect SIGTERM and SIGINT
 
             if (
-                isinstance(exc, (SystemExit, KeyboardInterrupt))
+                isinstance(exc, SystemExit)
+                # setutools will throw `SystemExit` on incorrect usage so do not treat
+                # it as a SIGTERM
                 and build_backend_name != "setuptools.build_meta:__legacy__"
             ):
+                raise
+            elif isinstance(exc, KeyboardInterrupt):
                 raise
 
             raise HookRuntimeError(exc) from exc
