@@ -7,15 +7,13 @@ See the `README` for details.
 from __future__ import annotations
 
 import enum
-import importlib
-import io
 import errno
+import importlib
 import os
 import sys
 import time
-from types import ModuleType
 from contextlib import ExitStack, contextmanager
-from typing import Any, TextIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TextIO
 
 Path = str  # We don't use `pathlib` for a modest speedup
 
