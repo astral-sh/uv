@@ -227,8 +227,6 @@ impl RegistryClient {
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip(self))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
-        // STOPSHIP(charlie): Purge from the cache.
-
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::Url(url) => {
