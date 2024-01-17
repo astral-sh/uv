@@ -2,7 +2,13 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct BaseUrl(Url);
+pub struct BaseUrl(
+    #[serde(
+        serialize_with = "Url::serialize_internal",
+        deserialize_with = "Url::deserialize_internal"
+    )]
+    Url,
+);
 
 impl BaseUrl {
     /// Parse the given URL. If it's relative, join it to the current [`BaseUrl`]. Allows for
@@ -18,6 +24,11 @@ impl BaseUrl {
                 }
             }
         }
+    }
+
+    /// Return the underlying [`Url`].
+    pub fn as_url(&self) -> &Url {
+        &self.0
     }
 }
 

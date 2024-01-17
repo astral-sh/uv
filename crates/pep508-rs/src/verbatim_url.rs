@@ -13,6 +13,10 @@ use url::Url;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VerbatimUrl {
     /// The parsed URL.
+    #[serde(
+        serialize_with = "Url::serialize_internal",
+        deserialize_with = "Url::deserialize_internal"
+    )]
     url: Url,
     /// The URL as it was provided by the user.
     #[derivative(PartialEq = "ignore")]

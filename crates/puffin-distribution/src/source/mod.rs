@@ -99,7 +99,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = match &registry_source_dist.file.url {
-                    FileLocation::Url(url) => url,
+                    FileLocation::RelativeUrl(base, url) => base
+                        .join_relative(url)
+                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
+                    FileLocation::AbsoluteUrl(url) => Url::parse(url)
+                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
                     FileLocation::Path(path, url) => {
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
@@ -123,7 +127,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 self.url(
                     source_dist,
                     &registry_source_dist.file.filename,
-                    url,
+                    &url,
                     &cache_shard,
                     None,
                 )
@@ -168,7 +172,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = match &registry_source_dist.file.url {
-                    FileLocation::Url(url) => url,
+                    FileLocation::RelativeUrl(base, url) => base
+                        .join_relative(url)
+                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
+                    FileLocation::AbsoluteUrl(url) => Url::parse(url)
+                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
                     FileLocation::Path(path, url) => {
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
@@ -192,7 +200,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 self.url_metadata(
                     source_dist,
                     &registry_source_dist.file.filename,
-                    url,
+                    &url,
                     &cache_shard,
                     None,
                 )

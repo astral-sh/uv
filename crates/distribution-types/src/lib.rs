@@ -694,17 +694,49 @@ impl Identifier for Path {
     }
 }
 
+impl Identifier for String {
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(cache_key::digest(&self))
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(cache_key::digest(&self))
+    }
+}
+
+impl Identifier for &str {
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(cache_key::digest(&self))
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(cache_key::digest(&self))
+    }
+}
+
+impl Identifier for (&Url, &str) {
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(cache_key::digest(&self))
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(cache_key::digest(&self))
+    }
+}
+
 impl Identifier for FileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            FileLocation::Url(url) => url.distribution_id(),
+            FileLocation::RelativeUrl(base, url) => (base.as_url(), url.as_str()).distribution_id(),
+            FileLocation::AbsoluteUrl(url) => url.distribution_id(),
             FileLocation::Path(path, _) => path.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            FileLocation::Url(url) => url.resource_id(),
+            FileLocation::RelativeUrl(base, url) => (base.as_url(), url.as_str()).resource_id(),
+            FileLocation::AbsoluteUrl(url) => url.resource_id(),
             FileLocation::Path(path, _) => path.resource_id(),
         }
     }
