@@ -13,8 +13,8 @@ import errno
 import os
 import sys
 import time
+from types import ModuleType
 from contextlib import ExitStack, contextmanager
-from functools import lru_cache as cache
 from typing import Any, TextIO, TYPE_CHECKING
 
 Path = str  # We don't use `pathlib` for a modest speedup
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         Self = Any
 
 DEBUG = os.getenv("HOOKD_DEBUG")
+INIT_MODULES = set(sys.modules.keys())
 
 
 def main():
@@ -108,10 +109,6 @@ def run_once(stdin: TextIO, stdout: TextIO):
     end = time.perf_counter()
     send_debug(stdout, f"Parsed hook inputs in {(end - start)*1000.0:.2f}ms")
 
-    # We must invalidate caches or dependencies that were installed since the daemon
-    # started may be ignored
-    importlib.invalidate_caches()
-
     with ExitStack() as hook_ctx:
         hook_ctx.enter_context(update_sys_path(backend_path))
         hook_stdout = hook_ctx.enter_context(redirect_sys_stream("stdout"))
@@ -120,7 +117,9 @@ def run_once(stdin: TextIO, stdout: TextIO):
         send_redirect(stdout, "stderr", str(hook_stderr))
 
         try:
-            build_backend = import_build_backend(build_backend_name, backend_path)
+            build_backend = import_build_backend(
+                stdout, build_backend_name, backend_path
+            )
         except Exception as exc:
             if not isinstance(exc, HookdError):
                 # Wrap unhandled errors in a generic one
@@ -138,13 +137,9 @@ def run_once(stdin: TextIO, stdout: TextIO):
             # Respect SIGTERM and SIGINT
 
             if (
-                isinstance(exc, SystemExit)
-                # setutools will throw `SystemExit` on incorrect usage so do not treat
-                # it as a SIGTERM
+                isinstance(exc, (SystemExit, KeyboardInterrupt))
                 and build_backend_name != "setuptools.build_meta:__legacy__"
             ):
-                raise
-            elif isinstance(exc, KeyboardInterrupt):
                 raise
 
             raise HookRuntimeError(exc) from exc
@@ -152,11 +147,25 @@ def run_once(stdin: TextIO, stdout: TextIO):
             send_ok(stdout, result)
 
 
-@cache()
-def import_build_backend(backend_name: str, backend_path: tuple[str]) -> object:
+def import_build_backend(
+    stdout,
+    backend_name: str,
+    backend_path: tuple[str],
+) -> object:
     """
     See: https://peps.python.org/pep-0517/#source-trees
     """
+    # Invalidate the module caches before resetting modules
+    importlib.invalidate_caches()
+
+    for module in tuple(sys.modules.keys()):
+        # We remove all of the modules that have been added since the daemon started
+        # If a new dependency is added without resetting modules, build backends
+        # can end up in a broken state. We cannot simply reset the backend module
+        # using `importtools.reload` because types can become out of sync across
+        # packages e.g. breaking `isinstance` calls.
+        if module not in INIT_MODULES:
+            sys.modules.pop(module)
 
     parts = backend_name.split(":")
     if len(parts) == 1:
