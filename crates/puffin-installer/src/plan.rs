@@ -48,6 +48,7 @@ impl<'a> Planner<'a> {
 
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
         mut site_packages: SitePackages,

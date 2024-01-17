@@ -60,6 +60,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
