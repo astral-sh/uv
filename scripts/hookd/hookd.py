@@ -28,6 +28,8 @@ if TYPE_CHECKING:
         StreamName = str
         Self = Any
 
+DEBUG = os.getenv("HOOKD_DEBUG")
+
 
 def main():
     # Create copies of standard streams since the `sys.<name>` will be redirected during
@@ -54,7 +56,7 @@ def main():
 
             run_once(stdin, stdout)
             end = time.perf_counter()
-            send_debug(stdout, f"ran hook in {(end - start)*1000.0:.2f}ms")
+            send_debug(stdout, f"Ran hook in {(end - start)*1000.0:.2f}ms")
 
         except HookdError as exc:
             # These errors are "handled" and non-fatal
@@ -93,7 +95,7 @@ def run_once(stdin: TextIO, stdout: TextIO):
 
     send_debug(
         stdout,
-        "{}.{}({})".format(
+        "Calling {}.{}({})".format(
             build_backend_name,
             hook_name.value,
             ", ".join(
@@ -104,7 +106,7 @@ def run_once(stdin: TextIO, stdout: TextIO):
     )
 
     end = time.perf_counter()
-    send_debug(stdout, f"parsed hook inputs in {(end - start)*1000.0:.2f}ms")
+    send_debug(stdout, f"Parsed hook inputs in {(end - start)*1000.0:.2f}ms")
 
     # All hooks are run with working directory set to the root of the source tree
     # TODO(zanieb): Where do we get the path of the source tree?
@@ -146,6 +148,7 @@ def import_build_backend(backend_name: str, backend_path: tuple[str]) -> object:
     """
     See: https://peps.python.org/pep-0517/#source-trees
     """
+
     parts = backend_name.split(":")
     if len(parts) == 1:
         module_name = parts[0]
@@ -448,6 +451,9 @@ def write_safe(file: TextIO, *args: str):
     args = [str(arg).replace("\n", "\\n") for arg in args]
     print(*args, file=file, flush=True)
 
+    if DEBUG:
+        print(*args, file=sys.stderr, flush=True)
+
 
 #######################
 ####### ERRORS ########
@@ -727,7 +733,7 @@ if __name__ == "__main__":
     try:
         source_tree = os.path.abspath(sys.argv[1])
         os.chdir(source_tree)
-        send_debug(sys.stdout, "changed working directory to", source_tree)
+        send_debug(sys.stdout, "Changed working directory to", source_tree)
     except IndexError:
         pass
     except ValueError as exc:

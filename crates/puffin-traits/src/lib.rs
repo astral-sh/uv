@@ -122,6 +122,11 @@ pub trait SourceBuildTrait {
         &'a mut self,
         wheel_dir: &'a Path,
     ) -> impl Future<Output = Result<String>> + Send + 'a;
+
+    /// A wrapper for `puffin_build::SourceBuild.pep517_daemon.close()`.
+    ///
+    /// For PEP 517 builds, this ensures the build daemon is closed.
+    fn finish(&mut self) -> impl Future<Output = Result<()>> + Send;
 }
 
 #[derive(Default)]

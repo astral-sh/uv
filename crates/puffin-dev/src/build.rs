@@ -13,7 +13,7 @@ use puffin_client::{FlatIndex, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
+use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy, SourceBuildTrait};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -85,5 +85,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         build_kind,
     )
     .await?;
-    Ok(wheel_dir.join(builder.build(&wheel_dir).await?))
+    let result = Ok(wheel_dir.join(builder.build(&wheel_dir).await?));
+    builder.finish().await?;
+    result
 }

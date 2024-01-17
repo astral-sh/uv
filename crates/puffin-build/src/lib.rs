@@ -6,6 +6,7 @@ use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::str::FromStr;
@@ -21,11 +22,11 @@ use serde::{Deserialize, Serialize};
 use tempfile::{tempdir, tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
+use tokio::io::{AsyncWriteExt, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::Mutex;
-use tracing::{debug, info_span, instrument, Instrument};
+use tracing::{debug, error, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
@@ -240,7 +241,7 @@ impl Pep517DaemonResponse {
                 "SHUTDOWN" => Self::Shutdown,
                 _ => {
                     return Err(Error::DaemonError {
-                        message: "Unknown response".into(),
+                        message: format!("Unknown response: {}", line),
                     })
                 }
             };
@@ -290,10 +291,11 @@ struct Pep517Daemon {
     script_path: PathBuf,
     venv: Virtualenv,
     source_tree: PathBuf,
-    stdout: Option<BufReader<ChildStdout>>,
+    stdout: Option<Lines<BufReader<ChildStdout>>>,
     stdin: Option<ChildStdin>,
     handle: Option<Child>,
     last_response: Option<Pep517DaemonResponse>,
+    closed: bool,
 }
 
 impl Pep517Daemon {
@@ -311,36 +313,45 @@ impl Pep517Daemon {
             stdin: None,
             handle: None,
             last_response: None,
+            closed: false,
         })
     }
 
     async fn ensure_started(&mut self) -> Result<(), Error> {
-        if self.handle.is_some() {
-            // TODO: Ensure the process is still running
-            return Ok(());
-        }
-        let handle = self.start().await?;
-        self.handle = Some(handle);
+        let started = {
+            if let Some(handle) = self.handle.as_mut() {
+                // Check if the process has exited
+                handle.try_wait()?.is_none()
+            } else {
+                false
+            }
+        };
+        if !started {
+            let handle = self.start().await?;
+            self.handle = Some(handle);
+            self.closed = false;
 
-        let stdout = self
-            .handle
-            .as_mut()
-            .unwrap()
-            .stdout
-            .take()
-            .expect("stdout is available");
-
-        self.stdout = Some(BufReader::new(stdout));
-
-        self.stdin = Some(
-            self.handle
+            let stdout = self
+                .handle
                 .as_mut()
                 .unwrap()
-                .stdin
+                .stdout
                 .take()
-                .expect("stdin is available"),
-        );
+                .expect("stdout is available");
 
+            self.stdout = Some(tokio::io::AsyncBufReadExt::lines(BufReader::new(stdout)));
+
+            self.stdin = Some(
+                self.handle
+                    .as_mut()
+                    .unwrap()
+                    .stdin
+                    .take()
+                    .expect("stdin is available"),
+            );
+        }
+
+        // Wait until ready
         if self.receive_until_actionable().await? == Pep517DaemonResponse::Ready {
             Ok(())
         } else {
@@ -370,20 +381,34 @@ impl Pep517Daemon {
             .stderr(Stdio::null())
             .spawn()?;
 
+        debug!(
+            "Started new hook daemon in virtualenv {}",
+            self.venv.root().to_string_lossy()
+        );
+
         Ok(handle)
     }
 
     async fn receive_one(&mut self) -> Result<Pep517DaemonResponse, Error> {
-        let mut lines = tokio::io::AsyncBufReadExt::lines(self.stdout.as_mut().unwrap());
-
-        if let Some(line) = lines.next_line().await? {
+        let mut stdout = self.stdout.as_mut().unwrap();
+        if let Some(line) = stdout.next_line().await? {
             let response = Pep517DaemonResponse::from_line(line.as_str())?;
             self.last_response = Some(response.clone());
             Ok(response)
         } else {
-            Err(Error::DaemonError {
-                message: "no response".into(),
-            })
+            if let Some(output) = self.close().await? {
+                Err(Error::DaemonError {
+                    message: format!(
+                        "Daemon closed unexpectedly with code {:?}",
+                        // TODO: debug output
+                        output
+                    ),
+                })
+            } else {
+                Err(Error::DaemonError {
+                    message: format!("Daemon closed unexpectedly"),
+                })
+            }
         }
     }
 
@@ -391,8 +416,13 @@ impl Pep517Daemon {
         loop {
             let next = self.receive_one().await?;
             match next {
-                Pep517DaemonResponse::Debug(_) => continue,
+                Pep517DaemonResponse::Debug(message) => debug!("{message}"),
                 Pep517DaemonResponse::Expect(_) => continue,
+                Pep517DaemonResponse::Fatal(kind, message) => {
+                    return Err(Error::DaemonError {
+                        message: format!("Fatal error {}: {}", kind, message),
+                    })
+                }
                 _ => return Ok(next),
             }
         }
@@ -439,14 +469,19 @@ impl Pep517Daemon {
                 Pep517DaemonResponse::Stdout(_) => continue,
                 Pep517DaemonResponse::Ok(result) => return Ok(result),
                 Pep517DaemonResponse::Error(_kind, message) => {
-                    return Err(Error::DaemonError { message })
+                    if let Pep517DaemonResponse::Traceback(message) =
+                        self.receive_until_actionable().await?
+                    {
+                        error!("{}", message.replace("\\n", "\n").replace("\n\n", "\n"))
+                    }
+                    return Err(Error::DaemonError { message });
                 }
                 _ => break,
             }
         }
 
         Err(Error::DaemonError {
-            message: "unexpected response".to_string(),
+            message: format!("unexpected response {:?}", self.last_response).to_string(),
         })
     }
 
@@ -465,13 +500,87 @@ impl Pep517Daemon {
         Ok(Some(PathBuf::from_str(result.as_str()).unwrap()))
     }
 
-    async fn close(&mut self) -> Result<(), Error> {
-        if let Some(handle) = self.handle.take() {
-            let stdin = self.stdin.as_mut().unwrap();
-            stdin.write_all("shutdown\n".as_bytes()).await?;
-            handle.wait_with_output().await?;
+    async fn get_requires_for_build(
+        &mut self,
+        backend: &Pep517Backend,
+        kind: BuildKind,
+    ) -> Result<Vec<Requirement>, Error> {
+        let result = self
+            .run_hook(
+                backend,
+                format!("get_requires_for_build_{}", kind).as_str(),
+                vec![""],
+            )
+            .await?;
+
+        let requirements: Result<Vec<Requirement>, _> = result
+            .strip_prefix("[")
+            .unwrap()
+            .strip_suffix("]")
+            .unwrap()
+            .split(", ")
+            .map(|item| {
+                item.strip_prefix('\'')
+                    .and_then(|item| item.strip_suffix('\''))
+            })
+            .filter(|item| item.is_some())
+            .map(|item| item.unwrap())
+            .filter(|item| !item.is_empty())
+            .map(|item| {
+                Requirement::from_str(item).map_err(|err| Error::DaemonError {
+                    message: format!("Failed to parse {}: {}", item, err.to_string()),
+                })
+            })
+            .collect();
+
+        requirements
+    }
+    async fn build(
+        &mut self,
+        backend: &Pep517Backend,
+        kind: BuildKind,
+        wheel_directory: &Path,
+        metadata_directory: Option<&Path>,
+    ) -> Result<String, Error> {
+        let result = self
+            .run_hook(
+                backend,
+                format!("build_{}", kind).as_str(),
+                vec![
+                    wheel_directory.to_string_lossy().deref(),
+                    "",
+                    metadata_directory
+                        .unwrap_or(Path::new(""))
+                        .to_string_lossy()
+                        .deref(),
+                ],
+            )
+            .await?;
+        Ok(result)
+    }
+
+    async fn close(&mut self) -> Result<Option<Output>, Error> {
+        // Mark `closed` before attempting to close
+        // If there's an error on close, we should raise that instead of complaining it was never called
+        self.closed = true;
+        if let Some(mut handle) = self.handle.take() {
+            if handle.try_wait()?.is_none() {
+                // Already closed, don't bother sending the exit signal
+                let stdin = self.stdin.as_mut().unwrap();
+                stdin.write_all("shutdown\n".as_bytes()).await?;
+            }
+            Ok(Some(handle.wait_with_output().await?))
+        } else {
+            Ok(None)
         }
-        Ok(())
+    }
+}
+
+impl Drop for Pep517Daemon {
+    fn drop(&mut self) {
+        if !self.closed {
+            panic!("`Pep517Daemon::close()` not called before drop.");
+        }
     }
 }
 
@@ -675,23 +784,30 @@ impl SourceBuild {
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
 
+        let mut pep517_daemon = Pep517Daemon::new(&venv, &source_tree).await?;
+
         // If we're using the default backend configuration, skip `get_requires_for_build_*`, since
         // we already installed the requirements above.
         if let Some(pep517_backend) = &pep517_backend {
             if pep517_backend != &default_backend {
-                create_pep517_build_environment(
+                let environment = create_pep517_build_environment(
                     &source_tree,
                     &venv,
                     pep517_backend,
+                    &mut pep517_daemon,
                     build_context,
                     &package_id,
                     build_kind,
                 )
-                .await?;
+                .await;
+
+                if environment.is_err() {
+                    pep517_daemon.close().await?;
+                }
+
+                environment?
             }
         }
-
-        let pep517_daemon = Pep517Daemon::new(&venv, &source_tree).await?;
 
         Ok(Self {
             temp_dir,
@@ -720,16 +836,10 @@ impl SourceBuild {
         let metadata_directory = self.temp_dir.path().join("metadata_directory");
         fs::create_dir(&metadata_directory)?;
 
-        debug!(
-            "Calling `{}.prepare_metadata_for_build_wheel()`",
-            pep517_backend.backend
-        );
         let result = self
             .pep517_daemon
             .prepare_metadata_for_build_wheel(&pep517_backend, metadata_directory.clone())
             .await?;
-
-        self.pep517_daemon.close().await?;
 
         if let Some(path) = result {
             self.metadata_directory = Some(metadata_directory.join(path));
@@ -810,27 +920,16 @@ impl SourceBuild {
         wheel_dir: &Path,
         pep517_backend: &Pep517Backend,
     ) -> Result<String, Error> {
-        let metadata_directory = self
-            .metadata_directory
-            .as_deref()
-            .map_or("None".to_string(), |path| {
-                format!(r#""{}""#, escape_path_for_python(path))
-            });
-        debug!(
-            "Calling `{}.build_{}(metadata_directory={})`",
-            pep517_backend.backend, self.build_kind, metadata_directory
-        );
-
         let distribution_filename = self
             .pep517_daemon
-            .run_hook(
+            .build(
                 &pep517_backend,
-                format!("build_{}", self.build_kind).as_str(),
-                vec![metadata_directory.clone().as_str()],
+                self.build_kind,
+                wheel_dir,
+                self.metadata_directory.clone().take().as_deref(),
             )
             .await?;
 
-        self.pep517_daemon.close().await?;
         if wheel_dir.join(distribution_filename.clone()).is_file() {
             Ok(distribution_filename)
         } else {
@@ -849,6 +948,11 @@ impl SourceBuildTrait for SourceBuild {
     async fn wheel<'a>(&'a mut self, wheel_dir: &'a Path) -> anyhow::Result<String> {
         Ok(self.build(wheel_dir).await?)
     }
+
+    async fn finish(&mut self) -> anyhow::Result<()> {
+        self.pep517_daemon.close().await?;
+        Ok(())
+    }
 }
 
 fn escape_path_for_python(path: &Path) -> String {
@@ -862,60 +966,14 @@ async fn create_pep517_build_environment(
     source_tree: &Path,
     venv: &Virtualenv,
     pep517_backend: &Pep517Backend,
+    pep517_daemon: &mut Pep517Daemon,
     build_context: &impl BuildContext,
     package_id: &str,
     build_kind: BuildKind,
 ) -> Result<(), Error> {
-    debug!(
-        "Calling `{}.get_requires_for_build_{}()`",
-        pep517_backend.backend, build_kind
-    );
-    let script = formatdoc! {
-        r#"
-            {}
-            import json
-
-            get_requires_for_build = getattr(backend, "get_requires_for_build_{}", None)
-            if get_requires_for_build:
-                requires = get_requires_for_build()
-            else:
-                requires = []
-            print(json.dumps(requires))
-        "#, pep517_backend.backend_import(), build_kind
-    };
-    let span = info_span!(
-        "run_python_script",
-        script=format!("get_requires_for_build_{}", build_kind),
-        python_version = %venv.interpreter().version()
-    );
-    let output = run_python_script(venv, &script, source_tree)
-        .instrument(span)
+    let extra_requires = pep517_daemon
+        .get_requires_for_build(pep517_backend, build_kind)
         .await?;
-    if !output.status.success() {
-        return Err(Error::from_command_output(
-            format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
-            &output,
-            package_id,
-        ));
-    }
-    let extra_requires = output
-        .stdout
-        .lines()
-        .last()
-        .transpose()
-        .map_err(|err| err.to_string())
-        .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
-        .and_then(|message| serde_json::from_str(&message).map_err(|err| err.to_string()));
-
-    let extra_requires: Vec<Requirement> = extra_requires.map_err(|err| {
-        Error::from_command_output(
-            format!(
-                "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
-            ),
-            &output,
-            package_id,
-        )
-    })?;
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
