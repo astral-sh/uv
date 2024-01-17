@@ -7,12 +7,10 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use distribution_types::{CachedDist, DistributionId, Resolution};
-pub use once_map::OnceMap;
+use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
 use puffin_interpreter::{Interpreter, Virtualenv};
-
-mod once_map;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///

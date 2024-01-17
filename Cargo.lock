@@ -1923,6 +1923,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "once-map"
+version = "0.0.1"
+dependencies = [
+ "rustc-hash",
+ "waitmap",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2680,6 +2688,7 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "itertools 0.12.0",
+ "once-map",
  "once_cell",
  "owo-colors",
  "pep440_rs 0.3.12",
@@ -2718,12 +2727,11 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "distribution-types",
+ "once-map",
  "pep508_rs",
  "puffin-cache",
  "puffin-interpreter",
- "rustc-hash",
  "tokio",
- "waitmap",
 ]
 
 [[package]]

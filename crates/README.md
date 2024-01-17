@@ -26,6 +26,11 @@ A `venv` replacement to create virtual environments in Rust.
 
 Install built distributions (wheels) into a virtual environment.]
 
+## [once-map](./once-map)
+
+A [`waitmap`](https://github.com/withoutboats/waitmap)-like concurrent hash map for executing tasks
+exactly once.
+
 ## [pep440-rs](./pep440-rs)
 
 Utilities for interacting with Python version numbers and specifiers.
