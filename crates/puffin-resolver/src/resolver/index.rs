@@ -2,8 +2,8 @@ use dashmap::DashMap;
 use url::Url;
 
 use distribution_types::PackageId;
+use once_map::OnceMap;
 use puffin_normalize::PackageName;
-use puffin_traits::OnceMap;
 use pypi_types::Metadata21;
 
 use crate::version_map::VersionMap;

@@ -8,11 +8,11 @@ use thiserror::Error;
 use url::Url;
 
 use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
+use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
-use puffin_traits::OnceMap;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
