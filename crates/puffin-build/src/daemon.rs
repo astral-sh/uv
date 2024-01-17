@@ -126,16 +126,54 @@ impl HookErrorKind {
         }
     }
 }
+#[derive(Debug)]
+struct DaemonIO {
+    stdout: Lines<BufReader<ChildStdout>>,
+    stdin: ChildStdin,
+    handle: Child,
+}
+
+impl DaemonIO {
+    async fn new(mut handle: Child) -> Self {
+        // Create a buffered line reader for stdout
+        let stdout = tokio::io::AsyncBufReadExt::lines(BufReader::new(
+            handle.stdout.take().expect("stdout is available"),
+        ));
+
+        // Take standard input
+        let stdin = handle.stdin.take().expect("stdin is available");
+
+        Self {
+            stdout,
+            stdin,
+            handle,
+        }
+    }
+
+    fn exited(&mut self) -> Result<bool, io::Error> {
+        Ok(self.handle.try_wait()?.is_some())
+    }
+
+    async fn send(&mut self, commands: Vec<&str>) -> Result<(), io::Error> {
+        self.stdin.write_all(commands.join("\n").as_bytes()).await?;
+        self.stdin.flush().await?;
+        Ok(())
+    }
+    async fn close(mut self) -> Result<Option<Output>, DaemonError> {
+        if !self.exited()? {
+            // Send a shutdown command if it's not closed yet
+            self.stdin.write_all("shutdown\n".as_bytes()).await?;
+        }
+        Ok(Some(self.handle.wait_with_output().await?))
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct Pep517Daemon {
     script_path: PathBuf,
     venv: Virtualenv,
     source_tree: PathBuf,
-    stdout: Option<Lines<BufReader<ChildStdout>>>,
-    stdin: Option<ChildStdin>,
-    handle: Option<Child>,
-    last_response: Option<DaemonResponse>,
+    io: Option<DaemonIO>,
     closed: bool,
 }
 
@@ -150,10 +188,7 @@ impl Pep517Daemon {
             script_path,
             venv: venv.clone(),
             source_tree: source_tree.to_path_buf(),
-            stdout: None,
-            stdin: None,
-            handle: None,
-            last_response: None,
+            io: None,
             closed: false,
         })
     }
@@ -161,50 +196,32 @@ impl Pep517Daemon {
     /// Ensure the daemon is started and ready.
     /// If the daemon is not started, [`Self::start`] will be called.
     ///
-    async fn ensure_started(&mut self) -> Result<(), DaemonError> {
+    async fn ensure_started(&mut self) -> Result<&mut DaemonIO, DaemonError> {
         let started = {
-            if let Some(handle) = self.handle.as_mut() {
+            if let Some(io) = self.io.as_mut() {
                 // Check if the process has exited
-                handle.try_wait()?.is_none()
+                !io.exited()?
             } else {
                 false
             }
         };
         if !started {
-            let handle = self.start().await?;
-            self.handle = Some(handle);
-            self.closed = false;
-
-            let stdout = self
-                .handle
-                .as_mut()
-                .unwrap()
-                .stdout
-                .take()
-                .expect("stdout is available");
-
-            self.stdout = Some(tokio::io::AsyncBufReadExt::lines(BufReader::new(stdout)));
-
-            self.stdin = Some(
-                self.handle
-                    .as_mut()
-                    .unwrap()
-                    .stdin
-                    .take()
-                    .expect("stdin is available"),
-            );
+            self.io = Some(self.start().await?);
         }
 
         // Wait until ready
         if self.receive_until_actionable().await? == DaemonResponse::Ready {
-            Ok(())
+            Ok(self
+                .io
+                .as_mut()
+                .expect("The daemon must be started, we just checked."))
         } else {
             Err(DaemonError::NotReady)
         }
     }
 
     /// Starts the daemon.
-    async fn start(&mut self) -> Result<Child, DaemonError> {
+    async fn start(&mut self) -> Result<DaemonIO, DaemonError> {
         let mut new_path = self.venv.bin_dir().into_os_string();
         if let Some(path) = env::var_os("PATH") {
             new_path.push(":");
@@ -225,20 +242,17 @@ impl Pep517Daemon {
             .spawn()?;
 
         debug!(
-            "Started new hook daemon in virtualenv {}",
+            "Starting new hook daemon in virtualenv {}",
             self.venv.root().to_string_lossy()
         );
-
-        Ok(handle)
+        Ok(DaemonIO::new(handle).await)
     }
 
     /// Reads a single response from the daemon.
     async fn receive_one(&mut self) -> Result<DaemonResponse, DaemonError> {
-        let stdout = self.stdout.as_mut().unwrap();
+        let stdout = &mut self.io.as_mut().unwrap().stdout;
         if let Some(line) = stdout.next_line().await? {
-            let response = DaemonResponse::try_from_str(line.as_str())?;
-            self.last_response = Some(response.clone());
-            Ok(response)
+            Ok(DaemonResponse::try_from_str(line.as_str())?)
         } else {
             self.close().await?;
             Err(DaemonError::Closed)
@@ -278,9 +292,7 @@ impl Pep517Daemon {
         hook_name: &str,
         mut args: Vec<&str>,
     ) -> Result<String, DaemonError> {
-        self.ensure_started().await?;
-
-        let stdin = self.stdin.as_mut().unwrap();
+        let mut io = self.ensure_started().await?;
 
         // Always send run and the backend name
         let mut commands = vec!["run", backend.backend.as_str()];
@@ -302,8 +314,7 @@ impl Pep517Daemon {
         // Send a trailing newline
         commands.push("");
 
-        stdin.write_all(commands.join("\n").as_bytes()).await?;
-        stdin.flush().await?;
+        io.send(commands).await?;
 
         // Read the responses
         loop {
@@ -363,6 +374,7 @@ impl Pep517Daemon {
             )
             .await?;
 
+        // TODO(zanieb): Improve the parsing of requirements lists
         let requirements: Result<Vec<Requirement>, _> = result
             .strip_prefix("[")
             .unwrap()
@@ -421,13 +433,9 @@ impl Pep517Daemon {
         // Mark `closed` before attempting to close
         // If there's an error on close, we should raise that instead of complaining it was never called
         self.closed = true;
-        if let Some(mut handle) = self.handle.take() {
-            if handle.try_wait()?.is_none() {
-                // Send a shutdown command if it's not closed yet
-                let stdin = self.stdin.as_mut().unwrap();
-                stdin.write_all("shutdown\n".as_bytes()).await?;
-            }
-            Ok(Some(handle.wait_with_output().await?))
+
+        if let Some(mut io) = self.io.take() {
+            io.close().await
         } else {
             Ok(None)
         }
