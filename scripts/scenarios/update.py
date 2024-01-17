@@ -42,11 +42,10 @@ import shutil
 import subprocess
 import sys
 import textwrap
-import packaging.requirements
 from pathlib import Path
 
 
-PACKSE_COMMIT = "a9d2f659117693b89cba8a487200fd01444468af"
+PACKSE_COMMIT = "b6cb1f6310a40937dc68a59c82460fea58957b70"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATE = TOOL_ROOT / "template.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
@@ -147,10 +146,6 @@ data["generated_from"] = f"https://github.com/zanieb/packse/tree/{commit}/scenar
 data["generated_with"] = " ".join(sys.argv)
 
 
-# Add normalized names for tests
-for scenario in data["scenarios"]:
-    scenario["normalized_name"] = scenario["name"].replace("-", "_")
-
 # Drop the example scenario
 for index, scenario in enumerate(data["scenarios"]):
     if scenario["name"] == "example":
@@ -170,39 +165,12 @@ for scenario in data["scenarios"]:
         else []
     )
 
-# Convert the expected packages into a list for rendering
-for scenario in data["scenarios"]:
-    expected = scenario["expected"]
-    expected["packages_list"] = []
-    for key, value in expected["packages"].items():
-        expected["packages_list"].append(
-            {
-                "package": key,
-                "version": value,
-                # Include a converted version of the package name to its Python module
-                "package_module": key.replace("-", "_"),
-            }
-        )
-
-
-# Convert the required packages into a list without versions
-for scenario in data["scenarios"]:
-    requires_packages = scenario["root"]["requires_packages"] = []
-    for requirement in scenario["root"]["requires"]:
-        package = packaging.requirements.Requirement(requirement).name
-        requires_packages.append(
-            {"package": package, "package_module": package.replace("-", "_")}
-        )
-
-
-# Include the Python module name of the prefix
-for scenario in data["scenarios"]:
-    scenario["prefix_module"] = scenario["prefix"].replace("-", "_")
-
 
 # Render the template
 print("Rendering template...", file=sys.stderr)
-output = chevron_blue.render(template=TEMPLATE.read_text(), data=data, no_escape=True)
+output = chevron_blue.render(
+    template=TEMPLATE.read_text(), data=data, no_escape=True, warn=True
+)
 
 # Update the test file
 print(f"Updating test file at `{TARGET.relative_to(PROJECT_ROOT)}`...", file=sys.stderr)
