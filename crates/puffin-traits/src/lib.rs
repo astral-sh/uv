@@ -183,9 +183,4 @@ impl NoBinary {
             Self::None
         }
     }
-
-    /// Returns `true` if no packages binaries should be excluded from installation.
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
 }
