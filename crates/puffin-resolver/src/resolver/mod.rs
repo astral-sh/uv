@@ -101,6 +101,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
                 .iter()
                 .chain(manifest.constraints.iter())
                 .collect(),
+            build_context.no_binary(),
         );
         Self::new_custom_io(
             manifest,

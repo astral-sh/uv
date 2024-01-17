@@ -20,7 +20,7 @@ use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::{
-    BuiltEditable, Downloader, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+    BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
@@ -50,6 +50,7 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     setup_py: SetupPyStrategy,
     no_build: bool,
+    no_binary: &NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: Cache,
@@ -152,6 +153,7 @@ pub(crate) async fn pip_install(
         venv.python_executable(),
         setup_py,
         no_build,
+        no_binary,
     )
     .with_options(options);
 
@@ -228,6 +230,7 @@ pub(crate) async fn pip_install(
             venv.python_executable(),
             setup_py,
             no_build,
+            no_binary,
         )
     };
 
@@ -237,6 +240,7 @@ pub(crate) async fn pip_install(
         editables,
         site_packages,
         reinstall,
+        no_binary,
         link_mode,
         &index_locations,
         tags,
@@ -436,6 +440,7 @@ async fn install(
     built_editables: Vec<BuiltEditable>,
     site_packages: SitePackages<'_>,
     reinstall: &Reinstall,
+    no_binary: &NoBinary,
     link_mode: LinkMode,
     index_urls: &IndexLocations,
     tags: &Tags,
@@ -463,7 +468,15 @@ async fn install(
         extraneous: _,
     } = Planner::with_requirements(&requirements)
         .with_editable_requirements(editables)
-        .build(site_packages, reinstall, index_urls, cache, venv, tags)
+        .build(
+            site_packages,
+            reinstall,
+            no_binary,
+            index_urls,
+            cache,
+            venv,
+            tags,
+        )
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.

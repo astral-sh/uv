@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 
 use anyhow::{bail, Result};
+use puffin_traits::NoBinary;
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
@@ -51,6 +52,7 @@ impl<'a> Planner<'a> {
         self,
         mut site_packages: SitePackages,
         reinstall: &Reinstall,
+        no_binary: &NoBinary,
         index_locations: &IndexLocations,
         cache: &Cache,
         venv: &Virtualenv,
@@ -129,6 +131,13 @@ impl<'a> Planner<'a> {
                 Reinstall::Packages(packages) => packages.contains(&requirement.name),
             };
 
+            // Check if installation of a binary version of the package should be allowed.
+            let no_binary = match no_binary {
+                NoBinary::None => false,
+                NoBinary::All => true,
+                NoBinary::Packages(packages) => packages.contains(&requirement.name),
+            };
+
             if reinstall {
                 // If necessary, purge the cached distributions.
                 debug!("Purging cached distributions for: {requirement}");
@@ -202,7 +211,7 @@ impl<'a> Planner<'a> {
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     match Dist::from_url(requirement.name.clone(), url.clone())? {
-                        Dist::Built(BuiltDist::Registry(_wheel)) => {
+                        Dist::Built(BuiltDist::Registry(_)) => {
                             // Nothing to do.
                         }
                         Dist::Source(SourceDist::Registry(_)) => {
@@ -212,6 +221,13 @@ impl<'a> Planner<'a> {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
                                     "A URL dependency is incompatible with the current platform: {}",
+                                    wheel.url
+                                );
+                            }
+
+                            if no_binary {
+                                bail!(
+                                    "A URL dependency points to a wheel which conflicts with `--no-binary`: {}",
                                     wheel.url
                                 );
                             }
@@ -241,6 +257,13 @@ impl<'a> Planner<'a> {
                                 bail!(
                                     "A path dependency is incompatible with the current platform: {}",
                                     wheel.path.display()
+                                );
+                            }
+
+                            if no_binary {
+                                bail!(
+                                    "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
+                                    wheel.url
                                 );
                             }
 

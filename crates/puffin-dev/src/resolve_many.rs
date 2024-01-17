@@ -7,6 +7,7 @@ use clap::Parser;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
 use itertools::Itertools;
+use puffin_installer::NoBinary;
 use tokio::time::Instant;
 use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -91,6 +92,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
         venv.python_executable(),
         setup_py,
         args.no_build,
+        &NoBinary::None,
     );
     let build_dispatch = Arc::new(build_dispatch);
 

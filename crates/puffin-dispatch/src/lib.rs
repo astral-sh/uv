@@ -14,7 +14,7 @@ use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, RegistryClient};
-use puffin_installer::{Downloader, Installer, Plan, Planner, Reinstall, SitePackages};
+use puffin_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{InMemoryIndex, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
@@ -32,6 +32,7 @@ pub struct BuildDispatch<'a> {
     base_python: PathBuf,
     setup_py: SetupPyStrategy,
     no_build: bool,
+    no_binary: &'a NoBinary,
     source_build_context: SourceBuildContext,
     options: ResolutionOptions,
 }
@@ -49,6 +50,7 @@ impl<'a> BuildDispatch<'a> {
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
         no_build: bool,
+        no_binary: &'a NoBinary,
     ) -> Self {
         Self {
             client,
@@ -61,6 +63,7 @@ impl<'a> BuildDispatch<'a> {
             base_python,
             setup_py,
             no_build,
+            no_binary,
             source_build_context: SourceBuildContext::default(),
             options: ResolutionOptions::default(),
         }
@@ -90,6 +93,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn no_build(&self) -> bool {
         self.no_build
+    }
+
+    fn no_binary(&self) -> &NoBinary {
+        self.no_binary
     }
 
     fn setup_py_strategy(&self) -> SetupPyStrategy {
@@ -157,6 +164,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             } = Planner::with_requirements(&resolution.requirements()).build(
                 site_packages,
                 &Reinstall::None,
+                &NoBinary::None,
                 self.index_locations,
                 self.cache(),
                 venv,

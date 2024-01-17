@@ -21,7 +21,7 @@ use puffin_cache::{Cache, CacheArgs};
 use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_distribution::RegistryWheelIndex;
-use puffin_installer::Downloader;
+use puffin_installer::{Downloader, NoBinary};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::{DistFinder, InMemoryIndex};
@@ -77,6 +77,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         venv.python_executable(),
         setup_py,
         args.no_build,
+        &NoBinary::None,
     );
 
     for (idx, requirements) in requirements.chunks(100).enumerate() {
@@ -109,11 +110,16 @@ async fn install_chunk(
     venv: &Virtualenv,
     index_locations: &IndexLocations,
 ) -> Result<()> {
-    let resolution: Vec<_> =
-        DistFinder::new(tags, client, venv.interpreter(), &FlatIndex::default())
-            .resolve_stream(requirements)
-            .collect()
-            .await;
+    let resolution: Vec<_> = DistFinder::new(
+        tags,
+        client,
+        venv.interpreter(),
+        &FlatIndex::default(),
+        &NoBinary::None,
+    )
+    .resolve_stream(requirements)
+    .collect()
+    .await;
     let (resolution, failures): (FxHashMap<PackageName, Dist>, Vec<_>) =
         resolution.into_iter().partition_result();
     for failure in &failures {

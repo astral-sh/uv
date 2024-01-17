@@ -12,7 +12,9 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::{Downloader, Plan, Planner, Reinstall, ResolvedEditable, SitePackages};
+use puffin_installer::{
+    Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+};
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{InFlight, SetupPyStrategy};
@@ -33,6 +35,7 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     no_build: bool,
+    no_binary: &NoBinary,
     strict: bool,
     cache: Cache,
     mut printer: Printer,
@@ -89,6 +92,7 @@ pub(crate) async fn pip_sync(
         venv.python_executable(),
         setup_py,
         no_build,
+        no_binary,
     );
 
     // Determine the set of installed packages.
@@ -121,6 +125,7 @@ pub(crate) async fn pip_sync(
         .build(
             site_packages,
             reinstall,
+            no_binary,
             &index_locations,
             &cache,
             &venv,
@@ -163,9 +168,14 @@ pub(crate) async fn pip_sync(
             FlatIndex::from_entries(entries, tags)
         };
 
-        let wheel_finder =
-            puffin_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index)
-                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder = puffin_resolver::DistFinder::new(
+            tags,
+            &client,
+            venv.interpreter(),
+            &flat_index,
+            no_binary,
+        )
+        .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };

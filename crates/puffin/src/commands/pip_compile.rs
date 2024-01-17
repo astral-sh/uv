@@ -22,7 +22,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_installer::Downloader;
+use puffin_installer::{Downloader, NoBinary};
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{
@@ -185,6 +185,7 @@ pub(crate) async fn pip_compile(
         interpreter.sys_executable().to_path_buf(),
         setup_py,
         no_build,
+        &NoBinary::None,
     )
     .with_options(options);
 
