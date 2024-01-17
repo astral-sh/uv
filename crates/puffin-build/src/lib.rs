@@ -72,11 +72,8 @@ pub enum Error {
     Gourgeist(#[from] gourgeist::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error("{message}")]
-    DaemonError {
-        // TODO: Do not expose this
-        message: String,
-    },
+    #[error(transparent)]
+    DaemonError(#[from] daemon::DaemonError),
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     BuildBackend {
         message: String,
@@ -416,7 +413,11 @@ impl SourceBuild {
 
         let result = self
             .pep517_daemon
-            .prepare_metadata_for_build_wheel(&pep517_backend, metadata_directory.clone())
+            .prepare_metadata_for_build(
+                &pep517_backend,
+                BuildKind::Wheel,
+                metadata_directory.clone(),
+            )
             .await?;
 
         if let Some(path) = result {
@@ -511,8 +512,10 @@ impl SourceBuild {
         if wheel_dir.join(distribution_filename.clone()).is_file() {
             Ok(distribution_filename)
         } else {
-            Err(Error::DaemonError {
+            Err(Error::BuildBackend {
                 message: "failed to build wheel".to_string(),
+                stdout: "".to_string(),
+                stderr: "".to_string(),
             })
         }
     }

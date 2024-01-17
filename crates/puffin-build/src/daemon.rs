@@ -4,22 +4,51 @@ use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::str::FromStr;
 use tokio::fs::File;
-use tokio::io::BufReader;
+use tokio::io::{self, BufReader};
 use tokio::io::{AsyncWriteExt, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tracing::{debug, error};
 
-use crate::{BuildKind, Error, Pep517Backend};
+use crate::{BuildKind, Pep517Backend};
 use pep508_rs::Requirement;
 use puffin_interpreter::Virtualenv;
-use puffin_traits::SourceBuildTrait;
+use thiserror::Error;
 
 static HOOKD_SOURCE: &'static str = include_str!("hookd.py");
 
+#[derive(Error, Debug)]
+pub enum DaemonError {
+    #[error(transparent)]
+    IO(#[from] io::Error),
+    #[error("Unknown response from build daemon: {0}")]
+    UnknownResponse(String),
+    #[error("Unexpected response from build daemon: {0:?}")]
+    UnexpectedResponse(DaemonResponse),
+    #[error("Unexpected empty response from build daemon")]
+    EmptyResponse,
+    #[error("Unknown error kind reported by build daemon: {0}")]
+    UnknownErrorKind(String),
+    #[error("Build daemon never reported ready")]
+    NotReady,
+    #[error("Build daemon died unexpectedly")]
+    Closed,
+    #[error("Build daemon crashed with fatal error. {kind}: {message}\n{traceback}")]
+    Crashed {
+        kind: String,
+        message: String,
+        traceback: String,
+    },
+    #[error("Build daemon encountered error running hook: {0}\n{1}")]
+    HookError(String, String),
+    #[error("Build daemon encountered error parsing hook result {0}: {1}")]
+    InvalidResult(String, String),
+}
+
+/// Possible responses from the daemon
 #[derive(Debug, Eq, PartialEq, Clone)]
-enum Pep517DaemonResponse {
+pub enum DaemonResponse {
     Debug(String),
-    Error(Pep517DaemonErrorKind, String),
+    Error(HookErrorKind, String),
     Traceback(String),
     Ok(String),
     Stderr(PathBuf),
@@ -30,8 +59,8 @@ enum Pep517DaemonResponse {
     Shutdown,
 }
 
-impl Pep517DaemonResponse {
-    fn from_line(line: &str) -> Result<Self, Error> {
+impl DaemonResponse {
+    fn try_from_str(line: &str) -> Result<Self, DaemonError> {
         // Split on the first two spaces
         let mut parts = line.splitn(3, ' ');
         if let Some(kind) = parts.next() {
@@ -39,10 +68,16 @@ impl Pep517DaemonResponse {
                 "DEBUG" => Self::Debug(parts.collect::<Vec<&str>>().join(" ")),
                 "EXPECT" => Self::Expect(parts.collect::<Vec<&str>>().join(" ")),
                 "OK" => Self::Ok(parts.collect::<Vec<&str>>().join(" ")),
-                "TRACEBACK" => Self::Traceback(parts.collect::<Vec<&str>>().join(" ")),
+                "TRACEBACK" => Self::Traceback(
+                    parts
+                        .collect::<Vec<&str>>()
+                        .join(" ")
+                        .replace("\\n", "\n")
+                        .replace("\n\n", "\n"),
+                ),
                 "ERROR" => Self::Error(
-                    Pep517DaemonErrorKind::from_str(parts.next().unwrap())?,
-                    parts.next().unwrap().to_string(),
+                    HookErrorKind::try_from_str(parts.next().unwrap())?,
+                    parts.collect::<Vec<&str>>().join(" "),
                 ),
                 "STDOUT" => Self::Stdout(parts.next().unwrap().into()),
                 "STDERR" => Self::Stderr(parts.next().unwrap().into()),
@@ -52,23 +87,18 @@ impl Pep517DaemonResponse {
                     parts.next().unwrap().to_string(),
                 ),
                 "SHUTDOWN" => Self::Shutdown,
-                _ => {
-                    return Err(Error::DaemonError {
-                        message: format!("Unknown response: {}", line),
-                    })
-                }
+                _ => return Err(DaemonError::UnknownResponse(line.to_string())),
             };
             Ok(response)
         } else {
-            Err(Error::DaemonError {
-                message: "No kind in response.".into(),
-            })
+            Err(DaemonError::EmptyResponse)
         }
     }
 }
 
+/// Possible non-fatal error types from the
 #[derive(Debug, Eq, PartialEq, Clone)]
-enum Pep517DaemonErrorKind {
+pub enum HookErrorKind {
     MissingBackendModule,
     MissingBackendAttribute,
     MalformedBackendName,
@@ -80,8 +110,8 @@ enum Pep517DaemonErrorKind {
     HookRuntimeError,
 }
 
-impl Pep517DaemonErrorKind {
-    fn from_str(name: &str) -> Result<Self, Error> {
+impl HookErrorKind {
+    fn try_from_str(name: &str) -> Result<Self, DaemonError> {
         match name {
             "MissingBackendModule" => Ok(Self::MissingBackendModule),
             "MissingBackendAttribute" => Ok(Self::MissingBackendAttribute),
@@ -92,9 +122,7 @@ impl Pep517DaemonErrorKind {
             "UnsupportedHook" => Ok(Self::UnsupportedHook),
             "MalformedHookArgument" => Ok(Self::MalformedHookArgument),
             "HookRuntimeError" => Ok(Self::HookRuntimeError),
-            _ => Err(Error::DaemonError {
-                message: "Unknown error kind".into(),
-            }),
+            _ => Err(DaemonError::UnknownErrorKind(name.to_string())),
         }
     }
 }
@@ -107,12 +135,12 @@ pub(crate) struct Pep517Daemon {
     stdout: Option<Lines<BufReader<ChildStdout>>>,
     stdin: Option<ChildStdin>,
     handle: Option<Child>,
-    last_response: Option<Pep517DaemonResponse>,
+    last_response: Option<DaemonResponse>,
     closed: bool,
 }
 
 impl Pep517Daemon {
-    pub(crate) async fn new(venv: &Virtualenv, source_tree: &Path) -> Result<Self, Error> {
+    pub(crate) async fn new(venv: &Virtualenv, source_tree: &Path) -> Result<Self, DaemonError> {
         // Write `hookd` to the virtual environment
         let script_path = venv.bin_dir().join("hookd");
         let mut file = File::create(&script_path).await?;
@@ -130,7 +158,10 @@ impl Pep517Daemon {
         })
     }
 
-    async fn ensure_started(&mut self) -> Result<(), Error> {
+    /// Ensure the daemon is started and ready.
+    /// If the daemon is not started, [`Self::start`] will be called.
+    ///
+    async fn ensure_started(&mut self) -> Result<(), DaemonError> {
         let started = {
             if let Some(handle) = self.handle.as_mut() {
                 // Check if the process has exited
@@ -165,16 +196,15 @@ impl Pep517Daemon {
         }
 
         // Wait until ready
-        if self.receive_until_actionable().await? == Pep517DaemonResponse::Ready {
+        if self.receive_until_actionable().await? == DaemonResponse::Ready {
             Ok(())
         } else {
-            Err(Error::DaemonError {
-                message: "did not recieve ready".into(),
-            })
+            Err(DaemonError::NotReady)
         }
     }
 
-    async fn start(&mut self) -> Result<Child, Error> {
+    /// Starts the daemon.
+    async fn start(&mut self) -> Result<Child, DaemonError> {
         let mut new_path = self.venv.bin_dir().into_os_string();
         if let Some(path) = env::var_os("PATH") {
             new_path.push(":");
@@ -202,41 +232,38 @@ impl Pep517Daemon {
         Ok(handle)
     }
 
-    async fn receive_one(&mut self) -> Result<Pep517DaemonResponse, Error> {
+    /// Reads a single response from the daemon.
+    async fn receive_one(&mut self) -> Result<DaemonResponse, DaemonError> {
         let stdout = self.stdout.as_mut().unwrap();
         if let Some(line) = stdout.next_line().await? {
-            let response = Pep517DaemonResponse::from_line(line.as_str())?;
+            let response = DaemonResponse::try_from_str(line.as_str())?;
             self.last_response = Some(response.clone());
             Ok(response)
         } else {
-            if let Some(output) = self.close().await? {
-                Err(Error::DaemonError {
-                    message: format!(
-                        "Daemon closed unexpectedly with code {:?}",
-                        // TODO: debug output
-                        output
-                    ),
-                })
-            } else {
-                Err(Error::DaemonError {
-                    message: format!("Daemon closed unexpectedly"),
-                })
-            }
+            self.close().await?;
+            Err(DaemonError::Closed)
         }
     }
 
-    async fn receive_until_actionable(&mut self) -> Result<Pep517DaemonResponse, Error> {
+    /// Reads from the daemon until an actionable response is seen.
+    async fn receive_until_actionable(&mut self) -> Result<DaemonResponse, DaemonError> {
         loop {
             let next = self.receive_one().await?;
             match next {
-                Pep517DaemonResponse::Debug(message) => debug!("{message}"),
-                Pep517DaemonResponse::Expect(_) => continue,
-                Pep517DaemonResponse::Fatal(kind, message) => {
-                    if let Pep517DaemonResponse::Traceback(traceback) = self.receive_one().await? {
-                        error!("{}", traceback.replace("\\n", "\n").replace("\n\n", "\n"))
-                    }
-                    return Err(Error::DaemonError {
-                        message: format!("Fatal error {kind}: {message}"),
+                DaemonResponse::Debug(message) => debug!("{message}"),
+                DaemonResponse::Expect(_) => continue,
+                DaemonResponse::Fatal(kind, message) => {
+                    let traceback = {
+                        if let DaemonResponse::Traceback(traceback) = self.receive_one().await? {
+                            traceback
+                        } else {
+                            "".to_string()
+                        }
+                    };
+                    return Err(DaemonError::Crashed {
+                        kind,
+                        message,
+                        traceback,
                     });
                 }
                 _ => return Ok(next),
@@ -244,12 +271,13 @@ impl Pep517Daemon {
         }
     }
 
+    /// Runs a hook to completion on the daemon.
     async fn run_hook(
         &mut self,
         backend: &Pep517Backend,
         hook_name: &str,
         mut args: Vec<&str>,
-    ) -> Result<String, Error> {
+    ) -> Result<String, DaemonError> {
         self.ensure_started().await?;
 
         let stdin = self.stdin.as_mut().unwrap();
@@ -281,46 +309,52 @@ impl Pep517Daemon {
         loop {
             let next = self.receive_until_actionable().await?;
             match next {
-                Pep517DaemonResponse::Stderr(_) => continue,
-                Pep517DaemonResponse::Stdout(_) => continue,
-                Pep517DaemonResponse::Ok(result) => return Ok(result),
-                Pep517DaemonResponse::Error(_kind, message) => {
-                    if let Pep517DaemonResponse::Traceback(message) =
-                        self.receive_until_actionable().await?
-                    {
-                        error!("{}", message.replace("\\n", "\n").replace("\n\n", "\n"))
-                    }
-                    return Err(Error::DaemonError { message });
+                DaemonResponse::Stderr(_) => continue,
+                DaemonResponse::Stdout(_) => continue,
+                DaemonResponse::Ok(result) => return Ok(result),
+                DaemonResponse::Error(_kind, message) => {
+                    let traceback = {
+                        if let DaemonResponse::Traceback(traceback) = self.receive_one().await? {
+                            traceback
+                        } else {
+                            "".to_string()
+                        }
+                    };
+                    return Err(DaemonError::HookError(message, traceback));
                 }
-                _ => break,
+                unexpected @ _ => return Err(DaemonError::UnexpectedResponse(unexpected)),
             }
         }
-
-        Err(Error::DaemonError {
-            message: format!("unexpected response {:?}", self.last_response).to_string(),
-        })
     }
 
-    pub(crate) async fn prepare_metadata_for_build_wheel(
+    /// Run the hook to create a .dist-info directory for a package
+    ///
+    /// <https://peps.python.org/pep-0517/#prepare-metadata-for-build-wheel>
+    /// <https://peps.python.org/pep-0660/#prepare-metadata-for-build-editable>
+    pub(crate) async fn prepare_metadata_for_build(
         &mut self,
         backend: &Pep517Backend,
+        kind: BuildKind,
         metadata_directory: PathBuf,
-    ) -> Result<Option<PathBuf>, Error> {
+    ) -> Result<Option<PathBuf>, DaemonError> {
         let result = self
             .run_hook(
                 backend,
-                "prepare_metadata_for_build_wheel",
+                format!("prepare_metadata_for_build_{}", kind).as_str(),
                 vec![metadata_directory.to_str().unwrap(), ""],
             )
             .await?;
         Ok(Some(PathBuf::from_str(result.as_str()).unwrap()))
     }
 
+    /// Get the requirements for an editable or or wheel build.
+    ///
+    /// <https://peps.python.org/pep-0517/#get-requires-for-build-wheel>
     pub(crate) async fn get_requires_for_build(
         &mut self,
         backend: &Pep517Backend,
         kind: BuildKind,
-    ) -> Result<Vec<Requirement>, Error> {
+    ) -> Result<Vec<Requirement>, DaemonError> {
         let result = self
             .run_hook(
                 backend,
@@ -343,21 +377,22 @@ impl Pep517Daemon {
             .map(|item| item.unwrap())
             .filter(|item| !item.is_empty())
             .map(|item| {
-                Requirement::from_str(item).map_err(|err| Error::DaemonError {
-                    message: format!("Failed to parse {}: {}", item, err.to_string()),
-                })
+                Requirement::from_str(item)
+                    .map_err(|err| DaemonError::InvalidResult(item.to_string(), err.to_string()))
             })
             .collect();
 
         requirements
     }
+
+    /// Run a wheel or editable build hook.
     pub(crate) async fn build(
         &mut self,
         backend: &Pep517Backend,
         kind: BuildKind,
         wheel_directory: &Path,
         metadata_directory: Option<&Path>,
-    ) -> Result<String, Error> {
+    ) -> Result<String, DaemonError> {
         let result = self
             .run_hook(
                 backend,
@@ -375,7 +410,9 @@ impl Pep517Daemon {
         Ok(result)
     }
 
-    pub(crate) async fn close(&mut self) -> Result<Option<Output>, Error> {
+    /// Close the daemon, waiting for it to exit.
+    /// If the daemon has already been closed, `None` will be returned.
+    pub(crate) async fn close(&mut self) -> Result<Option<Output>, DaemonError> {
         // Mark `closed` before attempting to close
         // If there's an error on close, we should raise that instead of complaining it was never called
         self.closed = true;
@@ -394,6 +431,7 @@ impl Pep517Daemon {
 
 impl Drop for Pep517Daemon {
     fn drop(&mut self) {
+        // On drop, we ensure `close` was called. Otherwise, we can leave behind a zombie process.
         if !self.closed {
             panic!("`Pep517Daemon::close()` not called before drop.");
         }
