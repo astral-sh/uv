@@ -366,7 +366,6 @@ impl SourceBuild {
         if let Some(pep517_backend) = &pep517_backend {
             if pep517_backend != &default_backend {
                 let environment = create_pep517_build_environment(
-                    &source_tree,
                     &venv,
                     pep517_backend,
                     &mut pep517_daemon,
@@ -537,12 +536,11 @@ impl SourceBuildTrait for SourceBuild {
 }
 /// Not a method because we call it before the builder is completely initialized
 async fn create_pep517_build_environment(
-    source_tree: &Path,
     venv: &Virtualenv,
     pep517_backend: &Pep517Backend,
     pep517_daemon: &mut Pep517Daemon,
     build_context: &impl BuildContext,
-    package_id: &str,
+    _package_id: &str,
     build_kind: BuildKind,
 ) -> Result<(), Error> {
     let extra_requires = pep517_daemon
