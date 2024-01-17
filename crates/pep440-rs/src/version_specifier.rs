@@ -727,7 +727,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::{LocalSegment, PreReleaseKind};
+    use crate::{LocalSegment, PreRelease, PreReleaseKind};
 
     use super::*;
 
@@ -1436,7 +1436,10 @@ mod tests {
                 "==2.0a1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_pre(Some((PreReleaseKind::Alpha, 1))),
+                        version: Version::new([2, 0]).with_pre(Some(PreRelease {
+                            kind: PreReleaseKind::Alpha,
+                            number: 1,
+                        })),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1447,7 +1450,10 @@ mod tests {
                 "!=2.0a1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_pre(Some((PreReleaseKind::Alpha, 1))),
+                        version: Version::new([2, 0]).with_pre(Some(PreRelease {
+                            kind: PreReleaseKind::Alpha,
+                            number: 1,
+                        })),
                         remaining: ".*".to_string(),
                     }
                     .into(),

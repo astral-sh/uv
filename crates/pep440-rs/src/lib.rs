@@ -38,8 +38,8 @@
 pub use version::PyVersion;
 pub use {
     version::{
-        LocalSegment, Operator, OperatorParseError, PreReleaseKind, Version, VersionParseError,
-        VersionPattern, VersionPatternParseError, MIN_VERSION,
+        LocalSegment, Operator, OperatorParseError, PreRelease, PreReleaseKind, Version,
+        VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
     },
     version_specifier::{
         parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,
