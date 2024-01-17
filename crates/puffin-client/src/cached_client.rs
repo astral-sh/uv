@@ -1,3 +1,4 @@
+use futures::FutureExt;
 use std::future::Future;
 use std::time::SystemTime;
 
@@ -88,7 +89,7 @@ impl CachedClient {
     /// client.
     #[instrument(skip_all)]
     pub async fn get_cached_with_callback<
-        Payload: Serialize + DeserializeOwned,
+        Payload: Serialize + DeserializeOwned + Send,
         CallBackError,
         Callback,
         CallbackReturn,
@@ -128,7 +129,7 @@ impl CachedClient {
             None
         };
 
-        let cached_response = self.send_cached(req, cached).await?;
+        let cached_response = self.send_cached(req, cached).boxed().await?;
 
         let write_cache = info_span!("write_cache", file = %cache_entry.path().display());
         match cached_response {
