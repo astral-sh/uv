@@ -75,24 +75,16 @@ pub enum Error {
 impl Metadata21 {
     /// Parse distribution metadata from metadata bytes
     pub fn parse(content: &[u8]) -> Result<Self, Error> {
-        // HACK: trick mailparse to parse as UTF-8 instead of ASCII
-        let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();
-        mail.extend_from_slice(content);
-
-        let msg = mailparse::parse_mail(&mail)?;
+        let msg = mailparse::parse_mail(content)?;
         let headers = msg.get_headers();
 
         let get_first_value = |name| {
             headers.get_first_header(name).and_then(|header| {
-                match rfc2047_decoder::decode(header.get_value_raw()) {
-                    Ok(value) => {
-                        if value == "UNKNOWN" {
-                            None
-                        } else {
-                            Some(value)
-                        }
-                    }
-                    Err(_) => None,
+                let value = header.get_value();
+                if value == "UNKNOWN" {
+                    None
+                } else {
+                    Some(value)
                 }
             })
         };
@@ -139,5 +131,57 @@ impl Metadata21 {
             requires_python,
             provides_extras,
         })
+    }
+}
+
+impl FromStr for Metadata21 {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Metadata21::parse(s.as_bytes())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use pep440_rs::Version;
+    use puffin_normalize::PackageName;
+
+    use crate::Error;
+
+    use super::Metadata21;
+
+    #[test]
+    fn test_parse_from_str() {
+        let s = "Metadata-Version: 1.0";
+        let meta: Result<Metadata21, Error> = s.parse();
+        assert!(matches!(meta, Err(Error::FieldNotFound("Name"))));
+
+        let s = "Metadata-Version: 1.0\nName: asdf";
+        let meta = Metadata21::parse(s.as_bytes());
+        assert!(matches!(meta, Err(Error::FieldNotFound("Version"))));
+
+        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
+        let meta = Metadata21::parse(s.as_bytes()).unwrap();
+        assert_eq!(meta.metadata_version, "1.0");
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+
+        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nAuthor: 中文\n\n一个 Python 包";
+        let meta = Metadata21::parse(s.as_bytes()).unwrap();
+        assert_eq!(meta.metadata_version, "1.0");
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+
+        let s = "Metadata-Version: 1.0\nName: =?utf-8?q?foobar?=\nVersion: 1.0";
+        let meta = Metadata21::parse(s.as_bytes()).unwrap();
+        assert_eq!(meta.metadata_version, "1.0");
+        assert_eq!(meta.name, PackageName::from_str("foobar").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+
+        let s = "Metadata-Version: 1.0\nName: =?utf-8?q?=C3=A4_space?= <x@y.org>\nVersion: 1.0";
+        let meta = Metadata21::parse(s.as_bytes());
+        assert!(matches!(meta, Err(Error::InvalidName(_))));
     }
 }
