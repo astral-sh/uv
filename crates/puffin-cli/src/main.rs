@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -517,6 +518,17 @@ async fn inner() -> Result<ExitStatus> {
     if !cli.quiet {
         puffin_warnings::enable();
     }
+
+    miette::set_hook(Box::new(|_| {
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .break_words(false)
+                .word_separator(textwrap::WordSeparator::AsciiSpace)
+                .word_splitter(textwrap::WordSplitter::NoHyphenation)
+                .wrap_lines(env::var("PUFFIN_NO_WRAP").map(|_| false).unwrap_or(true))
+                .build(),
+        )
+    }))?;
 
     let cache = Cache::try_from(cli.cache_args)?;
 
