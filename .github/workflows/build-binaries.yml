@@ -274,6 +274,8 @@ jobs:
             *.sha256
 
   linux-cross:
+    # TODO(charlie): Enable cross-compilation.
+    if: false
     runs-on: ubuntu-latest
     strategy:
       matrix:
