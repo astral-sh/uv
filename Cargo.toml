@@ -8,7 +8,7 @@ edition = "2021"
 rust-version = "1.74"
 homepage = "https://pypi.org/project/puffin-alpha/"
 documentation = "https://pypi.org/project/puffin-alpha/"
-repository = "https://pypi.org/project/puffin-alpha/"
+repository = "https://github.com/astral-sh/puffin"
 authors = ["Puffin"]
 license = "MIT OR Apache-2.0"
 
@@ -158,7 +158,7 @@ auto-includes = false
 # Whether cargo-dist should create a Github Release or use an existing draft
 create-release = true
 # Publish jobs to run in CI
-pr-run-mode = "skip"
+pr-run-mode = "plan"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
 # Whether CI should include auto-generated code to build local artifacts
