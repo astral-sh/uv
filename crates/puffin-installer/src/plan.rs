@@ -7,8 +7,8 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
 use distribution_types::{
-    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
-    Name, SourceDist,
+    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations,
+    InstalledDirectUrlDist, InstalledDist, Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
@@ -151,10 +151,18 @@ impl<'a> Planner<'a> {
                         // If the requirement comes from a direct URL, check by URL.
                         Some(VersionOrUrl::Url(url)) => {
                             if let InstalledDist::Url(distribution) = &distribution {
-                                // TODO(charlie): Check freshness for path dependencies.
                                 if &distribution.url == url.raw() {
-                                    debug!("Requirement already satisfied: {distribution}");
-                                    continue;
+                                    // If the requirement came from a local path, check freshness.
+                                    if let Ok(archive) = url.to_file_path() {
+                                        if is_fresh_install(distribution, &archive)? {
+                                            debug!("Requirement already satisfied (and up-to-date): {distribution}");
+                                            continue;
+                                        }
+                                    } else {
+                                        // Otherwise, assume the requirement is up-to-date.
+                                        debug!("Requirement already satisfied (assumed up-to-date): {distribution}");
+                                        continue;
+                                    }
                                 }
                             }
                         }
@@ -244,7 +252,7 @@ impl<'a> Planner<'a> {
                                 wheel.filename.stem(),
                             );
 
-                            if is_fresh(&cache_entry, &wheel.path)? {
+                            if is_fresh_cache(&cache_entry, &wheel.path)? {
                                 let cached_dist = CachedDirectUrlDist::from_url(
                                     wheel.filename,
                                     wheel.url,
@@ -281,7 +289,7 @@ impl<'a> Planner<'a> {
                             );
 
                             if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
-                                if is_fresh(&wheel.entry, &sdist.path)? {
+                                if is_fresh_cache(&wheel.entry, &sdist.path)? {
                                     let cached_dist = wheel.into_url_dist(url.clone());
                                     debug!("Path source requirement already cached: {cached_dist}");
                                     local.push(CachedDist::Url(cached_dist));
@@ -346,7 +354,7 @@ impl<'a> Planner<'a> {
 ///
 /// A cache entry is considered fresh if it exists and is newer than the file at the given path.
 /// If the cache entry is stale, it will be removed from the cache.
-fn is_fresh(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
+fn is_fresh_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
     match fs_err::metadata(cache_entry.path()).and_then(|metadata| metadata.modified()) {
         Ok(cache_mtime) => {
             // Determine the modification time of the wheel.
@@ -373,6 +381,22 @@ fn is_fresh(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error
         }
         Err(err) => Err(err),
     }
+}
+
+/// Returns `true` if the installed distribution linked to the file at the given [`Path`] is fresh,
+/// based on the modification time of the installed distribution.
+fn is_fresh_install(dist: &InstalledDirectUrlDist, artifact: &Path) -> Result<bool, io::Error> {
+    // Determine the modification time of the installed distribution.
+    let dist_metadata = fs_err::metadata(&dist.path)?;
+    let dist_mtime = dist_metadata.modified()?;
+
+    // Determine the modification time of the wheel.
+    let Some(artifact_mtime) = puffin_cache::archive_mtime(artifact)? else {
+        // The artifact doesn't exist, so it's not fresh.
+        return Ok(false);
+    };
+
+    Ok(dist_mtime >= artifact_mtime)
 }
 
 #[derive(Debug, Default)]
