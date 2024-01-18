@@ -104,11 +104,7 @@ impl FromStr for EditableRequirement {
     type Err = RequirementsTxtParserError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let editable_requirement = if let Ok(url) = VerbatimUrl::from_str(s) {
-            ParsedEditableRequirement::Url(url)
-        } else {
-            ParsedEditableRequirement::Path(s.to_string())
-        };
+        let editable_requirement = ParsedEditableRequirement::from_str(s)?;
         editable_requirement.with_working_dir(".")
     }
 }
@@ -159,6 +155,32 @@ impl ParsedEditableRequirement {
                 }
             }
         })
+    }
+}
+
+impl FromStr for ParsedEditableRequirement {
+    type Err = RequirementsTxtParserError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.trim_start().starts_with("file://") {
+            // Ex) `file:///home/ferris/project/scripts/...`
+            if let Ok(url) = VerbatimUrl::from_str(s) {
+                Ok(ParsedEditableRequirement::Url(url))
+            } else {
+                Err(RequirementsTxtParserError::UnsupportedUrl(
+                    VerbatimUrl::from_str(s).unwrap(),
+                ))
+            }
+        } else if let Some(s) = s.trim_start().strip_prefix("file:") {
+            // Ex) `file:../editable/`
+            Ok(ParsedEditableRequirement::Path(s.to_string()))
+        } else if let Ok(url) = VerbatimUrl::from_str(s) {
+            // Ex) `http://example.com/`
+            Ok(ParsedEditableRequirement::Url(url))
+        } else {
+            // Ex) `../editable/`
+            Ok(ParsedEditableRequirement::Path(s.to_string()))
+        }
     }
 }
 
@@ -352,11 +374,7 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let editable_requirement = if let Ok(url) = VerbatimUrl::from_str(path_or_url) {
-            ParsedEditableRequirement::Url(url)
-        } else {
-            ParsedEditableRequirement::Path(path_or_url.to_string())
-        };
+        let editable_requirement = ParsedEditableRequirement::from_str(path_or_url)?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content)?;
