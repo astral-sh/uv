@@ -3,7 +3,7 @@
 use std::io;
 use std::io::{BufWriter, Write};
 
-use camino::{FromPathError, Utf8Path, Utf8PathBuf};
+use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
@@ -57,10 +57,11 @@ pub struct VenvPaths {
 
 /// Write all the files that belong to a venv without any packages installed.
 pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::Result<VenvPaths> {
-    let base_python: &Utf8Path = interpreter
-        .sys_executable()
+    // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
+    // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
+    let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
         .try_into()
-        .map_err(|err: FromPathError| err.into_io_error())?;
+        .map_err(|err: FromPathBufError| err.into_io_error())?;
     if location.exists() {
         if location.join("pyvenv.cfg").is_file() {
             info!("Removing existing directory");
@@ -110,7 +111,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     };
     #[cfg(unix)]
     {
-        symlink(base_python, &venv_python)?;
+        symlink(&base_python, &venv_python)?;
         symlink(
             "python",
             bin_dir.join(format!("python{}", interpreter.simple_version().0)),
