@@ -1075,7 +1075,7 @@ fn install_local_wheel() -> Result<()> {
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
-    let archive = temp_dir.child("tomli-3.0.1-py3-none-any.whl");
+    let archive = temp_dir.child("tomli-2.0.1-py3-none-any.whl");
     let mut archive_file = std::fs::File::create(&archive)?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
@@ -1107,7 +1107,7 @@ fn install_local_wheel() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
         "###);
     });
 
