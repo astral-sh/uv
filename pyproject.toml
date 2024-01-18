@@ -14,5 +14,6 @@ classifiers = []
 bindings = "bin"
 manifest-path = "crates/puffin-cli/Cargo.toml"
 module-name = "puffin"
+python-source = "python"
 strip = true
 include = ["rust-toolchain.toml"]

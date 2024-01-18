@@ -150,6 +150,8 @@ jobs:
             *.sha256
 
   windows:
+    # TODO(charlie): Enable Windows builds.
+    if: false
     runs-on: windows-latest
     strategy:
       matrix:
@@ -379,7 +381,7 @@ jobs:
             apk add python3
             python -m venv .venv
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }} check --help
+            .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -444,7 +446,7 @@ jobs:
           run: |
             python -m venv .venv
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }} check --help
+            .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
