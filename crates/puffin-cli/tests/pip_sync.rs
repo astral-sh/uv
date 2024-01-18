@@ -1174,6 +1174,39 @@ fn install_local_wheel() -> Result<()> {
 
     check_command(&venv, "import tomli", &temp_dir);
 
+    // "Modify" the wheel.
+    let archive_file = std::fs::File::open(&archive)?;
+    archive_file.set_modified(std::time::SystemTime::now())?;
+
+    // Reinstall into the same virtual environment. The wheel should be reinstalled.
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Uninstalled 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &temp_dir);
+
     Ok(())
 }
 
