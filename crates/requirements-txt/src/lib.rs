@@ -90,14 +90,6 @@ impl EditableRequirement {
             EditableRequirement::Url { url, .. } => url.raw(),
         }
     }
-
-    /// Return the resolved path to the editable.
-    pub fn path(&self) -> &Path {
-        match self {
-            EditableRequirement::Path { path, .. } => path,
-            EditableRequirement::Url { path, .. } => path,
-        }
-    }
 }
 
 impl FromStr for EditableRequirement {
