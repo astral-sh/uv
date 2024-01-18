@@ -275,7 +275,7 @@ jobs:
 
   linux-cross:
     # TODO(charlie): Enable cross-compilation.
-    if: false
+    # if: false
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -307,7 +307,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: auto
+          manylinux: manylinux2014
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
       - uses: uraimo/run-on-arch-action@v2
