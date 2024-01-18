@@ -59,17 +59,6 @@ pub(crate) async fn pip_compile(
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
-    miette::set_hook(Box::new(|_| {
-        Box::new(
-            miette::MietteHandlerOpts::new()
-                .break_words(false)
-                .word_separator(textwrap::WordSeparator::AsciiSpace)
-                .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(env::var("PUFFIN_NO_WRAP").map(|_| false).unwrap_or(true))
-                .build(),
-        )
-    }))?;
-
     let start = std::time::Instant::now();
 
     // If the user requests `extras` but does not provide a pyproject toml source
