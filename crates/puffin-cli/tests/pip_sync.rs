@@ -2587,9 +2587,10 @@ fn sync_editable_and_registry() -> Result<()> {
     });
 
     // Install the editable version of Black. This should remove the registry-based version.
+    // Use the `file:` syntax for extra coverage.
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
-        -e ../../scripts/editable-installs/black_editable
+        -e file:../../scripts/editable-installs/black_editable
         "
     })?;
 
