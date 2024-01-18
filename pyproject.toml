@@ -9,6 +9,7 @@ authors = [{ name = "Puffin" }]
 requires-python = ">=3.7"
 keywords = []
 classifiers = []
+readme = "README.md"
 
 [tool.maturin]
 bindings = "bin"

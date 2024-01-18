@@ -34,6 +34,8 @@ env:
 
 jobs:
   sdist:
+    # TODO(charlie): Enable source distribution builds.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +45,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build sdist"
         uses: PyO3/maturin-action@v1
         with:
@@ -71,7 +73,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@v1
         with:
@@ -116,7 +118,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@v1
         with:
@@ -171,7 +173,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -219,7 +221,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -275,7 +277,7 @@ jobs:
 
   linux-cross:
     # TODO(charlie): Enable cross-compilation.
-    # if: false
+    if: false
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -302,12 +304,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: manylinux2014
+          manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
       - uses: uraimo/run-on-arch-action@v2
@@ -366,7 +368,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -429,7 +431,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: rm README.md
+        run: echo "# Puffin" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
