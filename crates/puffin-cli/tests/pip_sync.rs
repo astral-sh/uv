@@ -1,6 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::io::{Read, Write};
 use std::iter;
 use std::path::Path;
 use std::process::Command;
@@ -8,7 +7,6 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use assert_fs::TempDir;
 use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
@@ -1108,7 +1106,7 @@ fn install_local_wheel() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1136,7 +1134,7 @@ fn install_local_wheel() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1145,12 +1143,9 @@ fn install_local_wheel() -> Result<()> {
     // Create a new virtual environment.
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
-    // "Modify" the wheel by reading its contents and writing them back out.
-    let mut archive_file = std::fs::File::open(&archive)?;
-    let mut archive_contents = Vec::new();
-    archive_file.read_to_end(&mut archive_contents)?;
-    let mut archive_file = std::fs::File::create(&archive)?;
-    archive_file.write_all(&archive_contents)?;
+    // "Modify" the wheel.
+    let archive_file = std::fs::File::open(&archive)?;
+    archive_file.set_modified(std::time::SystemTime::now())?;
 
     // Reinstall. The wheel should be "downloaded" again.
     insta::with_settings!({
@@ -2806,8 +2801,8 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
 /// Sync using `--find-links` with a local directory.
 #[test]
 fn find_links() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let cache_dir = TempDir::new()?;
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");

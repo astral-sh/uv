@@ -446,7 +446,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) = puffin_cache::modified(&path_source_dist.path)? else {
+        let Some(modified) = puffin_cache::archive_mtime(&path_source_dist.path)? else {
             return Err(SourceDistError::DirWithoutEntrypoint);
         };
 

@@ -552,8 +552,8 @@ impl Display for CacheBucket {
 ///
 /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
 /// returns `None`.
-pub fn modified(path: &Path) -> Result<Option<SystemTime>, io::Error> {
-    let metadata = fs_err::metadata(&path)?;
+pub fn archive_mtime(path: &Path) -> Result<Option<SystemTime>, io::Error> {
+    let metadata = fs_err::metadata(path)?;
     if metadata.is_file() {
         // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
         Ok(Some(metadata.modified()?))

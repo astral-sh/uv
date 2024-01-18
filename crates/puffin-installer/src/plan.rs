@@ -1,11 +1,10 @@
-use std::fs::Metadata;
 use std::hash::BuildHasherDefault;
+use std::io;
 use std::path::Path;
-use std::{fs, io};
 
 use anyhow::{bail, Result};
 use rustc_hash::FxHashSet;
-use tracing::{debug, metadata, warn};
+use tracing::{debug, warn};
 
 use distribution_types::{
     git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
@@ -152,6 +151,7 @@ impl<'a> Planner<'a> {
                         // If the requirement comes from a direct URL, check by URL.
                         Some(VersionOrUrl::Url(url)) => {
                             if let InstalledDist::Url(distribution) = &distribution {
+                                // TODO(charlie): Check freshness for path dependencies.
                                 if &distribution.url == url.raw() {
                                     debug!("Requirement already satisfied: {distribution}");
                                     continue;
@@ -347,10 +347,10 @@ impl<'a> Planner<'a> {
 /// A cache entry is considered fresh if it exists and is newer than the file at the given path.
 /// If the cache entry is stale, it will be removed from the cache.
 fn is_fresh(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
-    match fs_err::metadata(&cache_entry.path()).and_then(|metadata| metadata.modified()) {
+    match fs_err::metadata(cache_entry.path()).and_then(|metadata| metadata.modified()) {
         Ok(cache_mtime) => {
             // Determine the modification time of the wheel.
-            let Some(artifact_mtime) = puffin_cache::modified(&artifact)? else {
+            let Some(artifact_mtime) = puffin_cache::archive_mtime(artifact)? else {
                 // The artifact doesn't exist, so it's not fresh.
                 return Ok(false);
             };
@@ -361,7 +361,7 @@ fn is_fresh(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error
                     "Removing stale built wheels for: {}",
                     cache_entry.path().display()
                 );
-                if let Err(err) = fs_err::remove_dir_all(&cache_entry.dir()) {
+                if let Err(err) = fs_err::remove_dir_all(cache_entry.dir()) {
                     warn!("Failed to remove stale built wheel cache directory: {err}");
                 }
                 Ok(false)
@@ -371,9 +371,7 @@ fn is_fresh(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error
             // The cache entry doesn't exist, so it's not fresh.
             Ok(false)
         }
-        Err(err) => {
-            return Err(err.into());
-        }
+        Err(err) => Err(err),
     }
 }
 
