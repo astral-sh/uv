@@ -12,9 +12,9 @@ classifiers = []
 readme = "README.md"
 
 [project.urls]
-Repository = ""
-Documentation = ""
-Changelog = ""
+Repository = "https://pypi.org/project/puffin-alpha/"
+Documentation = "https://pypi.org/project/puffin-alpha/"
+Changelog = "https://pypi.org/project/puffin-alpha/"
 
 [tool.maturin]
 bindings = "bin"
