@@ -43,7 +43,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build sdist"
         uses: PyO3/maturin-action@v1
         with:
@@ -71,7 +71,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@v1
         with:
@@ -116,7 +116,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@v1
         with:
@@ -169,7 +169,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -217,7 +217,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -298,7 +298,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -362,7 +362,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -425,7 +425,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: rm README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
