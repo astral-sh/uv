@@ -18,7 +18,7 @@ distribution-filename = { path = "../distribution-filename", features = ["serde"
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
-puffin-git = { path = "../puffin-git" }
+puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
