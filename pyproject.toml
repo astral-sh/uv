@@ -11,6 +11,11 @@ keywords = []
 classifiers = []
 readme = "README.md"
 
+[project.urls]
+Repository = ""
+Documentation = ""
+Changelog = ""
+
 [tool.maturin]
 bindings = "bin"
 manifest-path = "crates/puffin-cli/Cargo.toml"
