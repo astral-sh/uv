@@ -24,7 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_NAME: puffin
+  PACKAGE_NAME: puffin_alpha
+  MODULE_NAME: puffin
   PYTHON_VERSION: "3.11"
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
@@ -51,8 +52,8 @@ jobs:
       - name: "Test sdist"
         run: |
           pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
-          puffin --help
-          python -m puffin --help
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload sdist"
         uses: actions/upload-artifact@v3
         with:
@@ -79,8 +80,8 @@ jobs:
       - name: "Test wheel - x86_64"
         run: |
           pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
-          puffin --help
-          python -m puffin --help
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -123,8 +124,8 @@ jobs:
       - name: "Test wheel - universal2"
         run: |
           pip install dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
-          puffin --help
-          python -m puffin --help
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -179,8 +180,8 @@ jobs:
         shell: bash
         run: |
           python -m pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
-          puffin --help
-          python -m puffin --help
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -242,8 +243,8 @@ jobs:
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
           pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
-          puffin --help
-          python -m puffin --help
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -318,7 +319,7 @@ jobs:
             pip3 install -U pip
           run: |
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            puffin --help
+            ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -378,7 +379,7 @@ jobs:
             apk add python3
             python -m venv .venv
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/puffin check --help
+            .venv/bin/${{ env.MODULE_NAME }} check --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -443,7 +444,7 @@ jobs:
           run: |
             python -m venv .venv
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/puffin check --help
+            .venv/bin/${{ env.MODULE_NAME }} check --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
