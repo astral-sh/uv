@@ -138,8 +138,11 @@ impl std::fmt::Display for NoSolutionError {
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
         };
-        let report =
-            DefaultStringReporter::report_with_formatter(&self.derivation_tree, &formatter);
+
+        let mut derivation_tree = self.derivation_tree.clone();
+        derivation_tree.collapse_no_versions();
+
+        let report = DefaultStringReporter::report_with_formatter(&derivation_tree, &formatter);
         write!(f, "{report}")?;
 
         // Include any additional hints.
