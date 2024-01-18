@@ -14,10 +14,10 @@ on:
         type: string
   pull_request:
     paths:
-      # When we change pyproject.toml, we want to ensure that the maturin builds still work
+      # When we change pyproject.toml, we want to ensure that the maturin builds still work.
       - pyproject.toml
       # And when we change this workflow itself...
-      - .github/workflows/build.yaml
+      - .github/workflows/*.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

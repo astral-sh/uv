@@ -6,10 +6,10 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 rust-version = "1.74"
-homepage = "https://astral.sh"
-documentation = "https://astral.sh"
-repository = "https://github.com/astral-sh/puffin"
-authors = ["Astral Software Inc. <hey@astral.sh>"]
+homepage = "https://pypi.org/project/puffin-alpha/"
+documentation = "https://pypi.org/project/puffin-alpha/"
+repository = "https://pypi.org/project/puffin-alpha/"
+authors = ["Puffin"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]

@@ -5,13 +5,11 @@ build-backend = "maturin"
 [project]
 name = "puffin-alpha"
 version = "0.0.1"
-description = "An extremely fast Python package installer, written in Rust."
-authors = []
+authors = [{ name = "Puffin" }]
 readme = "README.md"
 requires-python = ">=3.7"
 keywords = []
 classifiers = []
-urls = {}
 
 [tool.maturin]
 bindings = "bin"
