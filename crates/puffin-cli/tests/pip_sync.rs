@@ -7,7 +7,6 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use assert_fs::TempDir;
 use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
@@ -1088,7 +1087,69 @@ fn install_local_wheel() -> Result<()> {
         .collect();
 
     insta::with_settings!({
-        filters => filters
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Create a new virtual environment.
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Installed 1 package in [TIME]
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Create a new virtual environment.
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // "Modify" the wheel.
+    let archive_file = std::fs::File::open(&archive)?;
+    archive_file.set_modified(std::time::SystemTime::now())?;
+
+    // Reinstall. The wheel should be "downloaded" again.
+    insta::with_settings!({
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2740,8 +2801,8 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
 /// Sync using `--find-links` with a local directory.
 #[test]
 fn find_links() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let cache_dir = TempDir::new()?;
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let requirements_txt = temp_dir.child("requirements.txt");

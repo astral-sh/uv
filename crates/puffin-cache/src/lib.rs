@@ -4,6 +4,7 @@ use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
@@ -30,6 +31,11 @@ impl CacheEntry {
     /// Create a new [`CacheEntry`] from a directory and a file name.
     pub fn new(dir: impl Into<PathBuf>, file: impl AsRef<Path>) -> Self {
         Self(dir.into().join(file))
+    }
+
+    /// Create a new [`CacheEntry`] from a path.
+    pub fn from_path(path: impl Into<PathBuf>) -> Self {
+        Self(path.into())
     }
 
     /// Convert the [`CacheEntry`] into a [`PathBuf`].
@@ -538,5 +544,36 @@ impl CacheBucket {
 impl Display for CacheBucket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.to_str())
+    }
+}
+
+/// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
+/// archive) or a directory containing a Python package.
+///
+/// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
+/// returns `None`.
+pub fn archive_mtime(path: &Path) -> Result<Option<SystemTime>, io::Error> {
+    let metadata = fs_err::metadata(path)?;
+    if metadata.is_file() {
+        // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
+        Ok(Some(metadata.modified()?))
+    } else {
+        if let Some(metadata) = path
+            .join("pyproject.toml")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+        {
+            Ok(Some(metadata.modified()?))
+        } else if let Some(metadata) = path
+            .join("setup.py")
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+        {
+            Ok(Some(metadata.modified()?))
+        } else {
+            Ok(None)
+        }
     }
 }

@@ -1,7 +1,8 @@
-use distribution_types::CachedWheel;
 use platform_tags::Tags;
 use puffin_cache::CacheShard;
 use puffin_fs::directories;
+
+use crate::index::cached_wheel::CachedWheel;
 
 /// A local index of built distributions for a specific source distribution.
 pub struct BuiltWheelIndex;
@@ -38,10 +39,6 @@ impl BuiltWheelIndex {
                         continue;
                     }
 
-                    // TODO(charlie): Consider taking into account the freshness checks that we
-                    // encode when building source distributions (e.g., timestamps). For now, we
-                    // assume that distributions are immutable when installing (i.e., in this
-                    // index).
                     if let Some(existing) = candidate.as_ref() {
                         // Override if the wheel is newer, or "more" compatible.
                         if dist_info.filename.version > existing.filename.version

@@ -4,9 +4,8 @@ use std::path::Path;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{
-    CachedRegistryDist, CachedWheel, FlatIndexLocation, IndexLocations, IndexUrl,
-};
+use crate::index::cached_wheel::CachedWheel;
+use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};

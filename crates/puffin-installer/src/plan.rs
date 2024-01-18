@@ -1,4 +1,6 @@
 use std::hash::BuildHasherDefault;
+use std::io;
+use std::path::Path;
 
 use anyhow::{bail, Result};
 use rustc_hash::FxHashSet;
@@ -10,7 +12,7 @@ use distribution_types::{
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
+use puffin_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
@@ -149,6 +151,7 @@ impl<'a> Planner<'a> {
                         // If the requirement comes from a direct URL, check by URL.
                         Some(VersionOrUrl::Url(url)) => {
                             if let InstalledDist::Url(distribution) = &distribution {
+                                // TODO(charlie): Check freshness for path dependencies.
                                 if &distribution.url == url.raw() {
                                     debug!("Requirement already satisfied: {distribution}");
                                     continue;
@@ -241,7 +244,7 @@ impl<'a> Planner<'a> {
                                 wheel.filename.stem(),
                             );
 
-                            if cache_entry.path().exists() {
+                            if is_fresh(&cache_entry, &wheel.path)? {
                                 let cached_dist = CachedDirectUrlDist::from_url(
                                     wheel.filename,
                                     wheel.url,
@@ -278,10 +281,12 @@ impl<'a> Planner<'a> {
                             );
 
                             if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
-                                let cached_dist = wheel.into_url_dist(url.clone());
-                                debug!("Path source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
-                                continue;
+                                if is_fresh(&wheel.entry, &sdist.path)? {
+                                    let cached_dist = wheel.into_url_dist(url.clone());
+                                    debug!("Path source requirement already cached: {cached_dist}");
+                                    local.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
                             }
                         }
                         Dist::Source(SourceDist::Git(sdist)) => {
@@ -334,6 +339,39 @@ impl<'a> Planner<'a> {
             reinstalls,
             extraneous,
         })
+    }
+}
+
+/// Returns `true` if the cache entry linked to the file at the given [`Path`] is fresh.
+///
+/// A cache entry is considered fresh if it exists and is newer than the file at the given path.
+/// If the cache entry is stale, it will be removed from the cache.
+fn is_fresh(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
+    match fs_err::metadata(cache_entry.path()).and_then(|metadata| metadata.modified()) {
+        Ok(cache_mtime) => {
+            // Determine the modification time of the wheel.
+            let Some(artifact_mtime) = puffin_cache::archive_mtime(artifact)? else {
+                // The artifact doesn't exist, so it's not fresh.
+                return Ok(false);
+            };
+            if cache_mtime >= artifact_mtime {
+                Ok(true)
+            } else {
+                debug!(
+                    "Removing stale built wheels for: {}",
+                    cache_entry.path().display()
+                );
+                if let Err(err) = fs_err::remove_dir_all(cache_entry.dir()) {
+                    warn!("Failed to remove stale built wheel cache directory: {err}");
+                }
+                Ok(false)
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            // The cache entry doesn't exist, so it's not fresh.
+            Ok(false)
+        }
+        Err(err) => Err(err),
     }
 }
 
