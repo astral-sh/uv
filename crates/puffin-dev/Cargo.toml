@@ -2,6 +2,8 @@
 name = "puffin-dev"
 version = "0.0.1"
 description = "Build wheels from source distributions"
+publish = false
+
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
