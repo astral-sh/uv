@@ -446,30 +446,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
 
         // Determine the last-modified time of the source distribution.
-        let file_metadata = fs_err::metadata(&path_source_dist.path)?;
-        let modified = if file_metadata.is_file() {
-            // `modified()` is infallible on windows and unix (i.e., all platforms we support).
-            file_metadata.modified()?
-        } else {
-            if let Some(metadata) = path_source_dist
-                .path
-                .join("pyproject.toml")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-            {
-                metadata.modified()?
-            } else if let Some(metadata) = path_source_dist
-                .path
-                .join("setup.py")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-            {
-                metadata.modified()?
-            } else {
-                return Err(SourceDistError::DirWithoutEntrypoint);
-            }
+        let Some(modified) = puffin_cache::modified(&path_source_dist.path)? else {
+            return Err(SourceDistError::DirWithoutEntrypoint);
         };
 
         // Read the existing metadata from the cache.

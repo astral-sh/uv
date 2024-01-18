@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::io::{Read, Write};
 use std::iter;
 use std::path::Path;
 use std::process::Command;
@@ -1088,7 +1089,72 @@ fn install_local_wheel() -> Result<()> {
         .collect();
 
     insta::with_settings!({
-        filters => filters
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Create a new virtual environment.
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Installed 1 package in [TIME]
+         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+        "###);
+    });
+
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Create a new virtual environment.
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // "Modify" the wheel by reading its contents and writing them back out.
+    let mut archive_file = std::fs::File::open(&archive)?;
+    let mut archive_contents = Vec::new();
+    archive_file.read_to_end(&mut archive_contents)?;
+    let mut archive_file = std::fs::File::create(&archive)?;
+    archive_file.write_all(&archive_contents)?;
+
+    // Reinstall. The wheel should be "downloaded" again.
+    insta::with_settings!({
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
