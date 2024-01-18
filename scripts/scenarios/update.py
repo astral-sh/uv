@@ -51,7 +51,7 @@ TEMPLATE = TOOL_ROOT / "template.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
-TARGET = PROJECT_ROOT / "crates" / "puffin-cli" / "tests" / "pip_install_scenarios.rs"
+TARGET = PROJECT_ROOT / "crates" / "puffin" / "tests" / "pip_install_scenarios.rs"
 
 try:
     import packse

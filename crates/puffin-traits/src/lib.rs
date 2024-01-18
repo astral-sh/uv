@@ -27,7 +27,7 @@ use puffin_interpreter::{Interpreter, Virtualenv};
 ///
 /// ```text
 ///                    ┌────────────────┐
-///                    │puffin-cli      │
+///                    │puffin          │
 ///                    └───────▲────────┘
 ///                            │
 ///                            │

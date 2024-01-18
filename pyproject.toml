@@ -18,7 +18,7 @@ Changelog = "https://pypi.org/project/puffin-alpha/"
 
 [tool.maturin]
 bindings = "bin"
-manifest-path = "crates/puffin-cli/Cargo.toml"
+manifest-path = "crates/puffin/Cargo.toml"
 module-name = "puffin"
 python-source = "python"
 strip = true
