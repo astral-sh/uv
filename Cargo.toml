@@ -34,7 +34,7 @@ dirs = { version = "5.0.1" }
 # This tells flate2 (and all libraries that depend on it, including async_compression
 # and async_zip) to use zlib-ng, which about 2x faster than the default flate2 backend
 # at decompression. See https://github.com/rust-lang/flate2-rs#backends
-flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false }
+# flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false }
 fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
