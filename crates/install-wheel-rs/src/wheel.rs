@@ -362,7 +362,7 @@ pub(crate) fn write_script_entrypoints(
                 record,
             )?;
             // We need to make the launcher executable
-            #[cfg(target_family = "unix")]
+            #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
                 fs::set_permissions(
