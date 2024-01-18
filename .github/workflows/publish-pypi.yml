@@ -1,0 +1,33 @@
+# Publish a release to PyPI.
+#
+# Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a publish job
+# within `cargo-dist`.
+name: "Publish to PyPI"
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  pypi-publish:
+    name: Upload to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      # For PyPI's trusted publishing.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheels
+          path: wheels
+      - name: Publish to PyPi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          packages-dir: wheels
+          verbose: true

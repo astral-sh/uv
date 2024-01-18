@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "puffin-alpha"
+version = "0.0.1"
+description = "An extremely fast Python package installer, written in Rust."
+authors = []
+readme = "README.md"
+requires-python = ">=3.7"
+keywords = []
+classifiers = []
+urls = {}
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "crates/puffin-cli/Cargo.toml"
+module-name = "puffin"
+strip = true
+include = ["rust-toolchain.toml"]

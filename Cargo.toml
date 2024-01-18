@@ -133,3 +133,37 @@ rest_pat_in_fully_bound_structs = "warn"
 [profile.profiling]
 inherits = "release"
 debug = true
+
+# The profile that 'cargo dist' will build with.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.7.3-prerelease.3"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = ["shell", "powershell"]
+# The archive format to use for windows builds (defaults .zip)
+windows-archive = ".zip"
+# The archive format to use for non-windows builds (defaults .tar.xz)
+unix-archive = ".tar.gz"
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl", "i686-unknown-linux-musl", "aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "armv7-unknown-linux-gnueabihf", "powerpc64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu", "s390x-unknown-linux-gnu"]
+# Whether to auto-include files like READMEs and CHANGELOGs (default true)
+auto-includes = false
+# Whether cargo-dist should create a Github Release or use an existing draft
+create-release = true
+# Publish jobs to run in CI
+pr-run-mode = "skip"
+# Whether CI should trigger releases with dispatches instead of tag pushes
+dispatch-releases = true
+# Whether CI should include auto-generated code to build local artifacts
+build-local-artifacts = false
+# Local artifacts jobs to run in CI
+local-artifacts-jobs = ["./build-binaries"]
+# Publish jobs to run in CI
+publish-jobs = ["./publish-pypi"]
