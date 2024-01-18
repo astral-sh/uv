@@ -21,7 +21,6 @@ chrono = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
-rfc2047-decoder = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
