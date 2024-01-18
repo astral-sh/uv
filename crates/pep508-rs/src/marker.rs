@@ -733,15 +733,16 @@ impl MarkerExpression {
     /// # use pep440_rs::Version;
     ///
     /// # fn main() -> Result<(), Pep508Error> {
+    /// use puffin_normalize::ExtraName;
     /// let marker_tree = MarkerTree::from_str(r#"("linux" in sys_platform) and extra == 'day'"#)?;
     /// let versions: Vec<Version> = (8..12).map(|minor| Version::new([3, minor])).collect();
-    /// assert!(marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &versions));
-    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["night".to_string()].into(), &versions));
+    /// assert!(marker_tree.evaluate_extras_and_python_version(&[ExtraName::from_str("day").unwrap()].into(), &versions));
+    /// assert!(!marker_tree.evaluate_extras_and_python_version(&[ExtraName::from_str("night").unwrap()].into(), &versions));
     ///
     /// let marker_tree = MarkerTree::from_str(r#"extra == 'day' and python_version < '3.11' and '3.10' <= python_version"#)?;
-    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::new([3, 9])]));
-    /// assert!(marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::new([3, 10])]));
-    /// assert!(!marker_tree.evaluate_extras_and_python_version(&["day".to_string()].into(), &vec![Version::new([3, 11])]));
+    /// assert!(!marker_tree.evaluate_extras_and_python_version(&[ExtraName::from_str("day").unwrap()].into(), &vec![Version::new([3, 9])]));
+    /// assert!(marker_tree.evaluate_extras_and_python_version(&[ExtraName::from_str("day").unwrap()].into(), &vec![Version::new([3, 10])]));
+    /// assert!(!marker_tree.evaluate_extras_and_python_version(&[ExtraName::from_str("day").unwrap()].into(), &vec![Version::new([3, 11])]));
     /// # Ok(())
     /// # }
     /// ```
