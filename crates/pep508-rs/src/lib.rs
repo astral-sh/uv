@@ -44,13 +44,13 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "pyo3")]
 use puffin_normalize::InvalidNameError;
 use puffin_normalize::{ExtraName, PackageName};
-pub use verbatim_url::VerbatimUrl;
+pub use verbatim_url::{VerbatimUrl, VerbatimUrlError};
 
 mod marker;
 mod verbatim_url;
 
 /// Error with a span attached. Not that those aren't `String` but `Vec<char>` indices.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct Pep508Error {
     /// Either we have an error string from our parser or an upstream error from `url`
     pub message: Pep508ErrorSource,
@@ -63,14 +63,14 @@ pub struct Pep508Error {
 }
 
 /// Either we have an error string from our parser or an upstream error from `url`
-#[derive(Debug, Error, Clone, Eq, PartialEq)]
+#[derive(Debug, Error)]
 pub enum Pep508ErrorSource {
     /// An error from our parser.
     #[error("{0}")]
     String(String),
     /// A URL parsing error.
     #[error(transparent)]
-    UrlError(#[from] verbatim_url::Error),
+    UrlError(#[from] verbatim_url::VerbatimUrlError),
 }
 
 impl Display for Pep508Error {

@@ -403,7 +403,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
         ----- stderr -----
         Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
         "###);
     });
 
@@ -467,7 +467,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 
         ----- stderr -----
         Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
         "###);
     });
 
@@ -532,7 +532,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
 
         ----- stderr -----
         Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable/)
+         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
         "###);
     });
 

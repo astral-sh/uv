@@ -315,15 +315,12 @@ async fn build_editables(
 
     let editables: Vec<LocalEditable> = editables
         .iter()
-        .map(|editable| match editable {
-            EditableRequirement::Path { path, .. } => Ok(LocalEditable {
+        .map(|editable| {
+            let EditableRequirement { path, url } = editable;
+            Ok(LocalEditable {
                 path: path.clone(),
-                requirement: editable.clone(),
-            }),
-            EditableRequirement::Url { path, .. } => Ok(LocalEditable {
-                path: path.clone(),
-                requirement: editable.clone(),
-            }),
+                url: url.clone(),
+            })
         })
         .collect::<Result<_>>()?;
 

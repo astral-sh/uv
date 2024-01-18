@@ -1,6 +1,7 @@
 use std::borrow::Cow;
+use std::fmt::Debug;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -26,8 +27,9 @@ pub struct VerbatimUrl {
 
 impl VerbatimUrl {
     /// Parse a URL from a string, expanding any environment variables.
-    pub fn parse(given: String) -> Result<Self, Error> {
-        let url = Url::parse(&expand_env_vars(&given))?;
+    pub fn parse(given: String) -> Result<Self, VerbatimUrlError> {
+        let url = Url::parse(&expand_env_vars(&given, true))
+            .map_err(|err| VerbatimUrlError::Url(given.clone(), err))?;
         Ok(Self {
             given: Some(given),
             url,
@@ -35,10 +37,30 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from a path.
-    #[allow(clippy::result_unit_err)]
-    pub fn from_path(path: impl AsRef<Path>, given: String) -> Result<Self, ()> {
+    pub fn from_path(
+        path: impl AsRef<str>,
+        working_dir: impl AsRef<Path>,
+        given: String,
+    ) -> Result<Self, VerbatimUrlError> {
+        // Expand any environment variables.
+        let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
+
+        // Convert the path to an absolute path, if necessary.
+        let path = if path.is_absolute() {
+            path
+        } else {
+            working_dir.as_ref().join(path)
+        };
+
+        // Canonicalize the path.
+        let path =
+            fs_err::canonicalize(path).map_err(|err| VerbatimUrlError::Path(given.clone(), err))?;
+
+        // Convert to a URL.
+        let url = Url::from_file_path(path).expect("path is absolute");
+
         Ok(Self {
-            url: Url::from_directory_path(path)?,
+            url,
             given: Some(given),
         })
     }
@@ -68,7 +90,7 @@ impl VerbatimUrl {
 }
 
 impl std::str::FromStr for VerbatimUrl {
-    type Err = Error;
+    type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s.to_owned())
@@ -77,7 +99,7 @@ impl std::str::FromStr for VerbatimUrl {
 
 impl std::fmt::Display for VerbatimUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.url.fmt(f)
+        std::fmt::Display::fmt(&self.url, f)
     }
 }
 
@@ -89,10 +111,16 @@ impl Deref for VerbatimUrl {
     }
 }
 
-#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
-pub enum Error {
-    #[error(transparent)]
-    Url(#[from] url::ParseError),
+/// An error that can occur when parsing a [`VerbatimUrl`].
+#[derive(thiserror::Error, Debug)]
+pub enum VerbatimUrlError {
+    /// Failed to canonicalize a path.
+    #[error("{0}")]
+    Path(String, #[source] std::io::Error),
+
+    /// Failed to parse a URL.
+    #[error("{0}")]
+    Url(String, #[source] url::ParseError),
 }
 
 /// Expand all available environment variables.
@@ -110,12 +138,12 @@ pub enum Error {
 ///   Valid characters in variable names follow the `POSIX standard
 ///   <http://pubs.opengroup.org/onlinepubs/9699919799/>`_ and are limited
 ///   to uppercase letter, digits and the `_` (underscore).
-fn expand_env_vars(s: &str) -> Cow<'_, str> {
-    // Generate a URL-escaped project root, to be used via the `${PROJECT_ROOT}`
-    // environment variable. Ensure that it's URL-escaped.
+fn expand_env_vars(s: &str, escape: bool) -> Cow<'_, str> {
+    // Generate the project root, to be used via the `${PROJECT_ROOT}`
+    // environment variable.
     static PROJECT_ROOT_FRAGMENT: Lazy<String> = Lazy::new(|| {
         let project_root = std::env::current_dir().unwrap();
-        project_root.to_string_lossy().replace(' ', "%20")
+        project_root.to_string_lossy().to_string()
     });
 
     static RE: Lazy<Regex> =
@@ -124,7 +152,14 @@ fn expand_env_vars(s: &str) -> Cow<'_, str> {
     RE.replace_all(s, |caps: &regex::Captures<'_>| {
         let name = caps.name("name").unwrap().as_str();
         std::env::var(name).unwrap_or_else(|_| match name {
-            "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.clone(),
+            // Ensure that the variable is URL-escaped, if necessary.
+            "PROJECT_ROOT" => {
+                if escape {
+                    PROJECT_ROOT_FRAGMENT.replace(' ', "%20")
+                } else {
+                    PROJECT_ROOT_FRAGMENT.to_string()
+                }
+            }
             _ => caps["var"].to_owned(),
         })
     })

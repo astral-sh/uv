@@ -2047,6 +2047,7 @@ name = "pep508_rs"
 version = "0.2.3"
 dependencies = [
  "derivative",
+ "fs-err",
  "indoc",
  "log",
  "once_cell",
