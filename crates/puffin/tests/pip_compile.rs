@@ -3420,3 +3420,81 @@ fn upgrade_package() -> Result<()> {
 
     Ok(())
 }
+
+/// Attempt to resolve a requirement at a path that doesn't exist.
+#[test]
+fn missing_path_requirement() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("django @ file:///tmp/django-3.2.8.tar.gz")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Unable to locate distribution at: file:///tmp/django-3.2.8.tar.gz
+          Caused by: No such file or directory (os error 2)
+        "###);
+    });
+
+    Ok(())
+}
+
+/// Attempt to resolve an editable requirement at a path that doesn't exist.
+#[test]
+fn missing_editable_requirement() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let cache_dir = TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("-e ../tmp/django-3.2.8.tar.gz")?;
+
+    let workspace_dir = temp_dir.path().canonicalize()?;
+
+    let filters = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: failed to canonicalize path `[WORKSPACE_DIR]/../tmp/django-3.2.8.tar.gz`
+          Caused by: No such file or directory (os error 2)
+        "###);
+    });
+
+    Ok(())
+}
