@@ -14,7 +14,6 @@ use distribution_types::{
     RegistryBuiltDist, RegistrySourceDist, SourceDist,
 };
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket};
 use puffin_normalize::PackageName;
@@ -142,11 +141,9 @@ impl<'a> FlatIndexClient<'a> {
     fn read_from_directory(path: &PathBuf) -> Result<Vec<FlatIndexEntry>, std::io::Error> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
-        let url = Url::from_directory_path(&path).expect("URL is already absolute");
-        let url = VerbatimUrl::unknown(url);
 
         let mut dists = Vec::new();
-        for entry in fs_err::read_dir(&path)? {
+        for entry in fs_err::read_dir(path)? {
             let entry = entry?;
             let metadata = entry.metadata()?;
             if !metadata.is_file() {
@@ -168,7 +165,7 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time: None,
-                url: FileLocation::Path(entry.path().to_path_buf(), url.clone()),
+                url: FileLocation::Path(entry.path().to_path_buf()),
                 yanked: None,
             };
 

@@ -729,7 +729,7 @@ impl Identifier for FileLocation {
         match self {
             FileLocation::RelativeUrl(base, url) => (base.as_url(), url.as_str()).distribution_id(),
             FileLocation::AbsoluteUrl(url) => url.distribution_id(),
-            FileLocation::Path(path, _) => path.distribution_id(),
+            FileLocation::Path(path) => path.distribution_id(),
         }
     }
 
@@ -737,7 +737,7 @@ impl Identifier for FileLocation {
         match self {
             FileLocation::RelativeUrl(base, url) => (base.as_url(), url.as_str()).resource_id(),
             FileLocation::AbsoluteUrl(url) => url.resource_id(),
-            FileLocation::Path(path, _) => path.resource_id(),
+            FileLocation::Path(path) => path.resource_id(),
         }
     }
 }
