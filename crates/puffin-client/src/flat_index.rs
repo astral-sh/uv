@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use futures::{FutureExt, StreamExt};
+use futures::StreamExt;
 use reqwest::Response;
 use rustc_hash::FxHashMap;
 use tracing::{debug, info_span, instrument, warn, Instrument};
@@ -120,7 +120,6 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok(files)
             }
-            .boxed()
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
         let files = cached_client
@@ -219,7 +218,7 @@ impl FlatIndex {
 
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
-                    file: Box::new(file),
+                    file,
                     index,
                 }));
                 match distributions.0.entry(version) {
@@ -236,7 +235,7 @@ impl FlatIndex {
             DistFilename::SourceDistFilename(filename) => {
                 let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
                     filename: filename.clone(),
-                    file: Box::new(file),
+                    file,
                     index,
                 }));
                 match distributions.0.entry(filename.version.clone()) {

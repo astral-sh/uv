@@ -683,7 +683,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch(&self, request_stream: UnboundedReceiver<Request>) -> Result<(), ResolveError> {
         let mut response_stream = request_stream
-            .map(|request| self.process_request(request).boxed())
+            .map(|request| self.process_request(request))
             .buffer_unordered(50);
 
         while let Some(response) = response_stream.next().await {
@@ -738,7 +738,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let version_map = self
                     .provider
                     .get_version_map(&package_name)
-                    .boxed()
                     .await
                     .map_err(ResolveError::Client)?;
                 Ok(Some(Response::Package(package_name, version_map)))
@@ -749,7 +748,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let (metadata, precise) = self
                     .provider
                     .get_or_build_wheel_metadata(&dist)
-                    .boxed()
                     .await
                     .map_err(|err| match dist.clone() {
                         Dist::Built(BuiltDist::Path(built_dist)) => {
@@ -802,7 +800,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     let (metadata, precise) = self
                         .provider
                         .get_or_build_wheel_metadata(&dist)
-                        .boxed()
                         .await
                         .map_err(|err| match dist.clone() {
                             Dist::Built(BuiltDist::Path(built_dist)) => {
