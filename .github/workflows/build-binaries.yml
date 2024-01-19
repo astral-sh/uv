@@ -292,12 +292,12 @@ jobs:
           - target: s390x-unknown-linux-gnu
             arch: s390x
             gcc: s390x-linux-gnu-gcc
-          - target: powerpc64le-unknown-linux-gnu
-            arch: ppc64le
-            gcc: cmake # powerpc64le-linux-gnu-gcc
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
-            gcc: powerpc-linux-gnu-gcc
+#          - target: powerpc64le-unknown-linux-gnu
+#            arch: ppc64le
+#            gcc: cmake # powerpc64le-linux-gnu-gcc
+#          - target: powerpc64-unknown-linux-gnu
+#            arch: ppc64
+#            gcc: powerpc-linux-gnu-gcc
 
     steps:
       - uses: actions/checkout@v4
@@ -315,8 +315,8 @@ jobs:
           manylinux: 2_28
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
-          before-script-linux: |
-            apt update -y && apt-get install -y ${{ matrix.platform.gcc }}
+#          before-script-linux: |
+#            apt update -y && apt-get install -y ${{ matrix.platform.gcc }}
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
