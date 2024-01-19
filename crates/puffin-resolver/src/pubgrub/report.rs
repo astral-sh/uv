@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::ops::Bound;
 
 use derivative::Derivative;
@@ -20,7 +21,7 @@ use super::PubGrubPackage;
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, Vec<Version>>,
+    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, BTreeSet<Version>>,
 
     /// The versions that were available for each package
     pub(crate) python_requirement: Option<&'a PythonRequirement>,
@@ -152,7 +153,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 let range = range.simplify(
                     self.available_versions
                         .get(package)
-                        .unwrap_or(&vec![])
+                        .unwrap_or(&BTreeSet::new())
                         .iter(),
                 );
                 format!(
@@ -164,7 +165,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 let range = range.simplify(
                     self.available_versions
                         .get(package)
-                        .unwrap_or(&vec![])
+                        .unwrap_or(&BTreeSet::new())
                         .iter(),
                 );
                 format!(

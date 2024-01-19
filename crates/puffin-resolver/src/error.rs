@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::fmt::Formatter;
 
@@ -131,7 +132,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
 #[derive(Debug)]
 pub struct NoSolutionError {
     derivation_tree: DerivationTree<PubGrubPackage, Range<Version>>,
-    available_versions: FxHashMap<PubGrubPackage, Vec<Version>>,
+    available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
     selector: Option<CandidateSelector>,
     python_requirement: Option<PythonRequirement>,
 }
@@ -177,12 +178,14 @@ impl NoSolutionError {
                 PubGrubPackage::Python(PubGrubPython::Installed) => {
                     available_versions.insert(
                         package.clone(),
-                        vec![python_requirement.installed().clone()],
+                        BTreeSet::from([python_requirement.installed().clone()]),
                     );
                 }
                 PubGrubPackage::Python(PubGrubPython::Target) => {
-                    available_versions
-                        .insert(package.clone(), vec![python_requirement.target().clone()]);
+                    available_versions.insert(
+                        package.clone(),
+                        BTreeSet::from([python_requirement.target().clone()]),
+                    );
                 }
                 PubGrubPackage::Package(name, ..) => {
                     if let Some(entry) = package_versions.get(name) {
