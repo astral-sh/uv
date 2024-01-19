@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use std::ops::Bound;
 
 use derivative::Derivative;
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pubgrub::range::Range;
@@ -54,37 +53,34 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                                 python.target,
                                 PackageRange::compatibility(package, set)
                             );
-                        } else {
-                            // Complex case, the target was provided and differs from the installed one
-                            // Determine which Python version requirement was not met
-                            if !set.contains(&python.target) {
-                                return format!(
-                                    "the requested {package} version ({}) does not satisfy {}",
-                                    python.target,
-                                    PackageRange::compatibility(package, set)
-                                );
-                            } else {
-                                // TODO(zanieb): Explain to the user why the installed version is relevant
-                                //               when they provoided a target version; probably via a "hint"
-                                debug_assert!(
-                                    !set.contains(&python.installed),
-                                    "There should not be an incompatibility where the range is satisfied by both Python requirements"
-                                );
-                                return format!(
-                                    "the current {package} version ({}) does not satisfy {}",
-                                    python.installed,
-                                    PackageRange::compatibility(package, set)
-                                );
-                            }
                         }
-                    } else {
-                        // We should always have the required Python versions, if we don't we'll fall back
-                        // to a less helpful message in production
+                        // Complex case, the target was provided and differs from the installed one
+                        // Determine which Python version requirement was not met
+                        if !set.contains(&python.target) {
+                            return format!(
+                                "the requested {package} version ({}) does not satisfy {}",
+                                python.target,
+                                PackageRange::compatibility(package, set)
+                            );
+                        }
+                        // TODO(zanieb): Explain to the user why the installed version is relevant
+                        //               when they provoided a target version; probably via a "hint"
                         debug_assert!(
-                            false,
-                            "Error reporting should always be provided with Python versions"
-                        )
+                            !set.contains(&python.installed),
+                            "There should not be an incompatibility where the range is satisfied by both Python requirements"
+                        );
+                        return format!(
+                            "the current {package} version ({}) does not satisfy {}",
+                            python.installed,
+                            PackageRange::compatibility(package, set)
+                        );
                     }
+                    // We should always have the required Python versions, if we don't we'll fall back
+                    // to a less helpful message in production
+                    debug_assert!(
+                        false,
+                        "Error reporting should always be provided with Python versions"
+                    );
                 }
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {
