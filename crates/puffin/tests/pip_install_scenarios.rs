@@ -58,7 +58,7 @@ fn requires_package_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((r"-57cd4136", ""));
 
@@ -110,8 +110,9 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-eaa03067", "albatross"));
     filters.push((r"-eaa03067", ""));
 
     insta::with_settings!({
@@ -134,7 +135,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of a==2.0.0 and root depends on a==2.0.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there is no version of albatross==2.0.0 and root depends on albatross==2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -165,8 +166,9 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-6e8e01df", "albatross"));
     filters.push((r"-6e8e01df", ""));
 
     insta::with_settings!({
@@ -189,7 +191,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy a>1.0.0 and root depends on a>1.0.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of albatross that satisfy albatross>1.0.0 and root depends on albatross>1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -221,8 +223,9 @@ fn requires_less_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-e45cec3c", "albatross"));
     filters.push((r"-e45cec3c", ""));
 
     insta::with_settings!({
@@ -245,7 +248,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy a<2.0.0 and root depends on a<2.0.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of albatross that satisfy albatross<2.0.0 and root depends on albatross<2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -276,8 +279,9 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-aca2796a", "albatross"));
     filters.push((r"-aca2796a", ""));
 
     insta::with_settings!({
@@ -329,8 +333,9 @@ fn excluded_only_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-7a9ed79c", "albatross"));
     filters.push((r"-7a9ed79c", ""));
 
     insta::with_settings!({
@@ -353,12 +358,12 @@ fn excluded_only_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
+          ╰─▶ Because there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0
               and root depends on one of:
-                  a<1.0.0
-                  a>1.0.0
+                  albatross<1.0.0
+                  albatross>1.0.0
               we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -405,8 +410,10 @@ fn excluded_only_compatible_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-b6b89642", "albatross"));
+    filters.push((r"b-b6b89642", "bluebird"));
     filters.push((r"-b6b89642", ""));
 
     insta::with_settings!({
@@ -430,23 +437,23 @@ fn excluded_only_compatible_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0,<2.0.0
-                  a>2.0.0,<3.0.0
-                  a>3.0.0
-              and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0.
-              And because a==3.0.0 depends on b==3.0.0 we can conclude that any of:
-                  a<2.0.0
-                  a>2.0.0
+          ╰─▶ Because there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0,<2.0.0
+                  albatross>2.0.0,<3.0.0
+                  albatross>3.0.0
+              and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
+              And because albatross==3.0.0 depends on bluebird==3.0.0 we can conclude that any of:
+                  albatross<2.0.0
+                  albatross>2.0.0
               depends on one of:
-                  b<=1.0.0
-                  b>=3.0.0
+                  bluebird<=1.0.0
+                  bluebird>=3.0.0
 
               And because root depends on one of:
-                  a<2.0.0
-                  a>2.0.0
-              and root depends on b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+                  albatross<2.0.0
+                  albatross>2.0.0
+              and root depends on bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -518,8 +525,11 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-1cd99bd0", "albatross"));
+    filters.push((r"b-1cd99bd0", "bluebird"));
+    filters.push((r"c-1cd99bd0", "crow"));
     filters.push((r"-1cd99bd0", ""));
 
     insta::with_settings!({
@@ -544,27 +554,27 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0,<2.0.0
-                  a>3.0.0
-              and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
+          ╰─▶ Because there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0,<2.0.0
+                  albatross>3.0.0
+              and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0. (1)
 
-              Because there are no versions of c that satisfy any of:
-                  c<1.0.0
-                  c>1.0.0,<2.0.0
-                  c>2.0.0
-              and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
-              And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c depends on one of:
-                  a<2.0.0
-                  a>=3.0.0
+              Because there are no versions of crow that satisfy any of:
+                  crow<1.0.0
+                  crow>1.0.0,<2.0.0
+                  crow>2.0.0
+              and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
+              And because crow==2.0.0 depends on albatross>=3.0.0 we can conclude that all versions of crow depends on one of:
+                  albatross<2.0.0
+                  albatross>=3.0.0
 
-              And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, b!=1.0.0, all versions of c are incompatible.
-              And because a==3.0.0 depends on b==3.0.0 we can conclude that all versions of c depends on one of:
-                  b<=1.0.0
-                  b>=3.0.0
+              And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, bluebird!=1.0.0, all versions of crow are incompatible.
+              And because albatross==3.0.0 depends on bluebird==3.0.0 we can conclude that all versions of crow depends on one of:
+                  bluebird<=1.0.0
+                  bluebird>=3.0.0
 
-              And because root depends on b>=2.0.0,<3.0.0 and root depends on c, we can conclude that the requirements are unsatisfiable.
+              And because root depends on bluebird>=2.0.0,<3.0.0 and root depends on crow, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -648,8 +658,11 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-0fd25b39", "albatross"));
+    filters.push((r"b-0fd25b39", "bluebird"));
+    filters.push((r"c-0fd25b39", "crow"));
     filters.push((r"-0fd25b39", ""));
 
     insta::with_settings!({
@@ -674,25 +687,25 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of c that satisfy any of:
-                  c<1.0.0
-                  c>1.0.0,<2.0.0
-                  c>2.0.0
-              and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0. (1)
+          ╰─▶ Because there are no versions of crow that satisfy any of:
+                  crow<1.0.0
+                  crow>1.0.0,<2.0.0
+                  crow>2.0.0
+              and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
 
-              Because a==1.0.0 depends on b==1.0.0 and there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0,<2.0.0
-              we can conclude that a<2.0.0 depends on b==1.0.0.
-              And because we know from (1) that c<2.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on b==1.0.0.
-              And because c==2.0.0 depends on a>=3.0.0 we can conclude that all versions of c, b!=1.0.0, !( a>=3.0.0 ) are incompatible. (2)
+              Because albatross==1.0.0 depends on bluebird==1.0.0 and there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0,<2.0.0
+              we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
+              And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
+              And because crow==2.0.0 depends on albatross>=3.0.0 we can conclude that all versions of crow, bluebird!=1.0.0, !( albatross>=3.0.0 ) are incompatible. (2)
 
-              Because a==3.0.0 depends on b==3.0.0 and there are no versions of a that satisfy a>3.0.0, we can conclude that a>=3.0.0 depends on b==3.0.0.
-              And because we know from (2) that all versions of c, b!=1.0.0, !( a>=3.0.0 ) are incompatible, we can conclude that all versions of c depends on one of:
-                  b<=1.0.0
-                  b>=3.0.0
+              Because albatross==3.0.0 depends on bluebird==3.0.0 and there are no versions of albatross that satisfy albatross>3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
+              And because we know from (2) that all versions of crow, bluebird!=1.0.0, !( albatross>=3.0.0 ) are incompatible, we can conclude that all versions of crow depends on one of:
+                  bluebird<=1.0.0
+                  bluebird>=3.0.0
 
-              And because root depends on c and root depends on b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+              And because root depends on crow and root depends on bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -732,8 +745,10 @@ fn extra_required() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-76e5355c", "albatross"));
+    filters.push((r"b-76e5355c", "bluebird"));
     filters.push((r"-76e5355c", ""));
 
     insta::with_settings!({
@@ -758,8 +773,8 @@ fn extra_required() -> Result<()> {
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
         Installed 2 packages in [TIME]
-         + a==1.0.0
-         + b==1.0.0
+         + albatross==1.0.0
+         + bluebird==1.0.0
         "###);
     });
 
@@ -790,8 +805,9 @@ fn missing_extra() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-06e7489c", "albatross"));
     filters.push((r"-06e7489c", ""));
 
     insta::with_settings!({
@@ -816,7 +832,7 @@ fn missing_extra() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0
+         + albatross==1.0.0
         "###);
     });
 
@@ -858,8 +874,11 @@ fn multiple_extras_required() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-e55f15c4", "albatross"));
+    filters.push((r"b-e55f15c4", "bluebird"));
+    filters.push((r"c-e55f15c4", "crow"));
     filters.push((r"-e55f15c4", ""));
 
     insta::with_settings!({
@@ -884,9 +903,9 @@ fn multiple_extras_required() -> Result<()> {
         Resolved 3 packages in [TIME]
         Downloaded 3 packages in [TIME]
         Installed 3 packages in [TIME]
-         + a==1.0.0
-         + b==1.0.0
-         + c==1.0.0
+         + albatross==1.0.0
+         + bluebird==1.0.0
+         + crow==1.0.0
         "###);
     });
 
@@ -929,8 +948,10 @@ fn extra_incompatible_with_extra() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-492741b0", "albatross"));
+    filters.push((r"b-492741b0", "bluebird"));
     filters.push((r"-492741b0", ""));
 
     insta::with_settings!({
@@ -953,15 +974,15 @@ fn extra_incompatible_with_extra() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a[extra-c] that satisfy any of:
-                  a[extra-c]<1.0.0
-                  a[extra-c]>1.0.0
-              and a[extra-c]==1.0.0 depends on b==2.0.0, we can conclude that all versions of a[extra-c] depends on b==2.0.0.
-              And because a[extra-b]==1.0.0 depends on b==1.0.0 and there are no versions of a[extra-b] that satisfy any of:
-                  a[extra-b]<1.0.0
-                  a[extra-b]>1.0.0
-              we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
-              And because root depends on a[extra-c] and root depends on a[extra-b], we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of albatross[extra-c] that satisfy any of:
+                  albatross[extra-c]<1.0.0
+                  albatross[extra-c]>1.0.0
+              and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depends on bluebird==2.0.0.
+              And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and there are no versions of albatross[extra-b] that satisfy any of:
+                  albatross[extra-b]<1.0.0
+                  albatross[extra-b]>1.0.0
+              we can conclude that all versions of albatross[extra-b] and all versions of albatross[extra-c] are incompatible.
+              And because root depends on albatross[extra-c] and root depends on albatross[extra-b], we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1003,8 +1024,10 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f0b0089a", "albatross"));
+    filters.push((r"b-f0b0089a", "bluebird"));
     filters.push((r"-f0b0089a", ""));
 
     insta::with_settings!({
@@ -1029,8 +1052,8 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
         Installed 2 packages in [TIME]
-         + a==1.0.0
-         + b==2.0.0
+         + albatross==1.0.0
+         + bluebird==2.0.0
         "###);
     });
 
@@ -1072,8 +1095,10 @@ fn extra_incompatible_with_root() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-9d588075", "albatross"));
+    filters.push((r"b-9d588075", "bluebird"));
     filters.push((r"-9d588075", ""));
 
     insta::with_settings!({
@@ -1097,11 +1122,11 @@ fn extra_incompatible_with_root() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because a[extra]==1.0.0 depends on b==1.0.0 and there are no versions of a[extra] that satisfy any of:
-                  a[extra]<1.0.0
-                  a[extra]>1.0.0
-              we can conclude that all versions of a[extra] depends on b==1.0.0.
-              And because root depends on a[extra] and root depends on b==2.0.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because albatross[extra]==1.0.0 depends on bluebird==1.0.0 and there are no versions of albatross[extra] that satisfy any of:
+                  albatross[extra]<1.0.0
+                  albatross[extra]>1.0.0
+              we can conclude that all versions of albatross[extra] depends on bluebird==1.0.0.
+              And because root depends on albatross[extra] and root depends on bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1144,8 +1169,10 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f1877db3", "albatross"));
+    filters.push((r"b-f1877db3", "bluebird"));
     filters.push((r"-f1877db3", ""));
 
     insta::with_settings!({
@@ -1170,7 +1197,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==3.0.0
+         + albatross==3.0.0
         "###);
     });
 
@@ -1204,8 +1231,9 @@ fn direct_incompatible_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-80d82ee8", "albatross"));
     filters.push((r"-80d82ee8", ""));
 
     insta::with_settings!({
@@ -1229,7 +1257,7 @@ fn direct_incompatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting versions for `a`: `a==1.0.0` does not intersect with `a==2.0.0`
+          ╰─▶ root dependencies are unusable: Conflicting versions for `albatross`: `albatross==1.0.0` does not intersect with `albatross==2.0.0`
         "###);
     });
 
@@ -1267,8 +1295,10 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-a967e815", "albatross"));
+    filters.push((r"b-a967e815", "bluebird"));
     filters.push((r"-a967e815", ""));
 
     insta::with_settings!({
@@ -1292,11 +1322,11 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because a==1.0.0 depends on b==2.0.0 and there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
-              we can conclude that all versions of a depends on b==2.0.0.
-              And because root depends on b==1.0.0 and root depends on a, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because albatross==1.0.0 depends on bluebird==2.0.0 and there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0
+              we can conclude that all versions of albatross depends on bluebird==2.0.0.
+              And because root depends on bluebird==1.0.0 and root depends on albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1338,8 +1368,11 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-6866d8dc", "albatross"));
+    filters.push((r"b-6866d8dc", "bluebird"));
+    filters.push((r"c-6866d8dc", "crow"));
     filters.push((r"-6866d8dc", ""));
 
     insta::with_settings!({
@@ -1363,15 +1396,15 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of b that satisfy any of:
-                  b<1.0.0
-                  b>1.0.0
-              and b==1.0.0 depends on c==2.0.0, we can conclude that all versions of b depends on c==2.0.0.
-              And because a==1.0.0 depends on c==1.0.0 and there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
-              we can conclude that all versions of b and all versions of a are incompatible.
-              And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of bluebird that satisfy any of:
+                  bluebird<1.0.0
+                  bluebird>1.0.0
+              and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depends on crow==2.0.0.
+              And because albatross==1.0.0 depends on crow==1.0.0 and there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0
+              we can conclude that all versions of bluebird and all versions of albatross are incompatible.
+              And because root depends on bluebird and root depends on albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -1402,8 +1435,9 @@ fn package_only_prereleases() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-9a1b3dda", "albatross"));
     filters.push((r"-9a1b3dda", ""));
 
     insta::with_settings!({
@@ -1428,7 +1462,7 @@ fn package_only_prereleases() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0a1
+         + albatross==1.0.0a1
         "###);
     });
 
@@ -1461,8 +1495,9 @@ fn package_only_prereleases_in_range() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-19673198", "albatross"));
     filters.push((r"-19673198", ""));
 
     insta::with_settings!({
@@ -1485,9 +1520,9 @@ fn package_only_prereleases_in_range() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of a that satisfy a>0.1.0 and root depends on a>0.1.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of albatross that satisfy albatross>0.1.0 and root depends on albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
 
-              hint: Pre-releases are available for a in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+              hint: Pre-releases are available for albatross in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
@@ -1521,8 +1556,9 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-51f94da2", "albatross"));
     filters.push((r"-51f94da2", ""));
 
     insta::with_settings!({
@@ -1548,7 +1584,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0a1
+         + albatross==1.0.0a1
         "###);
     });
 
@@ -1579,8 +1615,9 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-eebe53a6", "albatross"));
     filters.push((r"-eebe53a6", ""));
 
     insta::with_settings!({
@@ -1605,7 +1642,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==0.1.0
+         + albatross==0.1.0
         "###);
     });
 
@@ -1641,8 +1678,9 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-9d4725eb", "albatross"));
     filters.push((r"-9d4725eb", ""));
 
     insta::with_settings!({
@@ -1667,7 +1705,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==0.3.0
+         + albatross==0.3.0
         "###);
     });
 
@@ -1702,8 +1740,9 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-6cc95bc8", "albatross"));
     filters.push((r"-6cc95bc8", ""));
 
     insta::with_settings!({
@@ -1728,7 +1767,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==0.3.0a1
+         + albatross==0.3.0a1
         "###);
     });
 
@@ -1765,8 +1804,9 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-c97845e2", "albatross"));
     filters.push((r"-c97845e2", ""));
 
     insta::with_settings!({
@@ -1791,7 +1831,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0a1
+         + albatross==1.0.0a1
         "###);
     });
 
@@ -1827,8 +1867,9 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-e290bf29", "albatross"));
     filters.push((r"-e290bf29", ""));
 
     insta::with_settings!({
@@ -1853,7 +1894,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0rc1
+         + albatross==1.0.0rc1
         "###);
     });
 
@@ -1887,8 +1928,9 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f5948c28", "albatross"));
     filters.push((r"-f5948c28", ""));
 
     insta::with_settings!({
@@ -1913,7 +1955,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0a3
+         + albatross==1.0.0a3
         "###);
     });
 
@@ -1948,8 +1990,10 @@ fn transitive_package_only_prereleases() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-44ebef16", "albatross"));
+    filters.push((r"b-44ebef16", "bluebird"));
     filters.push((r"-44ebef16", ""));
 
     insta::with_settings!({
@@ -1974,8 +2018,8 @@ fn transitive_package_only_prereleases() -> Result<()> {
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
         Installed 2 packages in [TIME]
-         + a==0.1.0
-         + b==1.0.0a1
+         + albatross==0.1.0
+         + bluebird==1.0.0a1
         "###);
     });
 
@@ -2013,8 +2057,10 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-27759187", "albatross"));
+    filters.push((r"b-27759187", "bluebird"));
     filters.push((r"-27759187", ""));
 
     insta::with_settings!({
@@ -2037,13 +2083,13 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of b that satisfy b>0.1 and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
-              And because there are no versions of a that satisfy any of:
-                  a<0.1.0
-                  a>0.1.0
-              and root depends on a, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of bluebird that satisfy bluebird>0.1 and albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
+              And because there are no versions of albatross that satisfy any of:
+                  albatross<0.1.0
+                  albatross>0.1.0
+              and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
-              hint: Pre-releases are available for b in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+              hint: Pre-releases are available for bluebird in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
@@ -2084,8 +2130,10 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-26efb6c5", "albatross"));
+    filters.push((r"b-26efb6c5", "bluebird"));
     filters.push((r"-26efb6c5", ""));
 
     insta::with_settings!({
@@ -2111,8 +2159,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
         Resolved 2 packages in [TIME]
         Downloaded 2 packages in [TIME]
         Installed 2 packages in [TIME]
-         + a==0.1.0
-         + b==1.0.0a1
+         + albatross==0.1.0
+         + bluebird==1.0.0a1
         "###);
     });
 
@@ -2156,8 +2204,11 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f8aeea37", "albatross"));
+    filters.push((r"b-f8aeea37", "bluebird"));
+    filters.push((r"c-f8aeea37", "crow"));
     filters.push((r"-f8aeea37", ""));
 
     insta::with_settings!({
@@ -2181,13 +2232,13 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 cannot be used.
-              And because there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
-              and root depends on a, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there is no version of crow==2.0.0b1 and albatross==1.0.0 depends on crow==2.0.0b1, we can conclude that albatross==1.0.0 cannot be used.
+              And because there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0
+              and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
-              hint: c was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+              hint: crow was requested with a pre-release marker (e.g., crow==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
@@ -2234,8 +2285,11 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-184fc65f", "albatross"));
+    filters.push((r"b-184fc65f", "bluebird"));
+    filters.push((r"c-184fc65f", "crow"));
     filters.push((r"-184fc65f", ""));
 
     insta::with_settings!({
@@ -2262,9 +2316,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
         Resolved 3 packages in [TIME]
         Downloaded 3 packages in [TIME]
         Installed 3 packages in [TIME]
-         + a==1.0.0
-         + b==1.0.0
-         + c==2.0.0b1
+         + albatross==1.0.0
+         + bluebird==1.0.0
+         + crow==2.0.0b1
         "###);
     });
 
@@ -2333,8 +2387,11 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-7017673e", "albatross"));
+    filters.push((r"b-7017673e", "bluebird"));
+    filters.push((r"c-7017673e", "crow"));
     filters.push((r"-7017673e", ""));
 
     insta::with_settings!({
@@ -2358,18 +2415,18 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of b that satisfy any of:
-                  b<1.0.0
-                  b>1.0.0
-              and b==1.0.0 depends on c, we can conclude that all versions of b depends on c.
-              And because there are no versions of c that satisfy c>=2.0.0b1 we can conclude that all versions of b depends on c<2.0.0b1.
-              And because a==1.0.0 depends on c>=2.0.0b1 and there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
-              we can conclude that all versions of b and all versions of a are incompatible.
-              And because root depends on b and root depends on a, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of bluebird that satisfy any of:
+                  bluebird<1.0.0
+                  bluebird>1.0.0
+              and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depends on crow.
+              And because there are no versions of crow that satisfy crow>=2.0.0b1 we can conclude that all versions of bluebird depends on crow<2.0.0b1.
+              And because albatross==1.0.0 depends on crow>=2.0.0b1 and there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0
+              we can conclude that all versions of bluebird and all versions of albatross are incompatible.
+              And because root depends on bluebird and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
-              hint: c was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+              hint: crow was requested with a pre-release marker (e.g., crow>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
 
@@ -2430,8 +2487,11 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-aaee5052", "albatross"));
+    filters.push((r"b-aaee5052", "bluebird"));
+    filters.push((r"c-aaee5052", "crow"));
     filters.push((r"-aaee5052", ""));
 
     insta::with_settings!({
@@ -2455,24 +2515,24 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of c that satisfy any of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
-              and a==1.0.0 depends on one of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
-              we can conclude that a==1.0.0 cannot be used.
-              And because there are no versions of a that satisfy any of:
-                  a<1.0.0
-                  a>1.0.0
-              and root depends on a, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of crow that satisfy any of:
+                  crow>1.0.0,<2.0.0a5
+                  crow>2.0.0a7,<2.0.0b1
+                  crow>2.0.0b1,<2.0.0b5
+              and albatross==1.0.0 depends on one of:
+                  crow>1.0.0,<2.0.0a5
+                  crow>2.0.0a7,<2.0.0b1
+                  crow>2.0.0b1,<2.0.0b5
+              we can conclude that albatross==1.0.0 cannot be used.
+              And because there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0
+              and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
-              hint: c was requested with a pre-release marker (e.g., any of:
-                  c>1.0.0,<2.0.0a5
-                  c>2.0.0a7,<2.0.0b1
-                  c>2.0.0b1,<2.0.0b5
+              hint: crow was requested with a pre-release marker (e.g., any of:
+                  crow>1.0.0,<2.0.0a5
+                  crow>2.0.0a7,<2.0.0b1
+                  crow>2.0.0b1,<2.0.0b5
               ), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
     });
@@ -2505,8 +2565,9 @@ fn requires_python_version_does_not_exist() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-0825b69c", "albatross"));
     filters.push((r"-0825b69c", ""));
 
     insta::with_settings!({
@@ -2529,8 +2590,8 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=4.0 and a==1.0.0 depends on Python>=4.0, we can conclude that a==1.0.0 cannot be used.
-              And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=4.0 and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
+              And because root depends on albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2561,8 +2622,9 @@ fn requires_python_version_less_than_current() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f9296b84", "albatross"));
     filters.push((r"-f9296b84", ""));
 
     insta::with_settings!({
@@ -2585,8 +2647,8 @@ fn requires_python_version_less_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python<=3.8 and a==1.0.0 depends on Python<=3.8, we can conclude that a==1.0.0 cannot be used.
-              And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of Python that satisfy Python<=3.8 and albatross==1.0.0 depends on Python<=3.8, we can conclude that albatross==1.0.0 cannot be used.
+              And because root depends on albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2617,8 +2679,9 @@ fn requires_python_version_greater_than_current() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-a11d5394", "albatross"));
     filters.push((r"-a11d5394", ""));
 
     insta::with_settings!({
@@ -2641,8 +2704,8 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
-              And because root depends on a==1.0.0 we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
+              And because root depends on albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2695,8 +2758,9 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-02dc550c", "albatross"));
     filters.push((r"-02dc550c", ""));
 
     insta::with_settings!({
@@ -2719,7 +2783,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of a==1.0.0 and root depends on a==1.0.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because there is no version of albatross==1.0.0 and root depends on albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2758,8 +2822,9 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-ef060cef", "albatross"));
     filters.push((r"-ef060cef", ""));
 
     insta::with_settings!({
@@ -2784,7 +2849,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0
+         + albatross==1.0.0
         "###);
     });
 
@@ -2822,8 +2887,9 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-1bde0c18", "albatross"));
     filters.push((r"-1bde0c18", ""));
 
     insta::with_settings!({
@@ -2851,19 +2917,19 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                   Python>=3.12
                are incompatible.
               And because there are no versions of Python that satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
-              And because a==2.0.0 depends on Python>=3.10 and there are no versions of a that satisfy any of:
-                  a>2.0.0,<3.0.0
-                  a>3.0.0,<4.0.0
-                  a>4.0.0
-              we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
+              And because albatross==2.0.0 depends on Python>=3.10 and there are no versions of albatross that satisfy any of:
+                  albatross>2.0.0,<3.0.0
+                  albatross>3.0.0,<4.0.0
+                  albatross>4.0.0
+              we can conclude that albatross>=2.0.0,<3.0.0 cannot be used. (1)
 
               Because there are no versions of Python that satisfy Python>=3.11,<3.12 and there are no versions of Python that satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
-              And because a==3.0.0 depends on Python>=3.11 we can conclude that a==3.0.0 cannot be used.
-              And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
+              And because albatross==3.0.0 depends on Python>=3.11 we can conclude that albatross==3.0.0 cannot be used.
+              And because we know from (1) that albatross>=2.0.0,<3.0.0 cannot be used, we can conclude that albatross>=2.0.0,<4.0.0 cannot be used. (2)
 
-              Because there are no versions of Python that satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
-              And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
-              And because root depends on a>=2.0.0 we can conclude that the requirements are unsatisfiable.
+              Because there are no versions of Python that satisfy Python>=3.12 and albatross==4.0.0 depends on Python>=3.12, we can conclude that albatross==4.0.0 cannot be used.
+              And because we know from (2) that albatross>=2.0.0,<4.0.0 cannot be used, we can conclude that albatross>=2.0.0 cannot be used.
+              And because root depends on albatross>=2.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2892,8 +2958,9 @@ fn specific_tag_and_default() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-74e4a459", "albatross"));
     filters.push((r"-74e4a459", ""));
 
     insta::with_settings!({
@@ -2918,7 +2985,7 @@ fn specific_tag_and_default() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0
+         + albatross==1.0.0
         "###);
     });
 
@@ -2945,8 +3012,9 @@ fn only_wheels() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-4f019491", "albatross"));
     filters.push((r"-4f019491", ""));
 
     insta::with_settings!({
@@ -2971,7 +3039,7 @@ fn only_wheels() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0
+         + albatross==1.0.0
         "###);
     });
 
@@ -2998,8 +3066,9 @@ fn no_wheels() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-614d801c", "albatross"));
     filters.push((r"-614d801c", ""));
 
     insta::with_settings!({
@@ -3024,7 +3093,7 @@ fn no_wheels() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0
+         + albatross==1.0.0
         "###);
     });
 
@@ -3051,8 +3120,9 @@ fn no_wheels_with_matching_platform() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "python3.7");
 
-    // In addition to the standard filters, remove the scenario version
+    // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-737bbfd4", "albatross"));
     filters.push((r"-737bbfd4", ""));
 
     insta::with_settings!({
@@ -3077,7 +3147,7 @@ fn no_wheels_with_matching_platform() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + a==1.0.0
+         + albatross==1.0.0
         "###);
     });
 
