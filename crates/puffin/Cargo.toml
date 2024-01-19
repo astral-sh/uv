@@ -1,5 +1,5 @@
 [package]
-name = "puffin-cli"
+name = "puffin"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -12,10 +12,6 @@ default-run = "puffin"
 
 [lints]
 workspace = true
-
-[[bin]]
-name = "puffin"
-path = "src/main.rs"
 
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }

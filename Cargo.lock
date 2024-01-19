@@ -2253,56 +2253,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-build"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "fs-err",
- "gourgeist",
- "indoc",
- "insta",
- "itertools 0.12.0",
- "once_cell",
- "pep508_rs",
- "platform-host",
- "puffin-extract",
- "puffin-fs",
- "puffin-interpreter",
- "puffin-traits",
- "pypi-types",
- "pyproject-toml",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "puffin-cache"
-version = "0.0.1"
-dependencies = [
- "cache-key",
- "cachedir",
- "clap",
- "directories",
- "distribution-types",
- "fs-err",
- "puffin-fs",
- "puffin-normalize",
- "pypi-types",
- "serde",
- "tempfile",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "puffin-cli"
+name = "puffin"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -2362,6 +2313,55 @@ dependencies = [
  "url",
  "waitmap",
  "which",
+]
+
+[[package]]
+name = "puffin-build"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "distribution-types",
+ "fs-err",
+ "gourgeist",
+ "indoc",
+ "insta",
+ "itertools 0.12.0",
+ "once_cell",
+ "pep508_rs",
+ "platform-host",
+ "puffin-extract",
+ "puffin-fs",
+ "puffin-interpreter",
+ "puffin-traits",
+ "pypi-types",
+ "pyproject-toml",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+]
+
+[[package]]
+name = "puffin-cache"
+version = "0.0.1"
+dependencies = [
+ "cache-key",
+ "cachedir",
+ "clap",
+ "directories",
+ "distribution-types",
+ "fs-err",
+ "puffin-fs",
+ "puffin-normalize",
+ "pypi-types",
+ "serde",
+ "tempfile",
+ "tracing",
+ "url",
 ]
 
 [[package]]

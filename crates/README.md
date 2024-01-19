@@ -47,6 +47,10 @@ Functionality for detecting the current platform (operating system, architecture
 
 Functionality for parsing and inferring Python platform tags as per [PEP 425](https://peps.python.org/pep-0425/).
 
+## [puffin](./puffin)
+
+Command-line interface for the Puffin package manager.
+
 ## [puffin-build](./puffin-build)
 
 A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for Puffin.
@@ -54,10 +58,6 @@ A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend
 ## [puffin-cache](./puffin-cache)
 
 Functionality for caching Python packages and associated metadata.
-
-## [puffin-cli](./puffin-cli)
-
-Command-line interface for the Puffin package manager.
 
 ## [puffin-client](./puffin-client)
 
