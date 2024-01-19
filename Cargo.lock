@@ -2651,6 +2651,7 @@ dependencies = [
  "futures",
  "gourgeist",
  "http-cache-semantics",
+ "indexmap 2.1.0",
  "insta",
  "install-wheel-rs",
  "itertools 0.12.0",

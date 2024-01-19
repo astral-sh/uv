@@ -2,9 +2,9 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::fmt::Formatter;
 
+use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
-use rustc_hash::FxHashMap;
 use thiserror::Error;
 use url::Url;
 
@@ -113,7 +113,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
                 ResolveError::NoSolution(NoSolutionError {
                     derivation_tree,
                     // The following should be populated before display for the best error messages
-                    available_versions: FxHashMap::default(),
+                    available_versions: IndexMap::default(),
                     selector: None,
                     python_requirement: None,
                 })
@@ -132,7 +132,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
 #[derive(Debug)]
 pub struct NoSolutionError {
     derivation_tree: DerivationTree<PubGrubPackage, Range<Version>>,
-    available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
+    available_versions: IndexMap<PubGrubPackage, BTreeSet<Version>>,
     selector: Option<CandidateSelector>,
     python_requirement: Option<PythonRequirement>,
 }
@@ -171,7 +171,7 @@ impl NoSolutionError {
         python_requirement: &PythonRequirement,
         package_versions: &OnceMap<PackageName, VersionMap>,
     ) -> Self {
-        let mut available_versions = FxHashMap::default();
+        let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
             match package {
                 PubGrubPackage::Root(_) => {}

@@ -42,6 +42,7 @@ hex = { version = "0.4.3" }
 html-escape = { version = "0.2.13" }
 http = { version = "0.2.11" }
 http-cache-semantics = { version = "1.0.2" }
+indexmap = { version = "2.1.0" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.12.0" }

@@ -43,6 +43,7 @@ derivative = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http-cache-semantics = { workspace = true }
+indexmap = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 owo-colors = { workspace = true }
