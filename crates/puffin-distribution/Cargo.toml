@@ -24,7 +24,7 @@ puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
 puffin-extract = { path = "../puffin-extract" }
 puffin-fs = { path = "../puffin-fs" }
-puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
+puffin-git = { path = "../puffin-git", features = ["vendored-openssl", "vendored-libgit2"] }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }
