@@ -358,7 +358,7 @@ fn excluded_only_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because albatross==1.0.0 is the only available version and root depends on one of:
+          ╰─▶ Because only albatross==1.0.0 is available and root depends on one of:
                   albatross<1.0.0
                   albatross>1.0.0
               we can conclude that the requirements are unsatisfiable.
@@ -971,8 +971,8 @@ fn extra_incompatible_with_extra() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because albatross[extra-c]==1.0.0 is the only available version and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
-              And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and albatross[extra-b]==1.0.0 is the only available version, we can conclude that all versions of albatross[extra-b] and all versions of albatross[extra-c] are incompatible.
+          ╰─▶ Because only albatross[extra-c]==1.0.0 is available and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
+              And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra-b]==1.0.0 is available, we can conclude that all versions of albatross[extra-b] and all versions of albatross[extra-c] are incompatible.
               And because root depends on albatross[extra-c] and root depends on albatross[extra-b], we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -1113,7 +1113,7 @@ fn extra_incompatible_with_root() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because albatross[extra]==1.0.0 depends on bluebird==1.0.0 and albatross[extra]==1.0.0 is the only available version, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
+          ╰─▶ Because albatross[extra]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra]==1.0.0 is available, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
               And because root depends on albatross[extra] and root depends on bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -1310,7 +1310,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because albatross==1.0.0 depends on bluebird==2.0.0 and albatross==1.0.0 is the only available version, we can conclude that all versions of albatross depend on bluebird==2.0.0.
+          ╰─▶ Because albatross==1.0.0 depends on bluebird==2.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of albatross depend on bluebird==2.0.0.
               And because root depends on bluebird==1.0.0 and root depends on albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -1381,8 +1381,8 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because bluebird==1.0.0 is the only available version and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
-              And because albatross==1.0.0 depends on crow==1.0.0 and albatross==1.0.0 is the only available version, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
+          ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
+              And because albatross==1.0.0 depends on crow==1.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
               And because root depends on bluebird and root depends on albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2063,7 +2063,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because only bluebird<=0.1 is available and albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
-              And because albatross==0.1.0 is the only available version and root depends on albatross, we can conclude that the requirements are unsatisfiable.
+              And because only albatross==0.1.0 is available and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
               hint: Pre-releases are available for bluebird in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
@@ -2209,7 +2209,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of crow==2.0.0b1 and albatross==1.0.0 depends on crow==2.0.0b1, we can conclude that albatross==1.0.0 cannot be used.
-              And because albatross==1.0.0 is the only available version and root depends on albatross, we can conclude that the requirements are unsatisfiable.
+              And because only albatross==1.0.0 is available and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
               hint: crow was requested with a pre-release marker (e.g., crow==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
         "###);
@@ -2388,9 +2388,9 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because bluebird==1.0.0 is the only available version and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depend on crow.
+          ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depend on crow.
               And because only crow<2.0.0b1 is available we can conclude that all versions of bluebird depend on crow<2.0.0b1.
-              And because albatross==1.0.0 depends on crow>=2.0.0b1 and albatross==1.0.0 is the only available version, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
+              And because albatross==1.0.0 depends on crow>=2.0.0b1 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
               And because root depends on bluebird and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
               hint: crow was requested with a pre-release marker (e.g., crow>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -2491,7 +2491,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
                   crow>2.0.0a7,<2.0.0b1
                   crow>2.0.0b1,<2.0.0b5
               we can conclude that albatross==1.0.0 cannot be used.
-              And because albatross==1.0.0 is the only available version and root depends on albatross, we can conclude that the requirements are unsatisfiable.
+              And because only albatross==1.0.0 is available and root depends on albatross, we can conclude that the requirements are unsatisfiable.
 
               hint: crow was requested with a pre-release marker (e.g., any of:
                   crow>1.0.0,<2.0.0a5

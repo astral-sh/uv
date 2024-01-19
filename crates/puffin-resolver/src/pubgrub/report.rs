@@ -38,22 +38,18 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     format!("there is no version of {package}{set}")
                 } else {
                     let complement = set.complement();
-                    if let Some(version) = complement.as_singleton() {
-                        format!("{package}=={version} is the only available version")
+                    let segments = complement.iter().collect::<Vec<_>>().len();
+                    if segments == 1 {
+                        format!(
+                            "only {} is available",
+                            PackageRange::compatibility(package, &complement)
+                        )
                     } else {
-                        let segments = complement.iter().collect::<Vec<_>>().len();
-                        if segments == 1 {
-                            format!(
-                                "only {} is available",
-                                PackageRange::compatibility(package, &complement)
-                            )
-                        } else {
-                            format!(
-                                "there are no versions of {} that satisfy {}",
-                                package,
-                                PackageRange::compatibility(package, &set)
-                            )
-                        }
+                        format!(
+                            "there are no versions of {} that satisfy {}",
+                            package,
+                            PackageRange::compatibility(package, &set)
+                        )
                     }
                 }
             }
