@@ -34,8 +34,17 @@ RUN rustup target add $(cat rust_target.txt)
 COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
-RUN cargo zigbuild --bin puffin --target $(cat rust_target.txt) --release
-RUN cp target/$(cat rust_target.txt)/release/puffin /puffin
+
+# Build with mounted cache
+RUN --mount=type=cache,target=./target \
+  --mount=type=cache,target=/usr/local/cargo/git \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  cargo zigbuild --bin puffin --target $(cat rust_target.txt) --release
+
+# Copy binary into normal layer
+RUN --mount=type=cache,target=./target \
+  cp ./target/$(cat rust_target.txt)/release/puffin /puffin
+
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /puffin
 
