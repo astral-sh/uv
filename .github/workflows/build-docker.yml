@@ -19,6 +19,8 @@ on:
       - pyproject.toml
       # And when we change this workflow itself...
       - .github/workflows/build-docker.yml
+      # Or when we change the Dockerfile!
+      - Dockerfile
 
 jobs:
   docker-publish:
