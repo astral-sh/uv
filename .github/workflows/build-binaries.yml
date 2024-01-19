@@ -34,8 +34,6 @@ env:
 
 jobs:
   sdist:
-    # TODO(charlie): Enable source distribution builds.
-    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
