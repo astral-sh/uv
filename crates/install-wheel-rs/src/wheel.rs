@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
+use std::str::FromStr;
 use std::{env, io, iter};
 
 use configparser::ini::Ini;
@@ -20,6 +21,8 @@ use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
 
 use distribution_filename::WheelFilename;
+use pep440_rs::Version;
+use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
 use crate::install_location::{InstallLocation, LockedDir};
@@ -955,7 +958,20 @@ pub fn install_wheel(
         .1
         .to_string();
     let metadata = dist_info_metadata(&dist_info_prefix, &mut archive)?;
-    let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
+    let (name, version) = parse_metadata(&dist_info_prefix, &metadata)?;
+
+    // Validate the wheel name and version.
+    {
+        let name = PackageName::from_str(&name)?;
+        if name != filename.name {
+            return Err(Error::MismatchedName(name, filename.name.clone()));
+        }
+
+        let version = Version::from_str(&version)?;
+        if version != filename.version {
+            return Err(Error::MismatchedVersion(version, filename.version.clone()));
+        }
+    }
 
     let record_path = format!("{dist_info_prefix}.dist-info/RECORD");
     let mut record = read_record_file(&mut archive.by_name(&record_path).map_err(|err| {
