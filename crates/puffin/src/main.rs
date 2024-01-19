@@ -722,9 +722,35 @@ async fn inner() -> Result<ExitStatus> {
     }
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    match inner().await {
+fn main() -> ExitCode {
+    let result = if let Ok(stack_size) = env::var("PUFFIN_STACK_SIZE") {
+        // Artificially limit the stack size to test for stack overflows. Windows has a default stack size of 1MB,
+        // which is lower than the linux and mac default.
+        // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
+        let stack_size = stack_size.parse().expect("Invalid stack size");
+        let tokio_main = move || {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_stack_size(stack_size)
+                .build()
+                .expect("Failed building the Runtime")
+                .block_on(inner())
+        };
+        std::thread::Builder::new()
+            .stack_size(stack_size)
+            .spawn(tokio_main)
+            .expect("Tokio executor failed, was there a panic?")
+            .join()
+            .expect("Tokio executor failed, was there a panic?")
+    } else {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed building the Runtime")
+            .block_on(inner())
+    };
+
+    match result {
         Ok(code) => code.into(),
         Err(err) => {
             #[allow(clippy::print_stderr)]
