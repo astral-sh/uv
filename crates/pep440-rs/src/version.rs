@@ -485,14 +485,6 @@ impl Version {
         self
     }
 
-    /// Drop all components of the version except for the major and minor versions
-    /// For Python version matching, where we may only compare up to the minor version.
-    #[inline]
-    pub fn only_to_minor(mut self) -> Version {
-        self = Version::new(self.release().iter().take(2));
-        self
-    }
-
     /// Convert this version to a "full" representation in-place and return a
     /// mutable borrow to the full type.
     fn make_full(&mut self) -> &mut VersionFull {
