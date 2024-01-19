@@ -1,0 +1,78 @@
+//! DO NOT EDIT
+//!
+//! Generated with {{generated_with}}
+//! Scenarios from <{{generated_from}}>
+//!
+#![cfg(all(feature = "python", feature = "pypi"))]
+
+use std::process::Command;
+
+use anyhow::Result;
+use assert_fs::fixture::{FileWriteStr, PathChild};
+use insta_cmd::_macro_support::insta;
+use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+
+use common::{create_venv, BIN_NAME, INSTA_FILTERS};
+
+mod common;
+{{#scenarios}}
+
+/// {{name}}
+///
+{{#description_lines}}
+/// {{.}}
+{{/description_lines}}
+///
+/// ```text
+/// {{version}}
+{{#tree}}
+/// {{.}}
+{{/tree}}
+/// ```
+#[test]
+fn {{module_name}}() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python{{environment.python}}");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    {{#packages}}
+    filters.push((r"{{name}}", "{{cute_name}}"));
+    {{/packages}}
+    filters.push((r"-{{version}}", ""));
+
+    let requirements_in = temp_dir.child("requirements.in");
+    {{#root.requires}}
+    requirements_in.write_str("{{requirement}}")?;
+    {{/root.requires}}
+
+    {{#expected.explanation_lines}}
+    // {{.}}
+    {{/expected.explanation_lines}}
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            {{#environment.prereleases}}
+            .arg("--prerelease=allow")
+            {{/environment.prereleases}}
+            {{#resolver_options.python}}
+            .arg("--python-version={{.}}")
+            {{/resolver_options.python}}
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"<snapshot>
+        "###);
+    });
+
+    Ok(())
+}
+{{/scenarios}}
