@@ -37,6 +37,11 @@ puffin-workspace = { path = "../puffin-workspace" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 
+# This tells flate2 (and all libraries that depend on it, including async_compression
+# and async_zip) to use zlib-ng, which about 2x faster than the default flate2 backend
+# at decompression. See https://github.com/rust-lang/flate2-rs#backends
+flate2 = { workspace = true, features = ["zlib-ng"], default-features = false }
+
 anstream = { workspace = true }
 anyhow = { workspace = true }
 bitflags = { workspace = true }
