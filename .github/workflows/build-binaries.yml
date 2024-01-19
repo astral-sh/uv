@@ -309,7 +309,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: auto
+          manylinux: 2_28
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
       - uses: uraimo/run-on-arch-action@v2
