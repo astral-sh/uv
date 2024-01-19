@@ -12,6 +12,7 @@ use pubgrub::type_aliases::Map;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::candidate_selector::CandidateSelector;
+use crate::error::SolutionPythonRequirement;
 use crate::prerelease_mode::PreReleaseStrategy;
 
 use super::PubGrubPackage;
@@ -20,6 +21,9 @@ use super::PubGrubPackage;
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
     pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, Vec<Version>>,
+
+    /// The versions that were available for each package
+    pub(crate) python_requirement: Option<&'a SolutionPythonRequirement>,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<'_> {
@@ -32,21 +36,43 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
             }
             External::NoVersions(package, set) => {
                 if matches!(package, PubGrubPackage::Python(_)) {
-                    // We assume there is _only_ one available Python version as Puffin only supports
-                    // resolution for a single Python version; if this is not the case for some reason
-                    // we'll just fall back to the usual verbose message in production but panic in
-                    // debug builds
-                    if let Some([version]) = self.available_versions.get(package).map(Vec::as_slice)
-                    {
-                        return format!(
-                            "{package} {version} does not satisfy {}",
-                            PackageRange::compatibility(package, set)
-                        );
+                    if let Some(python) = self.python_requirement {
+                        if python.installed.clone().only_to_minor() == python.target {
+                            // Simple case
+                            return format!(
+                                "the current {package} version ({}) does not satisfy {}",
+                                python.target,
+                                PackageRange::compatibility(package, set)
+                            );
+                        } else {
+                            // Complex case, the target was provided and differs from the installed one
+                            if !set.contains(&python.target) {
+                                return format!(
+                                    "the requested {package} version ({}, {}) does not satisfy {}",
+                                    python.target,
+                                    python.installed,
+                                    PackageRange::compatibility(package, set)
+                                );
+                            } else {
+                                debug_assert!(
+                                    !set.contains(&python.installed),
+                                    "There should not be an incompatibility where the range is satisfied by both Python requirements"
+                                );
+                                return format!(
+                                    "the current {package} version ({}) does not satisfy {}",
+                                    python.target,
+                                    PackageRange::compatibility(package, set)
+                                );
+                            }
+                        }
+                    } else {
+                        // We should always have the required Python versions, if we don't we'll fall back
+                        // to a less helpful message in production
+                        debug_assert!(
+                            false,
+                            "Error reporting should always be provided with Python versions"
+                        )
                     }
-                    debug_assert!(
-                        false,
-                        "Unexpected value for available Python versions will degrade error message"
-                    );
                 }
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {

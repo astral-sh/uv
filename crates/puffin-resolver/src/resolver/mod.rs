@@ -220,7 +220,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                     // Add version information to improve unsat error messages.
                     if let ResolveError::NoSolution(err) = err {
-                        ResolveError::NoSolution(err.with_available_versions(&self.python_requirement, &self.index.packages).with_selector(self.selector.clone()))
+                        ResolveError::NoSolution(
+                            err
+                            .with_available_versions(&self.python_requirement, &self.index.packages)
+                            .with_selector(self.selector.clone())
+                            .with_python_requirement(&self.python_requirement)
+                        )
                     } else {
                         err
                     }
