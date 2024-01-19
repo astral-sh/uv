@@ -651,22 +651,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     self.visit_package(package, priorities, request_sink)?;
                 }
 
-                // If a package has a `requires_python` field, add a constraint on the target
-                // Python version.
-                if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    let version = requires_python
-                        .iter()
-                        .map(PubGrubSpecifier::try_from)
-                        .fold_ok(Range::full(), |range, specifier| {
-                            range.intersection(&specifier.into())
-                        })?;
-                    constraints.insert(
-                        PubGrubPackage::Python(PubGrubPython::Installed),
-                        version.clone(),
-                    );
-                    constraints.insert(PubGrubPackage::Python(PubGrubPython::Target), version);
-                }
-
                 // If a package has an extra, insert a constraint on the base package.
                 if extra.is_some() {
                     constraints.insert(
