@@ -64,7 +64,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                             );
                         }
                         // TODO(zanieb): Explain to the user why the installed version is relevant
-                        //               when they provoided a target version; probably via a "hint"
+                        //               when they provided a target version; probably via a "hint"
                         debug_assert!(
                             !set.contains(&python.installed),
                             "There should not be an incompatibility where the range is satisfied by both Python requirements"
