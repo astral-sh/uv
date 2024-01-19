@@ -316,7 +316,7 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
           before-script-linux: |
-            apt update -y && apt-get install -y ${{ matrix.platform.gcc }}
+            apt update -y && apt-get install -y ${{ matrix.platform.gcc }} libipc-run-perl
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
