@@ -273,9 +273,7 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # TODO(charlie): Re-enable s390x-unknown-linux-gnu, powerpc64le-unknown-linux-gnu, and powerpc64-unknown-linux-gnu.
-  # s390x-unknown-linux-gnu works if we disable zlib-ng. The others fail in mysterious ways.
-  linux-cross:
+  linux-arm:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -304,6 +302,148 @@ jobs:
           manylinux: 2_28
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
+      - uses: uraimo/run-on-arch-action@v2
+        if: matrix.platform.arch != 'ppc64'
+        name: Test wheel
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip
+            pip3 install -U pip
+          run: |
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifacts
+          path: |
+            *.tar.gz
+            *.sha256
+
+  # Like `linux-arm`, but use `--no-default-features --features flate2-rust_backend` when
+  # building Puffin.
+  linux-s390x:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: s390x-unknown-linux-gnu
+            arch: s390x
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: echo "# Puffin" > README.md
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --release --locked --out dist --no-default-features --features flate2-rust_backend
+      - uses: uraimo/run-on-arch-action@v2
+        if: matrix.platform.arch != 'ppc64'
+        name: Test wheel
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip
+            pip3 install -U pip
+          run: |
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifacts
+          path: |
+            *.tar.gz
+            *.sha256
+
+
+  # Like `linux-arm`, but use `--no-default-features --features flate2-rust_backend` when
+  # building Puffin, and install the `gcc-powerpc64-linux-gnu` package.
+  linux-powerpc:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: powerpc64le-unknown-linux-gnu
+            arch: ppc64le
+          - target: powerpc64-unknown-linux-gnu
+            arch: ppc64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: echo "# Puffin" > README.md
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --release --locked --out dist --no-default-features --features flate2-rust_backend
+          before-script-linux: |
+            if command -v yum &> /dev/null; then
+                yum update -y
+                yum -y install epel-release
+                yum repolist
+                yum install -y gcc-powerpc64-linux-gnu
+            fi
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
