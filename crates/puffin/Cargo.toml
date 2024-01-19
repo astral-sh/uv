@@ -1,6 +1,6 @@
 [package]
 name = "puffin"
-version = "0.0.1"
+version = "0.0.2"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
