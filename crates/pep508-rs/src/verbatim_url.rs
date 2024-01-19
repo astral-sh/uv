@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -37,11 +37,7 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from a path.
-    pub fn from_path(
-        path: impl AsRef<str>,
-        working_dir: impl AsRef<Path>,
-        given: String,
-    ) -> Result<Self, VerbatimUrlError> {
+    pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>, given: String) -> Self {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
 
@@ -52,17 +48,16 @@ impl VerbatimUrl {
             working_dir.as_ref().join(path)
         };
 
-        // Canonicalize the path.
-        let path =
-            fs_err::canonicalize(path).map_err(|err| VerbatimUrlError::Path(given.clone(), err))?;
+        // Normalize the path.
+        let path = normalize_path(&path);
 
         // Convert to a URL.
         let url = Url::from_file_path(path).expect("path is absolute");
 
-        Ok(Self {
+        Self {
             url,
             given: Some(given),
-        })
+        }
     }
 
     /// Return the original string as given by the user, if available.
@@ -114,10 +109,6 @@ impl Deref for VerbatimUrl {
 /// An error that can occur when parsing a [`VerbatimUrl`].
 #[derive(thiserror::Error, Debug)]
 pub enum VerbatimUrlError {
-    /// Failed to canonicalize a path.
-    #[error("{0}")]
-    Path(String, #[source] std::io::Error),
-
     /// Failed to parse a URL.
     #[error("{0}")]
     Url(String, #[source] url::ParseError),
@@ -163,4 +154,34 @@ fn expand_env_vars(s: &str, escape: bool) -> Cow<'_, str> {
             _ => caps["var"].to_owned(),
         })
     })
+}
+
+/// Normalize a path, removing things like `.` and `..`.
+///
+/// Source: <https://github.com/rust-lang/cargo/blob/b48c41aedbd69ee3990d62a0e2006edbb506a480/crates/cargo-util/src/paths.rs#L76C1-L109C2>
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
 }

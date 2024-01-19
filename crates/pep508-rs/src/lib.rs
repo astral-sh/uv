@@ -44,7 +44,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "pyo3")]
 use puffin_normalize::InvalidNameError;
 use puffin_normalize::{ExtraName, PackageName};
-pub use verbatim_url::{VerbatimUrl, VerbatimUrlError};
+pub use verbatim_url::VerbatimUrl;
 
 mod marker;
 mod verbatim_url;

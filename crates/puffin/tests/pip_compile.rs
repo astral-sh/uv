@@ -3467,9 +3467,7 @@ fn missing_editable_requirement() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../tmp/django-3.2.8.tar.gz")?;
 
-    let workspace_dir = temp_dir.path().canonicalize()?;
-
-    let filters = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+    let filters: Vec<_> = iter::once((r"(file:/)?/.*/", "file://[TEMP_DIR]/"))
         .chain(INSTA_FILTERS.to_vec())
         .collect::<Vec<_>>();
 
@@ -3491,8 +3489,10 @@ fn missing_editable_requirement() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Invalid editable path in requirements.in: ../tmp/django-3.2.8.tar.gz
-          Caused by: failed to canonicalize path `[WORKSPACE_DIR]/../tmp/django-3.2.8.tar.gz`
+        error: Failed to build editables
+          Caused by: Failed to build editable: file://[TEMP_DIR]/django-3.2.8.tar.gz
+          Caused by: Failed to build: file://[TEMP_DIR]/django-3.2.8.tar.gz
+          Caused by: failed to query metadata of file `file://[TEMP_DIR]/django-3.2.8.tar.gz`
           Caused by: No such file or directory (os error 2)
         "###);
     });
