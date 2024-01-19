@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
 use async_zip::tokio::read::seek::ZipFileReader;
-use futures::{FutureExt, TryStreamExt};
+use futures::TryStreamExt;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -206,7 +206,6 @@ impl RegistryClient {
                     }
                 }
             }
-            .boxed()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         let result = self
@@ -336,7 +335,6 @@ impl RegistryClient {
                 })?;
                 Ok(metadata)
             }
-            .boxed()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 

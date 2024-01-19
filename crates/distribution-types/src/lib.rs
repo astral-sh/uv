@@ -147,7 +147,7 @@ pub enum SourceDist {
 #[derive(Debug, Clone)]
 pub struct RegistryBuiltDist {
     pub filename: WheelFilename,
-    pub file: Box<File>,
+    pub file: File,
     pub index: IndexUrl,
 }
 
@@ -172,7 +172,7 @@ pub struct PathBuiltDist {
 #[derive(Debug, Clone)]
 pub struct RegistrySourceDist {
     pub filename: SourceDistFilename,
-    pub file: Box<File>,
+    pub file: File,
     pub index: IndexUrl,
 }
 
@@ -208,14 +208,14 @@ impl Dist {
             DistFilename::WheelFilename(filename) => {
                 Self::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
-                    file: Box::new(file),
+                    file,
                     index,
                 }))
             }
             DistFilename::SourceDistFilename(filename) => {
                 Self::Source(SourceDist::Registry(RegistrySourceDist {
                     filename,
-                    file: Box::new(file),
+                    file,
                     index,
                 }))
             }
@@ -863,18 +863,5 @@ impl Identifier for Dist {
             Self::Built(dist) => dist.resource_id(),
             Self::Source(dist) => dist.resource_id(),
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{BuiltDist, Dist, SourceDist};
-
-    /// Ensure that we don't accidentally grow the `Dist` sizes.
-    #[test]
-    fn dist_size() {
-        assert!(std::mem::size_of::<Dist>() <= 240);
-        assert!(std::mem::size_of::<BuiltDist>() <= 240);
-        assert!(std::mem::size_of::<SourceDist>() <= 168);
     }
 }

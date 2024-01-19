@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
-use futures::{FutureExt, TryStreamExt};
+use futures::TryStreamExt;
 use reqwest::Response;
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -96,7 +96,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     &cache_shard,
                     subdirectory.as_deref(),
                 )
-                .boxed()
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
@@ -135,7 +134,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     &cache_shard,
                     None,
                 )
-                .boxed()
                 .await?
             }
             SourceDist::Git(git_source_dist) => self.git(source_dist, git_source_dist).await?,
@@ -173,7 +171,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     &cache_shard,
                     subdirectory.as_deref(),
                 )
-                .boxed()
                 .await?
             }
             SourceDist::Registry(registry_source_dist) => {
@@ -192,10 +189,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                             path: path.clone(),
                             editable: false,
                         };
-                        return self
-                            .path_metadata(source_dist, &path_source_dist)
-                            .boxed()
-                            .await;
+                        return self.path_metadata(source_dist, &path_source_dist).await;
                     }
                 };
 
@@ -215,18 +209,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     &cache_shard,
                     None,
                 )
-                .boxed()
                 .await?
             }
             SourceDist::Git(git_source_dist) => {
-                self.git_metadata(source_dist, git_source_dist)
-                    .boxed()
-                    .await?
+                self.git_metadata(source_dist, git_source_dist).await?
             }
             SourceDist::Path(path_source_dist) => {
-                self.path_metadata(source_dist, path_source_dist)
-                    .boxed()
-                    .await?
+                self.path_metadata(source_dist, path_source_dist).await?
             }
         };
 
@@ -391,7 +380,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_source_dist_metadata(source_dist, source_dist_entry.path(), subdirectory)
-            .boxed()
             .await?
         {
             if let Ok(cached) = fs::read(cache_entry.path()).await {
@@ -576,7 +564,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_source_dist_metadata(source_dist, &path_source_dist.path, None)
-            .boxed()
             .await?
         {
             // Store the metadata for this build along with all the other builds.
@@ -725,7 +712,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_source_dist_metadata(source_dist, fetch.path(), subdirectory.as_deref())
-            .boxed()
             .await?
         {
             // Store the metadata for this build along with all the other builds.

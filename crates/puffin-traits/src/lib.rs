@@ -51,7 +51,7 @@ use puffin_interpreter::{Interpreter, Virtualenv};
 /// them.
 
 // TODO(konstin): Proper error types
-pub trait BuildContext: Sync {
+pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait + Send + Sync;
 
     fn cache(&self) -> &Cache;
