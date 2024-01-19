@@ -7,9 +7,28 @@ use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
+/// A collection of "files" from `PyPI`'s JSON API for a single package.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SimpleJson {
+    /// The list of [`File`]s available for download sorted by filename.
+    #[serde(deserialize_with = "sorted_simple_json_files")]
     pub files: Vec<File>,
+}
+
+/// Deserializes a sequence of "simple" files from `PyPI` and ensures that they
+/// are sorted in a stable order.
+fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>, D::Error> {
+    let mut files = <Vec<File>>::deserialize(d)?;
+    // While it has not been positively observed, we sort the files
+    // to ensure we have a defined ordering. Otherwise, if we rely on
+    // the API to provide a stable ordering and doesn't, it can lead
+    // non-deterministic behavior elsewhere. (This is somewhat hand-wavy
+    // and a bit of a band-aide, since arguably, the order of this API
+    // response probably shouldn't have an impact on things downstream from
+    // this. That is, if something depends on ordering, then it should
+    // probably be the thing that does the sorting.)
+    files.sort_unstable_by(|f1, f2| f1.filename.cmp(&f2.filename));
+    Ok(files)
 }
 
 /// A single (remote) file belonging to a package, either a wheel or a source distribution.

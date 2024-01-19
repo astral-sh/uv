@@ -7,11 +7,12 @@ use url::Url;
 use pep440_rs::VersionSpecifiers;
 use pypi_types::{BaseUrl, DistInfoMetadata, File, Hashes, Yanked};
 
+/// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
 pub(crate) struct SimpleHtml {
     /// The [`BaseUrl`] to which all relative URLs should be resolved.
     pub(crate) base: BaseUrl,
-    /// The list of [`File`]s available for download.
+    /// The list of [`File`]s available for download sorted by filename.
     pub(crate) files: Vec<File>,
 }
 
@@ -37,13 +38,22 @@ impl SimpleHtml {
         );
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
-        let files: Vec<File> = dom
+        let mut files: Vec<File> = dom
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| link.name().as_bytes() == b"a")
             .map(|link| Self::parse_anchor(link))
             .collect::<Result<Vec<_>, _>>()?;
+        // While it has not been positively observed, we sort the files
+        // to ensure we have a defined ordering. Otherwise, if we rely on
+        // the API to provide a stable ordering and doesn't, it can lead
+        // non-deterministic behavior elsewhere. (This is somewhat hand-wavy
+        // and a bit of a band-aide, since arguably, the order of this API
+        // response probably shouldn't have an impact on things downstream from
+        // this. That is, if something depends on ordering, then it should
+        // probably be the thing that does the sorting.)
+        files.sort_unstable_by(|f1, f2| f1.filename.cmp(&f2.filename));
 
         Ok(Self { base, files })
     }
