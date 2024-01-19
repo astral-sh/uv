@@ -116,10 +116,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         .map_err(|err| DistributionDatabaseError::Url(url.clone(), err))?,
                     FileLocation::AbsoluteUrl(url) => Url::parse(url)
                         .map_err(|err| DistributionDatabaseError::Url(url.clone(), err))?,
-                    FileLocation::Path(path, url) => {
+                    FileLocation::Path(path) => {
+                        let url = Url::from_file_path(path).expect("path is absolute");
                         let cache_entry = self.cache.entry(
                             CacheBucket::Wheels,
-                            WheelCache::Url(url).remote_wheel_dir(wheel.name().as_ref()),
+                            WheelCache::Url(&url).remote_wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
 

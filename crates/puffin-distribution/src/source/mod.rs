@@ -20,6 +20,7 @@ use distribution_types::{
     Name, PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
+use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use puffin_cache::{CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, WheelCache};
 use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
@@ -104,10 +105,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
                     FileLocation::AbsoluteUrl(url) => Url::parse(url)
                         .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
-                    FileLocation::Path(path, url) => {
+                    FileLocation::Path(path) => {
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
-                            url: url.clone(),
+                            url: VerbatimUrl::unknown(
+                                Url::from_file_path(path).expect("path is absolute"),
+                            ),
                             path: path.clone(),
                             editable: false,
                         };
@@ -177,10 +180,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
                     FileLocation::AbsoluteUrl(url) => Url::parse(url)
                         .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
-                    FileLocation::Path(path, url) => {
+                    FileLocation::Path(path) => {
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
-                            url: url.clone(),
+                            url: VerbatimUrl::unknown(
+                                Url::from_file_path(path).expect("path is absolute"),
+                            ),
                             path: path.clone(),
                             editable: false,
                         };

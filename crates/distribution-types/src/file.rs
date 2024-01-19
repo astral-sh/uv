@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::VerbatimUrl;
 use pypi_types::{BaseUrl, DistInfoMetadata, Hashes, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
@@ -59,7 +58,7 @@ pub enum FileLocation {
     /// Absolute URL.
     AbsoluteUrl(String),
     /// Absolute path to a file.
-    Path(PathBuf, VerbatimUrl),
+    Path(PathBuf),
 }
 
 impl Display for FileLocation {
@@ -67,7 +66,7 @@ impl Display for FileLocation {
         match self {
             FileLocation::RelativeUrl(_base, url) => Display::fmt(&url, f),
             FileLocation::AbsoluteUrl(url) => Display::fmt(&url, f),
-            FileLocation::Path(path, _url) => Display::fmt(&path.display(), f),
+            FileLocation::Path(path) => Display::fmt(&path.display(), f),
         }
     }
 }

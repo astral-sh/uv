@@ -235,7 +235,7 @@ impl RegistryClient {
                     self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
                         .await?
                 }
-                FileLocation::Path(path, _url) => {
+                FileLocation::Path(path) => {
                     let reader = fs_err::tokio::File::open(&path).await?;
                     read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
                 }
