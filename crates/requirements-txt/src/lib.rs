@@ -100,8 +100,45 @@ impl FromStr for EditableRequirement {
 /// - `file:///home/ferris/project/scripts/...`
 /// - `file:../editable/`
 /// - `../editable/`
+///
+/// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParsedEditableRequirement(String);
+
+/// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
+fn split_scheme(s: &str) -> Option<(&str, &str)> {
+    /// <https://url.spec.whatwg.org/#c0-controls-and-space>
+    #[inline]
+    fn c0_control_or_space(ch: char) -> bool {
+        ch <= ' ' // U+0000 to U+0020
+    }
+
+    /// <https://url.spec.whatwg.org/#ascii-alpha>
+    #[inline]
+    fn ascii_alpha(ch: char) -> bool {
+        ch.is_ascii_alphabetic()
+    }
+
+    // Trim control characters and spaces from the start and end.
+    let s = s.trim_matches(c0_control_or_space);
+    if s.is_empty() || !s.starts_with(ascii_alpha) {
+        return None;
+    }
+
+    // Find the `:` following any alpha characters.
+    let mut iter = s.char_indices();
+    let end = loop {
+        match iter.next() {
+            Some((_i, 'a'..='z' | 'A'..='Z' | '0'..='9' | '+' | '-' | '.')) => {}
+            Some((i, ':')) => break i,
+            _ => return None,
+        }
+    };
+
+    let scheme = &s[..end];
+    let rest = &s[end + 1..];
+    Some((scheme, rest))
+}
 
 impl ParsedEditableRequirement {
     pub fn with_working_dir(
@@ -110,34 +147,27 @@ impl ParsedEditableRequirement {
     ) -> Result<EditableRequirement, RequirementsTxtParserError> {
         let given = self.0;
 
-        // Validate against some common mistakes. If we're passed a URL with some other scheme,
-        // it will fail to canonicalize below, but this is a better error message for these common
-        // cases.
-        let s = given.trim();
-        if s.starts_with("http://")
-            || s.starts_with("https://")
-            || s.starts_with("git+")
-            || s.starts_with("hg+")
-            || s.starts_with("svn+")
-            || s.starts_with("bzr+")
-        {
-            return Err(RequirementsTxtParserError::UnsupportedUrl(
-                given.to_string(),
-            ));
-        }
-
         // Create a `VerbatimUrl` to represent the editable requirement.
-        let url = if let Some(path) = s.strip_prefix("file://") {
-            // Ex) `file:///home/ferris/project/scripts/...`
-            VerbatimUrl::from_path(path, working_dir, s.to_string())
-                .map_err(RequirementsTxtParserError::InvalidEditablePath)?
-        } else if let Some(path) = s.strip_prefix("file:") {
-            // Ex) `file:../editable/`
-            VerbatimUrl::from_path(path, working_dir, s.to_string())
-                .map_err(RequirementsTxtParserError::InvalidEditablePath)?
+        let url = if let Some((scheme, path)) = split_scheme(&given) {
+            if scheme == "file" {
+                if let Some(path) = path.strip_prefix("//") {
+                    // Ex) `file:///home/ferris/project/scripts/...`
+                    VerbatimUrl::from_path(path, working_dir, given.clone())
+                        .map_err(RequirementsTxtParserError::InvalidEditablePath)?
+                } else {
+                    // Ex) `file:../editable/`
+                    VerbatimUrl::from_path(path, working_dir, given.clone())
+                        .map_err(RequirementsTxtParserError::InvalidEditablePath)?
+                }
+            } else {
+                // Ex) `https://...`
+                return Err(RequirementsTxtParserError::UnsupportedUrl(
+                    given.to_string(),
+                ));
+            }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(s, working_dir, s.to_string())
+            VerbatimUrl::from_path(&given, working_dir, given.clone())
                 .map_err(RequirementsTxtParserError::InvalidEditablePath)?
         };
 
@@ -632,7 +662,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
 
-    use crate::RequirementsTxt;
+    use crate::{split_scheme, RequirementsTxt};
 
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]
@@ -755,5 +785,22 @@ mod test {
             "Unsupported URL (expected a `file://` scheme) in ./test-data/requirements-txt/unsupported-editable.txt: http://localhost:8080/".to_string()
         ];
         assert_eq!(errors, expected);
+    }
+
+    #[test]
+    fn scheme() {
+        assert_eq!(
+            split_scheme("file:///home/ferris/project/scripts"),
+            Some(("file", "///home/ferris/project/scripts"))
+        );
+        assert_eq!(
+            split_scheme("file:home/ferris/project/scripts"),
+            Some(("file", "home/ferris/project/scripts"))
+        );
+        assert_eq!(
+            split_scheme("https://example.com"),
+            Some(("https", "//example.com"))
+        );
+        assert_eq!(split_scheme("https:"), Some(("https", "")));
     }
 }
