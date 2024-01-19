@@ -142,7 +142,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.7.3-prerelease.3"
+cargo-dist-version = "0.8.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
