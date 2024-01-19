@@ -100,6 +100,9 @@ jobs:
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
+    permissions:
+      packages: write
+      contents: read
 
   # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
