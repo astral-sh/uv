@@ -280,13 +280,13 @@ jobs:
     strategy:
       matrix:
         platform:
-          - target: aarch64-unknown-linux-gnu
-            arch: aarch64
-            # see https://github.com/astral-sh/ruff/issues/3791
-            # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-#          - target: armv7-unknown-linux-gnueabihf
-#            arch: armv7
+#          - target: aarch64-unknown-linux-gnu
+#            arch: aarch64
+#            # see https://github.com/astral-sh/ruff/issues/3791
+#            # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
+#            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armv7
 #          - target: s390x-unknown-linux-gnu
 #            arch: s390x
 #          - target: powerpc64le-unknown-linux-gnu
@@ -311,7 +311,7 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
           before-script-linx: |
-            apt update -y && apt-get install -y aarch64-linux-gnu-gcc
+            apt update -y && apt-get install -y arm-linux-gnueabihf-gcc
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
