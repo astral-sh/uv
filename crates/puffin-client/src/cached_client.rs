@@ -1,3 +1,4 @@
+use futures::FutureExt;
 use std::future::Future;
 use std::time::SystemTime;
 
@@ -42,14 +43,15 @@ enum CachedResponse<Payload: Serialize> {
     /// There was no prior cached response or the cache was outdated
     ///
     /// The cache policy is `None` if it isn't storable
-    ModifiedOrNew(Response, Option<CachePolicy>),
+    ModifiedOrNew(Response, Option<Box<CachePolicy>>),
 }
 
 /// Serialize the actual payload together with its caching information
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DataWithCachePolicy<Payload: Serialize> {
     pub data: Payload,
-    cache_policy: CachePolicy,
+    // The cache policy is large (448 bytes at time of writing), reduce the stack size
+    cache_policy: Box<CachePolicy>,
 }
 
 /// Custom caching layer over [`reqwest::Client`] using `http-cache-semantics`.
@@ -88,7 +90,7 @@ impl CachedClient {
     /// client.
     #[instrument(skip_all)]
     pub async fn get_cached_with_callback<
-        Payload: Serialize + DeserializeOwned,
+        Payload: Serialize + DeserializeOwned + Send,
         CallBackError,
         Callback,
         CallbackReturn,
@@ -128,7 +130,7 @@ impl CachedClient {
             None
         };
 
-        let cached_response = self.send_cached(req, cached).await?;
+        let cached_response = self.send_cached(req, cached).boxed().await?;
 
         let write_cache = info_span!("write_cache", file = %cache_entry.path().display());
         match cached_response {
@@ -231,14 +233,14 @@ impl CachedClient {
                             debug!("Found not-modified response for: {url}");
                             CachedResponse::NotModified(DataWithCachePolicy {
                                 data: cached.data,
-                                cache_policy: new_policy,
+                                cache_policy: Box::new(new_policy),
                             })
                         }
                         AfterResponse::Modified(new_policy, _parts) => {
                             debug!("Found modified response for: {url}");
                             CachedResponse::ModifiedOrNew(
                                 res,
-                                new_policy.is_storable().then_some(new_policy),
+                                new_policy.is_storable().then(|| Box::new(new_policy)),
                             )
                         }
                     }
@@ -271,7 +273,7 @@ impl CachedClient {
             CachePolicy::new(&converted_req.into_parts().0, &converted_res.into_parts().0);
         Ok(CachedResponse::ModifiedOrNew(
             res,
-            cache_policy.is_storable().then_some(cache_policy),
+            cache_policy.is_storable().then(|| Box::new(cache_policy)),
         ))
     }
 }
