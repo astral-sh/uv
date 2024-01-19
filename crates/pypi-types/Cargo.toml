@@ -21,6 +21,7 @@ chrono = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
+rkyv = { workspace = true, features = ["strict", "validation"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

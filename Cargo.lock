@@ -2928,6 +2928,7 @@ dependencies = [
  "pep508_rs",
  "puffin-normalize",
  "regex",
+ "rkyv",
  "serde",
  "serde_json",
  "tempfile",

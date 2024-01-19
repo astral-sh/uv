@@ -68,7 +68,11 @@ where
     ))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 #[serde(untagged)]
 pub enum DistInfoMetadata {
     Bool(bool),
@@ -84,7 +88,11 @@ impl DistInfoMetadata {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 #[serde(untagged)]
 pub enum Yanked {
     Bool(bool),
@@ -104,7 +112,23 @@ impl Yanked {
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client, we
 /// only support SHA 256 atm.
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Default,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct Hashes {
     pub sha256: Option<String>,
 }
