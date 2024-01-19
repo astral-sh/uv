@@ -12,6 +12,7 @@ pub(crate) const BIN_NAME: &str = "puffin";
 pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
     (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    (r"v\d+\.\d+\.\d+", "v[VERSION]"),
 ];
 
 /// Create a virtual environment named `.venv` in a temporary directory.
