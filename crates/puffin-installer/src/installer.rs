@@ -49,6 +49,7 @@ impl<'a> Installer<'a> {
                 install_wheel_rs::linker::install_wheel(
                     &location,
                     wheel.path(),
+                    wheel.filename(),
                     wheel
                         .direct_url()?
                         .as_ref()

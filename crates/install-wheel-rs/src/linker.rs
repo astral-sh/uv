@@ -2,10 +2,14 @@
 //! reading from a zip file.
 
 use std::path::Path;
+use std::str::FromStr;
 
 use configparser::ini::Ini;
+use distribution_filename::WheelFilename;
 use fs_err as fs;
 use fs_err::File;
+use pep440_rs::Version;
+use puffin_normalize::PackageName;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
@@ -29,6 +33,7 @@ use crate::{read_record_file, Error, Script};
 pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
+    filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
     installer: Option<&str>,
     link_mode: LinkMode,
@@ -52,7 +57,20 @@ pub fn install_wheel(
 
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
-    let (name, _version) = parse_metadata(&dist_info_prefix, &metadata)?;
+    let (name, version) = parse_metadata(&dist_info_prefix, &metadata)?;
+
+    // Validate the wheel name and version.
+    {
+        let name = PackageName::from_str(&name)?;
+        if name != filename.name {
+            return Err(Error::MismatchedName(name, filename.name.clone()));
+        }
+
+        let version = Version::from_str(&version)?;
+        if version != filename.version {
+            return Err(Error::MismatchedVersion(version, filename.version.clone()));
+        }
+    }
 
     // We're going step by step though
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl

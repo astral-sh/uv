@@ -51,16 +51,13 @@ pub enum Error {
     /// The wheel is broken
     #[error("The wheel is invalid: {0}")]
     InvalidWheel(String),
-    /// pyproject.toml or poetry.lock are broken
-    #[error("The poetry dependency specification (pyproject.toml or poetry.lock) is broken (try `poetry update`?): {0}")]
-    InvalidPoetry(String),
     /// Doesn't follow file name schema
     #[error(transparent)]
     InvalidWheelFileName(#[from] distribution_filename::WheelFilenameError),
     /// The caller must add the name of the zip file (See note on type).
     #[error("Failed to read {0} from zip file")]
     Zip(String, #[source] ZipError),
-    #[error("Failed to run python subcommand")]
+    #[error("Failed to run Python subcommand")]
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to move data files")]
     WalkDir(#[from] walkdir::Error),
@@ -86,6 +83,14 @@ pub enum Error {
     MultipleDistInfo(String),
     #[error("Invalid wheel size")]
     InvalidSize,
+    #[error("Invalid package name")]
+    InvalidName(#[from] puffin_normalize::InvalidNameError),
+    #[error("Invalid package version")]
+    InvalidVersion(#[from] pep440_rs::VersionParseError),
+    #[error("Wheel package name does not match filename: {0} != {1}")]
+    MismatchedName(PackageName, PackageName),
+    #[error("Wheel version does not match filename: {0} != {1}")]
+    MismatchedVersion(Version, Version),
 }
 
 /// Find the `dist-info` directory from a list of files.

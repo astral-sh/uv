@@ -1210,6 +1210,102 @@ fn install_local_wheel() -> Result<()> {
     Ok(())
 }
 
+/// Install a wheel whose actual version doesn't match the version encoded in the filename.
+#[test]
+fn mismatched_version() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Download a wheel.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
+    let archive = temp_dir.child("tomli-3.7.2-py3-none-any.whl");
+    let mut archive_file = std::fs::File::create(&archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
+          Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
+        "###);
+    });
+
+    Ok(())
+}
+
+/// Install a wheel whose actual name doesn't match the name encoded in the filename.
+#[test]
+fn mismatched_name() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Download a wheel.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
+    let archive = temp_dir.child("foo-2.0.1-py3-none-any.whl");
+    let mut archive_file = std::fs::File::create(&archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    insta::with_settings!({
+        filters => filters.clone()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        error: Failed to install: foo-2.0.1-py3-none-any.whl (foo==2.0.1 (from file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl))
+          Caused by: Wheel package name does not match filename: tomli != foo
+        "###);
+    });
+
+    Ok(())
+}
+
 /// Install a local source distribution.
 #[test]
 fn install_local_source_distribution() -> Result<()> {
@@ -1847,7 +1943,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
-    let archive = temp_dir.child("tomli-3.0.1-py3-none-any.whl");
+    let archive = temp_dir.child("tomli-2.0.1-py3-none-any.whl");
     let mut archive_file = std::fs::File::create(&archive)?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
@@ -1879,7 +1975,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1907,7 +2003,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
         ----- stderr -----
         Installed 1 package in [TIME]
-         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
         "###);
     });
 
@@ -1956,7 +2052,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + tomli==3.0.1 (from file://[TEMP_DIR]/tomli-3.0.1-py3-none-any.whl)
+         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
         "###);
     });
 
