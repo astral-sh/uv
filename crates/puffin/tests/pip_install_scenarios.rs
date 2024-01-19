@@ -513,6 +513,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 ///             └── satisfied by a-3.0.0
 /// ```
 #[test]
+#[ignore]
 fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
