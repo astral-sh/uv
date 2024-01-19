@@ -37,11 +37,20 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 } else if set.as_singleton().is_some() {
                     format!("there is no version of {package}{set}")
                 } else {
-                    format!(
-                        "there are no versions of {} that satisfy {}",
-                        package,
-                        PackageRange::compatibility(package, &set)
-                    )
+                    let complement = set.complement();
+                    let segments = complement.iter().collect::<Vec<_>>().len();
+                    if segments == 1 {
+                        format!(
+                            "only {} is available",
+                            PackageRange::compatibility(package, &complement)
+                        )
+                    } else {
+                        format!(
+                            "there are no versions of {} that satisfy {}",
+                            package,
+                            PackageRange::compatibility(package, &set)
+                        )
+                    }
                 }
             }
             External::UnavailableDependencies(package, set) => {
