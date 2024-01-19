@@ -433,7 +433,11 @@ impl std::fmt::Display for PackageTerm<'_> {
                     let package = self.package;
                     write!(f, "{package}!={version}")
                 } else {
-                    write!(f, "!( {} )", PackageRange::compatibility(self.package, set))
+                    write!(
+                        f,
+                        "{}",
+                        PackageRange::compatibility(self.package, &set.complement())
+                    )
                 }
             }
         }
