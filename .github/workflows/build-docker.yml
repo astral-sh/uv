@@ -5,7 +5,7 @@
 #
 # TODO(charlie): Ideally, the publish step would happen as a publish job within `cargo-dist`, but
 # sharing the built image as an artifact between jobs is challenging.
-name: "[puffin] Build Docker image"
+name: "Build Docker image"
 
 on:
   workflow_call:

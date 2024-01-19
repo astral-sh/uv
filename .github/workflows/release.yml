@@ -45,7 +45,6 @@ on:
         required: true
         default: dry-run
         type: string
-  pull_request:
 
 jobs:
   # Run 'cargo dist plan' (or host) to determine what tasks we need to do
