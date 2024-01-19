@@ -56,21 +56,23 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                             );
                         } else {
                             // Complex case, the target was provided and differs from the installed one
+                            // Determine which Python version requirement was not met
                             if !set.contains(&python.target) {
                                 return format!(
-                                    "the requested {package} version ({}, {}) does not satisfy {}",
+                                    "the requested {package} version ({}) does not satisfy {}",
                                     python.target,
-                                    python.installed,
                                     PackageRange::compatibility(package, set)
                                 );
                             } else {
+                                // TODO(zanieb): Explain to the user why the installed version is relevant
+                                //               when they provoided a target version; probably via a "hint"
                                 debug_assert!(
                                     !set.contains(&python.installed),
                                     "There should not be an incompatibility where the range is satisfied by both Python requirements"
                                 );
                                 return format!(
                                     "the current {package} version ({}) does not satisfy {}",
-                                    python.target,
+                                    python.installed,
                                     PackageRange::compatibility(package, set)
                                 );
                             }
