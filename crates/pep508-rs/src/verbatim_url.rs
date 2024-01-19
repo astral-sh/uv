@@ -37,7 +37,7 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from a path.
-    pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>, given: String) -> Self {
+    pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
 
@@ -54,9 +54,15 @@ impl VerbatimUrl {
         // Convert to a URL.
         let url = Url::from_file_path(path).expect("path is absolute");
 
+        Self { url, given: None }
+    }
+
+    /// Set the verbatim representation of the URL.
+    #[must_use]
+    pub fn with_given(self, given: String) -> Self {
         Self {
-            url,
             given: Some(given),
+            ..self
         }
     }
 
