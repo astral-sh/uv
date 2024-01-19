@@ -155,10 +155,10 @@ impl ParsedEditableRequirement {
             if scheme == "file" {
                 if let Some(path) = path.strip_prefix("//") {
                     // Ex) `file:///home/ferris/project/scripts/...`
-                    VerbatimUrl::from_path(path, working_dir, given.clone())
+                    VerbatimUrl::from_path(path, working_dir)
                 } else {
                     // Ex) `file:../editable/`
-                    VerbatimUrl::from_path(path, working_dir, given.clone())
+                    VerbatimUrl::from_path(path, working_dir)
                 }
             } else {
                 // Ex) `https://...`
@@ -168,13 +168,16 @@ impl ParsedEditableRequirement {
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(&given, working_dir, given.clone())
+            VerbatimUrl::from_path(&given, working_dir)
         };
 
         // Create a `PathBuf`.
         let path = url
             .to_file_path()
             .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(given.clone()))?;
+
+        // Add the verbatim representation of the URL to the `VerbatimUrl`.
+        let url = url.with_given(given);
 
         Ok(EditableRequirement { url, path })
     }
