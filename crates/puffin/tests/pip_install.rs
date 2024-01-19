@@ -80,9 +80,9 @@ fn no_solution() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of flask that satisfy flask>3.0.0
-          and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that
-          flask>=3.0.0 depends on werkzeug>=3.0.0.
+      ╰─▶ Because only flask<=3.0.0 is available and flask==3.0.0 depends
+          on werkzeug>=3.0.0, we can conclude that flask>=3.0.0 depends on
+          werkzeug>=3.0.0.
           And because root depends on flask>=3.0.0 and root depends on
           werkzeug<1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
