@@ -23,5 +23,5 @@ WORKDIR /app
 RUN python3 -m venv $HOME/venv-docker
 ENV VIRTUAL_ENV="$HOME/venv-docker"
 ENV PATH="$HOME/.cargo/bin:$HOME/venv-docker/bin:$PATH"
-COPY rust-toolchain.toml rust-toolchain.toml
+RUN rustup default 1.75.0
 RUN rustup show

@@ -164,6 +164,6 @@ dispatch-releases = true
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
 # Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries"]
+local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
