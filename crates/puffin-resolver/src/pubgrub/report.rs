@@ -81,9 +81,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     )
                 } else {
                     format!(
-                        "{}depends on {}",
-                        Padded::new("", &PackageRange::compatibility(package, &package_set), " "),
-                        PackageRange::dependency(dependency, &dependency_set)
+                        "{}",
+                        PackageRange::compatibility(package, &package_set)
+                            .depends_on(dependency, &dependency_set),
                     )
                 }
             }
@@ -452,6 +452,21 @@ struct PackageRange<'a> {
     kind: PackageRangeKind,
 }
 
+impl PackageRange<'_> {
+    /// Returns a boolean indicating if the predicate following this package range should
+    /// be singular or plural e.g. if false use "<range> depends on <...>" and
+    /// if true use "<range> depend on <...>"
+    fn plural(&self) -> bool {
+        if self.range.is_empty() {
+            false
+        } else {
+            let segments: Vec<_> = self.range.iter().collect();
+            // "all versions of" is the only plural case
+            matches!(segments.as_slice(), [(Bound::Unbounded, Bound::Unbounded)])
+        }
+    }
+}
+
 impl std::fmt::Display for PackageRange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.range.is_empty() {
@@ -516,6 +531,37 @@ impl PackageRange<'_> {
             range,
             kind: PackageRangeKind::Dependency,
         }
+    }
+
+    fn depends_on<'a>(
+        &'a self,
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+    ) -> DependsOn<'a> {
+        DependsOn {
+            first: self,
+            second: PackageRange::dependency(package, range),
+        }
+    }
+}
+
+/// A representation of A depends on B.
+#[derive(Debug)]
+struct DependsOn<'a> {
+    first: &'a PackageRange<'a>,
+    second: PackageRange<'a>,
+}
+
+impl std::fmt::Display for DependsOn<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", Padded::new("", self.first, " "))?;
+        if self.first.plural() {
+            write!(f, "depend on ")?;
+        } else {
+            write!(f, "depends on ")?;
+        };
+        write!(f, "{}", self.second)?;
+        Ok(())
     }
 }
 

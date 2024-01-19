@@ -565,12 +565,12 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                   crow>1.0.0,<2.0.0
                   crow>2.0.0
               and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
-              And because crow==2.0.0 depends on albatross>=3.0.0 we can conclude that all versions of crow depends on one of:
+              And because crow==2.0.0 depends on albatross>=3.0.0 we can conclude that all versions of crow depend on one of:
                   albatross<2.0.0
                   albatross>=3.0.0
 
               And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, bluebird!=1.0.0, all versions of crow are incompatible.
-              And because albatross==3.0.0 depends on bluebird==3.0.0 we can conclude that all versions of crow depends on one of:
+              And because albatross==3.0.0 depends on bluebird==3.0.0 we can conclude that all versions of crow depend on one of:
                   bluebird<=1.0.0
                   bluebird>=3.0.0
 
@@ -701,7 +701,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
               And because crow==2.0.0 depends on albatross>=3.0.0 we can conclude that all versions of crow, bluebird!=1.0.0, !( albatross>=3.0.0 ) are incompatible. (2)
 
               Because albatross==3.0.0 depends on bluebird==3.0.0 and there are no versions of albatross that satisfy albatross>3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
-              And because we know from (2) that all versions of crow, bluebird!=1.0.0, !( albatross>=3.0.0 ) are incompatible, we can conclude that all versions of crow depends on one of:
+              And because we know from (2) that all versions of crow, bluebird!=1.0.0, !( albatross>=3.0.0 ) are incompatible, we can conclude that all versions of crow depend on one of:
                   bluebird<=1.0.0
                   bluebird>=3.0.0
 
@@ -977,7 +977,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
           ╰─▶ Because there are no versions of albatross[extra-c] that satisfy any of:
                   albatross[extra-c]<1.0.0
                   albatross[extra-c]>1.0.0
-              and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depends on bluebird==2.0.0.
+              and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
               And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and there are no versions of albatross[extra-b] that satisfy any of:
                   albatross[extra-b]<1.0.0
                   albatross[extra-b]>1.0.0
@@ -1125,7 +1125,7 @@ fn extra_incompatible_with_root() -> Result<()> {
           ╰─▶ Because albatross[extra]==1.0.0 depends on bluebird==1.0.0 and there are no versions of albatross[extra] that satisfy any of:
                   albatross[extra]<1.0.0
                   albatross[extra]>1.0.0
-              we can conclude that all versions of albatross[extra] depends on bluebird==1.0.0.
+              we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
               And because root depends on albatross[extra] and root depends on bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -1325,7 +1325,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
           ╰─▶ Because albatross==1.0.0 depends on bluebird==2.0.0 and there are no versions of albatross that satisfy any of:
                   albatross<1.0.0
                   albatross>1.0.0
-              we can conclude that all versions of albatross depends on bluebird==2.0.0.
+              we can conclude that all versions of albatross depend on bluebird==2.0.0.
               And because root depends on bluebird==1.0.0 and root depends on albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -1399,7 +1399,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
           ╰─▶ Because there are no versions of bluebird that satisfy any of:
                   bluebird<1.0.0
                   bluebird>1.0.0
-              and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depends on crow==2.0.0.
+              and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
               And because albatross==1.0.0 depends on crow==1.0.0 and there are no versions of albatross that satisfy any of:
                   albatross<1.0.0
                   albatross>1.0.0
@@ -2418,8 +2418,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
           ╰─▶ Because there are no versions of bluebird that satisfy any of:
                   bluebird<1.0.0
                   bluebird>1.0.0
-              and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depends on crow.
-              And because there are no versions of crow that satisfy crow>=2.0.0b1 we can conclude that all versions of bluebird depends on crow<2.0.0b1.
+              and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depend on crow.
+              And because there are no versions of crow that satisfy crow>=2.0.0b1 we can conclude that all versions of bluebird depend on crow<2.0.0b1.
               And because albatross==1.0.0 depends on crow>=2.0.0b1 and there are no versions of albatross that satisfy any of:
                   albatross<1.0.0
                   albatross>1.0.0
