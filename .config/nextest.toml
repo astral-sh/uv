@@ -4,5 +4,5 @@ slow-timeout = "10s"
 
 [[profile.default.overrides]]
 # The following test has a non-determinstic snapshot
-filter = 'test(excluded_only_compatible_version)'
+filter = 'test(excluded_only_compatible_version|dependency_excludes_range_of_compatible_versions)'
 retries = 2
