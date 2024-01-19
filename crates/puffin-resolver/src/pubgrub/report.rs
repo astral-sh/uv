@@ -31,6 +31,23 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 format!("we are solving dependencies of {package} {version}")
             }
             External::NoVersions(package, set) => {
+                if matches!(package, PubGrubPackage::Python(_)) {
+                    // We assume there is _only_ one available Python version as Puffin only supports
+                    // resolution for a single Python version; if this is not the case for some reason
+                    // we'll just fall back to the usual verbose message in production but panic in
+                    // debug builds
+                    if let Some([version]) = self.available_versions.get(package).map(Vec::as_slice)
+                    {
+                        return format!(
+                            "{package} {version} does not satisfy {}",
+                            PackageRange::compatibility(package, set)
+                        );
+                    }
+                    debug_assert!(
+                        false,
+                        "Unexpected value for available Python versions will degrade error message"
+                    );
+                }
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {
                     format!("there are no versions of {package}")

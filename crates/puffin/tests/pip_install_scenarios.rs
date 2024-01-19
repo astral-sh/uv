@@ -2554,7 +2554,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because only Python<4.0 is available and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
+          ╰─▶ Because Python 3.7 does not satisfy Python>=4.0 and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
               And because root depends on albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2611,7 +2611,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because only Python>3.8 is available and albatross==1.0.0 depends on Python<=3.8, we can conclude that albatross==1.0.0 cannot be used.
+          ╰─▶ Because Python 3.9 does not satisfy Python<=3.8 and albatross==1.0.0 depends on Python<=3.8, we can conclude that albatross==1.0.0 cannot be used.
               And because root depends on albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2668,7 +2668,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because only Python<3.10 is available and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
+          ╰─▶ Because Python 3.9 does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because root depends on albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
     });
@@ -2876,22 +2876,22 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of Python that satisfy Python>=3.10,<3.11 and only Python<3.12 is available, we can conclude that any of:
+          ╰─▶ Because Python 3.9 does not satisfy Python>=3.10,<3.11 and Python 3.9 does not satisfy Python>=3.12, we can conclude that any of:
                   Python>=3.10,<3.11
                   Python>=3.12
                are incompatible.
-              And because there are no versions of Python that satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
+              And because Python 3.9 does not satisfy Python>=3.11,<3.12 we can conclude that Python>=3.10 are incompatible.
               And because albatross==2.0.0 depends on Python>=3.10 and there are no versions of albatross that satisfy any of:
                   albatross>2.0.0,<3.0.0
                   albatross>3.0.0,<4.0.0
                   albatross>4.0.0
               we can conclude that albatross>=2.0.0,<3.0.0 cannot be used. (1)
 
-              Because there are no versions of Python that satisfy Python>=3.11,<3.12 and only Python<3.12 is available, we can conclude that Python>=3.11 are incompatible.
+              Because Python 3.9 does not satisfy Python>=3.11,<3.12 and Python 3.9 does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
               And because albatross==3.0.0 depends on Python>=3.11 we can conclude that albatross==3.0.0 cannot be used.
               And because we know from (1) that albatross>=2.0.0,<3.0.0 cannot be used, we can conclude that albatross>=2.0.0,<4.0.0 cannot be used. (2)
 
-              Because only Python<3.12 is available and albatross==4.0.0 depends on Python>=3.12, we can conclude that albatross==4.0.0 cannot be used.
+              Because Python 3.9 does not satisfy Python>=3.12 and albatross==4.0.0 depends on Python>=3.12, we can conclude that albatross==4.0.0 cannot be used.
               And because we know from (2) that albatross>=2.0.0,<4.0.0 cannot be used, we can conclude that albatross>=2.0.0 cannot be used.
               And because root depends on albatross>=2.0.0 we can conclude that the requirements are unsatisfiable.
         "###);
