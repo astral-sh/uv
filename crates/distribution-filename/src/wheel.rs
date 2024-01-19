@@ -11,6 +11,12 @@ use platform_tags::{TagPriority, Tags};
 use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+#[cfg_attr(feature = "rkyv", archive_attr(derive(Debug)))]
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,

@@ -12,11 +12,15 @@ license = { workspace = true }
 [lints]
 workspace = true
 
+[features]
+rkyv = ["dep:rkyv", "pep440_rs/rkyv"]
+
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
 platform-tags = { path = "../platform-tags" }
 puffin-normalize = { path = "../puffin-normalize" }
 
+rkyv = { workspace = true, features = ["strict", "validation"], optional = true }
 serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 url = { workspace = true }

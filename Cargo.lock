@@ -848,6 +848,7 @@ dependencies = [
  "pep440_rs 0.3.12",
  "platform-tags",
  "puffin-normalize",
+ "rkyv",
  "serde",
  "thiserror",
  "url",
