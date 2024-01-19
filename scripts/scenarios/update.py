@@ -52,6 +52,16 @@ PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TARGET = PROJECT_ROOT / "crates" / "puffin" / "tests" / "pip_install_scenarios.rs"
+CUTE_NAMES = {
+    "a": "albatross",
+    "b": "bluebird",
+    "c": "crow",
+    "d": "duck",
+    "e": "eagle",
+    "f": "flamingo",
+    "g": "goose",
+    "h": "heron",
+}
 
 try:
     import packse
@@ -164,6 +174,11 @@ for scenario in data["scenarios"]:
         if expected["explanation"]
         else []
     )
+
+# Generate cute names for each scenario
+for scenario in data["scenarios"]:
+    for package in scenario["packages"]:
+        package["cute_name"] = CUTE_NAMES[package["name"][0]]
 
 
 # Render the template
