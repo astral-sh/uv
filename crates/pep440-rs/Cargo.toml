@@ -14,7 +14,7 @@ authors = { workspace = true }
 
 [lib]
 name = "pep440_rs"
-crate-type = ["rlib", "cdylib"]
+# crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 once_cell = { workspace = true }
