@@ -10,7 +10,7 @@ use platform_tags::Tags;
 use puffin_client::{FlatIndex, RegistryClient};
 use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
 use puffin_normalize::PackageName;
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, NoBinary};
 use pypi_types::Metadata21;
 
 use crate::python_requirement::PythonRequirement;
@@ -55,10 +55,12 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     python_requirement: PythonRequirement<'a>,
     exclude_newer: Option<DateTime<Utc>>,
     allowed_yanks: AllowedYanks,
+    no_binary: &'a NoBinary,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: &'a RegistryClient,
         fetcher: DistributionDatabase<'a, Context>,
@@ -67,6 +69,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         python_requirement: PythonRequirement<'a>,
         exclude_newer: Option<DateTime<Utc>>,
         allowed_yanks: AllowedYanks,
+        no_binary: &'a NoBinary,
     ) -> Self {
         Self {
             client,
@@ -76,6 +79,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             python_requirement,
             exclude_newer,
             allowed_yanks,
+            no_binary,
         }
     }
 }
@@ -99,6 +103,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                     &self.allowed_yanks,
                     self.exclude_newer.as_ref(),
                     self.flat_index.get(package_name).cloned(),
+                    self.no_binary,
                 )),
                 Err(
                     err @ (puffin_client::Error::PackageNotFound(_)

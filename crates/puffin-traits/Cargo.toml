@@ -18,6 +18,7 @@ once-map = { path = "../once-map" }
 pep508_rs = { path = "../pep508-rs" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-interpreter = { path = "../puffin-interpreter" }
+puffin-normalize = { path = "../puffin-normalize" }
 
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }

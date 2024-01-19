@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
+use puffin_traits::NoBinary;
 use rustc_hash::FxHashMap;
 
 use distribution_filename::DistFilename;
@@ -22,6 +23,7 @@ pub struct DistFinder<'a> {
     reporter: Option<Box<dyn Reporter>>,
     interpreter: &'a Interpreter,
     flat_index: &'a FlatIndex,
+    no_binary: &'a NoBinary,
 }
 
 impl<'a> DistFinder<'a> {
@@ -31,6 +33,7 @@ impl<'a> DistFinder<'a> {
         client: &'a RegistryClient,
         interpreter: &'a Interpreter,
         flat_index: &'a FlatIndex,
+        no_binary: &'a NoBinary,
     ) -> Self {
         Self {
             tags,
@@ -38,6 +41,7 @@ impl<'a> DistFinder<'a> {
             reporter: None,
             interpreter,
             flat_index,
+            no_binary,
         }
     }
 
@@ -112,7 +116,10 @@ impl<'a> DistFinder<'a> {
         Ok(Resolution::new(resolution))
     }
 
-    /// select a version that satisfies the requirement, preferring wheels to source distributions.
+    /// Select a version that satisfies the requirement.
+    ///
+    /// Wheels are preferred to source distributions unless `no_binary` excludes wheels
+    /// for the requirement.
     fn select(
         &self,
         requirement: &Requirement,
@@ -120,6 +127,12 @@ impl<'a> DistFinder<'a> {
         index: &IndexUrl,
         flat_index: Option<&FlatDistributions>,
     ) -> Option<Dist> {
+        let no_binary = match self.no_binary {
+            NoBinary::None => false,
+            NoBinary::All => true,
+            NoBinary::Packages(packages) => packages.contains(&requirement.name),
+        };
+
         // Prioritize the flat index by initializing the "best" matches with its entries.
         let matching_override = if let Some(flat_index) = flat_index {
             match &requirement.version_or_url {
@@ -159,36 +172,38 @@ impl<'a> DistFinder<'a> {
                 continue;
             }
 
-            // Find the most-compatible wheel
-            for (wheel, file) in files.wheels {
-                // Only add dists compatible with the python version.
-                // This is relevant for source dists which give no other indication of their
-                // compatibility and wheels which may be tagged `py3-none-any` but
-                // have `requires-python: ">=3.9"`
-                if !file
-                    .requires_python
-                    .as_ref()
-                    .map_or(true, |requires_python| {
-                        requires_python.contains(self.interpreter.version())
-                    })
-                {
-                    continue;
-                }
-
-                best_version = Some(version.clone());
-                if let Some(priority) = wheel.compatibility(self.tags) {
-                    if best_wheel
+            if !no_binary {
+                // Find the most-compatible wheel
+                for (wheel, file) in files.wheels {
+                    // Only add dists compatible with the python version.
+                    // This is relevant for source dists which give no other indication of their
+                    // compatibility and wheels which may be tagged `py3-none-any` but
+                    // have `requires-python: ">=3.9"`
+                    if !file
+                        .requires_python
                         .as_ref()
-                        .map_or(true, |(.., existing)| priority > *existing)
+                        .map_or(true, |requires_python| {
+                            requires_python.contains(self.interpreter.version())
+                        })
                     {
-                        best_wheel = Some((
-                            Dist::from_registry(
-                                DistFilename::WheelFilename(wheel),
-                                file,
-                                index.clone(),
-                            ),
-                            priority,
-                        ));
+                        continue;
+                    }
+
+                    best_version = Some(version.clone());
+                    if let Some(priority) = wheel.compatibility(self.tags) {
+                        if best_wheel
+                            .as_ref()
+                            .map_or(true, |(.., existing)| priority > *existing)
+                        {
+                            best_wheel = Some((
+                                Dist::from_registry(
+                                    DistFilename::WheelFilename(wheel),
+                                    file,
+                                    index.clone(),
+                                ),
+                                priority,
+                            ));
+                        }
                     }
                 }
             }

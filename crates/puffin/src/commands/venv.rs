@@ -6,6 +6,7 @@ use anyhow::Result;
 use fs_err as fs;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
+use puffin_installer::NoBinary;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
@@ -158,6 +159,7 @@ async fn venv_impl(
             venv.python_executable(),
             SetupPyStrategy::default(),
             true,
+            &NoBinary::None,
         );
 
         // Resolve the seed packages.

@@ -2690,6 +2690,7 @@ dependencies = [
  "pep508_rs",
  "puffin-cache",
  "puffin-interpreter",
+ "puffin-normalize",
  "tokio",
 ]
 

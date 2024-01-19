@@ -83,8 +83,8 @@ fn no_solution() -> Result<()> {
       ╰─▶ Because only flask<=3.0.0 is available and flask==3.0.0 depends
           on werkzeug>=3.0.0, we can conclude that flask>=3.0.0 depends on
           werkzeug>=3.0.0.
-          And because root depends on flask>=3.0.0 and root depends on
-          werkzeug<1.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require flask>=3.0.0 and you require werkzeug<1.0.0, we
+          can conclude that the requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -741,5 +741,202 @@ fn reinstall_build_system() -> Result<()> {
         "###);
     });
 
+    Ok(())
+}
+
+/// Install a package without using pre-built wheels.
+#[test]
+fn install_no_binary() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("Flask")
+            .arg("--no-binary")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + blinker==1.7.0
+         + click==8.1.7
+         + flask==3.0.0
+         + itsdangerous==2.1.2
+         + jinja2==3.1.2
+         + markupsafe==2.1.3
+         + werkzeug==3.0.1
+        "###);
+    });
+
+    assert_command(&venv, "import flask", &temp_dir).success();
+
+    Ok(())
+}
+
+/// Install a package without using pre-built wheels for a subset of packages.
+#[test]
+fn install_no_binary_subset() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("Flask")
+            .arg("--no-binary-package")
+            .arg("click")
+            .arg("--no-binary-package")
+            .arg("flask")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + blinker==1.7.0
+         + click==8.1.7
+         + flask==3.0.0
+         + itsdangerous==2.1.2
+         + jinja2==3.1.2
+         + markupsafe==2.1.3
+         + werkzeug==3.0.1
+        "###);
+    });
+
+    assert_command(&venv, "import flask", &temp_dir).success();
+
+    Ok(())
+}
+
+/// Install a package without using pre-built wheels.
+#[test]
+fn reinstall_no_binary() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // The first installation should use a pre-built wheel
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("Flask")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + blinker==1.7.0
+         + click==8.1.7
+         + flask==3.0.0
+         + itsdangerous==2.1.2
+         + jinja2==3.1.2
+         + markupsafe==2.1.3
+         + werkzeug==3.0.1
+        "###);
+    });
+
+    assert_command(&venv, "import flask", &temp_dir).success();
+
+    // Running installation again with `--no-binary` should be a no-op
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("Flask")
+            .arg("--no-binary")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Audited 1 package in [TIME]
+        "###);
+    });
+
+    assert_command(&venv, "import flask", &temp_dir).success();
+
+    // With `--reinstall`, `--no-binary` should have an affect
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("Flask")
+            .arg("--no-binary")
+            .arg("--reinstall-package")
+            .arg("Flask")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         - flask==3.0.0
+         + flask==3.0.0
+        "###);
+    });
+
+    assert_command(&venv, "import flask", &temp_dir).success();
     Ok(())
 }

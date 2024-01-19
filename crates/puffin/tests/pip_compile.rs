@@ -690,7 +690,7 @@ fn compile_python_37() -> Result<()> {
           ╰─▶ Because the requested Python version (3.7.17, 3.12.0) does not satisfy
               Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude
               that black==23.10.1 cannot be used.
-              And because root depends on black==23.10.1 we can conclude that the
+              And because you require black==23.10.1 we can conclude that the
               requirements are unsatisfiable.
         "###);
     });
@@ -1442,8 +1442,8 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of werkzeug==3.0.0 and root depends
-              on werkzeug==3.0.0, we can conclude that the requirements are
+          ╰─▶ Because there is no version of werkzeug==3.0.0 and you require
+              werkzeug==3.0.0, we can conclude that the requirements are
               unsatisfiable.
         "###);
     });
@@ -1599,7 +1599,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
           × No solution found when resolving dependencies:
           ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and only werkzeug<3.0.0
               is available, we can conclude that flask==3.0.0 cannot be used.
-              And because root depends on flask==3.0.0 we can conclude that the
+              And because you require flask==3.0.0 we can conclude that the
               requirements are unsatisfiable.
         "###);
     });
@@ -2285,7 +2285,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
-              and root depends on attrs>20.3.0,<21.2.0, we can conclude that the
+              and you require attrs>20.3.0,<21.2.0, we can conclude that the
               requirements are unsatisfiable.
         "###);
     });

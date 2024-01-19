@@ -11,6 +11,7 @@ use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
 use puffin_interpreter::{Interpreter, Virtualenv};
+use puffin_normalize::PackageName;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -67,6 +68,9 @@ pub trait BuildContext: Sync {
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
     /// we can't build them
     fn no_build(&self) -> bool;
+
+    /// Whether using pre-built wheels is disabled.
+    fn no_binary(&self) -> &NoBinary;
 
     /// The strategy to use when building source distributions that lack a `pyproject.toml`.
     fn setup_py_strategy(&self) -> SetupPyStrategy;
@@ -152,6 +156,31 @@ impl Display for BuildKind {
         match self {
             BuildKind::Wheel => f.write_str("wheel"),
             BuildKind::Editable => f.write_str("editable"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum NoBinary {
+    /// Allow installation of any wheel.
+    None,
+
+    /// Do not allow installation from any wheels.
+    All,
+
+    /// Do not allow installation from the specific wheels.
+    Packages(Vec<PackageName>),
+}
+
+impl NoBinary {
+    /// Determine the binary installation strategy to use.
+    pub fn from_args(no_binary: bool, no_binary_package: Vec<PackageName>) -> Self {
+        if no_binary {
+            Self::All
+        } else if !no_binary_package.is_empty() {
+            Self::Packages(no_binary_package)
+        } else {
+            Self::None
         }
     }
 }
