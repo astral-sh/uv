@@ -196,15 +196,9 @@ pub(crate) async fn pip_compile(
 
         let editables: Vec<LocalEditable> = editables
             .into_iter()
-            .map(|editable| match &editable {
-                EditableRequirement::Path { path, .. } => Ok(LocalEditable {
-                    path: path.clone(),
-                    requirement: editable,
-                }),
-                EditableRequirement::Url { path, .. } => Ok(LocalEditable {
-                    path: path.clone(),
-                    requirement: editable,
-                }),
+            .map(|editable| {
+                let EditableRequirement { path, url } = editable;
+                Ok(LocalEditable { url, path })
             })
             .collect::<Result<_>>()?;
 

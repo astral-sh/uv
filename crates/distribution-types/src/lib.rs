@@ -43,7 +43,6 @@ use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::PackageName;
-use requirements_txt::EditableRequirement;
 
 pub use crate::any::*;
 pub use crate::cached::*;
@@ -272,24 +271,13 @@ impl Dist {
 
     /// Create a [`Dist`] for a local editable distribution.
     pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
-        match editable.requirement {
-            EditableRequirement::Path { url, path } => {
-                Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                    name,
-                    url,
-                    path,
-                    editable: true,
-                })))
-            }
-            EditableRequirement::Url { url, path } => {
-                Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                    name,
-                    path,
-                    url,
-                    editable: true,
-                })))
-            }
-        }
+        let LocalEditable { url, path } = editable;
+        Ok(Self::Source(SourceDist::Path(PathSourceDist {
+            name,
+            url,
+            path,
+            editable: true,
+        })))
     }
 
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
@@ -353,11 +341,7 @@ impl SourceDist {
                 url: VerbatimUrl::unknown(url),
                 ..dist
             }),
-            SourceDist::Path(dist) => SourceDist::Path(PathSourceDist {
-                url: VerbatimUrl::unknown(url),
-                ..dist
-            }),
-            dist @ SourceDist::Registry(_) => dist,
+            dist => dist,
         }
     }
 }

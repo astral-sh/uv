@@ -46,7 +46,7 @@ use tracing::warn;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use pep508_rs::{Pep508Error, Requirement, VerbatimUrl};
+use pep508_rs::{Pep508Error, Requirement, VerbatimUrl, VerbatimUrlError};
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -69,26 +69,18 @@ enum RequirementsTxtStatement {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum EditableRequirement {
-    Path { path: PathBuf, url: VerbatimUrl },
-    Url { path: PathBuf, url: VerbatimUrl },
+pub struct EditableRequirement {
+    pub url: VerbatimUrl,
+    pub path: PathBuf,
 }
 
 impl EditableRequirement {
-    /// Return the [`VerbatimUrl`] of the editable.
     pub fn url(&self) -> &VerbatimUrl {
-        match self {
-            EditableRequirement::Path { url, .. } => url,
-            EditableRequirement::Url { url, .. } => url,
-        }
+        &self.url
     }
 
-    /// Return the underlying [`Url`] of the editable.
     pub fn raw(&self) -> &Url {
-        match self {
-            EditableRequirement::Path { url, .. } => url.raw(),
-            EditableRequirement::Url { url, .. } => url.raw(),
-        }
+        self.url.raw()
     }
 }
 
@@ -96,101 +88,83 @@ impl FromStr for EditableRequirement {
     type Err = RequirementsTxtParserError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let editable_requirement = ParsedEditableRequirement::from_str(s)?;
+        let editable_requirement = ParsedEditableRequirement::from(s.to_string());
         editable_requirement.with_working_dir(".")
     }
 }
 
-/// Relative paths aren't resolved with the current dir yet
+/// A raw string for an editable requirement (`pip install -e <editable>`), which could be a URL or
+/// a local path, and could contain unexpanded environment variables.
+///
+/// For example:
+/// - `file:///home/ferris/project/scripts/...`
+/// - `file:../editable/`
+/// - `../editable/`
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ParsedEditableRequirement {
-    Path(String),
-    Url(VerbatimUrl),
-}
+pub struct ParsedEditableRequirement(String);
 
 impl ParsedEditableRequirement {
     pub fn with_working_dir(
         self,
         working_dir: impl AsRef<Path>,
     ) -> Result<EditableRequirement, RequirementsTxtParserError> {
-        Ok(match self {
-            ParsedEditableRequirement::Path(given) => {
-                let path = PathBuf::from(&given);
-                if path.is_absolute() {
-                    EditableRequirement::Path {
-                        url: VerbatimUrl::from_path(&path, given)
-                            .map_err(|()| RequirementsTxtParserError::InvalidPath(path.clone()))?,
-                        path,
-                    }
-                } else {
-                    // Avoid paths like `/home/ferris/project/scripts/../editable/`
-                    let path = fs::canonicalize(working_dir.as_ref().join(&path))?;
-                    EditableRequirement::Path {
-                        url: VerbatimUrl::from_path(&path, given)
-                            .map_err(|()| RequirementsTxtParserError::InvalidPath(path.clone()))?,
-                        path,
-                    }
-                }
-            }
-            ParsedEditableRequirement::Url(url) => {
-                // Require, e.g., `file:///home/ferris/project/scripts/...`.
-                if url.scheme() != "file" {
-                    return Err(RequirementsTxtParserError::UnsupportedUrl(url.clone()));
-                }
-                EditableRequirement::Url {
-                    path: fs::canonicalize(
-                        url.to_file_path().map_err(|()| {
-                            RequirementsTxtParserError::UnsupportedUrl(url.clone())
-                        })?,
-                    )?,
-                    url,
-                }
-            }
-        })
+        let given = self.0;
+
+        // Validate against some common mistakes. If we're passed a URL with some other scheme,
+        // it will fail to canonicalize below, but this is a better error message for these common
+        // cases.
+        let s = given.trim();
+        if s.starts_with("http://")
+            || s.starts_with("https://")
+            || s.starts_with("git+")
+            || s.starts_with("hg+")
+            || s.starts_with("svn+")
+            || s.starts_with("bzr+")
+        {
+            return Err(RequirementsTxtParserError::UnsupportedUrl(
+                given.to_string(),
+            ));
+        }
+
+        // Create a `VerbatimUrl` to represent the editable requirement.
+        let url = if let Some(path) = s.strip_prefix("file://") {
+            // Ex) `file:///home/ferris/project/scripts/...`
+            VerbatimUrl::from_path(path, working_dir, s.to_string())
+                .map_err(RequirementsTxtParserError::InvalidEditablePath)?
+        } else if let Some(path) = s.strip_prefix("file:") {
+            // Ex) `file:../editable/`
+            VerbatimUrl::from_path(path, working_dir, s.to_string())
+                .map_err(RequirementsTxtParserError::InvalidEditablePath)?
+        } else {
+            // Ex) `../editable/`
+            VerbatimUrl::from_path(s, working_dir, s.to_string())
+                .map_err(RequirementsTxtParserError::InvalidEditablePath)?
+        };
+
+        // Create a `PathBuf`.
+        let path = url
+            .to_file_path()
+            .expect("file:// URLs should be valid paths");
+
+        Ok(EditableRequirement { url, path })
     }
 }
 
-impl FromStr for ParsedEditableRequirement {
-    type Err = RequirementsTxtParserError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.trim_start().starts_with("file://") {
-            // Ex) `file:///home/ferris/project/scripts/...`
-            if let Ok(url) = VerbatimUrl::from_str(s) {
-                Ok(ParsedEditableRequirement::Url(url))
-            } else {
-                Err(RequirementsTxtParserError::UnsupportedUrl(
-                    VerbatimUrl::from_str(s).unwrap(),
-                ))
-            }
-        } else if let Some(s) = s.trim_start().strip_prefix("file:") {
-            // Ex) `file:../editable/`
-            Ok(ParsedEditableRequirement::Path(s.to_string()))
-        } else if let Ok(url) = VerbatimUrl::from_str(s) {
-            // Ex) `http://example.com/`
-            Ok(ParsedEditableRequirement::Url(url))
-        } else {
-            // Ex) `../editable/`
-            Ok(ParsedEditableRequirement::Path(s.to_string()))
-        }
+impl From<String> for ParsedEditableRequirement {
+    fn from(s: String) -> Self {
+        Self(s)
     }
 }
 
 impl Display for ParsedEditableRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParsedEditableRequirement::Path(path) => path.fmt(f),
-            ParsedEditableRequirement::Url(url) => url.fmt(f),
-        }
+        Display::fmt(&self.0, f)
     }
 }
 
 impl Display for EditableRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EditableRequirement::Path { url, .. } => url.fmt(f),
-            EditableRequirement::Url { url, .. } => url.fmt(f),
-        }
+        Display::fmt(&self.url, f)
     }
 }
 
@@ -366,7 +340,7 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let editable_requirement = ParsedEditableRequirement::from_str(path_or_url)?;
+        let editable_requirement = ParsedEditableRequirement::from(path_or_url.to_string());
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content)?;
@@ -534,8 +508,8 @@ pub struct RequirementsTxtFileError {
 #[derive(Debug)]
 pub enum RequirementsTxtParserError {
     IO(io::Error),
-    InvalidPath(PathBuf),
-    UnsupportedUrl(VerbatimUrl),
+    InvalidEditablePath(VerbatimUrlError),
+    UnsupportedUrl(String),
     Parser {
         message: String,
         location: usize,
@@ -556,8 +530,8 @@ impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             RequirementsTxtParserError::IO(err) => err.fmt(f),
-            RequirementsTxtParserError::InvalidPath(path) => {
-                write!(f, "Invalid path: {}", path.display())
+            RequirementsTxtParserError::InvalidEditablePath(err) => {
+                write!(f, "Invalid editable path: {err}")
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): {url}")
@@ -582,7 +556,7 @@ impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self {
             RequirementsTxtParserError::IO(err) => err.source(),
-            RequirementsTxtParserError::InvalidPath(_) => None,
+            RequirementsTxtParserError::InvalidEditablePath(err) => err.source(),
             RequirementsTxtParserError::UnsupportedUrl(_) => None,
             RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
@@ -595,13 +569,8 @@ impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.error {
             RequirementsTxtParserError::IO(err) => err.fmt(f),
-            RequirementsTxtParserError::InvalidPath(path) => {
-                write!(
-                    f,
-                    "Invalid path in {}: {}",
-                    self.file.display(),
-                    path.display()
-                )
+            RequirementsTxtParserError::InvalidEditablePath(err) => {
+                write!(f, "Invalid editable path in {}: {err}", self.file.display())
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(

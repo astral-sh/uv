@@ -2531,7 +2531,7 @@ fn sync_editable() -> Result<()> {
         Downloaded 2 packages in [TIME]
         Installed 4 packages in [TIME]
          + boltons==23.1.1
-         + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable/)
+         + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable)
          + numpy==1.26.2
          + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
         "###);
@@ -2720,7 +2720,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==24.1a1
-         + black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
+         + black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
         "###);
     });
 
@@ -2799,7 +2799,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Downloaded 1 package in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable/)
+         - black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
          + black==23.10.0
         warning: The package `black` requires `click >=8.0.0`, but it's not installed.
         warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
