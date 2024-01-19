@@ -1025,6 +1025,47 @@ fn install_numpy_py38() -> Result<()> {
     Ok(())
 }
 
+/// Install a package without using pre-built wheels.
+#[test]
+fn install_no_binary() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--no-binary")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + markupsafe==2.1.3
+        "###);
+    });
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+
+    Ok(())
+}
+
 #[test]
 fn warn_on_yanked_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;

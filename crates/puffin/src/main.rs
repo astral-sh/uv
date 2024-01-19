@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use puffin_cache::{Cache, CacheArgs};
-use puffin_installer::Reinstall;
+use puffin_installer::{NoBinary, Reinstall};
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{PreReleaseMode, ResolutionMode};
@@ -288,6 +288,20 @@ struct PipSyncArgs {
     #[clap(long)]
     no_build: bool,
 
+    /// Don't install pre-built wheels.
+    ///
+    /// When enabled, all installed packages will be installed from a source distribution. The resolver
+    /// will still use pre-built wheels for metadata.
+    #[clap(long)]
+    no_binary: bool,
+
+    /// Don't install pre-built wheels for a specific package.
+    ///
+    /// When enabled, the specified packages will be installed from a source distribution. The resolver
+    /// will still use pre-built wheels for metadata.
+    #[clap(long)]
+    no_binary_package: Vec<PackageName>,
+
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
     #[clap(long)]
@@ -397,6 +411,20 @@ struct PipInstallArgs {
     /// exit with an error.
     #[clap(long)]
     no_build: bool,
+
+    /// Don't install pre-built wheels.
+    ///
+    /// When enabled, all installed packages will be installed from a source distribution. The resolver
+    /// will still use pre-built wheels for metadata.
+    #[clap(long)]
+    no_binary: bool,
+
+    /// Don't install pre-built wheels for a specific package.
+    ///
+    /// When enabled, the specified packages will be installed from a source distribution. The resolver
+    /// will still use pre-built wheels for metadata.
+    #[clap(long)]
+    no_binary_package: Vec<PackageName>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -609,6 +637,7 @@ async fn inner() -> Result<ExitStatus> {
                 .map(RequirementsSource::from)
                 .collect::<Vec<_>>();
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
+            let no_binary = NoBinary::from_args(args.no_binary, args.no_binary_package);
             commands::pip_sync(
                 &sources,
                 &reinstall,
@@ -620,6 +649,7 @@ async fn inner() -> Result<ExitStatus> {
                     SetupPyStrategy::Pep517
                 },
                 args.no_build,
+                &no_binary,
                 args.strict,
                 cache,
                 printer,
@@ -660,6 +690,7 @@ async fn inner() -> Result<ExitStatus> {
                 ExtrasSpecification::Some(&args.extra)
             };
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
+            let no_binary = NoBinary::from_args(args.no_binary, args.no_binary_package);
             commands::pip_install(
                 &requirements,
                 &constraints,
@@ -676,6 +707,7 @@ async fn inner() -> Result<ExitStatus> {
                     SetupPyStrategy::Pep517
                 },
                 args.no_build,
+                &no_binary,
                 args.strict,
                 args.exclude_newer,
                 cache,

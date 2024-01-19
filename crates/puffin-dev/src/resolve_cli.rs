@@ -15,6 +15,7 @@ use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{InMemoryIndex, Manifest, ResolutionOptions, Resolver};
 use puffin_traits::{InFlight, SetupPyStrategy};
@@ -79,6 +80,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         venv.python_executable(),
         SetupPyStrategy::default(),
         args.no_build,
+        &NoBinary::None,
     );
 
     // Copied from `BuildDispatch`

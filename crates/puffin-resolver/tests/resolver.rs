@@ -21,7 +21,7 @@ use puffin_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, PreReleaseMode, ResolutionGraph,
     ResolutionMode, ResolutionOptions, Resolver,
 };
-use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, NoBinary, SetupPyStrategy, SourceBuildTrait};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -52,6 +52,10 @@ impl BuildContext for DummyContext {
 
     fn no_build(&self) -> bool {
         false
+    }
+
+    fn no_binary(&self) -> &NoBinary {
+        &NoBinary::None
     }
 
     fn setup_py_strategy(&self) -> SetupPyStrategy {

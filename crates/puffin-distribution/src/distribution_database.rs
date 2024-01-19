@@ -21,7 +21,7 @@ use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::RegistryClient;
 use puffin_extract::unzip_no_seek;
 use puffin_git::GitSource;
-use puffin_traits::BuildContext;
+use puffin_traits::{BuildContext, NoBinary};
 use pypi_types::Metadata21;
 
 use crate::download::{BuiltWheel, UnzippedWheel};
@@ -52,6 +52,8 @@ pub enum DistributionDatabaseError {
     Join(#[from] JoinError),
     #[error("Building source distributions is disabled")]
     NoBuild,
+    #[error("Using pre-built wheels is disabled")]
+    NoBinary,
 }
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
@@ -104,13 +106,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     }
 
     /// Either fetch the wheel or fetch and build the source distribution
+    ///
+    /// If `no_remote_wheel` is set, the wheel will be built from a source distribution
+    /// even if compatible pre-built wheels are available.
     #[instrument(skip(self))]
     pub async fn get_or_build_wheel(
         &self,
         dist: Dist,
     ) -> Result<LocalWheel, DistributionDatabaseError> {
+        let no_binary = match self.build_context.no_binary() {
+            NoBinary::None => false,
+            NoBinary::All => true,
+            NoBinary::Packages(packages) => packages.contains(dist.name()),
+        };
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
+                if no_binary {
+                    return Err(DistributionDatabaseError::NoBinary);
+                }
+
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => base
                         .join_relative(url)
@@ -175,6 +189,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             }
 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
+                if no_binary {
+                    return Err(DistributionDatabaseError::NoBinary);
+                }
+
                 let reader = self.client.stream_external(&wheel.url).await?;
 
                 // Download and unzip the wheel to a temporary directory.
@@ -202,6 +220,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             }
 
             Dist::Built(BuiltDist::Path(wheel)) => {
+                if no_binary {
+                    return Err(DistributionDatabaseError::NoBinary);
+                }
+
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),

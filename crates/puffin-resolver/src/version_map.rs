@@ -10,6 +10,7 @@ use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_client::{FlatDistributions, SimpleMetadata};
 use puffin_normalize::PackageName;
+use puffin_traits::NoBinary;
 use puffin_warnings::warn_user_once;
 use pypi_types::{Hashes, Yanked};
 
@@ -33,10 +34,18 @@ impl VersionMap {
         allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
+        no_binary: &NoBinary,
     ) -> Self {
         // If we have packages of the same name from find links, gives them priority, otherwise start empty
         let mut version_map: BTreeMap<Version, PrioritizedDistribution> =
             flat_index.map(Into::into).unwrap_or_default();
+
+        // Check if binaries are allowed for this package
+        let no_binary = match no_binary {
+            NoBinary::None => false,
+            NoBinary::All => true,
+            NoBinary::Packages(packages) => packages.contains(package_name),
+        };
 
         // Collect compatible distributions.
         for (version, files) in metadata {
@@ -73,6 +82,11 @@ impl VersionMap {
                 let hash = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
+                        // If pre-built binaries are disabled, skip this wheel
+                        if no_binary {
+                            continue;
+                        };
+
                         // To be compatible, the wheel must both have compatible tags _and_ have a
                         // compatible Python requirement.
                         let priority = filename.compatibility(tags).filter(|_| {

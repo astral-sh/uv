@@ -11,6 +11,7 @@ use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::{FlatIndex, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
@@ -72,6 +73,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         venv.python_executable(),
         setup_py,
         false,
+        &NoBinary::None,
     );
 
     let builder = SourceBuild::setup(
