@@ -2747,6 +2747,7 @@ dependencies = [
 name = "puffin-normalize"
 version = "0.0.1"
 dependencies = [
+ "rkyv",
  "serde",
 ]
 
