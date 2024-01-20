@@ -88,7 +88,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::Editable(name) => {
-                let requirement = EditableRequirement::from_str(name)
+                let requirement = EditableRequirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,

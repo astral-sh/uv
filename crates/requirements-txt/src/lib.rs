@@ -38,16 +38,14 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Error;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use fs_err as fs;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use pep508_rs::{Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
+use pep508_rs::{split_scheme, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -66,7 +64,7 @@ enum RequirementsTxtStatement {
     /// PEP 508 requirement plus metadata
     RequirementEntry(RequirementEntry),
     /// `-e`
-    EditableRequirement(ParsedEditableRequirement),
+    EditableRequirement(EditableRequirement),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -85,80 +83,29 @@ impl EditableRequirement {
     }
 }
 
-impl FromStr for EditableRequirement {
-    type Err = RequirementsTxtParserError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        static CWD: Lazy<PathBuf> = Lazy::new(|| std::env::current_dir().unwrap());
-
-        let editable_requirement = ParsedEditableRequirement::from(s.to_string());
-        editable_requirement.with_working_dir(&*CWD)
-    }
-}
-
-/// A raw string for an editable requirement (`pip install -e <editable>`), which could be a URL or
-/// a local path, and could contain unexpanded environment variables.
-///
-/// For example:
-/// - `file:///home/ferris/project/scripts/...`
-/// - `file:../editable/`
-/// - `../editable/`
-///
-/// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ParsedEditableRequirement(String);
-
-/// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
-fn split_scheme(s: &str) -> Option<(&str, &str)> {
-    /// <https://url.spec.whatwg.org/#c0-controls-and-space>
-    #[inline]
-    fn c0_control_or_space(ch: char) -> bool {
-        ch <= ' ' // U+0000 to U+0020
-    }
-
-    /// <https://url.spec.whatwg.org/#ascii-alpha>
-    #[inline]
-    fn ascii_alpha(ch: char) -> bool {
-        ch.is_ascii_alphabetic()
-    }
-
-    // Trim control characters and spaces from the start and end.
-    let s = s.trim_matches(c0_control_or_space);
-    if s.is_empty() || !s.starts_with(ascii_alpha) {
-        return None;
-    }
-
-    // Find the `:` following any alpha characters.
-    let mut iter = s.char_indices();
-    let end = loop {
-        match iter.next() {
-            Some((_i, 'a'..='z' | 'A'..='Z' | '0'..='9' | '+' | '-' | '.')) => {}
-            Some((i, ':')) => break i,
-            _ => return None,
-        }
-    };
-
-    let scheme = &s[..end];
-    let rest = &s[end + 1..];
-    Some((scheme, rest))
-}
-
-impl ParsedEditableRequirement {
-    pub fn with_working_dir(
-        self,
+impl EditableRequirement {
+    /// Parse a raw string for an editable requirement (`pip install -e <editable>`), which could be
+    /// a URL or a local path, and could contain unexpanded environment variables.
+    ///
+    /// For example:
+    /// - `file:///home/ferris/project/scripts/...`
+    /// - `file:../editable/`
+    /// - `../editable/`
+    ///
+    /// We disallow URLs with schemes other than `file://` (e.g., `https://...`).
+    pub fn parse(
+        given: &str,
         working_dir: impl AsRef<Path>,
     ) -> Result<EditableRequirement, RequirementsTxtParserError> {
-        let given = self.0;
-
         // Create a `VerbatimUrl` to represent the editable requirement.
-        let url = if let Some((scheme, path)) = split_scheme(&given) {
+        let url = if let Some((scheme, path)) = split_scheme(given) {
             if scheme == "file" {
                 if let Some(path) = path.strip_prefix("//") {
                     // Ex) `file:///home/ferris/project/scripts/...`
-                    VerbatimUrl::from_path(path, working_dir)
+                    VerbatimUrl::from_path(path, working_dir.as_ref())
                 } else {
                     // Ex) `file:../editable/`
-                    VerbatimUrl::from_path(path, working_dir)
+                    VerbatimUrl::from_path(path, working_dir.as_ref())
                 }
             } else {
                 // Ex) `https://...`
@@ -168,30 +115,18 @@ impl ParsedEditableRequirement {
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(&given, working_dir)
+            VerbatimUrl::from_path(given, working_dir.as_ref())
         };
 
         // Create a `PathBuf`.
         let path = url
             .to_file_path()
-            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(given.clone()))?;
+            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(given.to_string()))?;
 
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
-        let url = url.with_given(given);
+        let url = url.with_given(given.to_string());
 
         Ok(EditableRequirement { url, path })
-    }
-}
-
-impl From<String> for ParsedEditableRequirement {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl Display for ParsedEditableRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
     }
 }
 
@@ -248,11 +183,12 @@ impl RequirementsTxt {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
             })?;
-        let data =
-            Self::parse_inner(&content, working_dir).map_err(|err| RequirementsTxtFileError {
+        let data = Self::parse_inner(&content, working_dir.as_ref()).map_err(|err| {
+            RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: err,
-            })?;
+            }
+        })?;
         if data == Self::default() {
             warn!(
                 "Requirements file {} does not contain any dependencies",
@@ -268,27 +204,26 @@ impl RequirementsTxt {
     /// of the file
     pub fn parse_inner(
         content: &str,
-        working_dir: impl AsRef<Path>,
+        working_dir: &Path,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
-        while let Some(statement) = parse_entry(&mut s, content)? {
+        while let Some(statement) = parse_entry(&mut s, content, working_dir)? {
             match statement {
                 RequirementsTxtStatement::Requirements {
                     filename,
                     start,
                     end,
                 } => {
-                    let sub_file = working_dir.as_ref().join(filename);
-                    let sub_requirements =
-                        Self::parse(&sub_file, working_dir.as_ref()).map_err(|err| {
-                            RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            }
-                        })?;
+                    let sub_file = working_dir.join(filename);
+                    let sub_requirements = Self::parse(&sub_file, working_dir).map_err(|err| {
+                        RequirementsTxtParserError::Subfile {
+                            source: Box::new(err),
+                            start,
+                            end,
+                        }
+                    })?;
                     // Add each to the correct category
                     data.update_from(sub_requirements);
                 }
@@ -297,15 +232,14 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = working_dir.as_ref().join(filename);
-                    let sub_constraints =
-                        Self::parse(&sub_file, working_dir.as_ref()).map_err(|err| {
-                            RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            }
-                        })?;
+                    let sub_file = working_dir.join(filename);
+                    let sub_constraints = Self::parse(&sub_file, working_dir).map_err(|err| {
+                        RequirementsTxtParserError::Subfile {
+                            source: Box::new(err),
+                            start,
+                            end,
+                        }
+                    })?;
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
@@ -321,8 +255,7 @@ impl RequirementsTxt {
                     data.requirements.push(requirement_entry);
                 }
                 RequirementsTxtStatement::EditableRequirement(editable) => {
-                    data.editables
-                        .push(editable.with_working_dir(&working_dir)?);
+                    data.editables.push(editable);
                 }
             }
         }
@@ -343,6 +276,7 @@ impl RequirementsTxt {
 fn parse_entry(
     s: &mut Scanner,
     content: &str,
+    working_dir: &Path,
 ) -> Result<Option<RequirementsTxtStatement>, RequirementsTxtParserError> {
     // Eat all preceding whitespace, this may run us to the end of file
     eat_wrappable_whitespace(s);
@@ -373,10 +307,10 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let editable_requirement = ParsedEditableRequirement::from(path_or_url.to_string());
+        let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {
-        let (requirement, hashes) = parse_requirement_and_hashes(s, content)?;
+        let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
@@ -435,6 +369,7 @@ fn eat_trailing_line(s: &mut Scanner) -> Result<(), RequirementsTxtParserError> 
 fn parse_requirement_and_hashes(
     s: &mut Scanner,
     content: &str,
+    working_dir: &Path,
 ) -> Result<(Requirement, Vec<String>), RequirementsTxtParserError> {
     // PEP 508 requirement
     let start = s.cursor();
@@ -469,22 +404,24 @@ fn parse_requirement_and_hashes(
         }
     };
     let requirement =
-        Requirement::from_str(&content[start..end]).map_err(|err| match err.message {
-            Pep508ErrorSource::String(_) => RequirementsTxtParserError::Pep508 {
-                source: err,
-                start,
-                end,
-            },
-            Pep508ErrorSource::UrlError(_) => RequirementsTxtParserError::Pep508 {
-                source: err,
-                start,
-                end,
-            },
-            Pep508ErrorSource::UnsupportedRequirement(_) => {
-                RequirementsTxtParserError::UnsupportedRequirement {
+        Requirement::parse(&content[start..end], Some(working_dir)).map_err(|err| {
+            match err.message {
+                Pep508ErrorSource::String(_) => RequirementsTxtParserError::Pep508 {
                     source: err,
                     start,
                     end,
+                },
+                Pep508ErrorSource::UrlError(_) => RequirementsTxtParserError::Pep508 {
+                    source: err,
+                    start,
+                    end,
+                },
+                Pep508ErrorSource::UnsupportedRequirement(_) => {
+                    RequirementsTxtParserError::UnsupportedRequirement {
+                        source: err,
+                        start,
+                        end,
+                    }
                 }
             }
         })?;
@@ -690,7 +627,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
 
-    use crate::{split_scheme, RequirementsTxt};
+    use crate::RequirementsTxt;
 
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]
@@ -813,22 +750,5 @@ mod test {
             "Unsupported URL (expected a `file://` scheme) in `./test-data/requirements-txt/unsupported-editable.txt`: http://localhost:8080/".to_string()
         ];
         assert_eq!(errors, expected);
-    }
-
-    #[test]
-    fn scheme() {
-        assert_eq!(
-            split_scheme("file:///home/ferris/project/scripts"),
-            Some(("file", "///home/ferris/project/scripts"))
-        );
-        assert_eq!(
-            split_scheme("file:home/ferris/project/scripts"),
-            Some(("file", "home/ferris/project/scripts"))
-        );
-        assert_eq!(
-            split_scheme("https://example.com"),
-            Some(("https", "//example.com"))
-        );
-        assert_eq!(split_scheme("https:"), Some(("https", "")));
     }
 }

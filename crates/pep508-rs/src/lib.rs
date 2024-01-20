@@ -22,6 +22,7 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "pyo3")]
 use std::hash::{Hash, Hasher};
+use std::path::Path;
 use std::str::{Chars, FromStr};
 
 #[cfg(feature = "pyo3")]
@@ -44,7 +45,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "pyo3")]
 use puffin_normalize::InvalidNameError;
 use puffin_normalize::{ExtraName, PackageName};
-pub use verbatim_url::VerbatimUrl;
+pub use verbatim_url::{split_scheme, VerbatimUrl};
 
 mod marker;
 mod verbatim_url;
@@ -396,14 +397,14 @@ impl FromStr for Requirement {
 
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse(&mut Cursor::new(input))
+        parse(&mut Cursor::new(input), None)
     }
 }
 
 impl Requirement {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-    pub fn parse(input: &mut Cursor) -> Result<Self, Pep508Error> {
-        parse(input)
+    pub fn parse(input: &str, working_dir: Option<&Path>) -> Result<Self, Pep508Error> {
+        parse(&mut Cursor::new(input), working_dir)
     }
 }
 
@@ -690,7 +691,15 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Option<Vec<ExtraName>>, Pep508Err
     Ok(Some(extras))
 }
 
-fn parse_url(cursor: &mut Cursor) -> Result<VerbatimUrl, Pep508Error> {
+/// Parse a raw string for a URL requirement, which could be either a URL or a local path, and which
+/// could contain unexpanded environment variables.
+///
+/// For example:
+/// - `https://pypi.org/project/requests/...`
+/// - `file:///home/ferris/project/scripts/...`
+/// - `file:../editable/`
+/// - `../editable/`
+fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<VerbatimUrl, Pep508Error> {
     // wsp*
     cursor.eat_whitespace();
     // <URI_reference>
@@ -704,12 +713,64 @@ fn parse_url(cursor: &mut Cursor) -> Result<VerbatimUrl, Pep508Error> {
             input: cursor.to_string(),
         });
     }
-    let url = VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
-        message: Pep508ErrorSource::UrlError(err),
-        start,
-        len,
-        input: cursor.to_string(),
-    })?;
+
+    // Create a `VerbatimUrl` to represent the requirement.
+    let url = if let Some((scheme, path)) = split_scheme(url) {
+        if scheme == "file" {
+            if let Some(path) = path.strip_prefix("//") {
+                // Ex) `file:///home/ferris/project/scripts/...`
+                if let Some(working_dir) = working_dir {
+                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                } else {
+                    VerbatimUrl::from_absolute_path(path)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
+                        .with_given(url.to_string())
+                }
+            } else {
+                // Ex) `file:../editable/`
+                if let Some(working_dir) = working_dir {
+                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                } else {
+                    VerbatimUrl::from_absolute_path(path)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
+                        .with_given(url.to_string())
+                }
+            }
+        } else {
+            // Ex) `https://...`
+            VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
+                message: Pep508ErrorSource::UrlError(err),
+                start,
+                len,
+                input: cursor.to_string(),
+            })?
+        }
+    } else {
+        // Ex) `../editable/`
+        if let Some(working_dir) = working_dir {
+            VerbatimUrl::from_path(url, working_dir).with_given(url.to_string())
+        } else {
+            VerbatimUrl::from_absolute_path(url)
+                .map_err(|err| Pep508Error {
+                    message: Pep508ErrorSource::UrlError(err),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })?
+                .with_given(url.to_string())
+        }
+    };
+
     Ok(url)
 }
 
@@ -805,7 +866,7 @@ fn parse_version_specifier_parentheses(
 }
 
 /// Parse a [dependency specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers)
-fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
+fn parse(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Requirement, Pep508Error> {
     let start = cursor.pos();
 
     // Technically, the grammar is:
@@ -835,7 +896,7 @@ fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
     let requirement_kind = match cursor.peek_char() {
         Some('@') => {
             cursor.next();
-            Some(VersionOrUrl::Url(parse_url(cursor)?))
+            Some(VersionOrUrl::Url(parse_url(cursor, working_dir)?))
         }
         Some('(') => parse_version_specifier_parentheses(cursor)?,
         Some('<' | '=' | '>' | '~' | '!') => parse_version_specifier(cursor)?,
@@ -845,7 +906,7 @@ fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
             // a package name. pip supports this in `requirements.txt`, but it doesn't adhere to
             // the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
-            return if parse_url(&mut clone).is_ok() {
+            return if parse_url(&mut clone, working_dir).is_ok() {
                 Err(Pep508Error {
                     message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).".to_string()),
                     start,

@@ -29,16 +29,13 @@ pub struct VerbatimUrl {
 
 impl VerbatimUrl {
     /// Parse a URL from a string, expanding any environment variables.
-    pub fn parse(given: String) -> Result<Self, VerbatimUrlError> {
-        let url = Url::parse(&expand_env_vars(&given, true))
-            .map_err(|err| VerbatimUrlError::Url(given.clone(), err))?;
-        Ok(Self {
-            given: Some(given),
-            url,
-        })
+    pub fn parse(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+        let url = Url::parse(&expand_env_vars(given.as_ref(), true))
+            .map_err(|err| VerbatimUrlError::Url(given.as_ref().to_owned(), err))?;
+        Ok(Self { url, given: None })
     }
 
-    /// Parse a URL from a path.
+    /// Parse a URL from am absolute or relative path.
     pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
@@ -57,6 +54,27 @@ impl VerbatimUrl {
         let url = Url::from_file_path(path).expect("path is absolute");
 
         Self { url, given: None }
+    }
+
+    /// Parse a URL from an absolute path.
+    pub fn from_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+        // Expand any environment variables.
+        let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
+
+        // Convert the path to an absolute path, if necessary.
+        let path = if path.is_absolute() {
+            path
+        } else {
+            return Err(VerbatimUrlError::RelativePath(path));
+        };
+
+        // Normalize the path.
+        let path = normalize_path(&path);
+
+        // Convert to a URL.
+        let url = Url::from_file_path(path).expect("path is absolute");
+
+        Ok(Self { url, given: None })
     }
 
     /// Set the verbatim representation of the URL.
@@ -96,7 +114,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s.to_owned())
+        Self::parse(s).map(|url| url.with_given(s.to_owned()))
     }
 }
 
@@ -120,6 +138,10 @@ pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error("{0}")]
     Url(String, #[source] url::ParseError),
+
+    /// Received a relative path, but no working directory was provided.
+    #[error("relative path without a working directory: {0}")]
+    RelativePath(PathBuf),
 }
 
 /// Expand all available environment variables.
@@ -192,4 +214,61 @@ fn normalize_path(path: &Path) -> PathBuf {
         }
     }
     ret
+}
+
+/// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
+pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
+    /// <https://url.spec.whatwg.org/#c0-controls-and-space>
+    #[inline]
+    fn c0_control_or_space(ch: char) -> bool {
+        ch <= ' ' // U+0000 to U+0020
+    }
+
+    /// <https://url.spec.whatwg.org/#ascii-alpha>
+    #[inline]
+    fn ascii_alpha(ch: char) -> bool {
+        ch.is_ascii_alphabetic()
+    }
+
+    // Trim control characters and spaces from the start and end.
+    let s = s.trim_matches(c0_control_or_space);
+    if s.is_empty() || !s.starts_with(ascii_alpha) {
+        return None;
+    }
+
+    // Find the `:` following any alpha characters.
+    let mut iter = s.char_indices();
+    let end = loop {
+        match iter.next() {
+            Some((_i, 'a'..='z' | 'A'..='Z' | '0'..='9' | '+' | '-' | '.')) => {}
+            Some((i, ':')) => break i,
+            _ => return None,
+        }
+    };
+
+    let scheme = &s[..end];
+    let rest = &s[end + 1..];
+    Some((scheme, rest))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scheme() {
+        assert_eq!(
+            split_scheme("file:///home/ferris/project/scripts"),
+            Some(("file", "///home/ferris/project/scripts"))
+        );
+        assert_eq!(
+            split_scheme("file:home/ferris/project/scripts"),
+            Some(("file", "home/ferris/project/scripts"))
+        );
+        assert_eq!(
+            split_scheme("https://example.com"),
+            Some(("https", "//example.com"))
+        );
+        assert_eq!(split_scheme("https:"), Some(("https", "")));
+    }
 }
