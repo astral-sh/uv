@@ -593,14 +593,11 @@ impl Display for RequirementsTxtParserError {
             RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
                 write!(f, "Unsupported requirement in position {start} to {end}")
             }
-            RequirementsTxtParserError::Pep508 { start, end, .. } => {
-                write!(f, "Couldn't parse requirement in position {start} to {end}")
+            RequirementsTxtParserError::Pep508 { start, .. } => {
+                write!(f, "Couldn't parse requirement at position {start}")
             }
-            RequirementsTxtParserError::Subfile { start, end, .. } => {
-                write!(
-                    f,
-                    "Error parsing file included at position {start} to {end}"
-                )
+            RequirementsTxtParserError::Subfile { start, .. } => {
+                write!(f, "Error parsing included file at position {start}")
             }
         }
     }
@@ -627,25 +624,22 @@ impl Display for RequirementsTxtFileError {
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 write!(
                     f,
-                    "Invalid editable path in {}: {given}",
+                    "Invalid editable path in `{}`: {given}",
                     self.file.display()
                 )
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
-                    "Unsupported URL (expected a `file://` scheme) in {}: {}",
+                    "Unsupported URL (expected a `file://` scheme) in `{}`: {url}",
                     self.file.display(),
-                    url
                 )
             }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(
                     f,
-                    "{} in {} position {}",
-                    message,
+                    "{message} in `{}` at position {location}",
                     self.file.display(),
-                    location
                 )
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
@@ -657,22 +651,18 @@ impl Display for RequirementsTxtFileError {
                     end,
                 )
             }
-            RequirementsTxtParserError::Pep508 { start, end, .. } => {
+            RequirementsTxtParserError::Pep508 { start, .. } => {
                 write!(
                     f,
-                    "Couldn't parse requirement in {} position {} to {}",
+                    "Couldn't parse requirement in `{}` at position {start}",
                     self.file.display(),
-                    start,
-                    end,
                 )
             }
-            RequirementsTxtParserError::Subfile { start, end, .. } => {
+            RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
-                    "Error parsing file included into {} at position {} to {}",
+                    "Error parsing included file in `{}` at position {start}",
                     self.file.display(),
-                    start,
-                    end
                 )
             }
         }
@@ -771,7 +761,7 @@ mod test {
         assert_eq!(
             errors[0],
             format!(
-                "Error parsing file included into {} at position 0 to 14",
+                "Error parsing included file in `{}` at position 0",
                 basic.display()
             )
         );
@@ -793,7 +783,7 @@ mod test {
             .collect::<Vec<_>>();
         let expected = &[
             format!(
-                "Couldn't parse requirement in {} position 0 to 15",
+                "Couldn't parse requirement in `{}` at position 0",
                 basic.display()
             ),
             indoc! {"
@@ -820,7 +810,7 @@ mod test {
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         let expected = &[
-            "Unsupported URL (expected a `file://` scheme) in ./test-data/requirements-txt/unsupported-editable.txt: http://localhost:8080/".to_string()
+            "Unsupported URL (expected a `file://` scheme) in `./test-data/requirements-txt/unsupported-editable.txt`: http://localhost:8080/".to_string()
         ];
         assert_eq!(errors, expected);
     }
