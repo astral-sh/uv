@@ -228,12 +228,19 @@ impl Dist {
         }
 
         if url.scheme().eq_ignore_ascii_case("file") {
-            // Store the canonicalized path.
-            let path = url
+            // Store the canonicalized path, which also serves to validate that it exists.
+            let path = match url
                 .to_file_path()
                 .map_err(|()| Error::UrlFilename(url.to_url()))?
                 .canonicalize()
-                .map_err(|err| Error::NotFound(url.to_url(), err))?;
+            {
+                Ok(path) => path,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(Error::NotFound(url.to_url()));
+                }
+                Err(err) => return Err(err.into()),
+            };
+
             return if path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))

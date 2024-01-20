@@ -2208,8 +2208,7 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Unable to locate distribution at: file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
-          Caused by: No such file or directory (os error 2)
+        error: Distribution not found at: file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
         "###);
     });
 
@@ -3449,8 +3448,7 @@ fn missing_path_requirement() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Unable to locate distribution at: file:///tmp/django-3.2.8.tar.gz
-          Caused by: No such file or directory (os error 2)
+        error: Distribution not found at: file:///tmp/django-3.2.8.tar.gz
         "###);
     });
 
@@ -3491,9 +3489,7 @@ fn missing_editable_requirement() -> Result<()> {
         ----- stderr -----
         error: Failed to build editables
           Caused by: Failed to build editable: file://[TEMP_DIR]/django-3.2.8.tar.gz
-          Caused by: Failed to build: file://[TEMP_DIR]/django-3.2.8.tar.gz
-          Caused by: failed to query metadata of file `file://[TEMP_DIR]/django-3.2.8.tar.gz`
-          Caused by: No such file or directory (os error 2)
+          Caused by: Source distribution not found at: file://[TEMP_DIR]/django-3.2.8.tar.gz
         "###);
     });
 
