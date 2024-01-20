@@ -992,10 +992,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 BuildKind::Editable,
             )
             .await
-            .map_err(|err| SourceDistError::Build(editable.to_string(), err))?
+            .map_err(|err| SourceDistError::BuildEditable(editable.to_string(), err))?
             .wheel(editable_wheel_dir)
             .await
-            .map_err(|err| SourceDistError::Build(editable.to_string(), err))?;
+            .map_err(|err| SourceDistError::BuildEditable(editable.to_string(), err))?;
         let filename = WheelFilename::from_str(&disk_filename)?;
         // We finally have the name of the package and can construct the dist
         let dist = Dist::Source(SourceDist::Path(PathSourceDist {

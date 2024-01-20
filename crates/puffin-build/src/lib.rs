@@ -69,6 +69,8 @@ pub enum Error {
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] anyhow::Error),
+    #[error("Source distribution not found at: {0}")]
+    NotFound(PathBuf),
     #[error("Failed to create temporary virtual environment")]
     Gourgeist(#[from] gourgeist::Error),
     #[error("Failed to run {0}")]
@@ -280,7 +282,15 @@ impl SourceBuild {
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir()?;
 
-        let source_root = if fs::metadata(source)?.is_dir() {
+        let metadata = match fs::metadata(source) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                return Err(Error::NotFound(source.to_path_buf()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        let source_root = if metadata.is_dir() {
             source.to_path_buf()
         } else {
             debug!("Unpacking for build: {}", source.display());

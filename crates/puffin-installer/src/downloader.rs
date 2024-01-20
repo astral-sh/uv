@@ -25,8 +25,8 @@ pub enum Error {
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
-    #[error("Failed to build editable: {0}")]
-    Editable(LocalEditable, #[source] DistributionDatabaseError),
+    #[error(transparent)]
+    Editable(#[from] DistributionDatabaseError),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -121,7 +121,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                     .database
                     .build_wheel_editable(&editable, editable_wheel_dir)
                     .await
-                    .map_err(|err| Error::Editable(editable.clone(), err))?;
+                    .map_err(Error::Editable)?;
                 let cached_dist = Self::unzip_wheel(local_wheel).await?;
                 if let Some(task_id) = task_id {
                     if let Some(reporter) = &self.reporter {

@@ -3,6 +3,7 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
+
 use puffin_normalize::PackageName;
 
 /// The caller is responsible for adding the source dist information to the error chain
@@ -32,6 +33,8 @@ pub enum SourceDistError {
     // Build error
     #[error("Failed to build: {0}")]
     Build(String, #[source] anyhow::Error),
+    #[error("Failed to build editable: {0}")]
+    BuildEditable(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
