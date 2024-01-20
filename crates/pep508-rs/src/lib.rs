@@ -71,6 +71,9 @@ pub enum Pep508ErrorSource {
     /// A URL parsing error.
     #[error(transparent)]
     UrlError(#[from] verbatim_url::VerbatimUrlError),
+    /// The version requirement is not supported.
+    #[error("{0}")]
+    UnsupportedRequirement(String),
 }
 
 impl Display for Pep508Error {
@@ -842,11 +845,9 @@ fn parse(cursor: &mut Cursor) -> Result<Requirement, Pep508Error> {
             // a package name. pip supports this in `requirements.txt`, but it doesn't adhere to
             // the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
-            return if let Ok(url) = parse_url(&mut clone) {
+            return if parse_url(&mut clone).is_ok() {
                 Err(Pep508Error {
-                    message: Pep508ErrorSource::String(format!(
-                        "URL requirement is missing a package name; expected: `package_name @ {url}`",
-                    )),
+                    message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).".to_string()),
                     start,
                     len: clone.pos() - start,
                     input: clone.to_string(),
@@ -1305,7 +1306,7 @@ mod tests {
         assert_err(
             r#"git+https://github.com/pallets/flask.git"#,
             indoc! {"
-                URL requirement is missing a package name; expected: `package_name @ git+https://github.com/pallets/flask.git`
+                URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
                 git+https://github.com/pallets/flask.git
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
             },
