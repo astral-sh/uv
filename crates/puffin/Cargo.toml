@@ -14,75 +14,11 @@ default-run = "puffin"
 workspace = true
 
 [dependencies]
-distribution-filename = { path = "../distribution-filename" }
-distribution-types = { path = "../distribution-types" }
-gourgeist = { path = "../gourgeist" }
-install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
-pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
-platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache", features = ["clap"] }
-puffin-client = { path = "../puffin-client" }
-puffin-dispatch = { path = "../puffin-dispatch" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
-puffin-traits = { path = "../puffin-traits" }
-puffin-warnings = { path = "../puffin-warnings" }
-puffin-workspace = { path = "../puffin-workspace" }
-pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
 
 # This tells flate2 (and all libraries that depend on it, including async_compression
 # and async_zip) to use zlib-ng, which about 2x faster than the default flate2 backend
 # at decompression. See https://github.com/rust-lang/flate2-rs#backends
 flate2 = { workspace = true, default-features = false }
-
-anstream = { workspace = true }
-anyhow = { workspace = true }
-bitflags = { workspace = true }
-chrono = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-fs-err = { workspace = true, features = ["tokio"] }
-futures = { workspace = true }
-indicatif = { workspace = true }
-itertools = { workspace = true }
-miette = { workspace = true, features = ["fancy"] }
-owo-colors = { workspace = true }
-pubgrub = { workspace = true }
-pyproject-toml = { workspace = true }
-rustc-hash = { workspace = true }
-tempfile = { workspace = true }
-textwrap = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-toml = { workspace = true }
-tracing = { workspace = true }
-tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
-tracing-subscriber = { workspace = true }
-tracing-tree = { workspace = true }
-url = { workspace = true }
-waitmap = { workspace = true }
-which = { workspace = true }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-mimalloc = "0.1.39"
-
-[target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = "0.5.4"
-
-[dev-dependencies]
-assert_cmd = { version = "2.0.12" }
-assert_fs = { version = "1.1.0" }
-indoc = { version = "2.0.4" }
-insta-cmd = { version = "0.4.0" }
-insta = { version = "1.34.0", features = ["filters"] }
-predicates = { version = "3.0.4" }
-reqwest = { version = "0.11.23", features = ["blocking", "rustls"], default-features = false }
 
 [features]
 default = ["flate2-zlib-ng"]
