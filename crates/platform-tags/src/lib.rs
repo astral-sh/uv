@@ -1,9 +1,21 @@
 use std::num::NonZeroU32;
+use std::str::FromStr;
 
-use anyhow::{Error, Result};
 use rustc_hash::FxHashMap;
 
 use platform_host::{Arch, Os, Platform, PlatformError};
+
+#[derive(Debug, thiserror::Error)]
+pub enum TagsError {
+    #[error(transparent)]
+    PlatformError(#[from] PlatformError),
+    #[error("Unsupported implementation: {0}")]
+    UnsupportedImplementation(String),
+    #[error("Unknown implementation: {0}")]
+    UnknownImplementation(String),
+    #[error("Invalid priority: {0}")]
+    InvalidPriority(usize, #[source] std::num::TryFromIntError),
+}
 
 /// A set of compatible tags for a given Python version and platform.
 ///
@@ -33,8 +45,15 @@ impl Tags {
         Self { map }
     }
 
-    /// Returns the compatible tags for the given Python version and platform.
-    pub fn from_env(platform: &Platform, python_version: (u8, u8)) -> Result<Self, PlatformError> {
+    /// Returns the compatible tags for the given Python implementation (e.g., `cpython`), version,
+    /// and platform.
+    pub fn from_env(
+        platform: &Platform,
+        python_version: (u8, u8),
+        implementation_name: &str,
+        implementation_version: (u8, u8),
+    ) -> Result<Self, TagsError> {
+        let implementation = Implementation::from_str(implementation_name)?;
         let platform_tags = compatible_tags(platform)?;
 
         let mut tags = Vec::with_capacity(5 * platform_tags.len());
@@ -42,31 +61,27 @@ impl Tags {
         // 1. This exact c api version
         for platform_tag in &platform_tags {
             tags.push((
-                format!("cp{}{}", python_version.0, python_version.1),
-                format!(
-                    "cp{}{}{}",
-                    python_version.0,
-                    python_version.1,
-                    // hacky but that's legacy anyways
-                    if python_version.1 <= 7 { "m" } else { "" }
-                ),
+                implementation.language_tag(python_version),
+                implementation.abi_tag(python_version, implementation_version),
                 platform_tag.clone(),
             ));
             tags.push((
-                format!("cp{}{}", python_version.0, python_version.1),
+                implementation.language_tag(python_version),
                 "none".to_string(),
                 platform_tag.clone(),
             ));
         }
         // 2. abi3 and no abi (e.g. executable binary)
-        // For some reason 3.2 is the minimum python for the cp abi
-        for minor in 2..=python_version.1 {
-            for platform_tag in &platform_tags {
-                tags.push((
-                    format!("cp{}{}", python_version.0, minor),
-                    "abi3".to_string(),
-                    platform_tag.clone(),
-                ));
+        if matches!(implementation, Implementation::CPython) {
+            // For some reason 3.2 is the minimum python for the cp abi
+            for minor in 2..=python_version.1 {
+                for platform_tag in &platform_tags {
+                    tags.push((
+                        implementation.language_tag((python_version.0, minor)),
+                        "abi3".to_string(),
+                        platform_tag.clone(),
+                    ));
+                }
             }
         }
         // 3. no abi (e.g. executable binary)
@@ -174,12 +189,73 @@ impl Tags {
 pub struct TagPriority(NonZeroU32);
 
 impl TryFrom<usize> for TagPriority {
-    type Error = Error;
+    type Error = TagsError;
 
     /// Create a [`TagPriority`] from a `usize`, where higher `usize` values are given higher
     /// priority.
-    fn try_from(priority: usize) -> Result<Self> {
-        Ok(Self(NonZeroU32::try_from(1 + u32::try_from(priority)?)?))
+    fn try_from(priority: usize) -> Result<Self, TagsError> {
+        match u32::try_from(priority).and_then(|priority| NonZeroU32::try_from(1 + priority)) {
+            Ok(priority) => Ok(Self(priority)),
+            Err(err) => Err(TagsError::InvalidPriority(priority, err)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Implementation {
+    CPython,
+    PyPy,
+}
+
+impl Implementation {
+    /// Returns the "language implementation and version tag" for the current implementation and
+    /// Python version (e.g., `cp39` or `pp37`).
+    pub fn language_tag(&self, python_version: (u8, u8)) -> String {
+        match self {
+            // Ex) `cp39`
+            Implementation::CPython => format!("cp{}{}", python_version.0, python_version.1),
+            // Ex) `pp39`
+            Implementation::PyPy => format!("pp{}{}", python_version.0, python_version.1),
+        }
+    }
+
+    pub fn abi_tag(&self, python_version: (u8, u8), implementation_version: (u8, u8)) -> String {
+        match self {
+            // Ex) `cp39`
+            Implementation::CPython => {
+                if python_version.1 <= 7 {
+                    format!("cp{}{}m", python_version.0, python_version.1)
+                } else {
+                    format!("cp{}{}", python_version.0, python_version.1)
+                }
+            }
+            // Ex) `pypy39_pp73`
+            Implementation::PyPy => format!(
+                "pypy{}{}_pp{}{}",
+                python_version.0,
+                python_version.1,
+                implementation_version.0,
+                implementation_version.1
+            ),
+        }
+    }
+}
+
+impl FromStr for Implementation {
+    type Err = TagsError;
+
+    fn from_str(s: &str) -> Result<Self, TagsError> {
+        match s {
+            // Known and supported implementations.
+            "cpython" => Ok(Self::CPython),
+            "pypy" => Ok(Self::PyPy),
+            // Known but unsupported implementations.
+            "python" => Err(TagsError::UnsupportedImplementation(s.to_string())),
+            "ironpython" => Err(TagsError::UnsupportedImplementation(s.to_string())),
+            "jython" => Err(TagsError::UnsupportedImplementation(s.to_string())),
+            // Unknown implementations.
+            _ => Err(TagsError::UnknownImplementation(s.to_string())),
+        }
     }
 }
 

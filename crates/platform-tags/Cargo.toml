@@ -15,5 +15,5 @@ workspace = true
 [dependencies]
 platform-host = { path = "../platform-host" }
 
-anyhow = { workspace = true }
 rustc-hash = { workspace = true }
+thiserror = { workspace = true }

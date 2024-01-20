@@ -2156,9 +2156,9 @@ dependencies = [
 name = "platform-tags"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "platform-host",
  "rustc-hash",
+ "thiserror",
 ]
 
 [[package]]

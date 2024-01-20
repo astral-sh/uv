@@ -149,6 +149,8 @@ pub(crate) async fn pip_compile(
         Cow::Owned(Tags::from_env(
             interpreter.platform(),
             python_version.simple_version(),
+            interpreter.implementation_name(),
+            interpreter.implementation_version(),
         )?)
     } else {
         Cow::Borrowed(interpreter.tags()?)

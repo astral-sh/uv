@@ -68,7 +68,7 @@ enum VenvError {
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(puffin::venv::tags))]
-    TagsError(#[source] platform_host::PlatformError),
+    TagsError(#[source] platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     #[diagnostic(code(puffin::venv::flat_index))]
