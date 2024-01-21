@@ -52,7 +52,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: &'a FlatIndex,
     tags: &'a Tags,
-    python_requirement: PythonRequirement<'a>,
+    python_requirement: PythonRequirement,
     exclude_newer: Option<DateTime<Utc>>,
     allowed_yanks: AllowedYanks,
     no_binary: &'a NoBinary,
@@ -66,7 +66,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
         tags: &'a Tags,
-        python_requirement: PythonRequirement<'a>,
+        python_requirement: PythonRequirement,
         exclude_newer: Option<DateTime<Utc>>,
         allowed_yanks: AllowedYanks,
         no_binary: &'a NoBinary,

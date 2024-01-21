@@ -63,7 +63,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     overrides: Overrides,
     allowed_urls: AllowedUrls,
     markers: &'a MarkerEnvironment,
-    python_requirement: PythonRequirement<'a>,
+    python_requirement: PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
     /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
@@ -120,7 +120,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
-        python_requirement: PythonRequirement<'a>,
+        python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,
         provider: Provider,
     ) -> Self {

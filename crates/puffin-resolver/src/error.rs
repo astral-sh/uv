@@ -130,14 +130,7 @@ pub struct NoSolutionError {
     derivation_tree: DerivationTree<PubGrubPackage, Range<Version>>,
     available_versions: FxHashMap<PubGrubPackage, Vec<Version>>,
     selector: Option<CandidateSelector>,
-    python_requirement: Option<SolutionPythonRequirement>,
-}
-
-/// Derivative of [`PythonRequirement`] with owned data for error reporting.
-#[derive(Debug, Clone)]
-pub(crate) struct SolutionPythonRequirement {
-    pub(crate) installed: Version,
-    pub(crate) target: Version,
+    python_requirement: Option<PythonRequirement>,
 }
 
 impl std::error::Error for NoSolutionError {}
@@ -219,10 +212,7 @@ impl NoSolutionError {
         mut self,
         python_requirement: &PythonRequirement,
     ) -> Self {
-        self.python_requirement = Some(SolutionPythonRequirement {
-            target: python_requirement.target().clone(),
-            installed: python_requirement.installed().clone(),
-        });
+        self.python_requirement = Some(python_requirement.clone());
         self
     }
 }
