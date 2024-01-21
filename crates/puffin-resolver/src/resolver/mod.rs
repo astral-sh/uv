@@ -257,6 +257,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             FxHashMap::default();
         let mut next = root;
 
+        debug!(
+            "Solving with target Python version {}",
+            self.python_requirement.target()
+        );
+
         loop {
             // Run unit propagation.
             state.unit_propagation(next)?;

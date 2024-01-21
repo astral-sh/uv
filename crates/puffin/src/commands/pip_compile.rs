@@ -271,7 +271,6 @@ pub(crate) async fn pip_compile(
         result => result,
     }?;
 
-
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
         printer,
