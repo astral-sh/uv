@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/b6cb1f6310a40937dc68a59c82460fea58957b70/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/9a836122ad43eb9c8115ef09f3beb7779512cd78/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -690,14 +690,14 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                   crow>2.0.0
               and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
 
-              Because albatross==1.0.0 depends on bluebird==1.0.0 and there are no versions of albatross that satisfy any of:
+              Because there are no versions of albatross that satisfy any of:
                   albatross<1.0.0
                   albatross>1.0.0,<2.0.0
-              we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
+              and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
               And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
               And because crow==2.0.0 depends on albatross>=3.0.0 we can conclude that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible. (2)
 
-              Because albatross==3.0.0 depends on bluebird==3.0.0 and only albatross<=3.0.0 is available, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
+              Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
                   bluebird<=1.0.0
                   bluebird>=3.0.0

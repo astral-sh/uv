@@ -39,19 +39,25 @@ Requirements:
 
 import json
 import shutil
+import os
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "b6cb1f6310a40937dc68a59c82460fea58957b70"
+PACKSE_COMMIT = "9a836122ad43eb9c8115ef09f3beb7779512cd78"
 TOOL_ROOT = Path(__file__).parent
-TEMPLATE = TOOL_ROOT / "template.mustache"
+TEMPLATES = TOOL_ROOT / "templates"
+INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
+COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
-TARGET = PROJECT_ROOT / "crates" / "puffin" / "tests" / "pip_install_scenarios.rs"
+TESTS = PROJECT_ROOT / "crates" / "puffin" / "tests"
+INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
+COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
+
 CUTE_NAMES = {
     "a": "albatross",
     "b": "bluebird",
@@ -151,10 +157,6 @@ data = json.loads(
     )
 )
 
-# Add generated metadata
-data["generated_from"] = f"https://github.com/zanieb/packse/tree/{commit}/scenarios"
-data["generated_with"] = " ".join(sys.argv)
-
 
 # Drop the example scenario
 for index, scenario in enumerate(data["scenarios"]):
@@ -181,35 +183,63 @@ for scenario in data["scenarios"]:
         package["cute_name"] = CUTE_NAMES[package["name"][0]]
 
 
-# Render the template
-print("Rendering template...", file=sys.stderr)
-output = chevron_blue.render(
-    template=TEMPLATE.read_text(), data=data, no_escape=True, warn=True
-)
+# Split scenarios into `install` and `compile` cases
+install_scenarios = []
+compile_scenarios = []
 
-# Update the test file
-print(f"Updating test file at `{TARGET.relative_to(PROJECT_ROOT)}`...", file=sys.stderr)
-with open(TARGET, "wt") as target_file:
-    target_file.write(output)
+for scenario in data["scenarios"]:
+    if (scenario["resolver_options"] or {}).get("python") is not None:
+        compile_scenarios.append(scenario)
+    else:
+        install_scenarios.append(scenario)
 
-# Format
-print("Formatting test file...", file=sys.stderr)
-subprocess.check_call(["rustfmt", str(TARGET)])
+for template, tests, scenarios in [
+    (INSTALL_TEMPLATE, INSTALL_TESTS, install_scenarios),
+    (COMPILE_TEMPLATE, COMPILE_TESTS, compile_scenarios),
+]:
+    data = {"scenarios": scenarios}
 
-# Update snapshots
-print("Updating snapshots...\n", file=sys.stderr)
-subprocess.call(
-    [
-        "cargo",
-        "insta",
-        "test",
-        "--accept",
-        "--test",
-        TARGET.with_suffix("").name,
-        "--features",
-        "pypi,python",
-    ],
-    cwd=PROJECT_ROOT,
-)
+    # Add generated metadata
+    data["generated_from"] = f"https://github.com/zanieb/packse/tree/{commit}/scenarios"
+    data["generated_with"] = " ".join(sys.argv)
+
+    # Render the template
+    print(f"Rendering template {template.name}", file=sys.stderr)
+    output = chevron_blue.render(
+        template=template.read_text(), data=data, no_escape=True, warn=True
+    )
+
+    # Update the test files
+    print(
+        f"Updating test file at `{tests.relative_to(PROJECT_ROOT)}`...",
+        file=sys.stderr,
+    )
+    with open(tests, "wt") as test_file:
+        test_file.write(output)
+
+    # Format
+    print(
+        "Formatting test file...",
+        file=sys.stderr,
+    )
+    subprocess.check_call(["rustfmt", str(tests)])
+
+    # Update snapshots
+    print("Updating snapshots...\n", file=sys.stderr)
+    subprocess.call(
+        [
+            "cargo",
+            "insta",
+            "test",
+            "--features",
+            "pypi,python",
+            "--accept",
+            "--test-runner",
+            "nextest",
+            "--test",
+            tests.with_suffix("").name,
+        ],
+        cwd=PROJECT_ROOT,
+    )
 
 print("\nDone!", file=sys.stderr)
