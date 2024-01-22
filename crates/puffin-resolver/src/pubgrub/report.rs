@@ -37,17 +37,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
             External::NoVersions(package, set) => {
                 if matches!(package, PubGrubPackage::Python(_)) {
                     if let Some(python) = self.python_requirement {
-                        if python.target().release().iter().eq(python
-                            .installed()
-                            .release()
-                            .iter()
-                            .take(2))
-                        {
+                        if python.target() == python.installed() {
                             // Simple case, the installed version is the same as the target version
-                            // N.B. Usually the target version does not include anything past the
-                            //      minor version mumber so we only compare to part of the installed
-                            //      version. If the target version is longer, we'll do the complex
-                            //      display instead.
                             return format!(
                                 "the current {package} version ({}) does not satisfy {}",
                                 python.target(),
