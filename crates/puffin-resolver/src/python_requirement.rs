@@ -16,7 +16,7 @@ impl PythonRequirement {
     pub fn new(interpreter: &Interpreter, markers: &MarkerEnvironment) -> Self {
         Self {
             installed: interpreter.version().clone(),
-            target: markers.python_version.version.clone(),
+            target: markers.python_full_version.version.clone(),
         }
     }
 
