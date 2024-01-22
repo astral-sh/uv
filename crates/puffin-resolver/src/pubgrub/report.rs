@@ -282,7 +282,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
 
         format!(
             "And because {}we can conclude that {}",
-            Padded::from_string("", &external, " "),
+            Padded::from_string("", &external, ", "),
             Padded::from_string("", &terms, "."),
         )
     }
