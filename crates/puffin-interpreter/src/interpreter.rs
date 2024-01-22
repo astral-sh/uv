@@ -93,7 +93,9 @@ impl Interpreter {
     /// - `python3` (unix) or `python.exe` (windows)
     ///
     /// If provided, we will prefer the given Python version in a later location than a
-    /// different version in an earlier location.
+    /// different version in an earlier location. If a matching patch version cannot be
+    /// found, we will attempt to find a matching minor version before resorting to the
+    /// first available Python version.
     pub fn find(
         python_version: Option<&PythonVersion>,
         platform: Platform,

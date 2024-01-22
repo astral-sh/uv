@@ -70,14 +70,15 @@ impl PythonVersion {
 
     /// Return the patch version of this Python version, if set.
     pub fn patch(&self) -> Option<u8> {
-        if let Some(patch) = self.0.release().get(2).cloned() {
-            Some(u8::try_from(patch).expect("invalid patch version"))
-        } else {
-            None
-        }
+        self.0
+            .release()
+            .get(2)
+            .copied()
+            .map(|patch| u8::try_from(patch).expect("invalid patch version"))
     }
 
     /// Returns a copy of the Python version without the patch version
+    #[must_use]
     pub fn without_patch(&self) -> Self {
         Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
             .expect("dropping a patch should always be valid")
