@@ -89,7 +89,7 @@ pub(crate) async fn pip_install(
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     debug!(
-        "Using Python {} interpreter at {}",
+        "Using Python {} environment at {}",
         venv.interpreter().version(),
         venv.python_executable().display().cyan()
     );

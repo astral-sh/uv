@@ -126,7 +126,7 @@ pub(crate) async fn pip_compile(
     let platform = Platform::current()?;
     let interpreter = Interpreter::find(python_version.as_ref(), platform, &cache)?;
     debug!(
-        "Using Python {} interpreter at {}",
+        "Using Python {} interpreter at {} for builds",
         interpreter.version(),
         interpreter.sys_executable().display().cyan()
     );

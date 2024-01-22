@@ -21,7 +21,7 @@ pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Resul
     let venv = Virtualenv::from_env(platform, cache)?;
 
     debug!(
-        "Using Python {} interpreter at {}",
+        "Using Python {} environment at {}",
         venv.interpreter().version(),
         venv.python_executable().display().cyan()
     );
