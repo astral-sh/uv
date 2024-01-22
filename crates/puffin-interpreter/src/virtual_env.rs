@@ -78,7 +78,7 @@ impl Virtualenv {
     pub fn site_packages(&self) -> PathBuf {
         self.interpreter
             .platform
-            .venv_site_packages(&self.root, self.interpreter().python_version())
+            .venv_site_packages(&self.root, self.interpreter().python_tuple())
     }
 
     pub fn bin_dir(&self) -> PathBuf {

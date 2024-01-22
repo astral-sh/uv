@@ -160,50 +160,50 @@ impl Interpreter {
         self.tags.get_or_try_init(|| {
             Tags::from_env(
                 self.platform(),
-                self.python_version(),
+                self.python_tuple(),
                 self.implementation_name(),
-                self.implementation_version(),
+                self.implementation_tuple(),
             )
         })
     }
 
     /// Returns the Python version.
     #[inline]
-    pub const fn version(&self) -> &Version {
+    pub const fn python_version(&self) -> &Version {
         &self.markers.python_full_version.version
     }
 
     /// Return the major version of this Python version.
     pub fn python_major(&self) -> u8 {
-        let major = self.version().release()[0];
+        let major = self.markers.python_full_version.version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of this Python version.
     pub fn python_minor(&self) -> u8 {
-        let minor = self.version().release()[1];
+        let minor = self.markers.python_full_version.version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Returns the Python version as a simple tuple.
-    pub fn python_version(&self) -> (u8, u8) {
+    pub fn python_tuple(&self) -> (u8, u8) {
         (self.python_major(), self.python_minor())
     }
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
     pub fn implementation_major(&self) -> u8 {
-        let major = self.markers.python_full_version.version.release()[0];
+        let major = self.markers.implementation_version.version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
     pub fn implementation_minor(&self) -> u8 {
-        let minor = self.markers.python_full_version.version.release()[1];
+        let minor = self.markers.implementation_version.version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Returns the implementation version as a simple tuple.
-    pub fn implementation_version(&self) -> (u8, u8) {
+    pub fn implementation_tuple(&self) -> (u8, u8) {
         (self.implementation_major(), self.implementation_minor())
     }
 

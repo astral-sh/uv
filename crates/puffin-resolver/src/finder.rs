@@ -183,7 +183,7 @@ impl<'a> DistFinder<'a> {
                         .requires_python
                         .as_ref()
                         .map_or(true, |requires_python| {
-                            requires_python.contains(self.interpreter.version())
+                            requires_python.contains(self.interpreter.python_version())
                         })
                     {
                         continue;
@@ -219,7 +219,7 @@ impl<'a> DistFinder<'a> {
                         .requires_python
                         .as_ref()
                         .map_or(true, |requires_python| {
-                            requires_python.contains(self.interpreter.version())
+                            requires_python.contains(self.interpreter.python_version())
                         })
                     {
                         continue;

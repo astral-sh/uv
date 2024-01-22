@@ -114,14 +114,14 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         symlink(&base_python, &venv_python)?;
         symlink(
             "python",
-            bin_dir.join(format!("python{}", interpreter.python_version().0)),
+            bin_dir.join(format!("python{}", interpreter.python_major())),
         )?;
         symlink(
             "python",
             bin_dir.join(format!(
                 "python{}.{}",
-                interpreter.python_version().0,
-                interpreter.python_version().1
+                interpreter.python_major(),
+                interpreter.python_minor(),
             )),
         )?;
     }
@@ -134,8 +134,8 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
                     "../lib/python{}.{}/site-packages",
-                    interpreter.python_version().0,
-                    interpreter.python_version().1
+                    interpreter.python_major(),
+                    interpreter.python_minor(),
                 ),
             );
         fs::write(bin_dir.join(name), activator)?;
@@ -180,8 +180,8 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         .join("lib")
         .join(format!(
             "python{}.{}",
-            interpreter.python_version().0,
-            interpreter.python_version().1
+            interpreter.python_major(),
+            interpreter.python_minor(),
         ))
         .join("site-packages");
     fs::create_dir_all(&site_packages)?;

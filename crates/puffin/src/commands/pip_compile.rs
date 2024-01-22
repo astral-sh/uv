@@ -150,7 +150,7 @@ pub(crate) async fn pip_compile(
             interpreter.platform(),
             python_version.simple_version(),
             interpreter.implementation_name(),
-            interpreter.implementation_version(),
+            interpreter.implementation_tuple(),
         )?)
     } else {
         Cow::Borrowed(interpreter.tags()?)
