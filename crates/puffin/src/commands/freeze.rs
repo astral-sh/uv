@@ -22,7 +22,7 @@ pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Resul
 
     debug!(
         "Using Python {} environment at {}",
-        venv.interpreter().version(),
+        venv.interpreter().python_version(),
         venv.python_executable().display().cyan()
     );
 
