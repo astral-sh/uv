@@ -241,7 +241,7 @@ struct PipSyncArgs {
 
     /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
     /// packages in the environment.
-    #[clap(long)]
+    #[clap(long, alias = "force-reinstall")]
     reinstall: bool,
 
     /// Reinstall a specific package, overwriting any entries in the cache and replacing any
@@ -356,7 +356,7 @@ struct PipInstallArgs {
 
     /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
     /// packages in the environment.
-    #[clap(long)]
+    #[clap(long, alias = "force-reinstall")]
     reinstall: bool,
 
     /// Reinstall a specific package, overwriting any entries in the cache and replacing any
