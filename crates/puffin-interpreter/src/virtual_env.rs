@@ -51,10 +51,7 @@ impl Virtualenv {
         }
         #[cfg(windows)]
         {
-            self.0
-                .join("Scripts")
-                .join("python.exe")
-                .into_std_path_buf()
+            self.root.join("Scripts").join("python.exe")
         }
         #[cfg(not(any(unix, windows)))]
         {
