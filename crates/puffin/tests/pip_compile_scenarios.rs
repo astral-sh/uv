@@ -129,7 +129,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
-              And because you require albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
+              And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -192,7 +192,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
         ----- stderr -----
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
-              And because you require albatross==1.0.0 we can conclude that the requirements are unsatisfiable.
+              And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -329,7 +329,7 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
 
               Because the requested Python version (3.11.6) does not satisfy Python>=3.12 and albatross==2.0.0 depends on Python>=3.12, we can conclude that albatross==2.0.0 cannot be used.
               And because we know from (1) that albatross<2.0.0 cannot be used, we can conclude that all versions of albatross cannot be used.
-              And because you require albatross we can conclude that the requirements are unsatisfiable.
+              And because you require albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
