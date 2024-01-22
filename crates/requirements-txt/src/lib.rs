@@ -47,7 +47,7 @@ use tracing::warn;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use pep508_rs::{Pep508Error, Requirement, VerbatimUrl};
+use pep508_rs::{Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -468,13 +468,26 @@ fn parse_requirement_and_hashes(
             break (end, false);
         }
     };
-    let requirement = Requirement::from_str(&content[start..end]).map_err(|err| {
-        RequirementsTxtParserError::Pep508 {
-            source: err,
-            start,
-            end,
-        }
-    })?;
+    let requirement =
+        Requirement::from_str(&content[start..end]).map_err(|err| match err.message {
+            Pep508ErrorSource::String(_) => RequirementsTxtParserError::Pep508 {
+                source: err,
+                start,
+                end,
+            },
+            Pep508ErrorSource::UrlError(_) => RequirementsTxtParserError::Pep508 {
+                source: err,
+                start,
+                end,
+            },
+            Pep508ErrorSource::UnsupportedRequirement(_) => {
+                RequirementsTxtParserError::UnsupportedRequirement {
+                    source: err,
+                    start,
+                    end,
+                }
+            }
+        })?;
     let hashes = if has_hashes {
         let hashes = parse_hashes(s)?;
         eat_trailing_line(s)?;
@@ -547,6 +560,11 @@ pub enum RequirementsTxtParserError {
         message: String,
         location: usize,
     },
+    UnsupportedRequirement {
+        source: Pep508Error,
+        start: usize,
+        end: usize,
+    },
     Pep508 {
         source: Pep508Error,
         start: usize,
@@ -572,6 +590,9 @@ impl Display for RequirementsTxtParserError {
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(f, "{message} at position {location}")
             }
+            RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
+                write!(f, "Unsupported requirement in position {start} to {end}")
+            }
             RequirementsTxtParserError::Pep508 { start, end, .. } => {
                 write!(f, "Couldn't parse requirement in position {start} to {end}")
             }
@@ -591,6 +612,7 @@ impl std::error::Error for RequirementsTxtParserError {
             RequirementsTxtParserError::IO(err) => err.source(),
             RequirementsTxtParserError::InvalidEditablePath(_) => None,
             RequirementsTxtParserError::UnsupportedUrl(_) => None,
+            RequirementsTxtParserError::UnsupportedRequirement { source, .. } => Some(source),
             RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
             RequirementsTxtParserError::Parser { .. } => None,
@@ -624,6 +646,15 @@ impl Display for RequirementsTxtFileError {
                     message,
                     self.file.display(),
                     location
+                )
+            }
+            RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
+                write!(
+                    f,
+                    "Unsupported requirement in {} position {} to {}",
+                    self.file.display(),
+                    start,
+                    end,
                 )
             }
             RequirementsTxtParserError::Pep508 { start, end, .. } => {
