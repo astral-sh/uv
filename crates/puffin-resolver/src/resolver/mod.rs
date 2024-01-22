@@ -476,7 +476,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 } else {
                     // Otherwise, assume this is a source distribution.
                     let dist = PubGrubDistribution::from_url(package_name, url);
-                    let entry = self.index.distributions.wait(&dist.package_id()).await;
+                    let entry = self.index.distributions.wait(&dist.package_id()).await?;
                     let metadata = entry.value();
                     let version = &metadata.version;
                     if range.contains(version) {
@@ -489,7 +489,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
-                let entry = self.index.packages.wait(package_name).await;
+                let entry = self.index.packages.wait(package_name).await?;
                 let version_map = entry.value();
 
                 if let Some(extra) = extra {
@@ -638,7 +638,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Known(constraints));
                 }
 
-                let entry = self.index.distributions.wait(&package_id).await;
+                let entry = self.index.distributions.wait(&package_id).await?;
                 let metadata = entry.value();
 
                 let mut constraints = PubGrubDependencies::from_requirements(
@@ -763,7 +763,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
-                let entry = self.index.packages.wait(&package_name).await;
+                let entry = self.index.packages.wait(&package_name).await?;
                 let version_map = entry.value();
 
                 // Try to find a compatible version. If there aren't any compatible versions,
