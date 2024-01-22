@@ -8,6 +8,18 @@ use tracing::{error, warn};
 
 use puffin_warnings::warn_user;
 
+/// Symlink a directory.
+#[cfg(windows)]
+pub fn symlink_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(src, dst)
+}
+
+/// Symlink a directory.
+#[cfg(unix)]
+pub fn symlink_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(src, dst)
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let temp_file = NamedTempFile::new_in(

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
 use tokio::task::JoinError;
-use tracing::{instrument, warn};
+use tracing::instrument;
 use url::Url;
 
 use distribution_types::{CachedDist, Dist, Identifier, LocalEditable, RemoteSource, SourceDist};
@@ -36,6 +36,7 @@ pub enum Error {
 /// Download, build, and unzip a set of distributions.
 pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
     database: DistributionDatabase<'a, Context>,
+    cache: &'a Cache,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -49,6 +50,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Self {
             database: DistributionDatabase::new(cache, tags, client, build_context),
             reporter: None,
+            cache,
         }
     }
 
@@ -59,6 +61,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Self {
             reporter: Some(reporter.clone()),
             database: self.database.with_reporter(Facade::from(reporter.clone())),
+            cache: self.cache,
         }
     }
 
@@ -124,7 +127,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                     .build_wheel_editable(&editable, editable_wheel_dir)
                     .await
                     .map_err(Error::Editable)?;
-                let cached_dist = Self::unzip_wheel(local_wheel).await?;
+                let cached_dist = self.unzip_wheel(local_wheel).await?;
                 if let Some(task_id) = task_id {
                     if let Some(reporter) = &self.reporter {
                         reporter.on_editable_build_complete(&editable, task_id);
@@ -153,7 +156,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Download, build, and unzip a single wheel.
-    #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(|file| file.url.to_string()).unwrap_or_default()))]
+    #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
         let wheel = if in_flight.downloads.register(&id) {
@@ -163,7 +166,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await?;
-            let result = Self::unzip_wheel(download).await;
+            let result = self.unzip_wheel(download).await;
             match result {
                 Ok(cached) => {
                     in_flight.downloads.done(id, Ok(cached.clone()));
@@ -188,41 +191,23 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     }
 
     /// Unzip a locally-available wheel into the cache.
-    async fn unzip_wheel(download: LocalWheel) -> Result<CachedDist, Error> {
+    async fn unzip_wheel(&self, download: LocalWheel) -> Result<CachedDist, Error> {
         // Just an optimization: Avoid spawning a blocking task if there is no work to be done.
         if matches!(download, LocalWheel::Unzipped(_)) {
-            return Ok(download.into_cached_dist());
-        }
-
-        // If the wheel is already unpacked, we should avoid attempting to unzip it at all.
-        if download.target().is_dir() {
-            warn!("Wheel is already unpacked: {download}");
             return Ok(download.into_cached_dist());
         }
 
         // Unzip the wheel.
         tokio::task::spawn_blocking({
             let download = download.clone();
+            let cache = self.cache.clone();
             move || -> Result<(), puffin_extract::Error> {
                 // Unzip the wheel into a temporary directory.
-                let parent = download
-                    .target()
-                    .parent()
-                    .expect("Cache paths can't be root");
-                fs_err::create_dir_all(parent)?;
-                let staging = tempfile::tempdir_in(parent)?;
-                download.unzip(staging.path())?;
+                let temp_dir = tempfile::tempdir_in(cache.root())?;
+                download.unzip(temp_dir.path())?;
 
-                // Move the unzipped wheel into the cache.
-                if let Err(err) = fs_err::rename(staging.into_path(), download.target()) {
-                    // If another thread already unpacked the wheel, we can ignore the error.
-                    return if download.target().is_dir() {
-                        warn!("Wheel is already unpacked: {download}");
-                        Ok(())
-                    } else {
-                        Err(err.into())
-                    };
-                }
+                // Persist the temporary directory to the directory store.
+                cache.persist(temp_dir.into_path(), download.target())?;
 
                 Ok(())
             }

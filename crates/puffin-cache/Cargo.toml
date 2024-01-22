@@ -28,3 +28,4 @@ serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true , default-features = false, features = ["v4"] }

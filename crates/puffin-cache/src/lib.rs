@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
@@ -54,6 +55,11 @@ impl CacheEntry {
     #[inline]
     pub fn dir(&self) -> &Path {
         self.0.parent().expect("Cache entry has no parent")
+    }
+
+    /// Return the cache entry's parent directory.
+    pub fn file_name(&self) -> &OsStr {
+        self.0.file_name().expect("Cache entry has no file name")
     }
 
     /// Create a new [`CacheEntry`] with the given file name.
@@ -147,6 +153,32 @@ impl Cache {
         file: impl AsRef<Path>,
     ) -> CacheEntry {
         CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
+    }
+
+    /// Persist a temporary directory to the artifact store.
+    pub fn persist(
+        &self,
+        temp_dir: impl AsRef<Path>,
+        path: impl AsRef<Path>,
+    ) -> Result<(), io::Error> {
+        // Create a unique ID for the artifact.
+        let id = uuid::Uuid::new_v4();
+
+        // Move the temporary directory into the directory store.
+        let archive_entry = self.entry(CacheBucket::Archive, "", id.to_string());
+        fs_err::create_dir_all(archive_entry.dir())?;
+        fs_err::rename(temp_dir.as_ref(), archive_entry.path())?;
+
+        // Create a symlink to the directory store.
+        let temp_dir = tempfile::tempdir_in(self.root())?;
+        let temp_file = temp_dir.path().join("symlink");
+        puffin_fs::symlink_dir(archive_entry.path(), &temp_file)?;
+
+        // Move the symlink into the wheel cache.
+        fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
+        fs_err::rename(&temp_file, path.as_ref())?;
+
+        Ok(())
     }
 
     /// Initialize a directory for use as a cache.
@@ -413,6 +445,12 @@ pub enum CacheBucket {
     ///
     /// The response is parsed into `puffin_client::SimpleMetadata` before storage.
     Simple,
+    /// A cache of unzipped wheels, stored as directories. This is used internally within the cache.
+    /// When other buckets need to store directories, they should persist them to
+    /// [`CacheBucket::Archive`], and then symlink them into the appropriate bucket. This ensures
+    /// that cache entries can be atomically replaced and removed, as storing directories in the
+    /// other buckets directly would make atomic operations impossible.
+    Archive,
 }
 
 impl CacheBucket {
@@ -424,6 +462,7 @@ impl CacheBucket {
             CacheBucket::Interpreter => "interpreter-v0",
             CacheBucket::Simple => "simple-v0",
             CacheBucket::Wheels => "wheels-v0",
+            CacheBucket::Archive => "archive-v0",
         }
     }
 
@@ -540,6 +579,9 @@ impl CacheBucket {
                 // Nothing to do.
             }
             CacheBucket::Interpreter => {
+                // Nothing to do.
+            }
+            CacheBucket::Archive => {
                 // Nothing to do.
             }
         }
