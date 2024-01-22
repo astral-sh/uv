@@ -77,8 +77,13 @@ struct Cli {
 
 #[derive(Debug, Clone, clap::ValueEnum)]
 pub enum ColorChoice {
+    /// Enables colored output only when the output is going to a terminal or TTY with support.
     Auto,
+
+    /// Enables colored output regardless of the detected environment.
     Always,
+
+    /// Disables colored output.
     Never,
 }
 
