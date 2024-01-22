@@ -1,8 +1,8 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::iter;
 use std::path::Path;
 use std::process::Command;
+use std::{fs, iter};
 
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
@@ -121,6 +121,11 @@ fn install() -> Result<()> {
 
     check_command(&venv, "import markupsafe", &temp_dir);
 
+    // Removing the cache shouldn't invalidate the virtual environment.
+    fs::remove_dir_all(cache_dir.path())?;
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+
     Ok(())
 }
 
@@ -163,6 +168,11 @@ fn install_copy() -> Result<()> {
 
     check_command(&venv, "import markupsafe", &temp_dir);
 
+    // Removing the cache shouldn't invalidate the virtual environment.
+    fs::remove_dir_all(cache_dir.path())?;
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+
     Ok(())
 }
 
@@ -202,6 +212,11 @@ fn install_hardlink() -> Result<()> {
          + markupsafe==2.1.3
         "###);
     });
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+
+    // Removing the cache shouldn't invalidate the virtual environment.
+    fs::remove_dir_all(cache_dir.path())?;
 
     check_command(&venv, "import markupsafe", &temp_dir);
 
