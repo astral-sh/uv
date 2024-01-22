@@ -18,14 +18,16 @@ use crate::printer::Printer;
 pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let python = Virtualenv::from_env(platform, cache)?;
+    let venv = Virtualenv::from_env(platform, cache)?;
+
     debug!(
-        "Using Python interpreter: {}",
-        python.python_executable().display()
+        "Using Python {} environment at {}",
+        venv.interpreter().python_version(),
+        venv.python_executable().display().cyan()
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&python)?;
+    let site_packages = SitePackages::from_executable(&venv)?;
     for dist in site_packages
         .iter()
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()))

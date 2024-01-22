@@ -125,11 +125,10 @@ pub(crate) async fn pip_compile(
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let interpreter = Interpreter::find(python_version.as_ref(), platform, &cache)?;
-
     debug!(
-        "Using Python {} at {}",
-        interpreter.markers().python_version,
-        interpreter.sys_executable().display()
+        "Using Python {} interpreter at {} for builds",
+        interpreter.python_version(),
+        interpreter.sys_executable().display().cyan()
     );
 
     // Create a shared in-memory index.
@@ -258,6 +257,7 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
     )
     .with_reporter(ResolverReporter::from(printer));
+
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {
             #[allow(clippy::print_stderr)]

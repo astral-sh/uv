@@ -89,9 +89,11 @@ pub(crate) async fn pip_install(
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     debug!(
-        "Using Python interpreter: {}",
-        venv.python_executable().display()
+        "Using Python {} environment at {}",
+        venv.interpreter().python_version(),
+        venv.python_executable().display().cyan()
     );
+
     let _lock = venv.lock()?;
 
     // Determine the set of installed packages.

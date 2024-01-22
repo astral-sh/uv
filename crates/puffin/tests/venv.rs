@@ -18,7 +18,7 @@ fn create_venv() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"Using Python 3\.\d+\.\d+ at .+", "Using Python [VERSION] at [PATH]"),
+            (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
             (temp_dir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {
@@ -33,7 +33,7 @@ fn create_venv() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Using Python [VERSION] at [PATH]
+        Using Python [VERSION] interpreter at [PATH]
         Creating virtual environment at: /home/ferris/project/.venv
         "###);
     });
@@ -50,7 +50,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"Using Python 3\.\d+\.\d+ at .+", "Using Python [VERSION] at [PATH]"),
+            (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
             (temp_dir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {
@@ -64,7 +64,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Using Python [VERSION] at [PATH]
+        Using Python [VERSION] interpreter at [PATH]
         Creating virtual environment at: .venv
         "###);
     });
@@ -81,7 +81,7 @@ fn seed() -> Result<()> {
 
     insta::with_settings!({
         filters => vec![
-            (r"Using Python 3\.\d+\.\d+ at .+", "Using Python [VERSION] at [PATH]"),
+            (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
             (temp_dir.to_str().unwrap(), "/home/ferris/project"),
         ]
     }, {
@@ -97,7 +97,7 @@ fn seed() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Using Python [VERSION] at [PATH]
+        Using Python [VERSION] interpreter at [PATH]
         Creating virtual environment at: /home/ferris/project/.venv
          + setuptools==69.0.3
          + pip==23.3.2
