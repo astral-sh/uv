@@ -1,2 +1,4 @@
 chevron-blue==0.2.1
 packse @ git+https://github.com/zanieb/packse
+waitress @ git+https://github.com/zanieb/waitress@d6d764bcc970e1e50486153588eda8a92cf5b5e4
+devpi-server @ git+https://github.com/zanieb/devpi@22f71acb8f08a59a098e7ad434cf388a1193fc24#subdirectory=server
