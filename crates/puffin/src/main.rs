@@ -57,12 +57,39 @@ struct Cli {
     #[arg(global = true, long, short, conflicts_with = "quiet")]
     verbose: bool,
 
-    /// Disable colors.
-    #[arg(global = true, long)]
+    /// Disable colors; provided for compatibility with `pip`.
+    #[arg(global = true, long, hide = true, conflicts_with = "color")]
     no_color: bool,
+
+    /// Control colors in output.
+    #[arg(
+        global = true,
+        long,
+        value_enum,
+        default_value = "auto",
+        conflicts_with = "no_color"
+    )]
+    color: ColorChoice,
 
     #[command(flatten)]
     cache_args: CacheArgs,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum ColorChoice {
+    Auto,
+    Always,
+    Never,
+}
+
+impl ColorChoice {
+    fn to_anstream(&self) -> anstream::ColorChoice {
+        match self {
+            Self::Auto => anstream::ColorChoice::Auto,
+            Self::Always => anstream::ColorChoice::Always,
+            Self::Never => anstream::ColorChoice::Never,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -558,6 +585,8 @@ async fn inner() -> Result<ExitStatus> {
 
     if cli.no_color {
         anstream::ColorChoice::write_global(anstream::ColorChoice::Never);
+    } else {
+        anstream::ColorChoice::write_global(cli.color.to_anstream());
     }
 
     miette::set_hook(Box::new(|_| {
