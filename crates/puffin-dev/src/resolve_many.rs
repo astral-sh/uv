@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
 use indicatif::ProgressStyle;
 use itertools::Itertools;
-use puffin_installer::NoBinary;
 use tokio::time::Instant;
 use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -19,6 +17,7 @@ use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
 use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::InMemoryIndex;
@@ -46,7 +45,7 @@ pub(crate) struct ResolveManyArgs {
 
 /// Try to find the latest version of a package, ignoring error because we report them during resolution properly
 async fn find_latest_version(
-    client: RegistryClient,
+    client: &RegistryClient,
     package_name: &PackageName,
 ) -> Option<Version> {
     let (_, simple_metadata) = client.simple(package_name).await.ok()?;
@@ -74,44 +73,42 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
 
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
-    let client = RegistryClientBuilder::new(cache.clone()).build();
-    let index_locations = IndexLocations::default();
-    let flat_index = FlatIndex::default();
-    let index = InMemoryIndex::default();
-    let setup_py = SetupPyStrategy::default();
     let in_flight = InFlight::default();
-
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        &cache,
-        venv.interpreter(),
-        &index_locations,
-        &flat_index,
-        &index,
-        &in_flight,
-        venv.python_executable(),
-        setup_py,
-        args.no_build,
-        &NoBinary::None,
-    );
-    let build_dispatch = Arc::new(build_dispatch);
+    let client = RegistryClientBuilder::new(cache.clone()).build();
 
     let header_span = info_span!("resolve many");
     header_span.pb_set_style(&ProgressStyle::default_bar());
     header_span.pb_set_length(total as u64);
     let _header_span_enter = header_span.enter();
 
-    let client = RegistryClientBuilder::new(cache.clone()).build();
-
     let mut tasks = futures::stream::iter(requirements)
         .map(|requirement| {
-            let build_dispatch = build_dispatch.clone();
-            let client = client.clone();
-            async move {
+            async {
+                // Use a separate `InMemoryIndex` for each requirement.
+                let index = InMemoryIndex::default();
+                let index_locations = IndexLocations::default();
+                let setup_py = SetupPyStrategy::default();
+                let flat_index = FlatIndex::default();
+
+                // Create a `BuildDispatch` for each requirement.
+                let build_dispatch = BuildDispatch::new(
+                    &client,
+                    &cache,
+                    venv.interpreter(),
+                    &index_locations,
+                    &flat_index,
+                    &index,
+                    &in_flight,
+                    venv.python_executable(),
+                    setup_py,
+                    args.no_build,
+                    &NoBinary::None,
+                );
+
                 let start = Instant::now();
 
                 let requirement = if args.latest_version && requirement.version_or_url.is_none() {
-                    if let Some(version) = find_latest_version(client, &requirement.name).await {
+                    if let Some(version) = find_latest_version(&client, &requirement.name).await {
                         let equals_version = VersionOrUrl::VersionSpecifier(
                             VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
                         );
