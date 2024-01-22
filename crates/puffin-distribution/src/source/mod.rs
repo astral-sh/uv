@@ -47,8 +47,8 @@ pub struct SourceDistCachedBuilder<'a, T: BuildContext> {
     tags: &'a Tags,
 }
 
-/// The name of the file that contains the cached metadata, encoded via `MsgPack`.
-const METADATA: &str = "metadata.msgpack";
+/// The name of the file that contains the cached manifest, encoded via `MsgPack`.
+const MANIFEST: &str = "manifest.msgpack";
 
 impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Initialize a [`SourceDistCachedBuilder`] from a [`BuildContext`].
@@ -243,7 +243,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
-        let cache_entry = cache_shard.entry(METADATA);
+        let cache_entry = cache_shard.entry(MANIFEST);
 
         let download = |response| {
             async {
@@ -347,7 +347,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<Metadata21, SourceDistError> {
-        let cache_entry = cache_shard.entry(METADATA);
+        let cache_entry = cache_shard.entry(MANIFEST);
 
         let download = |response| {
             async {
@@ -459,7 +459,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             CacheBucket::BuiltWheels,
             WheelCache::Path(&path_source_dist.url)
                 .remote_wheel_dir(path_source_dist.name().as_ref()),
-            METADATA,
+            MANIFEST,
         );
 
         // Determine the last-modified time of the source distribution.
@@ -468,7 +468,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache.
-        let mut manifest = Self::read_cached_metadata(&cache_entry, modified)
+        let mut manifest = Self::read_cached_manifest(&cache_entry, modified)
             .await?
             .unwrap_or_default();
 
@@ -533,7 +533,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             CacheBucket::BuiltWheels,
             WheelCache::Path(&path_source_dist.url)
                 .remote_wheel_dir(path_source_dist.name().as_ref()),
-            METADATA,
+            MANIFEST,
         );
 
         // Determine the last-modified time of the source distribution.
@@ -564,7 +564,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache.
-        let mut manifest = Self::read_cached_metadata(&cache_entry, modified)
+        let mut manifest = Self::read_cached_manifest(&cache_entry, modified)
             .await?
             .unwrap_or_default();
 
@@ -641,11 +641,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             CacheBucket::BuiltWheels,
             WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
                 .remote_wheel_dir(git_source_dist.name().as_ref()),
-            METADATA,
+            MANIFEST,
         );
 
         // Read the existing metadata from the cache.
-        let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();
+        let mut manifest = Self::read_manifest(&cache_entry).await?.unwrap_or_default();
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) =
@@ -711,11 +711,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             CacheBucket::BuiltWheels,
             WheelCache::Git(&git_source_dist.url, &git_sha.to_short_string())
                 .remote_wheel_dir(git_source_dist.name().as_ref()),
-            METADATA,
+            MANIFEST,
         );
 
         // Read the existing metadata from the cache.
-        let mut manifest = Self::read_metadata(&cache_entry).await?.unwrap_or_default();
+        let mut manifest = Self::read_manifest(&cache_entry).await?.unwrap_or_default();
 
         // If the cache contains compatible metadata, return it.
         if let Some(metadata) = manifest.find_metadata() {
@@ -1010,8 +1010,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         Ok((dist, disk_filename, filename, metadata))
     }
 
-    /// Read an existing cache entry, if it exists and is up-to-date.
-    async fn read_cached_metadata(
+    /// Read an existing cached [`Manifest`], if it exists and is up-to-date.
+    async fn read_cached_manifest(
         cache_entry: &CacheEntry,
         modified: std::time::SystemTime,
     ) -> Result<Option<Manifest>, SourceDistError> {
@@ -1036,8 +1036,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
     }
 
-    /// Read an existing cache entry, if it exists.
-    async fn read_metadata(cache_entry: &CacheEntry) -> Result<Option<Manifest>, SourceDistError> {
+    /// Read an existing cached [`Manifest`], if it exists.
+    async fn read_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, SourceDistError> {
         match fs::read(&cache_entry.path()).await {
             Ok(cached) => Ok(Some(rmp_serde::from_slice::<Manifest>(&cached)?)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
