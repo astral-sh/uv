@@ -29,6 +29,8 @@ pub enum Error {
     Editable(#[from] DistributionDatabaseError),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
+    #[error(transparent)]
+    OnceMap(#[from] once_map::Error),
 }
 
 /// Download, build, and unzip a set of distributions.
@@ -176,7 +178,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             in_flight
                 .downloads
                 .wait(&id)
-                .await
+                .await?
                 .value()
                 .clone()
                 .map_err(Error::Thread)?

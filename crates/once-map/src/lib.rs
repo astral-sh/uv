@@ -54,14 +54,14 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     /// Wait for the result of a job that is running.
     ///
     /// Will hang if [`OnceMap::done`] isn't called for this key.
-    pub async fn wait<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Ref<'_, K, V, RandomState>
+    pub async fn wait<Q: ?Sized + Hash + Eq>(
+        &self,
+        key: &Q,
+    ) -> Result<Ref<'_, K, V, RandomState>, Error>
     where
         K: Borrow<Q> + for<'a> From<&'a Q>,
     {
-        self.wait_map
-            .wait(key)
-            .await
-            .expect("This operation is never cancelled")
+        self.wait_map.wait(key).await.ok_or(Error::Canceled)
     }
 
     /// Return the result of a previous job, if any.
@@ -87,4 +87,10 @@ impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
             wait_map: WaitMap::new(),
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("The operation was canceled")]
+    Canceled,
 }

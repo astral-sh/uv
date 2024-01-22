@@ -36,6 +36,9 @@ pub enum ResolveError {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
+    #[error(transparent)]
+    OnceMap(#[from] once_map::Error),
+
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
         given: PackageName,

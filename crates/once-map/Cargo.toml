@@ -14,4 +14,5 @@ workspace = true
 
 [dependencies]
 rustc-hash = { workspace = true }
+thiserror = { workspace = true }
 waitmap = { workspace = true }
