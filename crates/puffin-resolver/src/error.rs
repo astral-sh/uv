@@ -108,8 +108,10 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
             pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
                 ResolveError::NoSolution(NoSolutionError {
                     derivation_tree,
+                    // The following should be populated before display for the best error messages
                     available_versions: FxHashMap::default(),
                     selector: None,
+                    python_requirement: None,
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
@@ -128,6 +130,7 @@ pub struct NoSolutionError {
     derivation_tree: DerivationTree<PubGrubPackage, Range<Version>>,
     available_versions: FxHashMap<PubGrubPackage, Vec<Version>>,
     selector: Option<CandidateSelector>,
+    python_requirement: Option<PythonRequirement>,
 }
 
 impl std::error::Error for NoSolutionError {}
@@ -137,6 +140,7 @@ impl std::fmt::Display for NoSolutionError {
         // Write the derivation report.
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
+            python_requirement: self.python_requirement.as_ref(),
         };
         let report =
             DefaultStringReporter::report_with_formatter(&self.derivation_tree, &formatter);
@@ -199,6 +203,16 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_selector(mut self, selector: CandidateSelector) -> Self {
         self.selector = Some(selector);
+        self
+    }
+
+    /// Update the Python requirements attached to the error.
+    #[must_use]
+    pub(crate) fn with_python_requirement(
+        mut self,
+        python_requirement: &PythonRequirement,
+    ) -> Self {
+        self.python_requirement = Some(python_requirement.clone());
         self
     }
 }

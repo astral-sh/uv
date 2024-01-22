@@ -63,7 +63,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     overrides: Overrides,
     allowed_urls: AllowedUrls,
     markers: &'a MarkerEnvironment,
-    python_requirement: PythonRequirement<'a>,
+    python_requirement: PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
     /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
@@ -120,7 +120,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         manifest: Manifest,
         options: ResolutionOptions,
         markers: &'a MarkerEnvironment,
-        python_requirement: PythonRequirement<'a>,
+        python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,
         provider: Provider,
     ) -> Self {
@@ -221,7 +221,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                     // Add version information to improve unsat error messages.
                     if let ResolveError::NoSolution(err) = err {
-                        ResolveError::NoSolution(err.with_available_versions(&self.python_requirement, &self.index.packages).with_selector(self.selector.clone()))
+                        ResolveError::NoSolution(
+                            err
+                            .with_available_versions(&self.python_requirement, &self.index.packages)
+                            .with_selector(self.selector.clone())
+                            .with_python_requirement(&self.python_requirement)
+                        )
                     } else {
                         err
                     }

@@ -13,6 +13,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::prerelease_mode::PreReleaseStrategy;
+use crate::python_requirement::PythonRequirement;
 
 use super::PubGrubPackage;
 
@@ -20,6 +21,9 @@ use super::PubGrubPackage;
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
     pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, Vec<Version>>,
+
+    /// The versions that were available for each package
+    pub(crate) python_requirement: Option<&'a PythonRequirement>,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<'_> {
@@ -31,6 +35,53 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 format!("we are solving dependencies of {package} {version}")
             }
             External::NoVersions(package, set) => {
+                if matches!(package, PubGrubPackage::Python(_)) {
+                    if let Some(python) = self.python_requirement {
+                        if python.target().release().iter().eq(python
+                            .installed()
+                            .release()
+                            .iter()
+                            .take(2))
+                        {
+                            // Simple case, the installed version is the same as the target version
+                            // N.B. Usually the target version does not include anything past the
+                            //      minor version mumber so we only compare to part of the installed
+                            //      version. If the target version is longer, we'll do the complex
+                            //      display instead.
+                            return format!(
+                                "the current {package} version ({}) does not satisfy {}",
+                                python.target(),
+                                PackageRange::compatibility(package, set)
+                            );
+                        }
+                        // Complex case, the target was provided and differs from the installed one
+                        // Determine which Python version requirement was not met
+                        if !set.contains(python.target()) {
+                            return format!(
+                                "the requested {package} version ({}) does not satisfy {}",
+                                python.target(),
+                                PackageRange::compatibility(package, set)
+                            );
+                        }
+                        // TODO(zanieb): Explain to the user why the installed version is relevant
+                        //               when they provided a target version; probably via a "hint"
+                        debug_assert!(
+                            !set.contains(python.installed()),
+                            "There should not be an incompatibility where the range is satisfied by both Python requirements"
+                        );
+                        return format!(
+                            "the current {package} version ({}) does not satisfy {}",
+                            python.installed(),
+                            PackageRange::compatibility(package, set)
+                        );
+                    }
+                    // We should always have the required Python versions, if we don't we'll fall back
+                    // to a less helpful message in production
+                    debug_assert!(
+                        false,
+                        "Error reporting should always be provided with Python versions"
+                    );
+                }
                 let set = self.simplify_set(set, package);
                 if set.as_ref() == &Range::full() {
                     format!("there are no versions of {package}")
