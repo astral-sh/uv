@@ -1,13 +1,84 @@
+use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, Name, PathSourceDist};
 use platform_tags::Tags;
-use puffin_cache::CacheShard;
+use puffin_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use puffin_fs::directories;
 
 use crate::index::cached_wheel::CachedWheel;
+use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};
+use crate::SourceDistError;
 
 /// A local index of built distributions for a specific source distribution.
 pub struct BuiltWheelIndex;
 
 impl BuiltWheelIndex {
+    /// Return the most compatible [`CachedWheel`] for a given source distribution at a direct URL.
+    ///
+    /// This method does not perform any freshness checks and assumes that the source distribution
+    /// is already up-to-date.
+    pub async fn url(
+        source_dist: &DirectUrlSourceDist,
+        cache: &Cache,
+        tags: &Tags,
+    ) -> Result<Option<CachedWheel>, SourceDistError> {
+        // For direct URLs, cache directly under the hash of the URL itself.
+        let cache_shard = cache.shard(
+            CacheBucket::BuiltWheels,
+            WheelCache::Url(&source_dist.url.raw()).remote_wheel_dir(source_dist.name().as_ref()),
+        );
+
+        // Read the existing metadata from the cache, if it exists.
+        let manifest_entry = cache_shard.entry(MANIFEST);
+        let Some(manifest) = read_http_manifest(&manifest_entry).await? else {
+            return Ok(None);
+        };
+
+        Ok(Self::find(&cache_shard.shard(manifest.digest()), tags))
+    }
+
+    /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
+    pub async fn path(
+        source_dist: &PathSourceDist,
+        cache: &Cache,
+        tags: &Tags,
+    ) -> Result<Option<CachedWheel>, SourceDistError> {
+        let cache_shard = cache.shard(
+            CacheBucket::BuiltWheels,
+            WheelCache::Path(&source_dist.url).remote_wheel_dir(source_dist.name().as_ref()),
+        );
+
+        // Determine the last-modified time of the source distribution.
+        let Some(modified) = puffin_cache::archive_mtime(&source_dist.path)? else {
+            return Err(SourceDistError::DirWithoutEntrypoint);
+        };
+
+        // Read the existing metadata from the cache, if it's up-to-date.
+        let manifest_entry = cache_shard.entry(MANIFEST);
+        let Some(manifest) = read_timestamp_manifest(&manifest_entry, modified).await? else {
+            return Ok(None);
+        };
+
+        Ok(Self::find(&cache_shard.shard(manifest.digest()), tags))
+    }
+
+    /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
+    pub async fn git(
+        source_dist: &GitSourceDist,
+        cache: &Cache,
+        tags: &Tags,
+    ) -> Option<CachedWheel> {
+        let Ok(Some(git_sha)) = git_reference(&source_dist.url) else {
+            return None;
+        };
+
+        let cache_shard = cache.shard(
+            CacheBucket::BuiltWheels,
+            WheelCache::Git(&source_dist.url, &git_sha.to_short_string())
+                .remote_wheel_dir(source_dist.name().as_ref()),
+        );
+
+        Self::find(&cache_shard, tags)
+    }
+
     /// Find the "best" distribution in the index for a given source distribution.
     ///
     /// This lookup prefers newer versions over older versions, and aims to maximize compatibility
@@ -24,7 +95,7 @@ impl BuiltWheelIndex {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    pub fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
+    fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
         let mut candidate: Option<CachedWheel> = None;
 
         for subdir in directories(&**shard) {
