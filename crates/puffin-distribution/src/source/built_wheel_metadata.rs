@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
-use puffin_cache::CacheEntry;
+use puffin_cache::CacheShard;
 use puffin_fs::directories;
 
 /// The information about the wheel we either just built or got from the cache.
@@ -19,8 +19,8 @@ pub struct BuiltWheelMetadata {
 
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache based on the given manifest.
-    pub(crate) fn find_in_cache(tags: &Tags, cache_entry: &CacheEntry) -> Option<Self> {
-        for directory in directories(cache_entry.dir()) {
+    pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
+        for directory in directories(cache_shard) {
             if let Some(metadata) = Self::from_path(directory) {
                 // Validate that the wheel is compatible with the target platform.
                 if metadata.filename.is_compatible(tags) {

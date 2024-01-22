@@ -44,3 +44,4 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }
+uuid = { version = "1.7.0", default-features = false, features = ["v4", "serde"] }

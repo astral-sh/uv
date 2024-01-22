@@ -71,6 +71,16 @@ impl CacheShard {
     pub fn entry(&self, file: impl AsRef<Path>) -> CacheEntry {
         CacheEntry::new(&self.0, file)
     }
+
+    pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
+        Self(self.0.join(dir.as_ref()))
+    }
+}
+
+impl AsRef<Path> for CacheShard {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
 }
 
 impl Deref for CacheShard {
