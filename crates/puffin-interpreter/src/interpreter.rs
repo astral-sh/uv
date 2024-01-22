@@ -127,8 +127,8 @@ impl Interpreter {
 
         #[cfg(windows)]
         {
-            if let Some(python_version) = python_version {
-                compile_error!("Implement me")
+            if let Some(_python_version) = python_version {
+                unimplemented!("Implement me")
             }
 
             let executable = which::which("python.exe")
