@@ -15,7 +15,7 @@ impl BuiltWheelIndex {
     ///
     /// This method does not perform any freshness checks and assumes that the source distribution
     /// is already up-to-date.
-    pub async fn url(
+    pub fn url(
         source_dist: &DirectUrlSourceDist,
         cache: &Cache,
         tags: &Tags,
@@ -23,12 +23,12 @@ impl BuiltWheelIndex {
         // For direct URLs, cache directly under the hash of the URL itself.
         let cache_shard = cache.shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Url(&source_dist.url.raw()).remote_wheel_dir(source_dist.name().as_ref()),
+            WheelCache::Url(source_dist.url.raw()).remote_wheel_dir(source_dist.name().as_ref()),
         );
 
         // Read the existing metadata from the cache, if it exists.
         let manifest_entry = cache_shard.entry(MANIFEST);
-        let Some(manifest) = read_http_manifest(&manifest_entry).await? else {
+        let Some(manifest) = read_http_manifest(&manifest_entry)? else {
             return Ok(None);
         };
 
@@ -36,7 +36,7 @@ impl BuiltWheelIndex {
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
-    pub async fn path(
+    pub fn path(
         source_dist: &PathSourceDist,
         cache: &Cache,
         tags: &Tags,
@@ -53,7 +53,7 @@ impl BuiltWheelIndex {
 
         // Read the existing metadata from the cache, if it's up-to-date.
         let manifest_entry = cache_shard.entry(MANIFEST);
-        let Some(manifest) = read_timestamp_manifest(&manifest_entry, modified).await? else {
+        let Some(manifest) = read_timestamp_manifest(&manifest_entry, modified)? else {
             return Ok(None);
         };
 
@@ -61,11 +61,7 @@ impl BuiltWheelIndex {
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
-    pub async fn git(
-        source_dist: &GitSourceDist,
-        cache: &Cache,
-        tags: &Tags,
-    ) -> Option<CachedWheel> {
+    pub fn git(source_dist: &GitSourceDist, cache: &Cache, tags: &Tags) -> Option<CachedWheel> {
         let Ok(Some(git_sha)) = git_reference(&source_dist.url) else {
             return None;
         };
@@ -95,10 +91,10 @@ impl BuiltWheelIndex {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
+    pub fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
         let mut candidate: Option<CachedWheel> = None;
 
-        for subdir in directories(&**shard) {
+        for subdir in directories(shard) {
             match CachedWheel::from_path(&subdir) {
                 None => {}
                 Some(dist_info) => {

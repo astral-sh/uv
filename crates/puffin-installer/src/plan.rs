@@ -49,7 +49,7 @@ impl<'a> Planner<'a> {
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
     #[allow(clippy::too_many_arguments)]
-    pub async fn build(
+    pub fn build(
         self,
         mut site_packages: SitePackages<'_>,
         reinstall: &Reinstall,
@@ -295,7 +295,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Some(wheel) = BuiltWheelIndex::url(&sdist, cache, tags).await? {
+                            if let Some(wheel) = BuiltWheelIndex::url(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 local.push(CachedDist::Url(cached_dist));
@@ -305,7 +305,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::Path(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Some(wheel) = BuiltWheelIndex::path(&sdist, cache, tags).await? {
+                            if let Some(wheel) = BuiltWheelIndex::path(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 local.push(CachedDist::Url(cached_dist));
@@ -315,7 +315,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::Git(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Some(wheel) = BuiltWheelIndex::git(&sdist, cache, tags).await {
+                            if let Some(wheel) = BuiltWheelIndex::git(&sdist, cache, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Git source requirement already cached: {cached_dist}");
                                 local.push(CachedDist::Url(cached_dist));

@@ -133,7 +133,6 @@ pub(crate) async fn pip_sync(
             &venv,
             tags,
         )
-        .await
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.

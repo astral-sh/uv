@@ -479,7 +479,6 @@ async fn install(
             venv,
             tags,
         )
-        .await
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.

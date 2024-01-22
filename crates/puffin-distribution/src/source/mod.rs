@@ -122,13 +122,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     }
                 };
 
-                // For registry source distributions, shard by package, then by SHA.
-                // Ex) `pypi/requests/a673187abc19fe6c`
+                // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
                         .remote_wheel_dir(registry_source_dist.filename.name.as_ref())
-                        .join(&registry_source_dist.file.distribution_id().as_str()[..16]),
+                        .join(registry_source_dist.filename.version.to_string()),
                 );
 
                 self.url(
@@ -895,10 +894,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 }
 
-pub(crate) async fn read_http_manifest(
+/// Read an existing HTTP-cached [`Manifest`], if it exists.
+pub(crate) fn read_http_manifest(
     cache_entry: &CacheEntry,
 ) -> Result<Option<Manifest>, SourceDistError> {
-    match fs::read(&cache_entry.path()).await {
+    match std::fs::read(cache_entry.path()) {
         Ok(cached) => Ok(Some(
             rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?.data,
         )),
@@ -907,7 +907,28 @@ pub(crate) async fn read_http_manifest(
     }
 }
 
-/// Read an existing cached [`Manifest`], if it exists and is up-to-date.
+/// Read an existing timestamped [`Manifest`], if it exists and is up-to-date.
+///
+/// If the cache entry is stale, a new entry will be created.
+pub(crate) fn read_timestamp_manifest(
+    cache_entry: &CacheEntry,
+    modified: std::time::SystemTime,
+) -> Result<Option<Manifest>, SourceDistError> {
+    // If the cache entry is up-to-date, return it.
+    match std::fs::read(cache_entry.path()) {
+        Ok(cached) => {
+            let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
+            if cached.timestamp == modified {
+                return Ok(Some(cached.data));
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+    Ok(None)
+}
+
+/// Read an existing timestamped [`Manifest`], if it exists and is up-to-date.
 ///
 /// If the cache entry is stale, a new entry will be created.
 pub(crate) async fn refresh_timestamp_manifest(
@@ -915,7 +936,7 @@ pub(crate) async fn refresh_timestamp_manifest(
     modified: std::time::SystemTime,
 ) -> Result<Manifest, SourceDistError> {
     // If the cache entry is up-to-date, return it.
-    if let Some(manifest) = read_timestamp_manifest(cache_entry, modified).await? {
+    if let Some(manifest) = read_timestamp_manifest(cache_entry, modified)? {
         return Ok(manifest);
     }
 
@@ -931,27 +952,6 @@ pub(crate) async fn refresh_timestamp_manifest(
     )
     .await?;
     Ok(manifest)
-}
-
-/// Read an existing cached [`Manifest`], if it exists and is up-to-date.
-///
-/// If the cache entry is stale, a new entry will be created.
-pub(crate) async fn read_timestamp_manifest(
-    cache_entry: &CacheEntry,
-    modified: std::time::SystemTime,
-) -> Result<Option<Manifest>, SourceDistError> {
-    // If the cache entry is up-to-date, return it.
-    match fs::read(&cache_entry.path()).await {
-        Ok(cached) => {
-            let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
-            if cached.timestamp == modified {
-                return Ok(Some(cached.data));
-            }
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
-    Ok(None)
 }
 
 /// Read an existing cached [`Metadata21`], if it exists.

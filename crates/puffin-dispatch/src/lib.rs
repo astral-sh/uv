@@ -161,17 +161,15 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 remote,
                 reinstalls,
                 extraneous,
-            } = Planner::with_requirements(&resolution.requirements())
-                .build(
-                    site_packages,
-                    &Reinstall::None,
-                    &NoBinary::None,
-                    self.index_locations,
-                    self.cache(),
-                    venv,
-                    tags,
-                )
-                .await?;
+            } = Planner::with_requirements(&resolution.requirements()).build(
+                site_packages,
+                &Reinstall::None,
+                &NoBinary::None,
+                self.index_locations,
+                self.cache(),
+                venv,
+                tags,
+            )?;
 
             // Resolve any registry-based requirements.
             let remote = remote
