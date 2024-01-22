@@ -8,10 +8,12 @@ pub use crate::cfg::Configuration;
 pub use crate::interpreter::Interpreter;
 pub use crate::python_version::PythonVersion;
 pub use crate::virtual_env::Virtualenv;
+pub use python_query::find_requested_python;
 
 mod cfg;
 mod interpreter;
 mod python_platform;
+mod python_query;
 mod python_version;
 mod virtual_env;
 
@@ -51,4 +53,6 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Failed to parse pyvenv.cfg")]
     Cfg(#[from] cfg::Error),
+    #[error("Couldn't find `{0}` in PATH")]
+    Which(PathBuf, #[source] which::Error),
 }

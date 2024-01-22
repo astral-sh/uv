@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -15,7 +15,7 @@ use platform_host::Platform;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_interpreter::Interpreter;
+use puffin_interpreter::{find_requested_python, Interpreter};
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
@@ -26,13 +26,13 @@ use crate::printer::Printer;
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) async fn venv(
     path: &Path,
-    base_python: Option<&Path>,
+    python_request: Option<&str>,
     index_locations: &IndexLocations,
     seed: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    match venv_impl(path, base_python, index_locations, seed, cache, printer).await {
+    match venv_impl(path, python_request, index_locations, seed, cache, printer).await {
         Ok(status) => Ok(status),
         Err(err) => {
             #[allow(clippy::print_stderr)]
@@ -49,10 +49,6 @@ enum VenvError {
     #[error("Unable to find a Python interpreter")]
     #[diagnostic(code(puffin::venv::python_not_found))]
     PythonNotFound,
-
-    #[error("Unable to find a Python interpreter {0}")]
-    #[diagnostic(code(puffin::venv::python_not_found))]
-    UserPythonNotFound(PathBuf),
 
     #[error("Failed to extract Python interpreter info")]
     #[diagnostic(code(puffin::venv::interpreter))]
@@ -78,19 +74,15 @@ enum VenvError {
 /// Create a virtual environment.
 async fn venv_impl(
     path: &Path,
-    base_python: Option<&Path>,
+    python_request: Option<&str>,
     index_locations: &IndexLocations,
     seed: bool,
     cache: &Cache,
     mut printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
-    let base_python = if let Some(base_python) = base_python {
-        fs::canonicalize(
-            which::which_global(base_python)
-                .map_err(|_| VenvError::UserPythonNotFound(base_python.to_path_buf()))?,
-        )
-        .into_diagnostic()?
+    let base_python = if let Some(python_request) = python_request {
+        find_requested_python(python_request).into_diagnostic()?
     } else {
         fs::canonicalize(
             which::which_global("python3")

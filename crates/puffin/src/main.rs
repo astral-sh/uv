@@ -517,10 +517,18 @@ struct CleanArgs {
 #[allow(clippy::struct_excessive_bools)]
 struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
+    ///
+    /// Supported formats:
+    /// * `-p 3.10` searches for an installed Python 3.10 (`py --list-paths` on windows, `python3.10` on linux/mac).
+    ///   Specifying a patch version is not supported
+    /// * `-p python3.10` or `-p python.exe` looks for a binary in `PATH`
+    /// * `-p /home/ferris/.local/bin/python3.10` uses this exact Python
+    ///
+    /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
+    /// doesn't look for a Python interpreter on disk.
     // Short `-p` to match `virtualenv`
-    // TODO(konstin): Support e.g. `-p 3.10`
     #[clap(short, long)]
-    python: Option<PathBuf>,
+    python: Option<String>,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[clap(long)]
