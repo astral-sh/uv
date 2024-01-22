@@ -15,6 +15,7 @@ use puffin_cache::{Cache, CacheBucket, CachedByTimestamp};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
+use crate::python_query::find_python_windows;
 use crate::virtual_env::detect_virtual_env;
 use crate::{Error, PythonVersion};
 
@@ -89,7 +90,7 @@ impl Interpreter {
     /// We check, in order:
     /// * `VIRTUAL_ENV` and `CONDA_PREFIX`
     /// * A `.venv` folder
-    /// * If a python version is given: `pythonx.y` (TODO(konstin): `py -x.y` on windows),
+    /// * If a python version is given: `pythonx.y`
     /// * `python3` (unix) or `python.exe` (windows)
     pub fn find(
         python_version: Option<&PythonVersion>,
@@ -103,8 +104,7 @@ impl Interpreter {
             return Ok(interpreter);
         };
 
-        #[cfg(unix)]
-        {
+        if cfg!(unix) {
             if let Some(python_version) = python_version {
                 let requested = format!(
                     "python{}.{}",
@@ -123,23 +123,21 @@ impl Interpreter {
             debug!("Resolved python3 to {}", executable.display());
             let interpreter = Interpreter::query(&executable, platform.0, cache)?;
             Ok(interpreter)
-        }
-
-        #[cfg(windows)]
-        {
-            if let Some(_python_version) = python_version {
-                unimplemented!("Implement me")
+        } else if cfg!(windows) {
+            if let Some(python_version) = python_version {
+                if let Some(path) =
+                    find_python_windows(python_version.major(), python_version.minor())?
+                {
+                    return Interpreter::query(&path, platform.0, cache);
+                }
             }
 
             let executable = which::which("python.exe")
                 .map_err(|err| Error::WhichNotFound("python.exe".to_string(), err))?;
             let interpreter = Interpreter::query(&executable, platform.0, cache)?;
             Ok(interpreter)
-        }
-
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("only unix (like mac and linux) and windows are supported")
+        } else {
+            unimplemented!("Only Windows and Unix are supported");
         }
     }
 
