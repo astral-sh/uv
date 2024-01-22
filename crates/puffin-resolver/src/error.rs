@@ -147,6 +147,8 @@ impl std::fmt::Display for NoSolutionError {
         };
         let report =
             DefaultStringReporter::report_with_formatter(&self.derivation_tree, &formatter);
+
+        write!(f, "{:?}", &self.derivation_tree)?;
         write!(f, "{report}")?;
 
         // Include any additional hints.

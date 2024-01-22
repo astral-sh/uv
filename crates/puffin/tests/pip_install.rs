@@ -80,9 +80,32 @@ fn no_solution() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only flask<=3.0.0 is available and flask==3.0.0 depends
-          on werkzeug>=3.0.0, we can conclude that flask>=3.0.0 depends on
-          werkzeug>=3.0.0.
+      ╰─▶ Derived(Derived { terms: {Root(None): Positive(Range { segments:
+          [(Included("0a0.dev0"), Included("0a0.dev0"))] })}, shared_id:
+          None, cause1: Derived(Derived { terms: {Root(None): Positive(Range
+          { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] }),
+          Package(PackageName("werkzeug"), None, None): Negative(Range {
+          segments: [(Included("3.0.0"), Unbounded)] })}, shared_id: None,
+          cause1: Derived(Derived { terms: {Package(PackageName("flask"), None,
+          None): Positive(Range { segments: [(Included("3.0.0"), Unbounded)]
+          }), Package(PackageName("werkzeug"), None, None): Negative(Range
+          { segments: [(Included("3.0.0"), Unbounded)] })}, shared_id: None,
+          cause1: External(NoVersions(Package(PackageName("flask"), None,
+          None), Range { segments: [(Excluded("3.0.0"), Unbounded)] })),
+          cause2: External(FromDependencyOf(Package(PackageName("flask"),
+          None, None), Range { segments: [(Included("3.0.0"),
+          Included("3.0.0"))] }, Package(PackageName("werkzeug"), None,
+          None), Range { segments: [(Included("3.0.0"), Unbounded)]
+          })) }), cause2: External(FromDependencyOf(Root(None), Range
+          { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))]
+          }, Package(PackageName("flask"), None, None), Range
+          { segments: [(Included("3.0.0"), Unbounded)] })) }),
+          cause2: External(FromDependencyOf(Root(None), Range {
+          segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] },
+          Package(PackageName("werkzeug"), None, None), Range { segments:
+          [(Unbounded, Excluded("1.0.0"))] })) })Because only flask<=3.0.0 is
+          available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude
+          that flask>=3.0.0 depends on werkzeug>=3.0.0.
           And because you require flask>=3.0.0 and you require werkzeug<1.0.0, we
           can conclude that the requirements are unsatisfiable.
     "###);

@@ -511,7 +511,7 @@ async fn black_disallow_prerelease() -> Result<()> {
         .unwrap_err();
 
     assert_snapshot!(err, @r###"
-    Because only black>20.0 is available and you require black<=20.0, we can conclude that the requirements are unsatisfiable.
+    Derived(Derived { terms: {Root(None): Positive(Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] })}, shared_id: None, cause1: External(NoVersions(Package(PackageName("black"), None, None), Range { segments: [(Unbounded, Included("20.0"))] })), cause2: External(FromDependencyOf(Root(None), Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] }, Package(PackageName("black"), None, None), Range { segments: [(Unbounded, Included("20.0"))] })) })Because only black>20.0 is available and you require black<=20.0, we can conclude that the requirements are unsatisfiable.
 
     hint: Pre-releases are available for black in the requested range (e.g., 19.10b0), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
@@ -533,7 +533,7 @@ async fn black_allow_prerelease_if_necessary() -> Result<()> {
         .unwrap_err();
 
     assert_snapshot!(err, @r###"
-    Because only black>20.0 is available and you require black<=20.0, we can conclude that the requirements are unsatisfiable.
+    Derived(Derived { terms: {Root(None): Positive(Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] })}, shared_id: None, cause1: External(NoVersions(Package(PackageName("black"), None, None), Range { segments: [(Unbounded, Included("20.0"))] })), cause2: External(FromDependencyOf(Root(None), Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] }, Package(PackageName("black"), None, None), Range { segments: [(Unbounded, Included("20.0"))] })) })Because only black>20.0 is available and you require black<=20.0, we can conclude that the requirements are unsatisfiable.
 
     hint: Pre-releases are available for black in the requested range (e.g., 19.10b0), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
@@ -659,7 +659,7 @@ async fn msgraph_sdk() -> Result<()> {
         .unwrap_err();
 
     assert_snapshot!(err, @r###"
-    Because only msgraph-core<1.0.0a2 is available and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, we can conclude that msgraph-sdk==1.0.0 cannot be used.
+    Derived(Derived { terms: {Root(None): Positive(Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] })}, shared_id: None, cause1: Derived(Derived { terms: {Package(PackageName("msgraph-sdk"), None, None): Positive(Range { segments: [(Included("1.0.0"), Included("1.0.0"))] })}, shared_id: None, cause1: External(NoVersions(Package(PackageName("msgraph-core"), None, None), Range { segments: [(Included("1.0.0a2"), Unbounded)] })), cause2: External(FromDependencyOf(Package(PackageName("msgraph-sdk"), None, None), Range { segments: [(Included("1.0.0"), Included("1.0.0"))] }, Package(PackageName("msgraph-core"), None, None), Range { segments: [(Included("1.0.0a2"), Unbounded)] })) }), cause2: External(FromDependencyOf(Root(None), Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] }, Package(PackageName("msgraph-sdk"), None, None), Range { segments: [(Included("1.0.0"), Included("1.0.0"))] })) })Because only msgraph-core<1.0.0a2 is available and msgraph-sdk==1.0.0 depends on msgraph-core>=1.0.0a2, we can conclude that msgraph-sdk==1.0.0 cannot be used.
     And because you require msgraph-sdk==1.0.0, we can conclude that the requirements are unsatisfiable.
 
     hint: msgraph-core was requested with a pre-release marker (e.g., msgraph-core>=1.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)

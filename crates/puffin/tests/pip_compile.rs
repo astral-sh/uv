@@ -687,9 +687,23 @@ fn compile_python_37() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because the requested Python version (3.7.17) does not satisfy
-              Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude
-              that black==23.10.1 cannot be used.
+          ╰─▶ Derived(Derived { terms: {Root(None): Positive(Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))]
+              })}, shared_id: None, cause1: Derived(Derived { terms:
+              {Package(PackageName("black"), None, None): Positive(Range {
+              segments: [(Included("23.10.1"), Included("23.10.1"))] })},
+              shared_id: None, cause1: External(NoVersions(Python(Target),
+              Range { segments: [(Included("3.8"), Unbounded)] })), cause2:
+              External(FromDependencyOf(Package(PackageName("black"), None, None),
+              Range { segments: [(Included("23.10.1"), Included("23.10.1"))] },
+              Python(Target), Range { segments: [(Included("3.8"), Unbounded)]
+              })) }), cause2: External(FromDependencyOf(Root(None), Range
+              { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] },
+              Package(PackageName("black"), None, None), Range { segments:
+              [(Included("23.10.1"), Included("23.10.1"))] })) })Because the requested
+              Python version (3.7.17) does not satisfy Python>=3.8 and black==23.10.1
+              depends on Python>=3.8, we can conclude that black==23.10.1 cannot be
+              used.
               And because you require black==23.10.1, we can conclude that the
               requirements are unsatisfiable.
         "###);
@@ -1442,8 +1456,27 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of werkzeug==3.0.0 and you require
-              werkzeug==3.0.0, we can conclude that the requirements are
+          ╰─▶ Derived(Derived { terms: {Root(None): Positive(Range { segments:
+              [(Included("0a0.dev0"), Included("0a0.dev0"))] })}, shared_id:
+              None, cause1: External(NoVersions(Package(PackageName("werkzeug"),
+              None, Some(VerbatimUrl { url: Url { scheme: "https",
+              cannot_be_a_base: false, username: "", password: None, host:
+              Some(Domain("files.pythonhosted.org")), port: None, path:
+              "/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl",
+              query: None, fragment: None }, given:
+              Some("https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")
+              })), Range { segments: [(Included("3.0.0"), Included("3.0.0"))]
+              })), cause2: External(FromDependencyOf(Root(None), Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] },
+              Package(PackageName("werkzeug"), None, Some(VerbatimUrl { url: Url
+              { scheme: "https", cannot_be_a_base: false, username: "", password:
+              None, host: Some(Domain("files.pythonhosted.org")), port: None, path:
+              "/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl",
+              query: None, fragment: None }, given:
+              Some("https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")
+              })), Range { segments: [(Included("3.0.0"), Included("3.0.0"))]
+              })) })Because there is no version of werkzeug==3.0.0 and you
+              require werkzeug==3.0.0, we can conclude that the requirements are
               unsatisfiable.
         "###);
     });
@@ -1519,7 +1552,12 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting URLs for package `werkzeug`:
+          ╰─▶ External(UnusableDependencies(Root(None), Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))]
+              }, Some("Conflicting URLs for package `werkzeug`:\n-
+              https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\n-
+              https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")))root
+              dependencies are unusable: Conflicting URLs for package `werkzeug`:
               - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
               - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
         "###);
@@ -1559,7 +1597,12 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting URLs for package `werkzeug`:
+          ╰─▶ External(UnusableDependencies(Root(None), Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))]
+              }, Some("Conflicting URLs for package `werkzeug`:\n-
+              git+https://github.com/pallets/werkzeug.git@2.0.0\n-
+              https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")))root
+              dependencies are unusable: Conflicting URLs for package `werkzeug`:
               - git+https://github.com/pallets/werkzeug.git@2.0.0
               - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
         "###);
@@ -1597,8 +1640,29 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and only werkzeug<3.0.0
-              is available, we can conclude that flask==3.0.0 cannot be used.
+          ╰─▶ Derived(Derived { terms: {Root(None): Positive(Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))]
+              })}, shared_id: None, cause1: Derived(Derived { terms:
+              {Package(PackageName("flask"), None, None): Positive(Range { segments:
+              [(Included("3.0.0"), Included("3.0.0"))] })}, shared_id: None,
+              cause1: External(FromDependencyOf(Package(PackageName("flask"),
+              None, None), Range { segments: [(Included("3.0.0"),
+              Included("3.0.0"))] }, Package(PackageName("werkzeug"), None,
+              None), Range { segments: [(Included("3.0.0"), Unbounded)] })),
+              cause2: External(NoVersions(Package(PackageName("werkzeug"),
+              None, Some(VerbatimUrl { url: Url { scheme: "https",
+              cannot_be_a_base: false, username: "", password: None, host:
+              Some(Domain("files.pythonhosted.org")), port: None, path:
+              "/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl",
+              query: None, fragment: None }, given:
+              Some("https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")
+              })), Range { segments: [(Included("3.0.0"), Unbounded)] }))
+              }), cause2: External(FromDependencyOf(Root(None), Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] },
+              Package(PackageName("flask"), None, None), Range { segments:
+              [(Included("3.0.0"), Included("3.0.0"))] })) })Because flask==3.0.0
+              depends on werkzeug>=3.0.0 and only werkzeug<3.0.0 is available, we can
+              conclude that flask==3.0.0 cannot be used.
               And because you require flask==3.0.0, we can conclude that the
               requirements are unsatisfiable.
         "###);
@@ -1903,8 +1967,12 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ my-project dependencies are unusable: Conflicting versions for `django`:
-              `django==5.0b1` does not intersect with `django==5.0a1`
+          ╰─▶ External(UnusableDependencies(Root(Some(PackageName("my-project"))),
+              Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] },
+              Some("Conflicting versions for `django`: `django==5.0b1` does not
+              intersect with `django==5.0a1`")))my-project dependencies are unusable:
+              Conflicting versions for `django`: `django==5.0b1` does not intersect
+              with `django==5.0a1`
         "###);
     });
 
@@ -1949,9 +2017,17 @@ dependencies = ["django==300.1.4"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of django==300.1.4 and my-project
-              depends on django==300.1.4, we can conclude that the requirements are
-              unsatisfiable.
+          ╰─▶ Derived(Derived { terms: {Root(Some(PackageName("my-project"))):
+              Positive(Range { segments: [(Included("0a0.dev0"),
+              Included("0a0.dev0"))] })}, shared_id: None, cause1:
+              External(NoVersions(Package(PackageName("django"), None, None), Range
+              { segments: [(Included("300.1.4"), Included("300.1.4"))] })), cause2:
+              External(FromDependencyOf(Root(Some(PackageName("my-project"))),
+              Range { segments: [(Included("0a0.dev0"), Included("0a0.dev0"))]
+              }, Package(PackageName("django"), None, None), Range { segments:
+              [(Included("300.1.4"), Included("300.1.4"))] })) })Because there is no
+              version of django==300.1.4 and my-project depends on django==300.1.4, we
+              can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -2412,9 +2488,17 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
-              and you require attrs>20.3.0,<21.2.0, we can conclude that the
-              requirements are unsatisfiable.
+          ╰─▶ Derived(Derived { terms: {Root(None): Positive(Range { segments:
+              [(Included("0a0.dev0"), Included("0a0.dev0"))] })}, shared_id: None,
+              cause1: External(NoVersions(Package(PackageName("attrs"), None,
+              None), Range { segments: [(Excluded("20.3.0"), Excluded("21.2.0"))]
+              })), cause2: External(FromDependencyOf(Root(None), Range {
+              segments: [(Included("0a0.dev0"), Included("0a0.dev0"))] },
+              Package(PackageName("attrs"), None, None), Range { segments:
+              [(Excluded("20.3.0"), Excluded("21.2.0"))] })) })Because there are no
+              versions of attrs that satisfy attrs>20.3.0,<21.2.0 and you require
+              attrs>20.3.0,<21.2.0, we can conclude that the requirements are
+              unsatisfiable.
         "###);
     });
 
