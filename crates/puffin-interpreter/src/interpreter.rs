@@ -9,8 +9,8 @@ use tracing::{debug, warn};
 use cache_key::digest;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use platform_host::{Platform, PlatformError};
-use platform_tags::Tags;
+use platform_host::Platform;
+use platform_tags::{Tags, TagsError};
 use puffin_cache::{Cache, CacheBucket, CachedByTimestamp};
 use puffin_fs::write_atomic_sync;
 
@@ -156,34 +156,60 @@ impl Interpreter {
     }
 
     /// Returns the [`Tags`] for this Python executable.
-    pub fn tags(&self) -> Result<&Tags, PlatformError> {
-        self.tags
-            .get_or_try_init(|| Tags::from_env(self.platform(), self.simple_version()))
+    pub fn tags(&self) -> Result<&Tags, TagsError> {
+        self.tags.get_or_try_init(|| {
+            Tags::from_env(
+                self.platform(),
+                self.python_tuple(),
+                self.implementation_name(),
+                self.implementation_tuple(),
+            )
+        })
     }
 
     /// Returns the Python version.
     #[inline]
-    pub const fn version(&self) -> &Version {
+    pub const fn python_version(&self) -> &Version {
         &self.markers.python_full_version.version
     }
 
     /// Return the major version of this Python version.
-    pub fn major(&self) -> u8 {
-        let major = self.version().release()[0];
+    pub fn python_major(&self) -> u8 {
+        let major = self.markers.python_full_version.version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of this Python version.
-    pub fn minor(&self) -> u8 {
-        let minor = self.version().release()[1];
+    pub fn python_minor(&self) -> u8 {
+        let minor = self.markers.python_full_version.version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
     /// Returns the Python version as a simple tuple.
-    pub fn simple_version(&self) -> (u8, u8) {
-        (self.major(), self.minor())
+    pub fn python_tuple(&self) -> (u8, u8) {
+        (self.python_major(), self.python_minor())
     }
 
+    /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
+    pub fn implementation_major(&self) -> u8 {
+        let major = self.markers.implementation_version.version.release()[0];
+        u8::try_from(major).expect("invalid major version")
+    }
+
+    /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
+    pub fn implementation_minor(&self) -> u8 {
+        let minor = self.markers.implementation_version.version.release()[1];
+        u8::try_from(minor).expect("invalid minor version")
+    }
+
+    /// Returns the implementation version as a simple tuple.
+    pub fn implementation_tuple(&self) -> (u8, u8) {
+        (self.implementation_major(), self.implementation_minor())
+    }
+
+    pub fn implementation_name(&self) -> &str {
+        &self.markers.implementation_name
+    }
     pub fn base_exec_prefix(&self) -> &Path {
         &self.base_exec_prefix
     }

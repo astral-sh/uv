@@ -68,7 +68,7 @@ enum VenvError {
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(puffin::venv::tags))]
-    TagsError(#[source] platform_host::PlatformError),
+    TagsError(#[source] platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     #[diagnostic(code(puffin::venv::flat_index))]
@@ -107,7 +107,7 @@ async fn venv_impl(
     writeln!(
         printer,
         "Using Python {} at {}",
-        interpreter.version(),
+        interpreter.python_version(),
         interpreter.sys_executable().display().cyan()
     )
     .into_diagnostic()?;

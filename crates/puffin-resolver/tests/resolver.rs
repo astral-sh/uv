@@ -694,6 +694,8 @@ static TAGS_311: Lazy<Tags> = Lazy::new(|| {
             Arch::Aarch64,
         ),
         (3, 11),
+        "cpython",
+        (3, 11),
     )
     .unwrap()
 });
@@ -723,6 +725,8 @@ static TAGS_310: Lazy<Tags> = Lazy::new(|| {
             },
             Arch::Aarch64,
         ),
+        (3, 10),
+        "cpython",
         (3, 10),
     )
     .unwrap()
