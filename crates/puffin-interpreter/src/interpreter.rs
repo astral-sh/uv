@@ -101,13 +101,18 @@ impl Interpreter {
     ) -> Result<Self, Error> {
         if let Some(python_version) = python_version {
             // First, try to find a strict match
-            if let Some(interpreter) = Self::find_strict(python_version, true, &platform, cache)? {
+            if let Some(interpreter) = Self::find_strict(python_version, &platform, cache)? {
                 return Ok(interpreter);
             }
 
-            // If that fails, try again allowing a different patch version
-            if let Some(interpreter) = Self::find_strict(python_version, false, &platform, cache)? {
-                return Ok(interpreter);
+            // If that fails, and a specific patch version was requested try again allowing a
+            // different patch version
+            if python_version.patch().is_some() {
+                if let Some(interpreter) =
+                    Self::find_strict(&python_version.without_patch(), &platform, cache)?
+                {
+                    return Ok(interpreter);
+                }
             }
 
             // If a Python version was requested but cannot be fulfilled, just take any version
@@ -162,12 +167,12 @@ impl Interpreter {
     /// If an interpreter cannot be found with the given version, we will return [`None`].
     pub fn find_strict(
         python_version: &PythonVersion,
-        patch_version: bool,
         platform: &Platform,
         cache: &Cache,
     ) -> Result<Option<Self>, Error> {
         let version_matches = |interpreter: &Self| -> bool {
-            if patch_version {
+            // If a patch version was provided, honor it
+            if python_version.patch().is_some() {
                 python_version.version() == interpreter.version()
             } else {
                 python_version.simple_version() == interpreter.simple_version()

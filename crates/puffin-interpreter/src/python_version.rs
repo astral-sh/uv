@@ -1,9 +1,6 @@
-use std::str::FromStr;
-
-use tracing::debug;
-
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
+use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 pub struct PythonVersion(StringVersion);
@@ -29,34 +26,7 @@ impl FromStr for PythonVersion {
             return Err(format!("Python version {s} must be < 4.0"));
         }
 
-        // If the version lacks a patch, assume the most recent known patch for that minor version.
-        match version.release() {
-            [3, 7] => {
-                debug!("Assuming Python 3.7.17");
-                Ok(Self(StringVersion::from_str("3.7.17")?))
-            }
-            [3, 8] => {
-                debug!("Assuming Python 3.8.18");
-                Ok(Self(StringVersion::from_str("3.8.18")?))
-            }
-            [3, 9] => {
-                debug!("Assuming Python 3.9.18");
-                Ok(Self(StringVersion::from_str("3.9.18")?))
-            }
-            [3, 10] => {
-                debug!("Assuming Python 3.10.13");
-                Ok(Self(StringVersion::from_str("3.10.13")?))
-            }
-            [3, 11] => {
-                debug!("Assuming Python 3.11.6");
-                Ok(Self(StringVersion::from_str("3.11.6")?))
-            }
-            [3, 12] => {
-                debug!("Assuming Python 3.12.0");
-                Ok(Self(StringVersion::from_str("3.12.0")?))
-            }
-            _ => Ok(Self(version)),
-        }
+        Ok(Self(version))
     }
 }
 
@@ -98,8 +68,23 @@ impl PythonVersion {
         u8::try_from(self.0.release()[1]).expect("invalid minor version")
     }
 
+    /// Return the patch version of this Python version, if set.
+    pub fn patch(&self) -> Option<u8> {
+        if let Some(patch) = self.0.release().get(2).cloned() {
+            Some(u8::try_from(patch).expect("invalid patch version"))
+        } else {
+            None
+        }
+    }
+
     /// Returns the Python version as a simple tuple.
     pub fn simple_version(&self) -> (u8, u8) {
         (self.major(), self.minor())
+    }
+
+    /// Returns a copy of the Python version without the patch version
+    pub fn without_patch(&self) -> Self {
+        Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
+            .expect("dropping a patch should always be valid")
     }
 }
