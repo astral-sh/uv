@@ -53,8 +53,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                         // Determine which Python version requirement was not met
                         if !set.contains(python.target()) {
                             return format!(
-                                "the requested {package} version ({}) does not satisfy {}",
+                                "the requested {package} version ({}, {} installed) does not satisfy {}",
                                 python.target(),
+                                python.installed(),
                                 PackageRange::compatibility(package, set)
                             );
                         }
