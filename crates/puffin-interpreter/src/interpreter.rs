@@ -281,7 +281,7 @@ impl InterpreterQueryResult {
         );
 
         // `modified()` is infallible on windows and unix (i.e., all platforms we support).
-        let modified = fs_err::metadata(executable)?.modified()?;
+        let modified = fs_err::metadata(fs_err::canonicalize(executable)?)?.modified()?;
 
         // Read from the cache.
         if let Ok(data) = fs::read(cache_entry.path()) {
