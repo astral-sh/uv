@@ -106,8 +106,8 @@ async fn venv_impl(
 
     writeln!(
         printer,
-        "Using Python {} at {}",
-        interpreter.python_version(),
+        "Using Python {} interpreter at {}",
+        interpreter.version(),
         interpreter.sys_executable().display().cyan()
     )
     .into_diagnostic()?;

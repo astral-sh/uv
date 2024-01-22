@@ -28,9 +28,11 @@ pub(crate) async fn pip_uninstall(
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
     debug!(
-        "Using Python interpreter: {}",
-        venv.python_executable().display()
+        "Using Python {} interpreter at {}",
+        venv.interpreter().version(),
+        venv.python_executable().display().cyan()
     );
+
     let _lock = venv.lock()?;
 
     // Index the current `site-packages` directory.
