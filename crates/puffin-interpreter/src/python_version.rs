@@ -77,11 +77,6 @@ impl PythonVersion {
         }
     }
 
-    /// Returns the Python version as a simple tuple.
-    pub fn simple_version(&self) -> (u8, u8) {
-        (self.major(), self.minor())
-    }
-
     /// Returns a copy of the Python version without the patch version
     pub fn without_patch(&self) -> Self {
         Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())

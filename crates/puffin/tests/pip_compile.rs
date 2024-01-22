@@ -687,9 +687,9 @@ fn compile_python_37() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because the requested Python version (3.7.17) does not satisfy
-              Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude
-              that black==23.10.1 cannot be used.
+          ╰─▶ Because the requested Python version (3.7) does not satisfy Python>=3.8
+              and black==23.10.1 depends on Python>=3.8, we can conclude that
+              black==23.10.1 cannot be used.
               And because you require black==23.10.1, we can conclude that the
               requirements are unsatisfiable.
         "###);

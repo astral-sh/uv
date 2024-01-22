@@ -171,11 +171,11 @@ impl Interpreter {
         cache: &Cache,
     ) -> Result<Option<Self>, Error> {
         let version_matches = |interpreter: &Self| -> bool {
-            // If a patch version was provided, honor it
+            // If a patch version was provided, check for an exact match
             if python_version.patch().is_some() {
-                python_version.version() == interpreter.version()
+                python_version.version() == interpreter.python_version()
             } else {
-                python_version.simple_version() == interpreter.simple_version()
+                (python_version.major(), python_version.minor()) == interpreter.python_tuple()
             }
         };
 

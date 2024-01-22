@@ -147,7 +147,7 @@ pub(crate) async fn pip_compile(
     let tags = if let Some(python_version) = python_version.as_ref() {
         Cow::Owned(Tags::from_env(
             interpreter.platform(),
-            python_version.simple_version(),
+            (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
         )?)
