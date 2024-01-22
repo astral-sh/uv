@@ -99,7 +99,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Couldn't parse requirement in requirements.txt position 0 to 12
+    error: Couldn't parse requirement in `requirements.txt` at position 0
       Caused by: after parsing 1.0, found ".x" after it, which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
