@@ -294,9 +294,9 @@ pub enum CacheBucket {
     /// directories in the cache.
     ///
     /// Cache structure:
-    ///  * `built-wheels-v0/pypi/foo/34a17436ed1e9669/{metadata.msgpack, foo-1.0.0.zip, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
-    ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/pypi/foo/34a17436ed1e9669/{manifest.msgpack, metadata.msgpack, foo-1.0.0.zip, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/<digest(index-url)>/foo/foo-1.0.0.zip/{manifest.msgpack, metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
+    ///  * `built-wheels-v0/url/<digest(url)>/foo/foo-1.0.0.zip/{manifest.msgpack, metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///  * `built-wheels-v0/git/<digest(url)>/<git sha>/foo/foo-1.0.0.zip/{metadata.msgpack, foo-1.0.0-py3-none-any.whl, ...other wheels}`
     ///
     /// But the url filename does not need to be a valid source dist filename
@@ -322,34 +322,27 @@ pub enum CacheBucket {
     /// ├── git
     /// │   └── a67db8ed076e3814
     /// │       └── 843b753e9e8cb74e83cac55598719b39a4d5ef1f
+    /// │           ├── manifest.msgpack
     /// │           ├── metadata.msgpack
     /// │           └── pydantic_extra_types-2.1.0-py3-none-any.whl
     /// ├── pypi
     /// │   └── django
     /// │       └── django-allauth-0.51.0.tar.gz
     /// │           ├── django_allauth-0.51.0-py3-none-any.whl
+    /// │           ├── manifest.msgpack
     /// │           └── metadata.msgpack
     /// └── url
     ///     └── 6781bd6440ae72c2
     ///         └── werkzeug
     ///             └── werkzeug-3.0.1.tar.gz
+    ///                 ├── manifest.msgpack
     ///                 ├── metadata.msgpack
     ///                 └── werkzeug-3.0.1-py3-none-any.whl
     /// ```
     ///
-    /// Structurally, the inside of a `metadata.msgpack` looks like:
-    /// ```json
-    /// {
-    ///   "data": {
-    ///     "django_allauth-0.51.0-py3-none-any.whl": {
-    ///       "metadata-version": "2.1",
-    ///       "name": "django-allauth",
-    ///       "version": "0.51.0",
-    ///       ...
-    ///     }
-    ///   }
-    /// }
-    /// ```
+    /// Structurally, the `manifest.msgpack` is empty, and only contains the caching information
+    /// needed to invalidate the cache. The `metadata.msgpack` contains the metadata of the source
+    /// distribution.
     BuiltWheels,
     /// Flat index responses, a format very similar to the simple metadata API.
     ///

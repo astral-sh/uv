@@ -1,12 +1,10 @@
 use std::path::PathBuf;
-
-use tracing::warn;
+use std::str::FromStr;
 
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_cache::CacheEntry;
-
-use crate::source::manifest::{DiskFilenameAndMetadata, Manifest};
+use puffin_fs::directories;
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
@@ -21,37 +19,26 @@ pub struct BuiltWheelMetadata {
 
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache based on the given manifest.
-    pub(crate) fn find_in_cache(
-        tags: &Tags,
-        manifest: &Manifest,
-        cache_entry: &CacheEntry,
-    ) -> Option<Self> {
-        // Find a compatible cache entry in the manifest.
-        let (filename, wheel) = manifest.find_wheel(tags)?;
-        let metadata = Self::from_cached(filename.clone(), wheel.clone(), cache_entry);
-
-        // Validate that the wheel exists on disk.
-        if !metadata.path.is_file() {
-            warn!(
-                "Wheel `{}` is present in the manifest, but not on disk",
-                metadata.path.display()
-            );
-            return None;
+    pub(crate) fn find_in_cache(tags: &Tags, cache_entry: &CacheEntry) -> Option<Self> {
+        for directory in directories(cache_entry.dir()) {
+            if let Some(metadata) = Self::from_path(directory) {
+                // Validate that the wheel is compatible with the target platform.
+                if metadata.filename.is_compatible(tags) {
+                    return Some(metadata);
+                }
+            }
         }
-
-        Some(metadata)
+        None
     }
 
-    /// Create a [`BuiltWheelMetadata`] from a cached entry.
-    pub(crate) fn from_cached(
-        filename: WheelFilename,
-        cached_dist: DiskFilenameAndMetadata,
-        cache_entry: &CacheEntry,
-    ) -> Self {
-        Self {
-            path: cache_entry.dir().join(cached_dist.disk_filename),
-            target: cache_entry.dir().join(filename.stem()),
+    /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any.whl`).
+    fn from_path(path: PathBuf) -> Option<Self> {
+        let filename = path.file_name()?.to_str()?;
+        let filename = WheelFilename::from_str(filename).ok()?;
+        Some(Self {
+            target: path.join(filename.stem()),
+            path,
             filename,
-        }
+        })
     }
 }
