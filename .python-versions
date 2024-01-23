@@ -1,0 +1,5 @@
+3.8.18 --default-minor
+3.9.18 --default-minor
+3.10.13 --default-minor
+3.11.7 --default-minor
+3.12.1 --default --default-minor
