@@ -28,6 +28,7 @@ chrono = { workspace = true, features = ["serde"] }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 once_cell = { workspace = true }
+rkyv = { workspace = true, features = ["strict", "validation"] }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

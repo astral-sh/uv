@@ -51,14 +51,18 @@ impl File {
 }
 
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub enum FileLocation {
     /// URL relative to the base URL.
     RelativeUrl(String, String),
     /// Absolute URL.
     AbsoluteUrl(String),
     /// Absolute path to a file.
-    Path(PathBuf),
+    Path(#[with(rkyv::with::AsString)] PathBuf),
 }
 
 impl Display for FileLocation {
