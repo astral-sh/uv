@@ -116,7 +116,7 @@ impl<'a> FlatIndexClient<'a> {
                 let files: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, &base) {
+                        match File::try_from(file, base.as_url().as_str()) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparseable version specifiers.

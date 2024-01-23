@@ -705,6 +705,16 @@ impl Identifier for &str {
     }
 }
 
+impl Identifier for (&str, &str) {
+    fn distribution_id(&self) -> DistributionId {
+        DistributionId::new(cache_key::digest(&self))
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        ResourceId::new(cache_key::digest(&self))
+    }
+}
+
 impl Identifier for (&Url, &str) {
     fn distribution_id(&self) -> DistributionId {
         DistributionId::new(cache_key::digest(&self))
@@ -718,7 +728,7 @@ impl Identifier for (&Url, &str) {
 impl Identifier for FileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            FileLocation::RelativeUrl(base, url) => (base.as_url(), url.as_str()).distribution_id(),
+            FileLocation::RelativeUrl(base, url) => (base.as_str(), url.as_str()).distribution_id(),
             FileLocation::AbsoluteUrl(url) => url.distribution_id(),
             FileLocation::Path(path) => path.distribution_id(),
         }
@@ -726,7 +736,7 @@ impl Identifier for FileLocation {
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            FileLocation::RelativeUrl(base, url) => (base.as_url(), url.as_str()).resource_id(),
+            FileLocation::RelativeUrl(base, url) => (base.as_str(), url.as_str()).resource_id(),
             FileLocation::AbsoluteUrl(url) => url.resource_id(),
             FileLocation::Path(path) => path.resource_id(),
         }

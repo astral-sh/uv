@@ -18,7 +18,7 @@ use puffin_extract::unzip_no_seek;
 use puffin_fs::metadata_if_exists;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary};
-use pypi_types::Metadata21;
+use pypi_types::{BaseUrl, Metadata21};
 
 use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;
@@ -92,9 +92,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 }
 
                 let url = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => base
-                        .join_relative(url)
-                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::RelativeUrl(base, url) => {
+                        let base = Url::parse(base).map_err(|err| Error::Url(base.clone(), err))?;
+                        BaseUrl::from(base)
+                            .join_relative(url)
+                            .map_err(|err| Error::Url(url.clone(), err))?
+                    }
                     FileLocation::AbsoluteUrl(url) => {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }

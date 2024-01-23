@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
-use pypi_types::{BaseUrl, DistInfoMetadata, Hashes, Yanked};
+use pypi_types::{DistInfoMetadata, Hashes, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -32,7 +32,7 @@ pub struct File {
 
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
-    pub fn try_from(file: pypi_types::File, base: &BaseUrl) -> Result<Self, FileConversionError> {
+    pub fn try_from(file: pypi_types::File, base: &str) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file.dist_info_metadata,
             filename: file.filename,
@@ -43,7 +43,7 @@ impl File {
             url: if file.url.contains("://") {
                 FileLocation::AbsoluteUrl(file.url)
             } else {
-                FileLocation::RelativeUrl(base.clone(), file.url)
+                FileLocation::RelativeUrl(base.to_string(), file.url)
             },
             yanked: file.yanked,
         })
@@ -54,7 +54,7 @@ impl File {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileLocation {
     /// URL relative to the base URL.
-    RelativeUrl(BaseUrl, String),
+    RelativeUrl(String, String),
     /// Absolute URL.
     AbsoluteUrl(String),
     /// Absolute path to a file.

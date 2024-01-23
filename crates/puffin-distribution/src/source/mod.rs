@@ -29,7 +29,7 @@ use puffin_client::{CacheControl, CachedClient, CachedClientError, DataWithCache
 use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
-use pypi_types::Metadata21;
+use pypi_types::{BaseUrl, Metadata21};
 
 use crate::error::Error;
 use crate::reporter::Facade;
@@ -105,9 +105,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = match &registry_source_dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => base
-                        .join_relative(url)
-                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::RelativeUrl(base, url) => {
+                        let base = Url::parse(base).map_err(|err| Error::Url(base.clone(), err))?;
+                        BaseUrl::from(base)
+                            .join_relative(url)
+                            .map_err(|err| Error::Url(url.clone(), err))?
+                    }
                     FileLocation::AbsoluteUrl(url) => {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
@@ -182,9 +185,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = match &registry_source_dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => base
-                        .join_relative(url)
-                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::RelativeUrl(base, url) => {
+                        let base = Url::parse(base).map_err(|err| Error::Url(base.clone(), err))?;
+                        BaseUrl::from(base)
+                            .join_relative(url)
+                            .map_err(|err| Error::Url(url.clone(), err))?
+                    }
                     FileLocation::AbsoluteUrl(url) => {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
