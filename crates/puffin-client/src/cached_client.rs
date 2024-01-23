@@ -1,7 +1,7 @@
-use futures::FutureExt;
 use std::future::Future;
 use std::time::SystemTime;
 
+use futures::FutureExt;
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use reqwest::{Request, Response};
 use reqwest_middleware::ClientWithMiddleware;
@@ -11,6 +11,8 @@ use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 
 use puffin_cache::CacheEntry;
 use puffin_fs::write_atomic;
+
+use crate::cache_headers::CacheHeaders;
 
 /// Either a cached client error or a (user specified) error from the callback
 #[derive(Debug)]
@@ -46,11 +48,15 @@ enum CachedResponse<Payload: Serialize> {
     ModifiedOrNew(Response, Option<Box<CachePolicy>>),
 }
 
-/// Serialize the actual payload together with its caching information
+/// Serialize the actual payload together with its caching information.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DataWithCachePolicy<Payload: Serialize> {
     pub data: Payload,
-    // The cache policy is large (448 bytes at time of writing), reduce the stack size
+    /// Whether the response should be considered immutable.
+    immutable: bool,
+    /// The [`CachePolicy`] is used to determine if the response is fresh or stale.
+    /// The policy is large (448 bytes at time of writing), so we reduce the stack size by
+    /// boxing it.
     cache_policy: Box<CachePolicy>,
 }
 
@@ -148,11 +154,18 @@ impl CachedClient {
                 .await
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
+                let headers = CacheHeaders::from_response(res.headers().get_all("cache-control"));
+                let immutable = headers.is_immutable();
+
                 let data = response_callback(res)
                     .await
                     .map_err(|err| CachedClientError::Callback(err))?;
                 if let Some(cache_policy) = cache_policy {
-                    let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
+                    let data_with_cache_policy = DataWithCachePolicy {
+                        data,
+                        immutable,
+                        cache_policy,
+                    };
                     async {
                         fs_err::tokio::create_dir_all(cache_entry.dir())
                             .await
@@ -187,6 +200,12 @@ impl CachedClient {
         )?;
         let url = req.url().clone();
         let cached_response = if let Some(cached) = cached {
+            // Avoid sending revalidation requests for immutable responses.
+            if cached.immutable && !cached.cache_policy.is_stale(SystemTime::now()) {
+                debug!("Found immutable response for: {url}");
+                return Ok(CachedResponse::FreshCache(cached.data));
+            }
+
             match cached
                 .cache_policy
                 .before_request(&converted_req, SystemTime::now())
@@ -231,8 +250,12 @@ impl CachedClient {
                     match after_response {
                         AfterResponse::NotModified(new_policy, _parts) => {
                             debug!("Found not-modified response for: {url}");
+                            let headers =
+                                CacheHeaders::from_response(res.headers().get_all("cache-control"));
+                            let immutable = headers.is_immutable();
                             CachedResponse::NotModified(DataWithCachePolicy {
                                 data: cached.data,
+                                immutable,
                                 cache_policy: Box::new(new_policy),
                             })
                         }
