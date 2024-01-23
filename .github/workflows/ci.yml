@@ -57,13 +57,13 @@ jobs:
       - name: "Install Python"
         uses: actions/setup-python@v4
         with:
-          python-version: |
-            3.7
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Install required Python versions"
+        run: |
+          python3.12 -m pip install -r scripts/bootstrap/requirements.txt
+          cat .python-versions | xargs -L1 python3.12 scripts/bootstrap install
+      - name: "Install Rust toolchain"
+        run: rustup show
       - name: "Install Rust toolchain"
         run: rustup show
       - uses: rui314/setup-mold@v1
@@ -75,4 +75,6 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests"
-        run: cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+        run: |
+          export PATH=$PWD/bootstrap/bin:$PATH
+          cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
