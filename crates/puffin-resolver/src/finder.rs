@@ -174,12 +174,13 @@ impl<'a> DistFinder<'a> {
 
             if !no_binary {
                 // Find the most-compatible wheel
-                for (wheel, file) in files.wheels {
+                for vwheel in files.wheels {
                     // Only add dists compatible with the python version.
                     // This is relevant for source dists which give no other indication of their
                     // compatibility and wheels which may be tagged `py3-none-any` but
                     // have `requires-python: ">=3.9"`
-                    if !file
+                    if !vwheel
+                        .file
                         .requires_python
                         .as_ref()
                         .map_or(true, |requires_python| {
@@ -190,15 +191,15 @@ impl<'a> DistFinder<'a> {
                     }
 
                     best_version = Some(version.clone());
-                    if let Some(priority) = wheel.compatibility(self.tags) {
+                    if let Some(priority) = vwheel.name.compatibility(self.tags) {
                         if best_wheel
                             .as_ref()
                             .map_or(true, |(.., existing)| priority > *existing)
                         {
                             best_wheel = Some((
                                 Dist::from_registry(
-                                    DistFilename::WheelFilename(wheel),
-                                    file,
+                                    DistFilename::WheelFilename(vwheel.name),
+                                    vwheel.file,
                                     index.clone(),
                                 ),
                                 priority,
@@ -210,12 +211,13 @@ impl<'a> DistFinder<'a> {
 
             // Find the most-compatible sdist, if no wheel was found.
             if best_wheel.is_none() {
-                for (source_dist, file) in files.source_dists {
+                for vsdist in files.source_dists {
                     // Only add dists compatible with the python version.
                     // This is relevant for source dists which give no other indication of their
                     // compatibility and wheels which may be tagged `py3-none-any` but
                     // have `requires-python: ">=3.9"`
-                    if !file
+                    if !vsdist
+                        .file
                         .requires_python
                         .as_ref()
                         .map_or(true, |requires_python| {
@@ -225,10 +227,10 @@ impl<'a> DistFinder<'a> {
                         continue;
                     }
 
-                    best_version = Some(source_dist.version.clone());
+                    best_version = Some(vsdist.name.version.clone());
                     best_sdist = Some(Dist::from_registry(
-                        DistFilename::SourceDistFilename(source_dist),
-                        file,
+                        DistFilename::SourceDistFilename(vsdist.name),
+                        vsdist.file,
                         index.clone(),
                     ));
                 }

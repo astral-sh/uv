@@ -498,28 +498,44 @@ pub async fn read_metadata_async(
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct VersionFiles {
-    pub wheels: Vec<(WheelFilename, File)>,
-    pub source_dists: Vec<(SourceDistFilename, File)>,
+    pub wheels: Vec<VersionWheel>,
+    pub source_dists: Vec<VersionSourceDist>,
 }
 
 impl VersionFiles {
     fn push(&mut self, filename: DistFilename, file: File) {
         match filename {
-            DistFilename::WheelFilename(inner) => self.wheels.push((inner, file)),
-            DistFilename::SourceDistFilename(inner) => self.source_dists.push((inner, file)),
+            DistFilename::WheelFilename(name) => self.wheels.push(VersionWheel { name, file }),
+            DistFilename::SourceDistFilename(name) => {
+                self.source_dists.push(VersionSourceDist { name, file })
+            }
         }
     }
 
     pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
         self.wheels
             .into_iter()
-            .map(|(filename, file)| (DistFilename::WheelFilename(filename), file))
+            .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file))
             .chain(
                 self.source_dists
                     .into_iter()
-                    .map(|(filename, file)| (DistFilename::SourceDistFilename(filename), file)),
+                    .map(|VersionSourceDist { name, file }| {
+                        (DistFilename::SourceDistFilename(name), file)
+                    }),
             )
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionWheel {
+    pub name: WheelFilename,
+    pub file: File,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionSourceDist {
+    pub name: SourceDistFilename,
+    pub file: File,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
