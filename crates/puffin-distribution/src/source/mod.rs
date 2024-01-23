@@ -11,7 +11,7 @@ use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
 use zip::ZipArchive;
 
@@ -674,29 +674,22 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Download the source distribution to a temporary file.
         let span =
             info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
-        let (temp_dir, source_dist_archive) =
-            self.download_source_dist_url(response, filename).await?;
+        let download_dir = self.download_source_dist_url(response, filename).await?;
         drop(span);
 
         // Unzip the source distribution to a temporary directory.
         let span =
             info_span!("extract_source_dist", filename = filename, source_dist = %source_dist);
         let source_dist_dir = puffin_extract::extract_source(
-            &source_dist_archive,
-            temp_dir.path().join("extracted"),
+            download_dir.path().join(filename),
+            download_dir.path().join("extracted"),
         )?;
         drop(span);
 
         // Persist the unzipped distribution to the cache.
-        fs::create_dir_all(&cache_entry.dir()).await?;
-        if let Err(err) = fs_err::rename(&source_dist_dir, cache_path) {
-            // If another thread already cached the distribution, we can ignore the error.
-            if cache_path.is_dir() {
-                warn!("Downloaded already-cached distribution: {source_dist}");
-            } else {
-                return Err(err.into());
-            };
-        }
+        self.build_context
+            .cache()
+            .persist(source_dist_dir, cache_path)?;
 
         Ok(cache_path)
     }
@@ -706,7 +699,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         response: Response,
         source_dist_filename: &str,
-    ) -> Result<(TempDir, PathBuf), puffin_client::Error> {
+    ) -> Result<TempDir, puffin_client::Error> {
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
@@ -714,16 +707,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let mut reader = tokio::io::BufReader::new(reader.compat());
 
         // Create a temporary directory.
-        let cache_dir = self.build_context.cache().bucket(CacheBucket::BuiltWheels);
-        fs::create_dir_all(&cache_dir)
-            .await
+        let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
             .map_err(puffin_client::Error::CacheWrite)?;
-        let temp_dir = tempfile::tempdir_in(cache_dir).map_err(puffin_client::Error::CacheWrite)?;
 
         // Download the source distribution to a temporary file.
-        let sdist_file = temp_dir.path().join(source_dist_filename);
         let mut writer = tokio::io::BufWriter::new(
-            fs_err::tokio::File::create(&sdist_file)
+            fs_err::tokio::File::create(temp_dir.path().join(source_dist_filename))
                 .await
                 .map_err(puffin_client::Error::CacheWrite)?,
         );
@@ -731,7 +720,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .await
             .map_err(puffin_client::Error::CacheWrite)?;
 
-        Ok((temp_dir, sdist_file))
+        Ok(temp_dir)
     }
 
     /// Download a source distribution from a Git repository.

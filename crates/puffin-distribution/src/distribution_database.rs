@@ -46,7 +46,6 @@ pub enum DistributionDatabaseError {
     SourceBuild(#[from] SourceDistError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
-    /// Should not occur, i've only seen it when another task panicked
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
     #[error("Building source distributions is disabled")]
@@ -166,23 +165,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                let temp_target = temp_dir.path().join(&wheel.file.filename);
-                unzip_no_seek(reader.compat(), &temp_target).await?;
+                unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
-                // Move the temporary file to the cache.
+                // Persist the temporary directory to the directory store.
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Index(&wheel.index).remote_wheel_dir(wheel_filename.name.as_ref()),
                     wheel_filename.stem(),
                 );
-                fs_err::tokio::create_dir_all(&cache_entry.dir()).await?;
-                let target = cache_entry.into_path_buf();
-                fs_err::tokio::rename(temp_target, &target).await?;
+                self.cache
+                    .persist(temp_dir.into_path(), cache_entry.path())?;
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target,
+                    target: cache_entry.into_path_buf(),
                     filename: wheel_filename,
                 }))
             }
@@ -196,26 +193,22 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                let temp_target = temp_dir.path().join(wheel.filename.to_string());
-                unzip_no_seek(reader.compat(), &temp_target).await?;
+                unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
-                // Move the temporary file to the cache.
+                // Persist the temporary directory to the directory store.
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
-                fs_err::tokio::create_dir_all(&cache_entry.dir()).await?;
-                let target = cache_entry.into_path_buf();
-                fs_err::tokio::rename(temp_target, &target).await?;
+                self.cache
+                    .persist(temp_dir.into_path(), cache_entry.path())?;
 
-                let local_wheel = LocalWheel::Unzipped(UnzippedWheel {
+                Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target,
+                    target: cache_entry.into_path_buf(),
                     filename: wheel.filename.clone(),
-                });
-
-                Ok(local_wheel)
+                }))
             }
 
             Dist::Built(BuiltDist::Path(wheel)) => {

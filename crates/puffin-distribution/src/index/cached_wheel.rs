@@ -18,9 +18,6 @@ impl CachedWheel {
     pub fn from_path(path: &Path) -> Option<Self> {
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
-        if path.is_file() {
-            return None;
-        }
         let entry = CacheEntry::from_path(path);
         Some(Self { filename, entry })
     }
