@@ -255,8 +255,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .freshness(&cache_entry, Some(source_dist.name()))?,
         );
 
-        // STOPSHIP(charlie): PyPI is returning a 200 here rather than a 304, even when the etags
-        // match up. We need to avoid re-downloading the source distribution if it hasn't changed.
         let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
@@ -293,8 +291,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Ok(built_wheel);
         }
 
-        // At this point, we're seeing cached metadata (as in, we have an up-to-date source
-        // distribution), but the wheel(s) we built previously are incompatible.
         let task = self
             .reporter
             .as_ref()
@@ -406,8 +402,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Ok(metadata);
         }
 
-        // At this point, we're seeing cached metadata (as in, we have an up-to-date source
-        // distribution), but the wheel(s) we built previously are incompatible.
         let task = self
             .reporter
             .as_ref()

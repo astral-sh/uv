@@ -4,7 +4,7 @@ use std::str::FromStr;
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
 use puffin_cache::CacheShard;
-use puffin_fs::directories;
+use puffin_fs::files;
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
@@ -20,8 +20,8 @@ pub struct BuiltWheelMetadata {
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache based on the given manifest.
     pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
-        for directory in directories(cache_shard) {
-            if let Some(metadata) = Self::from_path(directory) {
+        for directory in files(cache_shard) {
+            if let Some(metadata) = Self::from_path(directory, &cache_shard) {
                 // Validate that the wheel is compatible with the target platform.
                 if metadata.filename.is_compatible(tags) {
                     return Some(metadata);
@@ -32,11 +32,11 @@ impl BuiltWheelMetadata {
     }
 
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any.whl`).
-    fn from_path(path: PathBuf) -> Option<Self> {
+    fn from_path(path: PathBuf, cache_shard: &CacheShard) -> Option<Self> {
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_str(filename).ok()?;
         Some(Self {
-            target: path.join(filename.stem()),
+            target: cache_shard.join(filename.stem()),
             path,
             filename,
         })

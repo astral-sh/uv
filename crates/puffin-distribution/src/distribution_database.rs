@@ -272,12 +272,23 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let _guard = lock.lock().await;
 
                 let built_wheel = self.builder.download_and_build(source_dist).boxed().await?;
-                Ok(LocalWheel::Built(BuiltWheel {
-                    dist: dist.clone(),
-                    path: built_wheel.path,
-                    target: built_wheel.target,
-                    filename: built_wheel.filename,
-                }))
+
+                // If the wheel was unzipped previously, respect it. Source distributions are
+                // cached under a unique build ID, so unzipped directories are never stale.
+                if built_wheel.target.exists() {
+                    Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        dist: dist.clone(),
+                        target: built_wheel.target,
+                        filename: built_wheel.filename,
+                    }))
+                } else {
+                    Ok(LocalWheel::Built(BuiltWheel {
+                        dist: dist.clone(),
+                        path: built_wheel.path,
+                        target: built_wheel.target,
+                        filename: built_wheel.filename,
+                    }))
+                }
             }
         }
     }
