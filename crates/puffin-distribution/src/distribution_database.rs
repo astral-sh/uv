@@ -4,7 +4,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use fs_err::tokio as fs;
 use futures::FutureExt;
 use thiserror::Error;
 use tokio::task::JoinError;
@@ -177,7 +176,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     WheelCache::Index(&wheel.index).remote_wheel_dir(wheel_filename.name.as_ref()),
                     wheel_filename.stem(),
                 );
-                fs::create_dir_all(&cache_entry.dir()).await?;
+                fs_err::tokio::create_dir_all(&cache_entry.dir()).await?;
                 let target = cache_entry.into_path_buf();
                 fs_err::tokio::rename(temp_target, &target).await?;
 
@@ -206,7 +205,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
-                fs::create_dir_all(&cache_entry.dir()).await?;
+                fs_err::tokio::create_dir_all(&cache_entry.dir()).await?;
                 let target = cache_entry.into_path_buf();
                 fs_err::tokio::rename(temp_target, &target).await?;
 
