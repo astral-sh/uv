@@ -24,6 +24,7 @@ use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
 use pypi_types::{BaseUrl, Metadata21, SimpleJson};
 
+use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::{CachedClient, CachedClientError, Error};
@@ -166,6 +167,8 @@ impl RegistryClient {
             }),
             format!("{package_name}.msgpack"),
         );
+        let cache_control =
+            CacheControl::from(self.cache.freshness(&cache_entry, Some(package_name))?);
 
         let simple_request = self
             .client
@@ -211,7 +214,12 @@ impl RegistryClient {
         };
         let result = self
             .client
-            .get_cached_with_callback(simple_request, &cache_entry, parse_simple_response)
+            .get_cached_with_callback(
+                simple_request,
+                &cache_entry,
+                cache_control,
+                parse_simple_response,
+            )
             .await;
         Ok(result)
     }
@@ -286,6 +294,8 @@ impl RegistryClient {
                 WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.stem()),
             );
+            let cache_control =
+                CacheControl::from(self.cache.freshness(&cache_entry, Some(&filename.name))?);
 
             let response_callback = |response: Response| async {
                 let bytes = response.bytes().await?;
@@ -299,7 +309,7 @@ impl RegistryClient {
             let req = self.client.uncached().get(url.clone()).build()?;
             Ok(self
                 .client
-                .get_cached_with_callback(req, &cache_entry, response_callback)
+                .get_cached_with_callback(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
@@ -322,6 +332,8 @@ impl RegistryClient {
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
             format!("{}.msgpack", filename.stem()),
         );
+        let cache_control =
+            CacheControl::from(self.cache.freshness(&cache_entry, Some(&filename.name))?);
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
@@ -343,7 +355,12 @@ impl RegistryClient {
         let req = self.client.uncached().head(url.clone()).build()?;
         let result = self
             .client
-            .get_cached_with_callback(req, &cache_entry, read_metadata_range_request)
+            .get_cached_with_callback(
+                req,
+                &cache_entry,
+                cache_control,
+                read_metadata_range_request,
+            )
             .await
             .map_err(crate::Error::from);
 

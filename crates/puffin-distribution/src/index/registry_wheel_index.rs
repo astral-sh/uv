@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
+use puffin_cache::{Cache, CacheBucket, Freshness, WheelCache};
 use puffin_fs::{directories, symlinks};
 use puffin_normalize::PackageName;
 
@@ -94,7 +94,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 WheelCache::Index(index_url).remote_wheel_dir(package.to_string()),
             );
 
-            Self::add_directory(&*wheel_dir, tags, &mut versions);
+            Self::add_directory(&wheel_dir, package, cache, tags, &mut versions);
 
             // Index all the built wheels, created by downloading and building source distributions
             // from the registry.
@@ -109,7 +109,13 @@ impl<'a> RegistryWheelIndex<'a> {
                 let cache_shard = cache_shard.shard(shard);
                 let manifest_entry = cache_shard.entry(MANIFEST);
                 if let Ok(Some(manifest)) = read_http_manifest(&manifest_entry) {
-                    Self::add_directory(cache_shard.join(manifest.digest()), tags, &mut versions);
+                    Self::add_directory(
+                        cache_shard.join(manifest.digest()),
+                        package,
+                        cache,
+                        tags,
+                        &mut versions,
+                    );
                 };
             }
         }
@@ -122,6 +128,8 @@ impl<'a> RegistryWheelIndex<'a> {
     /// Each subdirectory in the given path is expected to be that of an unzipped wheel.
     fn add_directory(
         path: impl AsRef<Path>,
+        package: &PackageName,
+        cache: &Cache,
         tags: &Tags,
         versions: &mut BTreeMap<Version, CachedRegistryDist>,
     ) {
@@ -130,6 +138,13 @@ impl<'a> RegistryWheelIndex<'a> {
             match CachedWheel::from_path(&wheel_dir) {
                 None => {}
                 Some(dist_info) => {
+                    if cache
+                        .freshness(&dist_info.entry, Some(package))
+                        .is_ok_and(Freshness::is_stale)
+                    {
+                        continue;
+                    }
+
                     let dist_info = dist_info.into_registry_dist();
 
                     // Pick the wheel with the highest priority

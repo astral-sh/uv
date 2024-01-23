@@ -19,6 +19,7 @@ use puffin_cache::{Cache, CacheBucket};
 use puffin_normalize::PackageName;
 use pypi_types::Hashes;
 
+use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::{Error, RegistryClient};
 
@@ -91,6 +92,8 @@ impl<'a> FlatIndexClient<'a> {
             "html",
             format!("{}.msgpack", cache_key::digest(&url.to_string())),
         );
+        let cache_control = CacheControl::from(self.cache.freshness(&cache_entry, None)?);
+
         let cached_client = self.client.cached_client();
 
         let flat_index_request = cached_client
@@ -124,7 +127,12 @@ impl<'a> FlatIndexClient<'a> {
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
         let files = cached_client
-            .get_cached_with_callback(flat_index_request, &cache_entry, parse_simple_response)
+            .get_cached_with_callback(
+                flat_index_request,
+                &cache_entry,
+                cache_control,
+                parse_simple_response,
+            )
             .await?;
         Ok(files
             .into_iter()

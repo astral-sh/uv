@@ -99,6 +99,8 @@ impl Deref for CacheShard {
 pub struct Cache {
     /// The cache directory.
     root: PathBuf,
+    /// The refresh strategy to use when reading from the cache.
+    refresh: Refresh,
     /// A temporary cache directory, if the user requested `--no-cache`.
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
@@ -111,6 +113,7 @@ impl Cache {
     pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
         Ok(Self {
             root: Self::init(root)?,
+            refresh: Refresh::None,
             _temp_dir_drop: None,
         })
     }
@@ -120,8 +123,15 @@ impl Cache {
         let temp_dir = tempdir()?;
         Ok(Self {
             root: Self::init(temp_dir.path())?,
+            refresh: Refresh::None,
             _temp_dir_drop: Some(Arc::new(temp_dir)),
         })
+    }
+
+    /// Set the [`Refresh`] policy for the cache.
+    #[must_use]
+    pub fn with_refresh(self, refresh: Refresh) -> Self {
+        Self { refresh, ..self }
     }
 
     /// Return the root of the cache.
@@ -149,13 +159,42 @@ impl Cache {
         CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
     }
 
-    /// Persist a temporary directory to the artifact store.
-    pub fn persist(
+    /// Returns `true` if a cache entry is up-to-date given the [`Refresh`] policy.
+    pub fn freshness(
         &self,
-        temp_dir: impl AsRef<Path>,
-        path: impl AsRef<Path>,
-    ) -> Result<(), io::Error> {
+        entry: &CacheEntry,
+        package: Option<&PackageName>,
+    ) -> io::Result<Freshness> {
+        // Grab the cutoff timestamp, if it's relevant.
+        let timestamp = match &self.refresh {
+            Refresh::None => return Ok(Freshness::Fresh),
+            Refresh::All(timestamp) => timestamp,
+            Refresh::Packages(packages, timestamp) => {
+                if package.map_or(true, |package| packages.contains(package)) {
+                    timestamp
+                } else {
+                    return Ok(Freshness::Fresh);
+                }
+            }
+        };
+
+        match fs::metadata(entry.path()) {
+            Ok(metadata) => {
+                if metadata.modified()? >= *timestamp {
+                    Ok(Freshness::Fresh)
+                } else {
+                    Ok(Freshness::Stale)
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Freshness::Missing),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Persist a temporary directory to the artifact store.
+    pub fn persist(&self, temp_dir: impl AsRef<Path>, path: impl AsRef<Path>) -> io::Result<()> {
         // Create a unique ID for the artifact.
+        // TODO(charlie): Support content-addressed persistence via SHAs.
         let id = uuid::Uuid::new_v4();
 
         // Move the temporary directory into the directory store.
@@ -589,33 +628,103 @@ impl Display for CacheBucket {
     }
 }
 
-/// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
-/// archive) or a directory containing a Python package.
-///
-/// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
-/// returns `None`.
-pub fn archive_mtime(path: &Path) -> Result<Option<SystemTime>, io::Error> {
-    let metadata = fs_err::metadata(path)?;
-    if metadata.is_file() {
-        // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
-        Ok(Some(metadata.modified()?))
-    } else {
-        if let Some(metadata) = path
-            .join("pyproject.toml")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-        {
-            Ok(Some(metadata.modified()?))
-        } else if let Some(metadata) = path
-            .join("setup.py")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-        {
-            Ok(Some(metadata.modified()?))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveTimestamp {
+    /// The archive consists of a single file with the given modification time.
+    Exact(SystemTime),
+    /// The archive consists of a directory. The modification time is the latest modification time
+    /// of the `pyproject.toml` or `setup.py` file in the directory.
+    Approximate(SystemTime),
+}
+
+impl ArchiveTimestamp {
+    /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
+    /// archive) or a directory containing a Python package.
+    ///
+    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
+    /// returns `None`.
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
+        let metadata = fs_err::metadata(path.as_ref())?;
+        if metadata.is_file() {
+            // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
+            Ok(Some(Self::Exact(metadata.modified()?)))
         } else {
-            Ok(None)
+            if let Some(metadata) = path
+                .as_ref()
+                .join("pyproject.toml")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                Ok(Some(Self::Approximate(metadata.modified()?)))
+            } else if let Some(metadata) = path
+                .as_ref()
+                .join("setup.py")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                Ok(Some(Self::Approximate(metadata.modified()?)))
+            } else {
+                Ok(None)
+            }
         }
+    }
+
+    /// Return the modification timestamp for an archive.
+    pub fn timestamp(&self) -> SystemTime {
+        match self {
+            Self::Exact(timestamp) => *timestamp,
+            Self::Approximate(timestamp) => *timestamp,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Freshness {
+    /// The cache entry is fresh according to the [`Refresh`] policy.
+    Fresh,
+    /// The cache entry is stale according to the [`Refresh`] policy.
+    Stale,
+    /// The cache entry does not exist.
+    Missing,
+}
+
+impl Freshness {
+    pub const fn is_fresh(self) -> bool {
+        matches!(self, Self::Fresh)
+    }
+
+    pub const fn is_stale(self) -> bool {
+        matches!(self, Self::Stale)
+    }
+}
+
+/// A refresh policy for cache entries.
+#[derive(Debug, Clone)]
+pub enum Refresh {
+    /// Don't refresh any entries.
+    None,
+    /// Refresh entries linked to the given packages, if created before the given timestamp.
+    Packages(Vec<PackageName>, SystemTime),
+    /// Refresh all entries created before the given timestamp.
+    All(SystemTime),
+}
+
+impl Refresh {
+    /// Determine the refresh strategy to use based on the command-line arguments.
+    pub fn from_args(refresh: bool, refresh_package: Vec<PackageName>) -> Self {
+        if refresh {
+            Self::All(SystemTime::now())
+        } else if !refresh_package.is_empty() {
+            Self::Packages(refresh_package, SystemTime::now())
+        } else {
+            Self::None
+        }
+    }
+
+    /// Returns `true` if no packages should be reinstalled.
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
     }
 }

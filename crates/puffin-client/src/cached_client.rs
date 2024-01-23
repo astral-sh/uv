@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 
-use puffin_cache::CacheEntry;
+use puffin_cache::{CacheEntry, Freshness};
 use puffin_fs::write_atomic;
 
 use crate::cache_headers::CacheHeaders;
@@ -104,6 +104,7 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
@@ -136,7 +137,7 @@ impl CachedClient {
             None
         };
 
-        let cached_response = self.send_cached(req, cached).boxed().await?;
+        let cached_response = self.send_cached(req, cache_control, cached).boxed().await?;
 
         let write_cache = info_span!("write_cache", file = %cache_entry.path().display());
         match cached_response {
@@ -190,6 +191,7 @@ impl CachedClient {
     async fn send_cached<T: Serialize + DeserializeOwned>(
         &self,
         mut req: Request,
+        cache_control: CacheControl,
         cached: Option<DataWithCachePolicy<T>>,
     ) -> Result<CachedResponse<T>, crate::Error> {
         // The converted types are from the specific `reqwest` types to the more generic `http`
@@ -198,12 +200,24 @@ impl CachedClient {
             req.try_clone()
                 .expect("You can't use streaming request bodies with this function"),
         )?;
+
         let url = req.url().clone();
         let cached_response = if let Some(cached) = cached {
             // Avoid sending revalidation requests for immutable responses.
             if cached.immutable && !cached.cache_policy.is_stale(SystemTime::now()) {
                 debug!("Found immutable response for: {url}");
                 return Ok(CachedResponse::FreshCache(cached.data));
+            }
+
+            // Apply the cache control header, if necessary.
+            match cache_control {
+                CacheControl::None => {}
+                CacheControl::MustRevalidate => {
+                    converted_req.headers_mut().insert(
+                        http::header::CACHE_CONTROL,
+                        http::HeaderValue::from_static("max-age=0, must-revalidate"),
+                    );
+                }
             }
 
             match cached
@@ -298,5 +312,23 @@ impl CachedClient {
             res,
             cache_policy.is_storable().then(|| Box::new(cache_policy)),
         ))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CacheControl {
+    /// Respect the `cache-control` header from the response.
+    None,
+    /// Apply `max-age=0, must-revalidate` to the request.
+    MustRevalidate,
+}
+
+impl From<Freshness> for CacheControl {
+    fn from(value: Freshness) -> Self {
+        match value {
+            Freshness::Fresh => CacheControl::None,
+            Freshness::Stale => CacheControl::MustRevalidate,
+            Freshness::Missing => CacheControl::None,
+        }
     }
 }

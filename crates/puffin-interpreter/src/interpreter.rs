@@ -11,7 +11,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
-use puffin_cache::{Cache, CacheBucket, CachedByTimestamp};
+use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
@@ -272,6 +272,7 @@ impl InterpreterQueryResult {
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let executable_bytes = executable.as_os_str().as_encoded_bytes();
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
@@ -281,25 +282,30 @@ impl InterpreterQueryResult {
         let modified = Timestamp::from_path(fs_err::canonicalize(executable)?.as_ref())?;
 
         // Read from the cache.
-        if let Ok(data) = fs::read(cache_entry.path()) {
-            match rmp_serde::from_slice::<CachedByTimestamp<Timestamp, Self>>(&data) {
-                Ok(cached) => {
-                    if cached.timestamp == modified {
-                        debug!("Using cached markers for: {}", executable.display());
-                        return Ok(cached.data);
-                    }
+        if cache
+            .freshness(&cache_entry, None)
+            .is_ok_and(Freshness::is_fresh)
+        {
+            if let Ok(data) = fs::read(cache_entry.path()) {
+                match rmp_serde::from_slice::<CachedByTimestamp<Timestamp, Self>>(&data) {
+                    Ok(cached) => {
+                        if cached.timestamp == modified {
+                            debug!("Using cached markers for: {}", executable.display());
+                            return Ok(cached.data);
+                        }
 
-                    debug!(
-                        "Ignoring stale cached markers for: {}",
-                        executable.display()
-                    );
-                }
-                Err(err) => {
-                    warn!(
-                        "Broken cache entry at {}, removing: {err}",
-                        cache_entry.path().display()
-                    );
-                    let _ = fs_err::remove_file(cache_entry.path());
+                        debug!(
+                            "Ignoring stale cached markers for: {}",
+                            executable.display()
+                        );
+                    }
+                    Err(err) => {
+                        warn!(
+                            "Broken cache entry at {}, removing: {err}",
+                            cache_entry.path().display()
+                        );
+                        let _ = fs_err::remove_file(cache_entry.path());
+                    }
                 }
             }
         }

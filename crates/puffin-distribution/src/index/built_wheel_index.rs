@@ -1,7 +1,8 @@
 use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, Name, PathSourceDist};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, CacheShard, WheelCache};
+use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, Freshness, WheelCache};
 use puffin_fs::symlinks;
+use puffin_normalize::PackageName;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};
@@ -26,13 +27,19 @@ impl BuiltWheelIndex {
             WheelCache::Url(source_dist.url.raw()).remote_wheel_dir(source_dist.name().as_ref()),
         );
 
-        // Read the existing metadata from the cache, if it exists.
+        // Read the manifest from the cache. There's no need to enforce freshness, since we
+        // enforce freshness on the entries.
         let manifest_entry = cache_shard.entry(MANIFEST);
         let Some(manifest) = read_http_manifest(&manifest_entry)? else {
             return Ok(None);
         };
 
-        Ok(Self::find(&cache_shard.shard(manifest.digest()), tags))
+        Ok(Self::find(
+            &cache_shard.shard(manifest.digest()),
+            source_dist.name(),
+            cache,
+            tags,
+        ))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
@@ -47,17 +54,23 @@ impl BuiltWheelIndex {
         );
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) = puffin_cache::archive_mtime(&source_dist.path)? else {
+        let Some(modified) = ArchiveTimestamp::from_path(&source_dist.path)? else {
             return Err(SourceDistError::DirWithoutEntrypoint);
         };
 
-        // Read the existing metadata from the cache, if it's up-to-date.
+        // Read the manifest from the cache. There's no need to enforce freshness, since we
+        // enforce freshness on the entries.
         let manifest_entry = cache_shard.entry(MANIFEST);
         let Some(manifest) = read_timestamp_manifest(&manifest_entry, modified)? else {
             return Ok(None);
         };
 
-        Ok(Self::find(&cache_shard.shard(manifest.digest()), tags))
+        Ok(Self::find(
+            &cache_shard.shard(manifest.digest()),
+            source_dist.name(),
+            cache,
+            tags,
+        ))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
@@ -72,7 +85,7 @@ impl BuiltWheelIndex {
                 .remote_wheel_dir(source_dist.name().as_ref()),
         );
 
-        Self::find(&cache_shard, tags)
+        Self::find(&cache_shard, source_dist.name(), cache, tags)
     }
 
     /// Find the "best" distribution in the index for a given source distribution.
@@ -91,7 +104,12 @@ impl BuiltWheelIndex {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    pub fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
+    fn find(
+        shard: &CacheShard,
+        package: &PackageName,
+        cache: &Cache,
+        tags: &Tags,
+    ) -> Option<CachedWheel> {
         let mut candidate: Option<CachedWheel> = None;
 
         // Unzipped wheels are stored as symlinks into the archive directory.
@@ -99,6 +117,15 @@ impl BuiltWheelIndex {
             match CachedWheel::from_path(&subdir) {
                 None => {}
                 Some(dist_info) => {
+                    // If the [`Refresh`] policy is set, ignore entries that were created before
+                    // the cutoff.
+                    if cache
+                        .freshness(&dist_info.entry, Some(package))
+                        .is_ok_and(Freshness::is_stale)
+                    {
+                        continue;
+                    }
+
                     // Pick the wheel with the highest priority
                     let compatibility = dist_info.filename.compatibility(tags);
 

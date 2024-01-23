@@ -15,7 +15,7 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
-use puffin_client::{CachedClientError, RegistryClient};
+use puffin_client::{CacheControl, CachedClientError, RegistryClient};
 use puffin_extract::unzip_no_seek;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary};
@@ -34,6 +34,8 @@ pub enum DistributionDatabaseError {
     Client(#[from] puffin_client::Error),
     #[error(transparent)]
     Request(#[from] reqwest::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     #[error(transparent)]
     SourceBuild(#[from] SourceDistError),
     #[error("Git operation failed")]
@@ -129,6 +131,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             wheel.filename.stem(),
                         );
 
+                        // TODO(charlie): There's no need to unzip if the wheel is unchanged.
                         return Ok(LocalWheel::Disk(DiskWheel {
                             dist: dist.clone(),
                             path: path.clone(),
@@ -167,9 +170,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 };
 
                 let req = self.client.cached_client().uncached().get(url).build()?;
+                let cache_control =
+                    CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
                 self.client
                     .cached_client()
-                    .get_cached_with_callback(req, &http_entry, download)
+                    .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
@@ -222,9 +227,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .uncached()
                     .get(wheel.url.raw().clone())
                     .build()?;
+                let cache_control =
+                    CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
                 self.client
                     .cached_client()
-                    .get_cached_with_callback(req, &http_entry, download)
+                    .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
@@ -249,6 +256,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     wheel.filename.stem(),
                 );
 
+                // TODO(charlie): There's no need to unzip if the wheel is unchanged.
                 Ok(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
                     path: wheel.path.clone(),
@@ -262,12 +270,23 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let _guard = lock.lock().await;
 
                 let built_wheel = self.builder.download_and_build(source_dist).boxed().await?;
-                Ok(LocalWheel::Built(BuiltWheel {
-                    dist: dist.clone(),
-                    path: built_wheel.path,
-                    target: built_wheel.target,
-                    filename: built_wheel.filename,
-                }))
+
+                // If the wheel was unzipped previously, respect it. Source distributions are
+                // cached under a unique build ID, so unzipped directories are never stale.
+                if built_wheel.target.exists() {
+                    Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        dist: dist.clone(),
+                        target: built_wheel.target,
+                        filename: built_wheel.filename,
+                    }))
+                } else {
+                    Ok(LocalWheel::Built(BuiltWheel {
+                        dist: dist.clone(),
+                        path: built_wheel.path,
+                        target: built_wheel.target,
+                        filename: built_wheel.filename,
+                    }))
+                }
             }
         }
     }

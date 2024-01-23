@@ -12,7 +12,7 @@ use distribution_types::{
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Freshness, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
@@ -48,6 +48,11 @@ impl<'a> Planner<'a> {
 
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
+    ///
+    /// The install plan will respect cache [`Freshness`]. Specifically, if refresh is enabled, the
+    /// plan will respect cache entries created after the current time (as per the [`Refresh`]
+    /// policy). Otherwise, entries will be ignored. The downstream distribution database may still
+    /// read those entries from the cache after revalidating them.
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
@@ -140,9 +145,6 @@ impl<'a> Planner<'a> {
             };
 
             if reinstall {
-                // If necessary, purge the cached distributions.
-                debug!("Purging cached distributions for: {requirement}");
-                cache.purge(&requirement.name)?;
                 if let Some(distribution) = site_packages.remove(&requirement.name) {
                     reinstalls.push(distribution);
                 }
@@ -164,7 +166,7 @@ impl<'a> Planner<'a> {
                                 if &distribution.url == url.raw() {
                                     // If the requirement came from a local path, check freshness.
                                     if let Ok(archive) = url.to_file_path() {
-                                        if is_fresh_install(distribution, &archive)? {
+                                        if not_modified_install(distribution, &archive)? {
                                             debug!("Requirement already satisfied (and up-to-date): {distribution}");
                                             continue;
                                         }
@@ -243,16 +245,21 @@ impl<'a> Planner<'a> {
                                 )
                                 .entry(wheel.filename.stem());
 
-                            if cache_entry.path().exists() {
-                                let cached_dist = CachedDirectUrlDist::from_url(
-                                    wheel.filename,
-                                    wheel.url,
-                                    cache_entry.into_path_buf(),
-                                );
+                            if cache
+                                .freshness(&cache_entry, Some(wheel.name()))
+                                .is_ok_and(Freshness::is_fresh)
+                            {
+                                if cache_entry.path().exists() {
+                                    let cached_dist = CachedDirectUrlDist::from_url(
+                                        wheel.filename,
+                                        wheel.url,
+                                        cache_entry.into_path_buf(),
+                                    );
 
-                                debug!("URL wheel requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
-                                continue;
+                                    debug!("URL wheel requirement already cached: {cached_dist}");
+                                    local.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
                             }
                         }
                         Dist::Built(BuiltDist::Path(wheel)) => {
@@ -280,16 +287,21 @@ impl<'a> Planner<'a> {
                                 )
                                 .entry(wheel.filename.stem());
 
-                            if is_fresh_cache(&cache_entry, &wheel.path)? {
-                                let cached_dist = CachedDirectUrlDist::from_url(
-                                    wheel.filename,
-                                    wheel.url,
-                                    cache_entry.into_path_buf(),
-                                );
+                            if cache
+                                .freshness(&cache_entry, Some(wheel.name()))
+                                .is_ok_and(Freshness::is_fresh)
+                            {
+                                if not_modified_cache(&cache_entry, &wheel.path)? {
+                                    let cached_dist = CachedDirectUrlDist::from_url(
+                                        wheel.filename,
+                                        wheel.url,
+                                        cache_entry.into_path_buf(),
+                                    );
 
-                                debug!("Path wheel requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
-                                continue;
+                                    debug!("Path wheel requirement already cached: {cached_dist}");
+                                    local.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
                             }
                         }
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {
@@ -357,32 +369,21 @@ impl<'a> Planner<'a> {
     }
 }
 
-/// Returns `true` if the cache entry linked to the file at the given [`Path`] is fresh.
+/// Returns `true` if the cache entry linked to the file at the given [`Path`] is not-modified.
 ///
-/// A cache entry is considered fresh if it exists and is newer than the file at the given path.
-/// If the cache entry is stale, it will be removed from the cache.
-fn is_fresh_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
+/// A cache entry is not modified if it exists and is newer than the file at the given path.
+fn not_modified_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
     match fs_err::metadata(cache_entry.path()).and_then(|metadata| metadata.modified()) {
         Ok(cache_mtime) => {
             // Determine the modification time of the wheel.
-            let Some(artifact_mtime) = puffin_cache::archive_mtime(artifact)? else {
-                // The artifact doesn't exist, so it's not fresh.
-                return Ok(false);
-            };
-            if cache_mtime >= artifact_mtime {
-                Ok(true)
+            if let Some(artifact_mtime) = ArchiveTimestamp::from_path(artifact)? {
+                Ok(cache_mtime >= artifact_mtime.timestamp())
             } else {
-                debug!(
-                    "Removing stale built wheels for: {}",
-                    cache_entry.path().display()
-                );
-                if let Err(err) = fs_err::remove_dir_all(cache_entry.dir()) {
-                    warn!("Failed to remove stale built wheel cache directory: {err}");
-                }
+                // The artifact doesn't exist, so it's not fresh.
                 Ok(false)
             }
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
             // The cache entry doesn't exist, so it's not fresh.
             Ok(false)
         }
@@ -390,20 +391,20 @@ fn is_fresh_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io:
     }
 }
 
-/// Returns `true` if the installed distribution linked to the file at the given [`Path`] is fresh,
-/// based on the modification time of the installed distribution.
-fn is_fresh_install(dist: &InstalledDirectUrlDist, artifact: &Path) -> Result<bool, io::Error> {
+/// Returns `true` if the installed distribution linked to the file at the given [`Path`] is
+/// not-modified based on the modification time of the installed distribution.
+fn not_modified_install(dist: &InstalledDirectUrlDist, artifact: &Path) -> Result<bool, io::Error> {
     // Determine the modification time of the installed distribution.
     let dist_metadata = fs_err::metadata(&dist.path)?;
     let dist_mtime = dist_metadata.modified()?;
 
     // Determine the modification time of the wheel.
-    let Some(artifact_mtime) = puffin_cache::archive_mtime(artifact)? else {
+    if let Some(artifact_mtime) = ArchiveTimestamp::from_path(artifact)? {
+        Ok(dist_mtime >= artifact_mtime.timestamp())
+    } else {
         // The artifact doesn't exist, so it's not fresh.
-        return Ok(false);
-    };
-
-    Ok(dist_mtime >= artifact_mtime)
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -425,7 +426,7 @@ pub struct Plan {
     pub extraneous: Vec<InstalledDist>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Reinstall {
     /// Don't reinstall any packages; respect the existing installation.
     None,
