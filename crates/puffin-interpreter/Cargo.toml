@@ -23,6 +23,7 @@ puffin-fs = { path = "../puffin-fs" }
 
 fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }
+regex = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -32,5 +33,8 @@ tracing = { workspace = true }
 which = { workspace = true}
 
 [dev-dependencies]
+anyhow = { version = "1.0.79" }
 indoc = { version = "2.0.4" }
+insta = { version = "1.34.0" }
+itertools = { version = "0.12.0" }
 tempfile = { version = "3.9.0" }

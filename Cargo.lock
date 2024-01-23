@@ -2602,9 +2602,12 @@ dependencies = [
 name = "puffin-interpreter"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "cache-key",
  "fs-err",
  "indoc",
+ "insta",
+ "itertools 0.12.0",
  "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
@@ -2612,6 +2615,7 @@ dependencies = [
  "platform-tags",
  "puffin-cache",
  "puffin-fs",
+ "regex",
  "rmp-serde",
  "serde",
  "serde_json",
