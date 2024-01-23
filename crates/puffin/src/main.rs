@@ -87,12 +87,12 @@ pub enum ColorChoice {
     Never,
 }
 
-impl ColorChoice {
-    fn to_anstream(&self) -> anstream::ColorChoice {
-        match self {
-            Self::Auto => anstream::ColorChoice::Auto,
-            Self::Always => anstream::ColorChoice::Always,
-            Self::Never => anstream::ColorChoice::Never,
+impl From<ColorChoice> for anstream::ColorChoice {
+    fn from(value: ColorChoice) -> Self {
+        match value {
+            ColorChoice::Auto => anstream::ColorChoice::Auto,
+            ColorChoice::Always => anstream::ColorChoice::Always,
+            ColorChoice::Never => anstream::ColorChoice::Never,
         }
     }
 }
@@ -599,7 +599,7 @@ async fn inner() -> Result<ExitStatus> {
     if cli.no_color {
         anstream::ColorChoice::write_global(anstream::ColorChoice::Never);
     } else {
-        anstream::ColorChoice::write_global(cli.color.to_anstream());
+        anstream::ColorChoice::write_global(cli.color.into());
     }
 
     miette::set_hook(Box::new(|_| {
