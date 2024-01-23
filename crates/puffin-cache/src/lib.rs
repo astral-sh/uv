@@ -68,8 +68,21 @@ impl CacheEntry {
 pub struct CacheShard(PathBuf);
 
 impl CacheShard {
+    /// Return a [`CacheEntry`] within this shard.
     pub fn entry(&self, file: impl AsRef<Path>) -> CacheEntry {
         CacheEntry::new(&self.0, file)
+    }
+
+    /// Return a [`CacheShard`] within this shard.
+    #[must_use]
+    pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
+        Self(self.0.join(dir.as_ref()))
+    }
+}
+
+impl AsRef<Path> for CacheShard {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 

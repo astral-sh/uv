@@ -4,13 +4,15 @@ use std::path::Path;
 
 use rustc_hash::FxHashMap;
 
-use crate::index::cached_wheel::CachedWheel;
 use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_fs::directories;
 use puffin_normalize::PackageName;
+
+use crate::index::cached_wheel::CachedWheel;
+use crate::source::{read_http_manifest, MANIFEST};
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]
@@ -96,15 +98,19 @@ impl<'a> RegistryWheelIndex<'a> {
 
             // Index all the built wheels, created by downloading and building source distributions
             // from the registry.
-            let built_wheel_dir = cache.shard(
+            let cache_shard = cache.shard(
                 CacheBucket::BuiltWheels,
                 WheelCache::Index(index_url).built_wheel_dir(package.to_string()),
             );
 
-            // Built wheels have one more level of indirection, as they are keyed by the source
-            // distribution filename.
-            for subdir in directories(&*built_wheel_dir) {
-                Self::add_directory(subdir, tags, &mut versions);
+            // For registry wheels, the cache structure is: `<index>/<package-name>/<version>/`.
+            for shard in directories(&cache_shard) {
+                // Read the existing metadata from the cache, if it exists.
+                let cache_shard = cache_shard.shard(shard);
+                let manifest_entry = cache_shard.entry(MANIFEST);
+                if let Ok(Some(manifest)) = read_http_manifest(&manifest_entry) {
+                    Self::add_directory(cache_shard.join(manifest.digest()), tags, &mut versions);
+                };
             }
         }
 

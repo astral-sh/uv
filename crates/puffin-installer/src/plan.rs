@@ -3,13 +3,12 @@ use std::io;
 use std::path::Path;
 
 use anyhow::{bail, Result};
-use puffin_traits::NoBinary;
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
 use distribution_types::{
-    git_reference, BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations,
-    InstalledDirectUrlDist, InstalledDist, Name, SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDirectUrlDist,
+    InstalledDist, Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
@@ -17,6 +16,7 @@ use puffin_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
+use puffin_traits::NoBinary;
 
 use crate::{ResolvedEditable, SitePackages};
 
@@ -51,7 +51,7 @@ impl<'a> Planner<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
-        mut site_packages: SitePackages,
+        mut site_packages: SitePackages<'_>,
         reinstall: &Reinstall,
         no_binary: &NoBinary,
         index_locations: &IndexLocations,
@@ -235,11 +235,13 @@ impl<'a> Planner<'a> {
 
                             // Find the exact wheel from the cache, since we know the filename in
                             // advance.
-                            let cache_entry = cache.entry(
-                                CacheBucket::Wheels,
-                                WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
-                                wheel.filename.stem(),
-                            );
+                            let cache_entry = cache
+                                .shard(
+                                    CacheBucket::Wheels,
+                                    WheelCache::Url(&wheel.url)
+                                        .remote_wheel_dir(wheel.name().as_ref()),
+                                )
+                                .entry(wheel.filename.stem());
 
                             if cache_entry.path().exists() {
                                 let cached_dist = CachedDirectUrlDist::from_url(
@@ -270,11 +272,13 @@ impl<'a> Planner<'a> {
 
                             // Find the exact wheel from the cache, since we know the filename in
                             // advance.
-                            let cache_entry = cache.entry(
-                                CacheBucket::Wheels,
-                                WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
-                                wheel.filename.stem(),
-                            );
+                            let cache_entry = cache
+                                .shard(
+                                    CacheBucket::Wheels,
+                                    WheelCache::Url(&wheel.url)
+                                        .remote_wheel_dir(wheel.name().as_ref()),
+                                )
+                                .entry(wheel.filename.stem());
 
                             if is_fresh_cache(&cache_entry, &wheel.path)? {
                                 let cached_dist = CachedDirectUrlDist::from_url(
@@ -291,12 +295,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            let cache_shard = cache.shard(
-                                CacheBucket::BuiltWheels,
-                                WheelCache::Url(&sdist.url).remote_wheel_dir(sdist.name().as_ref()),
-                            );
-
-                            if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
+                            if let Some(wheel) = BuiltWheelIndex::url(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 local.push(CachedDist::Url(cached_dist));
@@ -306,37 +305,21 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::Path(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            let cache_shard = cache.shard(
-                                CacheBucket::BuiltWheels,
-                                WheelCache::Path(&sdist.url)
-                                    .remote_wheel_dir(sdist.name().as_ref()),
-                            );
-
-                            if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
-                                if is_fresh_cache(&wheel.entry, &sdist.path)? {
-                                    let cached_dist = wheel.into_url_dist(url.clone());
-                                    debug!("Path source requirement already cached: {cached_dist}");
-                                    local.push(CachedDist::Url(cached_dist));
-                                    continue;
-                                }
+                            if let Some(wheel) = BuiltWheelIndex::path(&sdist, cache, tags)? {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("Path source requirement already cached: {cached_dist}");
+                                local.push(CachedDist::Url(cached_dist));
+                                continue;
                             }
                         }
                         Dist::Source(SourceDist::Git(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Ok(Some(git_sha)) = git_reference(&sdist.url) {
-                                let cache_shard = cache.shard(
-                                    CacheBucket::BuiltWheels,
-                                    WheelCache::Git(&sdist.url, &git_sha.to_short_string())
-                                        .remote_wheel_dir(sdist.name().as_ref()),
-                                );
-
-                                if let Some(wheel) = BuiltWheelIndex::find(&cache_shard, tags) {
-                                    let cached_dist = wheel.into_url_dist(url.clone());
-                                    debug!("Git source requirement already cached: {cached_dist}");
-                                    local.push(CachedDist::Url(cached_dist));
-                                    continue;
-                                }
+                            if let Some(wheel) = BuiltWheelIndex::git(&sdist, cache, tags) {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("Git source requirement already cached: {cached_dist}");
+                                local.push(CachedDist::Url(cached_dist));
+                                continue;
                             }
                         }
                     }
