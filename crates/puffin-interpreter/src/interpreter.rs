@@ -278,12 +278,11 @@ impl InterpreterQueryResult {
             format!("{}.msgpack", digest(&executable_bytes)),
         );
 
-        // `modified()` is infallible on windows and unix (i.e., all platforms we support).
-        let modified = fs_err::metadata(fs_err::canonicalize(executable)?)?.modified()?;
+        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?.as_ref())?;
 
         // Read from the cache.
         if let Ok(data) = fs::read(cache_entry.path()) {
-            match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
+            match rmp_serde::from_slice::<CachedByTimestamp<Timestamp, Self>>(&data) {
                 Ok(cached) => {
                     if cached.timestamp == modified {
                         debug!("Using cached markers for: {}", executable.display());
@@ -310,10 +309,9 @@ impl InterpreterQueryResult {
         let info = Self::query(executable)?;
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
-        // python executable at another path, we're not allowed to cache the interpreter info
+        // python executable at another path, we're not allowed to cache the interpreter info.
         if executable == info.sys_executable {
             fs::create_dir_all(cache_entry.dir())?;
-            // Write to the cache.
             write_atomic_sync(
                 cache_entry.path(),
                 rmp_serde::to_vec(&CachedByTimestamp {
@@ -324,6 +322,52 @@ impl InterpreterQueryResult {
         }
 
         Ok(info)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+enum Timestamp {
+    // On Unix, use `ctime` and `ctime_nsec`.
+    Unix(i64, i64),
+    // On Windows, use `last_write_time`.
+    Windows(u64),
+    // On other platforms, use Rust's modified time.
+    Generic(std::time::SystemTime),
+}
+
+impl Timestamp {
+    /// Return the [`Timestamp`] for the given path.
+    ///
+    /// On Unix, this uses `ctime` as a conservative approach. `ctime` should detect all
+    /// modifications, including some that we don't care about, like hardlink modifications.
+    /// On other platforms, it uses `mtime`.
+    fn from_path(path: &Path) -> Result<Self, Error> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+
+            let metadata = path.metadata()?;
+            let ctime = metadata.ctime();
+            let ctime_nsec = metadata.ctime_nsec();
+
+            Ok(Self::Unix(ctime, ctime_nsec))
+        }
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+
+            let metadata = path.metadata()?;
+            let modified = metadata.last_write_time();
+            Ok(Self::Windows(modified))
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            let metadata = path.metadata()?;
+            let modified = metadata.modified()?;
+            Ok(Self::Generic(modified))
+        }
     }
 }
 

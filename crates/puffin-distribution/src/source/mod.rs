@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
@@ -912,12 +913,12 @@ pub(crate) fn read_http_manifest(
 /// If the cache entry is stale, a new entry will be created.
 pub(crate) fn read_timestamp_manifest(
     cache_entry: &CacheEntry,
-    modified: std::time::SystemTime,
+    modified: SystemTime,
 ) -> Result<Option<Manifest>, SourceDistError> {
     // If the cache entry is up-to-date, return it.
     match std::fs::read(cache_entry.path()) {
         Ok(cached) => {
-            let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
+            let cached = rmp_serde::from_slice::<CachedByTimestamp<SystemTime, Manifest>>(&cached)?;
             if cached.timestamp == modified {
                 return Ok(Some(cached.data));
             }
@@ -933,7 +934,7 @@ pub(crate) fn read_timestamp_manifest(
 /// If the cache entry is stale, a new entry will be created.
 pub(crate) async fn refresh_timestamp_manifest(
     cache_entry: &CacheEntry,
-    modified: std::time::SystemTime,
+    modified: SystemTime,
 ) -> Result<Manifest, SourceDistError> {
     // If the cache entry is up-to-date, return it.
     if let Some(manifest) = read_timestamp_manifest(cache_entry, modified)? {
