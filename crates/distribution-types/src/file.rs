@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -18,14 +17,22 @@ pub enum FileConversionError {
 }
 
 /// Internal analog to [`pypi_types::File`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct File {
     pub dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
     pub hashes: Hashes,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
-    pub upload_time: Option<DateTime<Utc>>,
+    // N.B. We don't use a chrono DateTime<Utc> here because it's a little
+    // annoying to do so with rkyv. Since we only use this field for doing
+    // comparisons in testing, we just store it as a UTC timestamp in
+    // milliseconds.
+    pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
     pub yanked: Option<Yanked>,
 }
@@ -39,7 +46,7 @@ impl File {
             hashes: file.hashes,
             requires_python: file.requires_python.transpose()?,
             size: file.size,
-            upload_time: file.upload_time,
+            upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
             url: if file.url.contains("://") {
                 FileLocation::AbsoluteUrl(file.url)
             } else {

@@ -178,7 +178,7 @@ impl<'a> FlatIndexClient<'a> {
                 hashes: Hashes { sha256: None },
                 requires_python: None,
                 size: None,
-                upload_time: None,
+                upload_time_utc_ms: None,
                 url: FileLocation::Path(entry.path().to_path_buf()),
                 yanked: None,
             };

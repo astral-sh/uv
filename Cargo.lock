@@ -860,7 +860,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
- "chrono",
  "data-encoding",
  "distribution-filename",
  "fs-err",

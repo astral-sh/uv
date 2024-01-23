@@ -24,7 +24,6 @@ puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 once_cell = { workspace = true }
