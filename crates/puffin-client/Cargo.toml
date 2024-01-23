@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 cache-key = { path = "../cache-key" }
-distribution-filename = { path = "../distribution-filename", features = ["serde"] }
+distribution-filename = { path = "../distribution-filename", features = ["rkyv", "serde"] }
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
@@ -27,6 +27,7 @@ http-cache-semantics = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+rkyv = { workspace = true, features = ["strict", "validation"] }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }

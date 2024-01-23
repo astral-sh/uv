@@ -496,7 +496,11 @@ pub async fn read_metadata_async(
     Ok(metadata)
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
     pub source_dists: Vec<VersionSourceDist>,
@@ -526,19 +530,27 @@ impl VersionFiles {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct VersionWheel {
     pub name: WheelFilename,
     pub file: File,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
     pub file: File,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
 pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
 
 impl SimpleMetadata {
