@@ -272,7 +272,7 @@ struct PipCompileArgs {
     /// Timestamps are given either as RFC 3339 timestamps such as `2006-12-02T02:07:43Z` or as
     /// UTC dates in the same format such as `2006-12-02`. Dates are interpreted as including this
     /// day, i.e. until midnight UTC that day.
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 }
 

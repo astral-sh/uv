@@ -1,6 +1,6 @@
 use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, Name, PathSourceDist};
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, CacheShard, Freshness, WheelCache};
+use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, Freshness, WheelCache};
 use puffin_fs::symlinks;
 use puffin_normalize::PackageName;
 
@@ -27,7 +27,8 @@ impl BuiltWheelIndex {
             WheelCache::Url(source_dist.url.raw()).remote_wheel_dir(source_dist.name().as_ref()),
         );
 
-        // Read the existing metadata from the cache, if it exists.
+        // Read the manifest from the cache. There's no need to enforce freshness, since we
+        // enforce freshness on the entries.
         let manifest_entry = cache_shard.entry(MANIFEST);
         let Some(manifest) = read_http_manifest(&manifest_entry)? else {
             return Ok(None);
@@ -53,11 +54,12 @@ impl BuiltWheelIndex {
         );
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) = puffin_cache::archive_mtime(&source_dist.path)? else {
+        let Some(modified) = ArchiveTimestamp::from_path(&source_dist.path)? else {
             return Err(SourceDistError::DirWithoutEntrypoint);
         };
 
-        // Read the existing metadata from the cache, if it's up-to-date.
+        // Read the manifest from the cache. There's no need to enforce freshness, since we
+        // enforce freshness on the entries.
         let manifest_entry = cache_shard.entry(MANIFEST);
         let Some(manifest) = read_timestamp_manifest(&manifest_entry, modified)? else {
             return Ok(None);
@@ -102,7 +104,7 @@ impl BuiltWheelIndex {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    pub fn find(
+    fn find(
         shard: &CacheShard,
         package: &PackageName,
         cache: &Cache,

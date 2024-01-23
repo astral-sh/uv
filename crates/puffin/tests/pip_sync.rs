@@ -2366,8 +2366,6 @@ fn reinstall() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
         Uninstalled 2 packages in [TIME]
         Installed 2 packages in [TIME]
          - markupsafe==2.1.3
@@ -2442,8 +2440,6 @@ fn reinstall_package() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - tomli==2.0.1
@@ -2515,8 +2511,6 @@ fn reinstall_git() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
          - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
@@ -2525,6 +2519,159 @@ fn reinstall_git() -> Result<()> {
     });
 
     check_command(&venv, "import werkzeug", &temp_dir);
+
+    Ok(())
+}
+
+/// Verify that we can force refresh of cached data.
+#[test]
+fn refresh() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + markupsafe==2.1.3
+         + tomli==2.0.1
+        "###);
+    });
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
+    // latest versions of the packages.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--refresh")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + markupsafe==2.1.3
+         + tomli==2.0.1
+        "###);
+    });
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, "import tomli", &temp_dir);
+
+    Ok(())
+}
+
+/// Verify that we can force refresh of selective packages.
+#[test]
+fn refresh_package() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Downloaded 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + markupsafe==2.1.3
+         + tomli==2.0.1
+        "###);
+    });
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, "import tomli", &temp_dir);
+
+    // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
+    // latest versions of the packages.
+    let parent = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&parent, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--refresh-package")
+            .arg("tomli")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 2 packages in [TIME]
+         + markupsafe==2.1.3
+         + tomli==2.0.1
+        "###);
+    });
+
+    check_command(&venv, "import markupsafe", &temp_dir);
+    check_command(&venv, "import tomli", &temp_dir);
 
     Ok(())
 }

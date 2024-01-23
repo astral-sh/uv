@@ -201,25 +201,23 @@ impl CachedClient {
                 .expect("You can't use streaming request bodies with this function"),
         )?;
 
-        // Apply the cache control header, if necessary.
-        match cache_control {
-            CacheControl::None => {}
-            CacheControl::MustRevalidate => {
-                converted_req.headers_mut().insert(
-                    http::header::CACHE_CONTROL,
-                    http::HeaderValue::from_static("max-age=0, must-revalidate"),
-                );
-            }
-        }
-
-        println!("cache_control: {:?}", cache_control);
-
         let url = req.url().clone();
         let cached_response = if let Some(cached) = cached {
             // Avoid sending revalidation requests for immutable responses.
             if cached.immutable && !cached.cache_policy.is_stale(SystemTime::now()) {
                 debug!("Found immutable response for: {url}");
                 return Ok(CachedResponse::FreshCache(cached.data));
+            }
+
+            // Apply the cache control header, if necessary.
+            match cache_control {
+                CacheControl::None => {}
+                CacheControl::MustRevalidate => {
+                    converted_req.headers_mut().insert(
+                        http::header::CACHE_CONTROL,
+                        http::HeaderValue::from_static("max-age=0, must-revalidate"),
+                    );
+                }
             }
 
             match cached

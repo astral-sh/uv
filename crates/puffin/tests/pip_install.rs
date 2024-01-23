@@ -728,7 +728,7 @@ fn reinstall_build_system() -> Result<()> {
 
         ----- stderr -----
         Resolved 8 packages in [TIME]
-        Downloaded 8 packages in [TIME]
+        Downloaded 7 packages in [TIME]
         Installed 8 packages in [TIME]
          + blinker==1.7.0
          + click==8.1.7
@@ -930,7 +930,6 @@ fn reinstall_no_binary() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          - flask==3.0.0
          + flask==3.0.0

@@ -15,7 +15,7 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
-use puffin_client::{CachedClientError, RegistryClient};
+use puffin_client::{CacheControl, CachedClientError, RegistryClient};
 use puffin_extract::unzip_no_seek;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary};
@@ -34,6 +34,8 @@ pub enum DistributionDatabaseError {
     Client(#[from] puffin_client::Error),
     #[error(transparent)]
     Request(#[from] reqwest::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     #[error(transparent)]
     SourceBuild(#[from] SourceDistError),
     #[error("Git operation failed")]
@@ -115,6 +117,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     return Err(DistributionDatabaseError::NoBinary);
                 }
 
+                // TODO(charlie): We should treat files with hashes as content-addressed. So if
+                // this wheel already exists in the `archive-v0` under its hash, we should just
+                // return it. Alternatively (or in addition), we could respect the `etag` header and
+                // only download the wheel if it's changed.
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => base
                         .join_relative(url)
@@ -167,9 +173,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 };
 
                 let req = self.client.cached_client().uncached().get(url).build()?;
+                let cache_control =
+                    CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
                 self.client
                     .cached_client()
-                    .get_cached_with_callback(req, &http_entry, download)
+                    .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
@@ -222,9 +230,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .uncached()
                     .get(wheel.url.raw().clone())
                     .build()?;
+                let cache_control =
+                    CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
                 self.client
                     .cached_client()
-                    .get_cached_with_callback(req, &http_entry, download)
+                    .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
