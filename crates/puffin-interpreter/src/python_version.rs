@@ -83,6 +83,11 @@ impl PythonVersion {
         markers
     }
 
+    /// Return the full parsed Python version.
+    pub fn version(&self) -> &Version {
+        &self.0.version
+    }
+
     /// Return the major version of this Python version.
     pub fn major(&self) -> u8 {
         u8::try_from(self.0.release()[0]).expect("invalid major version")

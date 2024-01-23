@@ -94,7 +94,7 @@ async fn venv_impl(
 
     let platform = Platform::current().into_diagnostic()?;
     let interpreter =
-        Interpreter::query(&base_python, platform, cache).map_err(VenvError::InterpreterError)?;
+        Interpreter::query(&base_python, &platform, cache).map_err(VenvError::InterpreterError)?;
 
     writeln!(
         printer,
