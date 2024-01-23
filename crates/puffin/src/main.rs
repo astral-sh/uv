@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand};
 use owo_colors::OwoColorize;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
-use puffin_cache::{Cache, CacheArgs};
+use puffin_cache::{Cache, CacheArgs, Refresh};
 use puffin_installer::{NoBinary, Reinstall};
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
@@ -200,6 +200,14 @@ struct PipCompileArgs {
     #[clap(short, long)]
     output_file: Option<PathBuf>,
 
+    /// Refresh all cached data.
+    #[clap(long)]
+    refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[clap(long)]
+    refresh_package: Vec<PackageName>,
+
     /// The URL of the Python Package Index.
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
     index_url: IndexUrl,
@@ -275,15 +283,21 @@ struct PipSyncArgs {
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
-    /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
-    /// packages in the environment.
+    /// Reinstall all packages, regardless of whether they're already installed.
     #[clap(long, alias = "force-reinstall")]
     reinstall: bool,
 
-    /// Reinstall a specific package, overwriting any entries in the cache and replacing any
-    /// existing versions in the environment.
+    /// Reinstall a specific package, regardless of whether it's already installed.
     #[clap(long)]
     reinstall_package: Vec<PackageName>,
+
+    /// Refresh all cached data.
+    #[clap(long)]
+    refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[clap(long)]
+    refresh_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
@@ -390,15 +404,21 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "extra")]
     all_extras: bool,
 
-    /// Reinstall all packages, overwriting any entries in the cache and replacing any existing
-    /// packages in the environment.
+    /// Reinstall all packages, regardless of whether they're already installed.
     #[clap(long, alias = "force-reinstall")]
     reinstall: bool,
 
-    /// Reinstall a specific package, overwriting any entries in the cache and replacing any
-    /// existing versions in the environment.
+    /// Reinstall a specific package, regardless of whether it's already installed.
     #[clap(long)]
     reinstall_package: Vec<PackageName>,
+
+    /// Refresh all cached data.
+    #[clap(long)]
+    refresh: bool,
+
+    /// Refresh cached data for a specific package.
+    #[clap(long)]
+    refresh_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
@@ -619,6 +639,7 @@ async fn inner() -> Result<ExitStatus> {
         Commands::Pip(PipArgs {
             command: PipCommand::Compile(args),
         }) => {
+            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let requirements = args
                 .src_file
                 .into_iter()
@@ -675,6 +696,7 @@ async fn inner() -> Result<ExitStatus> {
         Commands::Pip(PipArgs {
             command: PipCommand::Sync(args),
         }) => {
+            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let index_urls = IndexLocations::from_args(
                 args.index_url,
                 args.extra_index_url,
@@ -709,6 +731,7 @@ async fn inner() -> Result<ExitStatus> {
         Commands::Pip(PipArgs {
             command: PipCommand::Install(args),
         }) => {
+            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let requirements = args
                 .package
                 .into_iter()

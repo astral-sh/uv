@@ -2361,6 +2361,7 @@ dependencies = [
  "puffin-fs",
  "puffin-normalize",
  "pypi-types",
+ "rustc-hash",
  "serde",
  "tempfile",
  "tracing",

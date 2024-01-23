@@ -1,4 +1,4 @@
-pub use cached_client::{CachedClient, CachedClientError, DataWithCachePolicy};
+pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::Error;
 pub use flat_index::{FlatDistributions, FlatIndex, FlatIndexClient, FlatIndexError};
 pub use registry_client::{

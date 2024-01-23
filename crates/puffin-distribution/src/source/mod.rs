@@ -24,7 +24,7 @@ use install_wheel_rs::read_dist_info;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use puffin_cache::{CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, WheelCache};
-use puffin_client::{CachedClient, CachedClientError, DataWithCachePolicy};
+use puffin_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
@@ -247,6 +247,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, SourceDistError> {
         let cache_entry = cache_shard.entry(MANIFEST);
+        let cache_control = CacheControl::from(
+            self.build_context
+                .cache()
+                .freshness(&cache_entry, Some(source_dist.name()))?,
+        );
 
         let download = |response| {
             async {
@@ -267,7 +272,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let req = self.cached_client.uncached().get(url.clone()).build()?;
         let manifest = self
             .cached_client
-            .get_cached_with_callback(req, &cache_entry, download)
+            .get_cached_with_callback(req, &cache_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -334,6 +339,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
     ) -> Result<Metadata21, SourceDistError> {
         let cache_entry = cache_shard.entry(MANIFEST);
+        let cache_control = CacheControl::from(
+            self.build_context
+                .cache()
+                .freshness(&cache_entry, Some(source_dist.name()))?,
+        );
 
         let download = |response| {
             async {
@@ -354,7 +364,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let req = self.cached_client.uncached().get(url.clone()).build()?;
         let manifest = self
             .cached_client
-            .get_cached_with_callback(req, &cache_entry, download)
+            .get_cached_with_callback(req, &cache_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,

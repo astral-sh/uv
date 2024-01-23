@@ -24,6 +24,7 @@ cachedir = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }

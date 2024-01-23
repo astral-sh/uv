@@ -425,7 +425,7 @@ pub struct Plan {
     pub extraneous: Vec<InstalledDist>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Reinstall {
     /// Don't reinstall any packages; respect the existing installation.
     None,
