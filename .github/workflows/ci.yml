@@ -64,8 +64,6 @@ jobs:
           cat .python-versions | xargs -L1 python3.12 scripts/bootstrap install
       - name: "Install Rust toolchain"
         run: rustup show
-      - name: "Install Rust toolchain"
-        run: rustup show
       - uses: rui314/setup-mold@v1
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
