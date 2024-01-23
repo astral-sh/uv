@@ -5,6 +5,7 @@ pub use registry_client::{
     read_metadata_async, RegistryClient, RegistryClientBuilder, SimpleMetadata, VersionFiles,
 };
 
+mod cache_headers;
 mod cached_client;
 mod error;
 mod flat_index;
