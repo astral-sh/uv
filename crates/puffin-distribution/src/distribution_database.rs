@@ -117,10 +117,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     return Err(DistributionDatabaseError::NoBinary);
                 }
 
-                // TODO(charlie): We should treat files with hashes as content-addressed. So if
-                // this wheel already exists in the `archive-v0` under its hash, we should just
-                // return it. Alternatively (or in addition), we could respect the `etag` header and
-                // only download the wheel if it's changed.
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => base
                         .join_relative(url)
@@ -135,6 +131,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             wheel.filename.stem(),
                         );
 
+                        // TODO(charlie): There's no need to unzip if the wheel is unchanged.
                         return Ok(LocalWheel::Disk(DiskWheel {
                             dist: dist.clone(),
                             path: path.clone(),
@@ -259,6 +256,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     wheel.filename.stem(),
                 );
 
+                // TODO(charlie): There's no need to unzip if the wheel is unchanged.
                 Ok(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
                     path: wheel.path.clone(),

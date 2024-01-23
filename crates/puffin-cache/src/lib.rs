@@ -194,6 +194,7 @@ impl Cache {
     /// Persist a temporary directory to the artifact store.
     pub fn persist(&self, temp_dir: impl AsRef<Path>, path: impl AsRef<Path>) -> io::Result<()> {
         // Create a unique ID for the artifact.
+        // TODO(charlie): Support content-addressed persistence via SHAs.
         let id = uuid::Uuid::new_v4();
 
         // Move the temporary directory into the directory store.

@@ -317,12 +317,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
 
-        let path = cache_shard.join(&disk_filename);
-        let target = cache_shard.join(wheel_filename.stem());
-
         Ok(BuiltWheelMetadata {
-            path,
-            target,
+            path: cache_shard.join(&disk_filename),
+            target: cache_shard.join(wheel_filename.stem()),
             filename: wheel_filename,
         })
     }

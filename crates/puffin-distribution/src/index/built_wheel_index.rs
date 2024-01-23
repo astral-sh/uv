@@ -117,6 +117,8 @@ impl BuiltWheelIndex {
             match CachedWheel::from_path(&subdir) {
                 None => {}
                 Some(dist_info) => {
+                    // If the [`Refresh`] policy is set, ignore entries that were created before
+                    // the cutoff.
                     if cache
                         .freshness(&dist_info.entry, Some(package))
                         .is_ok_and(Freshness::is_stale)
