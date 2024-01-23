@@ -57,6 +57,10 @@ struct Cli {
     #[arg(global = true, long, short, conflicts_with = "quiet")]
     verbose: bool,
 
+    /// Disable colors.
+    #[arg(global = true, long)]
+    no_color: bool,
+
     #[command(flatten)]
     cache_args: CacheArgs,
 }
@@ -550,6 +554,10 @@ async fn inner() -> Result<ExitStatus> {
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if !cli.quiet {
         puffin_warnings::enable();
+    }
+
+    if cli.no_color {
+        anstream::ColorChoice::write_global(anstream::ColorChoice::Never);
     }
 
     miette::set_hook(Box::new(|_| {
