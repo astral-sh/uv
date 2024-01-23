@@ -107,6 +107,30 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         .map(|entry| entry.path())
 }
 
+/// Iterate over the symlinks in a directory.
+///
+/// If the directory does not exist, returns an empty iterator.
+pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
+    path.as_ref()
+        .read_dir()
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(err) => {
+                warn!("Failed to read entry: {}", err);
+                None
+            }
+        })
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map_or(false, |file_type| file_type.is_symlink())
+        })
+        .map(|entry| entry.path())
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 pub struct LockedFile(fs_err::File);

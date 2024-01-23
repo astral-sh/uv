@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
@@ -55,11 +54,6 @@ impl CacheEntry {
     #[inline]
     pub fn dir(&self) -> &Path {
         self.0.parent().expect("Cache entry has no parent")
-    }
-
-    /// Return the cache entry's parent directory.
-    pub fn file_name(&self) -> &OsStr {
-        self.0.file_name().expect("Cache entry has no file name")
     }
 
     /// Create a new [`CacheEntry`] with the given file name.

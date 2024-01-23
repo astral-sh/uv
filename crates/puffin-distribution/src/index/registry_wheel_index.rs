@@ -8,7 +8,7 @@ use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, 
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
-use puffin_fs::directories;
+use puffin_fs::{directories, symlinks};
 use puffin_normalize::PackageName;
 
 use crate::index::cached_wheel::CachedWheel;
@@ -125,7 +125,8 @@ impl<'a> RegistryWheelIndex<'a> {
         tags: &Tags,
         versions: &mut BTreeMap<Version, CachedRegistryDist>,
     ) {
-        for wheel_dir in directories(path.as_ref()) {
+        // Unzipped wheels are stored as symlinks into the archive directory.
+        for wheel_dir in symlinks(path.as_ref()) {
             match CachedWheel::from_path(&wheel_dir) {
                 None => {}
                 Some(dist_info) => {

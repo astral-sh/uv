@@ -165,7 +165,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.cache.root())?;
-                unzip_no_seek(reader.compat(), &temp_dir.path()).await?;
+                unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                 // Persist the temporary directory to the directory store.
                 let wheel_filename = WheelFilename::from_str(&wheel.file.filename)?;

@@ -1,7 +1,7 @@
 use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, Name, PathSourceDist};
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, CacheShard, WheelCache};
-use puffin_fs::directories;
+use puffin_fs::symlinks;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};
@@ -94,7 +94,8 @@ impl BuiltWheelIndex {
     pub fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
         let mut candidate: Option<CachedWheel> = None;
 
-        for subdir in directories(shard) {
+        // Unzipped wheels are stored as symlinks into the archive directory.
+        for subdir in symlinks(shard) {
             match CachedWheel::from_path(&subdir) {
                 None => {}
                 Some(dist_info) => {

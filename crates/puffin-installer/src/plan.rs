@@ -142,7 +142,7 @@ impl<'a> Planner<'a> {
             if reinstall {
                 // If necessary, purge the cached distributions.
                 debug!("Purging cached distributions for: {requirement}");
-                // cache.purge(&requirement.name)?;
+                cache.purge(&requirement.name)?;
                 if let Some(distribution) = site_packages.remove(&requirement.name) {
                     reinstalls.push(distribution);
                 }
@@ -185,13 +185,13 @@ impl<'a> Planner<'a> {
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None => {
-                    // if let Some((_version, distribution)) =
-                    //     registry_index.get(&requirement.name).next()
-                    // {
-                    //     debug!("Requirement already cached: {distribution}");
-                    //     local.push(CachedDist::Registry(distribution.clone()));
-                    //     continue;
-                    // }
+                    if let Some((_version, distribution)) =
+                        registry_index.get(&requirement.name).next()
+                    {
+                        debug!("Requirement already cached: {distribution}");
+                        local.push(CachedDist::Registry(distribution.clone()));
+                        continue;
+                    }
                 }
                 Some(VersionOrUrl::VersionSpecifier(specifier)) => {
                     if let Some(distribution) =
