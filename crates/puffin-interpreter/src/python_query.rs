@@ -26,16 +26,24 @@ static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
 /// * `-p python3.10` or `-p python.exe` looks for a binary in `PATH`.
 /// * `-p /home/ferris/.local/bin/python3.10` uses this exact Python.
 pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
-    let major_minor = request
-        .split_once('.')
-        .and_then(|(major, minor)| Some((major.parse::<u8>().ok()?, minor.parse::<u8>().ok()?)));
-    if let Some((major, minor)) = major_minor {
-        // `-p 3.10`
+    let versions = request
+        .splitn(3, '.')
+        .map(str::parse::<u8>)
+        .collect::<Result<Vec<_>, _>>();
+    if let Ok(versions) = versions {
+        // `-p 3.10` or `-p 3.10.1`
         if cfg!(unix) {
-            let formatted = PathBuf::from(format!("python{major}.{minor}"));
+            let formatted = PathBuf::from(format!("python{request}"));
             which::which_global(&formatted).map_err(|err| Error::Which(formatted, err))
         } else if cfg!(windows) {
-            find_python_windows(major, minor)?.ok_or(Error::NoSuchPython { major, minor })
+            if let [major, minor] = versions.as_slice() {
+                find_python_windows(*major, *minor)?.ok_or(Error::NoSuchPython {
+                    major: *major,
+                    minor: *minor,
+                })
+            } else {
+                unimplemented!("Patch versions cannot be requested on Windows")
+            }
         } else {
             unimplemented!("Only Windows and Unix are supported")
         }
