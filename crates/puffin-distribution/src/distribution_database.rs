@@ -17,6 +17,7 @@ use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_client::{CacheControl, CachedClientError, RegistryClient};
 use puffin_extract::unzip_no_seek;
+use puffin_fs::metadata_if_exists;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary};
 use pypi_types::Metadata21;
@@ -131,7 +132,22 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             wheel.filename.stem(),
                         );
 
-                        // TODO(charlie): There's no need to unzip if the wheel is unchanged.
+                        // If the file is already unzipped, and the unzipped directory is fresh,
+                        // return it.
+                        if let (Some(cache_metadata), Some(path_metadata)) = (
+                            metadata_if_exists(cache_entry.path())?,
+                            metadata_if_exists(path)?,
+                        ) {
+                            if cache_metadata.modified()? > path_metadata.modified()? {
+                                return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                    dist: dist.clone(),
+                                    target: cache_entry.into_path_buf(),
+                                    filename: wheel.filename.clone(),
+                                }));
+                            }
+                        }
+
+                        // Otherwise, unzip the file.
                         return Ok(LocalWheel::Disk(DiskWheel {
                             dist: dist.clone(),
                             path: path.clone(),
@@ -256,7 +272,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     wheel.filename.stem(),
                 );
 
-                // TODO(charlie): There's no need to unzip if the wheel is unchanged.
+                // If the file is already unzipped, and the unzipped directory is fresh,
+                // return it.
+                if let (Some(cache_metadata), Some(path_metadata)) = (
+                    metadata_if_exists(cache_entry.path())?,
+                    metadata_if_exists(&wheel.path)?,
+                ) {
+                    if cache_metadata.modified()? > path_metadata.modified()? {
+                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                            dist: dist.clone(),
+                            target: cache_entry.into_path_buf(),
+                            filename: wheel.filename.clone(),
+                        }));
+                    }
+                }
+
                 Ok(LocalWheel::Disk(DiskWheel {
                     dist: dist.clone(),
                     path: wheel.path.clone(),
