@@ -10,6 +10,7 @@ use platform_host::Platform;
 use puffin_cache::Cache;
 use puffin_installer::SitePackages;
 use puffin_interpreter::Virtualenv;
+use puffin_path::NormalizedDisplay;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -23,7 +24,7 @@ pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Resul
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().display().cyan()
+        venv.python_executable().normalized_display().cyan()
     );
 
     // Build the installed index.

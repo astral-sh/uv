@@ -24,6 +24,7 @@ use puffin_installer::{
 };
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
+use puffin_path::NormalizedDisplay;
 use puffin_resolver::{
     InMemoryIndex, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions,
     Resolver,
@@ -91,7 +92,7 @@ pub(crate) async fn pip_install(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().display().cyan()
+        venv.python_executable().normalized_display().cyan()
     );
 
     let _lock = venv.lock()?;

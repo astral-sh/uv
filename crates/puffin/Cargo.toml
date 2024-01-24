@@ -30,6 +30,7 @@ puffin-distribution = { path = "../puffin-distribution" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
+puffin-path = { path = "../puffin-path" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-traits = { path = "../puffin-traits" }
 puffin-warnings = { path = "../puffin-warnings" }
@@ -67,6 +68,7 @@ tracing-tree = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 which = { workspace = true }
+dunce = "1.0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = "0.1.39"

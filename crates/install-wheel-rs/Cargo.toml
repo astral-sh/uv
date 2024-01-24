@@ -24,6 +24,7 @@ distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
 platform-host = { path = "../platform-host" }
 puffin-normalize = { path = "../puffin-normalize" }
+puffin-path = { path = "../puffin-path" }
 pypi-types = { path = "../pypi-types" }
 
 clap = { workspace = true, optional = true, features = ["derive", "env"] }

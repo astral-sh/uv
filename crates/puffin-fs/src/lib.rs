@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 use fs_err as fs;
+use puffin_path::NormalizedDisplay;
 use tempfile::NamedTempFile;
 use tracing::{error, warn};
 
@@ -59,7 +60,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
             std::io::ErrorKind::Other,
             format!(
                 "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
+                path.normalized_display(),
                 err.error
             ),
         )
@@ -80,7 +81,7 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
             std::io::ErrorKind::Other,
             format!(
                 "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
+                path.normalized_display(),
                 err.error
             ),
         )
@@ -192,7 +193,7 @@ impl LockedFile {
                 warn_user!(
                     "Waiting to acquire lock for {} (lockfile: {})",
                     resource,
-                    path.as_ref().display()
+                    path.normalized_display(),
                 );
                 file.file().lock_exclusive()?;
                 Ok(Self(file))

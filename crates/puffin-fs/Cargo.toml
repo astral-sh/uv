@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+puffin-path = { path = "../puffin-path" }
 puffin-warnings = { path = "../puffin-warnings" }
 
 dunce = { workspace = true }

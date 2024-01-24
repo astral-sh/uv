@@ -823,6 +823,7 @@ dependencies = [
  "platform-tags",
  "puffin-git",
  "puffin-normalize",
+ "puffin-path",
  "pypi-types",
  "rustc-hash",
  "serde",
@@ -1477,6 +1478,7 @@ dependencies = [
  "platform-info",
  "plist",
  "puffin-normalize",
+ "puffin-path",
  "pyo3",
  "pypi-types",
  "rayon",
@@ -2283,6 +2285,7 @@ dependencies = [
  "clap",
  "distribution-filename",
  "distribution-types",
+ "dunce",
  "filetime",
  "flate2",
  "fs-err",
@@ -2311,6 +2314,7 @@ dependencies = [
  "puffin-installer",
  "puffin-interpreter",
  "puffin-normalize",
+ "puffin-path",
  "puffin-resolver",
  "puffin-traits",
  "puffin-warnings",
@@ -2560,6 +2564,7 @@ dependencies = [
  "fs-err",
  "fs2",
  "junction",
+ "puffin-path",
  "puffin-warnings",
  "tempfile",
  "tracing",
@@ -2576,6 +2581,7 @@ dependencies = [
  "glob",
  "hex",
  "once_cell",
+ "puffin-path",
  "rand",
  "reqwest",
  "serde",
@@ -2636,6 +2642,7 @@ dependencies = [
  "platform-tags",
  "puffin-cache",
  "puffin-fs",
+ "puffin-path",
  "regex",
  "rmp-serde",
  "serde",
@@ -2652,6 +2659,13 @@ name = "puffin-normalize"
 version = "0.0.1"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "puffin-path"
+version = "0.0.1"
+dependencies = [
+ "dunce",
 ]
 
 [[package]]
@@ -3022,6 +3036,7 @@ dependencies = [
  "pep440_rs 0.3.12",
  "pep508_rs",
  "puffin-normalize",
+ "puffin-path",
  "regex",
  "serde",
  "serde_json",

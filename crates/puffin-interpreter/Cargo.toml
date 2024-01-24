@@ -20,6 +20,7 @@ platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-fs = { path = "../puffin-fs" }
+puffin-path = { path = "../puffin-path" }
 
 fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }

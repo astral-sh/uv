@@ -46,6 +46,7 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use pep508_rs::{split_scheme, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
+use puffin_path::NormalizedDisplay;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -562,28 +563,28 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Invalid editable path in `{}`: {given}",
-                    self.file.display()
+                    self.file.normalized_display()
                 )
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: {url}",
-                    self.file.display(),
+                    self.file.normalized_display(),
                 )
             }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(
                     f,
                     "{message} in `{}` at position {location}",
-                    self.file.display(),
+                    self.file.normalized_display(),
                 )
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
                 write!(
                     f,
                     "Unsupported requirement in {} position {} to {}",
-                    self.file.display(),
+                    self.file.normalized_display(),
                     start,
                     end,
                 )
@@ -592,14 +593,14 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
-                    self.file.display(),
+                    self.file.normalized_display(),
                 )
             }
             RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
                     "Error parsing included file in `{}` at position {start}",
-                    self.file.display(),
+                    self.file.normalized_display(),
                 )
             }
         }
@@ -624,6 +625,7 @@ mod test {
 
     use fs_err as fs;
     use indoc::indoc;
+    use puffin_path::NormalizedDisplay;
     use tempfile::tempdir;
     use test_case::test_case;
 
@@ -699,12 +701,12 @@ mod test {
             errors[0],
             format!(
                 "Error parsing included file in `{}` at position 0",
-                basic.display()
+                basic.normalized_display()
             )
         );
         assert_eq!(
             errors[1],
-            format!("failed to open file `{}`", missing.display()),
+            format!("failed to open file `{}`", missing.normalized_display()),
         );
         // The last error message is os specific
     }
@@ -721,7 +723,7 @@ mod test {
         let expected = &[
             format!(
                 "Couldn't parse requirement in `{}` at position 0",
-                basic.display()
+                basic.normalized_display()
             ),
             indoc! {"
                 Expected an alphanumeric character starting the extra name, found 'ö'

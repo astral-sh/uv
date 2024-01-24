@@ -5,6 +5,8 @@ use fs2::FileExt;
 use fs_err::File;
 use tracing::{error, warn};
 
+use puffin_path::NormalizedDisplay;
+
 const INSTALL_LOCKFILE: &str = "install-wheel-rs.lock";
 
 /// I'm not sure that's the right way to normalize here, but it's a single place to change
@@ -55,7 +57,7 @@ impl Drop for LockedDir {
         if let Err(err) = self.lockfile.file().unlock() {
             error!(
                 "Failed to unlock {}: {}",
-                self.lockfile.path().display(),
+                self.lockfile.path().normalized_display(),
                 err
             );
         }

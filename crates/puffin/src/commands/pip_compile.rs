@@ -11,7 +11,6 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use puffin_warnings::warn_user;
 use rustc_hash::FxHashSet;
 use tempfile::tempdir_in;
 use tracing::debug;
@@ -26,11 +25,13 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::{Downloader, NoBinary};
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::{ExtraName, PackageName};
+use puffin_path::NormalizedDisplay;
 use puffin_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, PreReleaseMode, ResolutionMode,
     ResolutionOptions, Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
+use puffin_warnings::warn_user;
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -129,7 +130,7 @@ pub(crate) async fn pip_compile(
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
-        interpreter.sys_executable().display().cyan()
+        interpreter.sys_executable().normalized_display().cyan()
     );
     if let Some(python_version) = python_version.as_ref() {
         // If the requested version does not match the version we're using warn the user

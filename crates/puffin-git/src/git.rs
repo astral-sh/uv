@@ -9,6 +9,7 @@ use std::{env, str};
 use anyhow::{anyhow, Context as _, Result};
 use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
+use puffin_path::NormalizedDisplay;
 use reqwest::Client;
 use reqwest::StatusCode;
 use tracing::{debug, warn};
@@ -149,7 +150,7 @@ impl GitRemote {
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
-                .with_context(|| format!("failed to fetch into: {}", into.display()))?;
+                .with_context(|| format!("failed to fetch into: {}", into.normalized_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -169,7 +170,7 @@ impl GitRemote {
         paths::create_dir_all(into)?;
         let mut repo = init(into, true)?;
         fetch(&mut repo, self.url.as_str(), reference, strategy, client)
-            .with_context(|| format!("failed to clone into: {}", into.display()))?;
+            .with_context(|| format!("failed to clone into: {}", into.normalized_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,

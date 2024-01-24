@@ -9,6 +9,7 @@ use rustc_hash::FxHashSet;
 
 use pep508_rs::Requirement;
 use puffin_normalize::{ExtraName, PackageName};
+use puffin_path::NormalizedDisplay;
 use requirements_txt::{EditableRequirement, RequirementsTxt};
 
 #[derive(Debug)]
@@ -117,7 +118,7 @@ impl RequirementsSpecification {
             RequirementsSource::PyprojectToml(path) => {
                 let contents = fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
-                    .with_context(|| format!("Failed to parse `{}`", path.display()))?;
+                    .with_context(|| format!("Failed to parse `{}`", path.normalized_display()))?;
                 let mut used_extras = FxHashSet::default();
                 let mut requirements = Vec::new();
                 let mut project_name = None;
@@ -139,7 +140,7 @@ impl RequirementsSpecification {
                     }
                     // Parse the project name
                     project_name = Some(PackageName::new(project.name).with_context(|| {
-                        format!("Invalid `project.name` in {}", path.display())
+                        format!("Invalid `project.name` in {}", path.normalized_display())
                     })?);
                 }
 

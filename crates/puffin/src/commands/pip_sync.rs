@@ -16,6 +16,7 @@ use puffin_installer::{
     Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use puffin_interpreter::Virtualenv;
+use puffin_path::NormalizedDisplay;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{InFlight, SetupPyStrategy};
 use pypi_types::Yanked;
@@ -56,7 +57,7 @@ pub(crate) async fn pip_sync(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().display().cyan()
+        venv.python_executable().normalized_display().cyan()
     );
 
     let _lock = venv.lock()?;

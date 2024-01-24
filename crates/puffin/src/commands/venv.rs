@@ -15,6 +15,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::NoBinary;
 use puffin_interpreter::{find_default_python, find_requested_python, Interpreter};
+use puffin_path::NormalizedDisplay;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
@@ -90,14 +91,14 @@ async fn venv_impl(
         printer,
         "Using Python {} interpreter at {}",
         interpreter.python_version(),
-        interpreter.sys_executable().display().cyan()
+        interpreter.sys_executable().normalized_display().cyan()
     )
     .into_diagnostic()?;
 
     writeln!(
         printer,
         "Creating virtual environment at: {}",
-        path.display().cyan()
+        path.normalized_display().cyan()
     )
     .into_diagnostic()?;
 
