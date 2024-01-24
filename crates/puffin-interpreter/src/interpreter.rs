@@ -6,6 +6,10 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::python_platform::PythonPlatform;
+use crate::python_query::find_python_windows;
+use crate::virtual_env::detect_virtual_env;
+use crate::{Error, PythonVersion};
 use cache_key::digest;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -13,10 +17,6 @@ use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
 use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use puffin_fs::write_atomic_sync;
-
-use crate::python_platform::PythonPlatform;
-use crate::virtual_env::detect_virtual_env;
-use crate::{Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -162,8 +162,7 @@ impl Interpreter {
             }
         };
 
-        #[cfg(unix)]
-        {
+        if cfg!(unix) {
             if let Some(python_version) = python_version {
                 let requested = format!(
                     "python{}.{}",
@@ -186,10 +185,7 @@ impl Interpreter {
                     return Ok(Some(interpreter));
                 }
             }
-        }
-
-        #[cfg(windows)]
-        {
+        } else if cfg!(windows) {
             if let Some(python_version) = python_version {
                 if let Some(path) =
                     find_python_windows(python_version.major(), python_version.minor())?
@@ -207,11 +203,8 @@ impl Interpreter {
                     return Ok(Some(interpreter));
                 }
             }
-        }
-
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("only unix (like mac and linux) and windows are supported")
+        } else {
+            unimplemented!("Only Windows and Unix are supported");
         }
 
         Ok(None)
