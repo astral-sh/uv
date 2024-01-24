@@ -2,7 +2,7 @@
 
 ## Setup
 
-You need [Rust](https://rustup.rs/), a C compiler and CMake to build Puffin. To run the tests, you need Python 3.8, 3.9 and 3.12.
+You need [Rust](https://rustup.rs/), a C compiler, and CMake to build Puffin. To run the tests, you need Python 3.8, 3.9 and 3.12.
 
 To run the tests we recommend [nextest](https://nexte.st/) as faster `cargo test` replacement. Make sure to run the tests with `--all-features`, otherwise you'll miss most of our integration tests.
 
