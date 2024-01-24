@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use tracing::info_span;
 
-use crate::Error;
+use crate::{Error, Interpreter};
 
 /// ```text
 /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
@@ -34,7 +34,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
         // `-p 3.10` or `-p 3.10.1`
         if cfg!(unix) {
             let formatted = PathBuf::from(format!("python{request}"));
-            which::which_global(&formatted).map_err(|err| Error::Which(formatted, err))
+            Interpreter::find_executable(&formatted)
         } else if cfg!(windows) {
             if let [major, minor] = versions.as_slice() {
                 find_python_windows(*major, *minor)?.ok_or(Error::NoSuchPython {
@@ -49,8 +49,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
         }
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let request = PathBuf::from(request);
-        which::which_global(&request).map_err(|err| Error::Which(request, err))
+        Interpreter::find_executable(&request)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         Ok(fs_err::canonicalize(request)?)

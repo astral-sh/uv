@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -18,6 +19,7 @@ use crate::python_platform::PythonPlatform;
 use crate::python_query::find_python_windows;
 use crate::virtual_env::detect_virtual_env;
 use crate::{Error, PythonVersion};
+use puffin_warnings::warn_user_once;
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -132,6 +134,10 @@ impl Interpreter {
     /// - If a python version is given: `pythonx.y`
     /// - `python3` (unix) or `python.exe` (windows)
     ///
+    /// If `PUFFIN_PYTHON_PATH` is set, we will not check for Python versions in the
+    /// global PATH, instead we will search using the provided path. Virtual environments
+    /// will still be respected.
+    ///
     /// If a version is provided and an interpreter cannot be found with the given version,
     /// we will return [`None`].
     pub fn find_version(
@@ -166,7 +172,8 @@ impl Interpreter {
                     python_version.major(),
                     python_version.minor()
                 );
-                if let Ok(executable) = which::which(&requested) {
+
+                if let Ok(executable) = Interpreter::find_executable(&requested) {
                     debug!("Resolved {requested} to {}", executable.display());
                     let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
                     if version_matches(&interpreter) {
@@ -175,7 +182,7 @@ impl Interpreter {
                 }
             }
 
-            if let Ok(executable) = which::which("python3") {
+            if let Ok(executable) = Interpreter::find_executable("python3") {
                 debug!("Resolved python3 to {}", executable.display());
                 let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
                 if version_matches(&interpreter) {
@@ -194,7 +201,7 @@ impl Interpreter {
                 }
             }
 
-            if let Ok(executable) = which::which("python.exe") {
+            if let Ok(executable) = Interpreter::find_executable("python.exe") {
                 let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
                 if version_matches(&interpreter) {
                     return Ok(Some(interpreter));
@@ -205,6 +212,26 @@ impl Interpreter {
         }
 
         Ok(None)
+    }
+
+    pub fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
+        requested: R,
+    ) -> Result<PathBuf, Error> {
+        if let Some(isolated) = std::env::var_os("PUFFIN_PYTHON_PATH") {
+            warn_user_once!(
+                "PUFFIN_PYTHON_PATH is set; ignoring system PATH when looking for binaries."
+            );
+            if let Ok(cwd) = std::env::current_dir() {
+                which::which_in(&requested, Some(isolated), cwd)
+                    .map_err(|err| Error::Which(requested.into(), err))
+            } else {
+                which::which_in_global(requested, Some(isolated))
+                    .map_err(|err| Error::Which(requested.into(), err))
+                    .and_then(|mut paths| paths.next().ok_or(Error::PythonNotFound))
+            }
+        } else {
+            which::which(&requested).map_err(|err| Error::Which(requested.into(), err))
+        }
     }
 
     /// Returns the path to the Python virtual environment.

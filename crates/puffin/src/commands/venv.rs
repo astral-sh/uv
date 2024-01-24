@@ -85,8 +85,8 @@ async fn venv_impl(
         find_requested_python(python_request).into_diagnostic()?
     } else {
         fs::canonicalize(
-            which::which_global("python3")
-                .or_else(|_| which::which_global("python"))
+            Interpreter::find_executable("python3")
+                .or_else(|_| Interpreter::find_executable("python"))
                 .map_err(|_| VenvError::PythonNotFound)?,
         )
         .into_diagnostic()?

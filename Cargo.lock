@@ -2616,6 +2616,7 @@ dependencies = [
  "platform-tags",
  "puffin-cache",
  "puffin-fs",
+ "puffin-warnings",
  "regex",
  "rmp-serde",
  "serde",
