@@ -14,7 +14,7 @@ use distribution_types::{
     BuiltDist, DirectGitUrl, Dist, FileLocation, LocalEditable, Name, SourceDist,
 };
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
+use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
 use puffin_client::{CacheControl, CachedClientError, RegistryClient};
 use puffin_extract::unzip_no_seek;
 use puffin_fs::metadata_if_exists;
@@ -138,7 +138,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             metadata_if_exists(cache_entry.path())?,
                             metadata_if_exists(path)?,
                         ) {
-                            if cache_metadata.modified()? > path_metadata.modified()? {
+                            let cache_modified = Timestamp::from_metadata(&cache_metadata);
+                            let path_modified = Timestamp::from_metadata(&path_metadata);
+                            if cache_modified >= path_modified {
                                 return Ok(LocalWheel::Unzipped(UnzippedWheel {
                                     dist: dist.clone(),
                                     target: cache_entry.into_path_buf(),
@@ -278,7 +280,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     metadata_if_exists(cache_entry.path())?,
                     metadata_if_exists(&wheel.path)?,
                 ) {
-                    if cache_metadata.modified()? > path_metadata.modified()? {
+                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
+                    let path_modified = Timestamp::from_metadata(&path_metadata);
+                    if cache_modified >= path_modified {
                         return Ok(LocalWheel::Unzipped(UnzippedWheel {
                             dist: dist.clone(),
                             target: cache_entry.into_path_buf(),
