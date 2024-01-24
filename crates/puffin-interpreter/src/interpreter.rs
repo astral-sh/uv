@@ -6,10 +6,6 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use crate::python_platform::PythonPlatform;
-use crate::python_query::find_python_windows;
-use crate::virtual_env::detect_virtual_env;
-use crate::{Error, PythonVersion};
 use cache_key::digest;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -17,6 +13,11 @@ use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
 use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use puffin_fs::write_atomic_sync;
+
+use crate::python_platform::PythonPlatform;
+use crate::python_query::find_python_windows;
+use crate::virtual_env::detect_virtual_env;
+use crate::{Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
