@@ -141,11 +141,7 @@ impl Interpreter {
         let version_matches = |interpreter: &Self| -> bool {
             if let Some(python_version) = python_version {
                 // If a patch version was provided, check for an exact match
-                if python_version.patch().is_some() {
-                    python_version.version() == interpreter.python_version()
-                } else {
-                    (python_version.major(), python_version.minor()) == interpreter.python_tuple()
-                }
+                python_version.is_satisfied_by(interpreter)
             } else {
                 // The version always matches if one was not provided
                 true
