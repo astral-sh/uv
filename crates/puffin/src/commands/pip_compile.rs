@@ -11,6 +11,7 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use puffin_warnings::warn_user;
 use rustc_hash::FxHashSet;
 use tempfile::tempdir_in;
 use tracing::debug;
@@ -130,6 +131,25 @@ pub(crate) async fn pip_compile(
         interpreter.python_version(),
         interpreter.sys_executable().display().cyan()
     );
+    if let Some(python_version) = python_version.as_ref() {
+        // If the requested version does not match the version we're using warn the user
+        // _unless_ they have not specified a patch version and that is the only difference
+        // _or_ if builds are disabled
+        let matches_without_patch = {
+            python_version.major() == interpreter.python_major()
+                && python_version.minor() == interpreter.python_minor()
+        };
+        if !no_build
+            && python_version.version() != interpreter.python_version()
+            && (python_version.patch().is_some() || !matches_without_patch)
+        {
+            warn_user!(
+                "The requested Python version {} is not available; {} will be used to build dependencies instead.",
+                python_version.version(),
+                interpreter.python_version(),
+            );
+        }
+    }
 
     // Create a shared in-memory index.
     let source_index = InMemoryIndex::default();
