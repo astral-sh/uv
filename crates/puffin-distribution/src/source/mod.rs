@@ -1005,7 +1005,9 @@ fn read_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl Into<PathBuf>,
 ) -> Result<Metadata21, SourceDistError> {
-    let mut archive = ZipArchive::new(fs_err::File::open(wheel)?)?;
+    let file = fs_err::File::open(wheel)?;
+    let reader = std::io::BufReader::new(file);
+    let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_dist_info(filename, &mut archive)?;
     Ok(Metadata21::parse(&dist_info)?)
 }
