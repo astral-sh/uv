@@ -1832,6 +1832,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanoid"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ffa00dec017b5b1a8b7cf5e2c008bfda1aa7e0697ac1508b491fdf2622fb4d8"
+dependencies = [
+ "rand",
+]
+
+[[package]]
 name = "normalize-line-endings"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2358,6 +2367,7 @@ dependencies = [
  "directories",
  "distribution-types",
  "fs-err",
+ "nanoid",
  "puffin-fs",
  "puffin-normalize",
  "pypi-types",
@@ -2365,7 +2375,6 @@ dependencies = [
  "tempfile",
  "tracing",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -2495,6 +2504,7 @@ dependencies = [
  "fs-err",
  "futures",
  "install-wheel-rs",
+ "nanoid",
  "pep440_rs 0.3.12",
  "pep508_rs",
  "platform-tags",
@@ -2516,7 +2526,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
- "uuid",
  "zip",
 ]
 
@@ -4009,16 +4018,6 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
-
-[[package]]
-name = "uuid"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
-dependencies = [
- "getrandom",
- "serde",
-]
 
 [[package]]
 name = "valuable"

@@ -195,10 +195,10 @@ impl Cache {
     pub fn persist(&self, temp_dir: impl AsRef<Path>, path: impl AsRef<Path>) -> io::Result<()> {
         // Create a unique ID for the artifact.
         // TODO(charlie): Support content-addressed persistence via SHAs.
-        let id = uuid::Uuid::new_v4();
+        let id = nanoid::nanoid!();
 
         // Move the temporary directory into the directory store.
-        let archive_entry = self.entry(CacheBucket::Archive, "", id.to_string());
+        let archive_entry = self.entry(CacheBucket::Archive, "", id);
         fs_err::create_dir_all(archive_entry.dir())?;
         fs_err::rename(temp_dir.as_ref(), archive_entry.path())?;
 
