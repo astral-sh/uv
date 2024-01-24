@@ -1,5 +1,25 @@
 # Contributing
 
+## Setup
+
+You need [Rust](https://rustup.rs/), a C compiler, and CMake to build Puffin. To run the tests, you need Python 3.8, 3.9 and 3.12.
+
+To run the tests we recommend [nextest](https://nexte.st/). Make sure to run the tests with `--all-features`, otherwise you'll miss most of our integration tests.
+
+### Linux
+
+We recommend [pyenv](https://github.com/pyenv/pyenv) to manage multiple Python versions.
+
+On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with
+
+```shell
+sudo apt install build-essential cmake
+```
+
+### Windows
+
+You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake` (make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
+
 ## Running inside a docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your system (https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html, https://pypi.org/project/nvidia-pyindex/), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
