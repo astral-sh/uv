@@ -182,11 +182,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         self.cache
                             .persist(temp_dir.path(), wheel_entry.path())?;
 
-                                                // Persist the temporary directory to the directory store.
-                        self.cache
-                            .persist(temp_dir.path(), wheel_entry.path())?;
-
-
                         Ok(())
                     }
                     .instrument(info_span!("download", wheel = %wheel))
