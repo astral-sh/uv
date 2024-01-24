@@ -180,7 +180,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                         // Persist the temporary directory to the directory store.
                         self.cache
-                            .persist(temp_dir.into_path(), wheel_entry.path())?;
+                            .persist(temp_dir.path(), wheel_entry.path())?;
+
+                                                // Persist the temporary directory to the directory store.
+                        self.cache
+                            .persist(temp_dir.path(), wheel_entry.path())?;
+
 
                         Ok(())
                     }
