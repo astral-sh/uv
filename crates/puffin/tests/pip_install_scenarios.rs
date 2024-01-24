@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/78f34eec66acfba9c723285764dc1f4b841f4961/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/90f6943721b7b24d58f810cb06b8a9e88e89b00c/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -45,9 +45,9 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 /// The user requires any version of package `a` which does not exist.
 ///
 /// ```text
-/// 57cd4136
+/// 3cb60d4c
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// └── root
 ///     └── requires a
 ///         └── unsatisfied: no versions for package
@@ -60,7 +60,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-57cd4136", ""));
+    filters.push((r"-3cb60d4c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -68,7 +68,7 @@ fn requires_package_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-57cd4136")
+            .arg("a-3cb60d4c")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -85,7 +85,7 @@ fn requires_package_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_57cd4136", &temp_dir);
+    assert_not_installed(&venv, "a_3cb60d4c", &temp_dir);
 
     Ok(())
 }
@@ -95,9 +95,9 @@ fn requires_package_does_not_exist() -> Result<()> {
 /// The user requires an exact version of package `a` but only other versions exist
 ///
 /// ```text
-/// eaa03067
+/// e7132fc5
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a==2.0.0
 /// │       └── unsatisfied: no matching version
@@ -112,8 +112,8 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-eaa03067", "albatross"));
-    filters.push((r"-eaa03067", ""));
+    filters.push((r"a-e7132fc5", "albatross"));
+    filters.push((r"-e7132fc5", ""));
 
     insta::with_settings!({
         filters => filters
@@ -121,7 +121,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-eaa03067==2.0.0")
+            .arg("a-e7132fc5==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -139,7 +139,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_eaa03067", &temp_dir);
+    assert_not_installed(&venv, "a_e7132fc5", &temp_dir);
 
     Ok(())
 }
@@ -150,9 +150,9 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 /// equal versions exist
 ///
 /// ```text
-/// 6e8e01df
+/// 0e488e8f
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>1.0.0
 /// │       └── unsatisfied: no matching version
@@ -168,8 +168,8 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6e8e01df", "albatross"));
-    filters.push((r"-6e8e01df", ""));
+    filters.push((r"a-0e488e8f", "albatross"));
+    filters.push((r"-0e488e8f", ""));
 
     insta::with_settings!({
         filters => filters
@@ -177,7 +177,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-6e8e01df>1.0.0")
+            .arg("a-0e488e8f>1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -195,7 +195,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_6e8e01df", &temp_dir);
+    assert_not_installed(&venv, "a_0e488e8f", &temp_dir);
 
     Ok(())
 }
@@ -206,9 +206,9 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 /// exist
 ///
 /// ```text
-/// e45cec3c
+/// 1a4076bc
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a<2.0.0
 /// │       └── unsatisfied: no matching version
@@ -225,8 +225,8 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e45cec3c", "albatross"));
-    filters.push((r"-e45cec3c", ""));
+    filters.push((r"a-1a4076bc", "albatross"));
+    filters.push((r"-1a4076bc", ""));
 
     insta::with_settings!({
         filters => filters
@@ -234,7 +234,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-e45cec3c<2.0.0")
+            .arg("a-1a4076bc<2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -252,7 +252,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_e45cec3c", &temp_dir);
+    assert_not_installed(&venv, "a_1a4076bc", &temp_dir);
 
     Ok(())
 }
@@ -262,9 +262,9 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
 /// ```text
-/// aca2796a
+/// 22a72022
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
@@ -281,8 +281,8 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-aca2796a", "albatross"));
-    filters.push((r"-aca2796a", ""));
+    filters.push((r"a-22a72022", "albatross"));
+    filters.push((r"-22a72022", ""));
 
     insta::with_settings!({
         filters => filters
@@ -290,7 +290,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-aca2796a")
+            .arg("a-22a72022")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -307,7 +307,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_aca2796a", &temp_dir);
+    assert_not_installed(&venv, "a_22a72022", &temp_dir);
 
     Ok(())
 }
@@ -318,9 +318,9 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 /// that version.
 ///
 /// ```text
-/// 7a9ed79c
+/// 2bc4455f
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a!=1.0.0
 /// │       └── unsatisfied: no matching version
@@ -335,8 +335,8 @@ fn excluded_only_version() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-7a9ed79c", "albatross"));
-    filters.push((r"-7a9ed79c", ""));
+    filters.push((r"a-2bc4455f", "albatross"));
+    filters.push((r"-2bc4455f", ""));
 
     insta::with_settings!({
         filters => filters
@@ -344,7 +344,7 @@ fn excluded_only_version() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-7a9ed79c!=1.0.0")
+            .arg("a-2bc4455f!=1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -366,7 +366,7 @@ fn excluded_only_version() -> Result<()> {
     });
 
     // Only `a==1.0.0` is available but the user excluded it.
-    assert_not_installed(&venv, "a_7a9ed79c", &temp_dir);
+    assert_not_installed(&venv, "a_2bc4455f", &temp_dir);
 
     Ok(())
 }
@@ -377,9 +377,9 @@ fn excluded_only_version() -> Result<()> {
 /// banned that version.
 ///
 /// ```text
-/// b6b89642
+/// 5b90a629
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a!=2.0.0
 /// │   │   ├── satisfied by a-1.0.0
@@ -409,9 +409,9 @@ fn excluded_only_compatible_version() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-b6b89642", "albatross"));
-    filters.push((r"b-b6b89642", "bluebird"));
-    filters.push((r"-b6b89642", ""));
+    filters.push((r"a-5b90a629", "albatross"));
+    filters.push((r"b-5b90a629", "bluebird"));
+    filters.push((r"-5b90a629", ""));
 
     insta::with_settings!({
         filters => filters
@@ -419,8 +419,8 @@ fn excluded_only_compatible_version() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-b6b89642!=2.0.0")
-            .arg("b-b6b89642<3.0.0,>=2.0.0")
+            .arg("a-5b90a629!=2.0.0")
+            .arg("b-5b90a629<3.0.0,>=2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -447,18 +447,18 @@ fn excluded_only_compatible_version() -> Result<()> {
                   bluebird<=1.0.0
                   bluebird>=3.0.0
 
-              And because you require one of:
+              And because you require bluebird>=2.0.0,<3.0.0 and you require one of:
                   albatross<2.0.0
                   albatross>2.0.0
-              and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+              we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
     // incompatible versions of `b`. The user has excluded that version of `a` so
     // resolution fails.
-    assert_not_installed(&venv, "a_b6b89642", &temp_dir);
-    assert_not_installed(&venv, "b_b6b89642", &temp_dir);
+    assert_not_installed(&venv, "a_5b90a629", &temp_dir);
+    assert_not_installed(&venv, "b_5b90a629", &temp_dir);
 
     Ok(())
 }
@@ -469,9 +469,9 @@ fn excluded_only_compatible_version() -> Result<()> {
 /// another dependency `c` excludes that range.
 ///
 /// ```text
-/// 1cd99bd0
+/// e59e1cd1
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   ├── satisfied by a-1.0.0
@@ -524,10 +524,10 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-1cd99bd0", "albatross"));
-    filters.push((r"b-1cd99bd0", "bluebird"));
-    filters.push((r"c-1cd99bd0", "crow"));
-    filters.push((r"-1cd99bd0", ""));
+    filters.push((r"a-e59e1cd1", "albatross"));
+    filters.push((r"b-e59e1cd1", "bluebird"));
+    filters.push((r"c-e59e1cd1", "crow"));
+    filters.push((r"-e59e1cd1", ""));
 
     insta::with_settings!({
         filters => filters
@@ -535,9 +535,9 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-1cd99bd0")
-            .arg("b-1cd99bd0<3.0.0,>=2.0.0")
-            .arg("c-1cd99bd0")
+            .arg("a-e59e1cd1")
+            .arg("b-e59e1cd1<3.0.0,>=2.0.0")
+            .arg("c-e59e1cd1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -551,36 +551,34 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of albatross that satisfy any of:
-                  albatross<1.0.0
-                  albatross>1.0.0,<2.0.0
-                  albatross>3.0.0
-              and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0. (1)
-
-              Because there are no versions of crow that satisfy any of:
+          ╰─▶ Because there are no versions of crow that satisfy any of:
                   crow<1.0.0
                   crow>1.0.0,<2.0.0
                   crow>2.0.0
-              and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
-              And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow depend on one of:
-                  albatross<2.0.0
-                  albatross>=3.0.0
+              and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
 
-              And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, bluebird!=1.0.0, all versions of crow are incompatible.
-              And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
+              Because there are no versions of albatross that satisfy any of:
+                  albatross<1.0.0
+                  albatross>1.0.0,<2.0.0
+              and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
+              And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
+              And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible. (2)
+
+              Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
+              And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
                   bluebird<=1.0.0
                   bluebird>=3.0.0
 
-              And because you require bluebird>=2.0.0,<3.0.0 and you require crow, we can conclude that the requirements are unsatisfiable.
+              And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
     // require incompatible versions of `b`, but all available versions of `c` exclude
     // that range of `a` so resolution fails.
-    assert_not_installed(&venv, "a_1cd99bd0", &temp_dir);
-    assert_not_installed(&venv, "b_1cd99bd0", &temp_dir);
-    assert_not_installed(&venv, "c_1cd99bd0", &temp_dir);
+    assert_not_installed(&venv, "a_e59e1cd1", &temp_dir);
+    assert_not_installed(&venv, "b_e59e1cd1", &temp_dir);
+    assert_not_installed(&venv, "c_e59e1cd1", &temp_dir);
 
     Ok(())
 }
@@ -594,9 +592,9 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 /// `d`.
 ///
 /// ```text
-/// 0fd25b39
+/// ed41451f
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   ├── satisfied by a-1.0.0
@@ -657,10 +655,10 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-0fd25b39", "albatross"));
-    filters.push((r"b-0fd25b39", "bluebird"));
-    filters.push((r"c-0fd25b39", "crow"));
-    filters.push((r"-0fd25b39", ""));
+    filters.push((r"a-ed41451f", "albatross"));
+    filters.push((r"b-ed41451f", "bluebird"));
+    filters.push((r"c-ed41451f", "crow"));
+    filters.push((r"-ed41451f", ""));
 
     insta::with_settings!({
         filters => filters
@@ -668,9 +666,9 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-0fd25b39")
-            .arg("b-0fd25b39<3.0.0,>=2.0.0")
-            .arg("c-0fd25b39")
+            .arg("a-ed41451f")
+            .arg("b-ed41451f<3.0.0,>=2.0.0")
+            .arg("c-ed41451f")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -709,9 +707,9 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
     // require incompatible versions of `b`, but all available versions of `c` exclude
     // that range of `a` so resolution fails.
-    assert_not_installed(&venv, "a_0fd25b39", &temp_dir);
-    assert_not_installed(&venv, "b_0fd25b39", &temp_dir);
-    assert_not_installed(&venv, "c_0fd25b39", &temp_dir);
+    assert_not_installed(&venv, "a_ed41451f", &temp_dir);
+    assert_not_installed(&venv, "b_ed41451f", &temp_dir);
+    assert_not_installed(&venv, "c_ed41451f", &temp_dir);
 
     Ok(())
 }
@@ -721,9 +719,9 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 /// Optional dependencies are requested for the package.
 ///
 /// ```text
-/// 76e5355c
+/// c9be513b
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a[extra]
 /// │       ├── satisfied by a-1.0.0
@@ -744,9 +742,9 @@ fn extra_required() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-76e5355c", "albatross"));
-    filters.push((r"b-76e5355c", "bluebird"));
-    filters.push((r"-76e5355c", ""));
+    filters.push((r"a-c9be513b", "albatross"));
+    filters.push((r"b-c9be513b", "bluebird"));
+    filters.push((r"-c9be513b", ""));
 
     insta::with_settings!({
         filters => filters
@@ -754,7 +752,7 @@ fn extra_required() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-76e5355c[extra]")
+            .arg("a-c9be513b[extra]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -775,8 +773,8 @@ fn extra_required() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_76e5355c", "1.0.0", &temp_dir);
-    assert_installed(&venv, "b_76e5355c", "1.0.0", &temp_dir);
+    assert_installed(&venv, "a_c9be513b", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_c9be513b", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -787,9 +785,9 @@ fn extra_required() -> Result<()> {
 /// exist.
 ///
 /// ```text
-/// 06e7489c
+/// 79fd9a92
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a[extra]
 /// │       └── satisfied by a-1.0.0
@@ -804,8 +802,8 @@ fn missing_extra() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-06e7489c", "albatross"));
-    filters.push((r"-06e7489c", ""));
+    filters.push((r"a-79fd9a92", "albatross"));
+    filters.push((r"-79fd9a92", ""));
 
     insta::with_settings!({
         filters => filters
@@ -813,7 +811,7 @@ fn missing_extra() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-06e7489c[extra]")
+            .arg("a-79fd9a92[extra]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -834,7 +832,7 @@ fn missing_extra() -> Result<()> {
     });
 
     // Missing extras are ignored during resolution.
-    assert_installed(&venv, "a_06e7489c", "1.0.0", &temp_dir);
+    assert_installed(&venv, "a_79fd9a92", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -844,9 +842,9 @@ fn missing_extra() -> Result<()> {
 /// Multiple optional dependencies are requested for the package.
 ///
 /// ```text
-/// e55f15c4
+/// 14317535
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a[extra_b,extra_c]
 /// │       ├── satisfied by a-1.0.0
@@ -873,10 +871,10 @@ fn multiple_extras_required() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e55f15c4", "albatross"));
-    filters.push((r"b-e55f15c4", "bluebird"));
-    filters.push((r"c-e55f15c4", "crow"));
-    filters.push((r"-e55f15c4", ""));
+    filters.push((r"a-14317535", "albatross"));
+    filters.push((r"b-14317535", "bluebird"));
+    filters.push((r"c-14317535", "crow"));
+    filters.push((r"-14317535", ""));
 
     insta::with_settings!({
         filters => filters
@@ -884,7 +882,7 @@ fn multiple_extras_required() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-e55f15c4[extra_b,extra_c]")
+            .arg("a-14317535[extra_b,extra_c]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -906,9 +904,9 @@ fn multiple_extras_required() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_e55f15c4", "1.0.0", &temp_dir);
-    assert_installed(&venv, "b_e55f15c4", "1.0.0", &temp_dir);
-    assert_installed(&venv, "c_e55f15c4", "1.0.0", &temp_dir);
+    assert_installed(&venv, "a_14317535", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_14317535", "1.0.0", &temp_dir);
+    assert_installed(&venv, "c_14317535", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -919,9 +917,9 @@ fn multiple_extras_required() -> Result<()> {
 /// conflicting requirements with each other.
 ///
 /// ```text
-/// 492741b0
+/// afa38951
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a[extra_b,extra_c]
 /// │       ├── satisfied by a-1.0.0
@@ -947,9 +945,9 @@ fn extra_incompatible_with_extra() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-492741b0", "albatross"));
-    filters.push((r"b-492741b0", "bluebird"));
-    filters.push((r"-492741b0", ""));
+    filters.push((r"a-afa38951", "albatross"));
+    filters.push((r"b-afa38951", "bluebird"));
+    filters.push((r"-afa38951", ""));
 
     insta::with_settings!({
         filters => filters
@@ -957,7 +955,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-492741b0[extra_b,extra_c]")
+            .arg("a-afa38951[extra_b,extra_c]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -971,15 +969,15 @@ fn extra_incompatible_with_extra() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because only albatross[extra-c]==1.0.0 is available and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
-              And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra-b]==1.0.0 is available, we can conclude that all versions of albatross[extra-b] and all versions of albatross[extra-c] are incompatible.
-              And because you require albatross[extra-c] and you require albatross[extra-b], we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because only albatross[extra-b]==1.0.0 is available and albatross[extra-b]==1.0.0 depends on bluebird==1.0.0, we can conclude that all versions of albatross[extra-b] depend on bluebird==1.0.0.
+              And because albatross[extra-c]==1.0.0 depends on bluebird==2.0.0 and only albatross[extra-c]==1.0.0 is available, we can conclude that all versions of albatross[extra-c] and all versions of albatross[extra-b] are incompatible.
+              And because you require albatross[extra-b] and you require albatross[extra-c], we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible
     // versions of `b`, `a` cannot be installed.
-    assert_not_installed(&venv, "a_492741b0", &temp_dir);
+    assert_not_installed(&venv, "a_afa38951", &temp_dir);
 
     Ok(())
 }
@@ -989,9 +987,9 @@ fn extra_incompatible_with_extra() -> Result<()> {
 /// One of two incompatible optional dependencies are requested for the package.
 ///
 /// ```text
-/// f0b0089a
+/// 5c305dd9
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a[extra_c]
 /// │       ├── satisfied by a-1.0.0
@@ -1017,9 +1015,9 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-f0b0089a", "albatross"));
-    filters.push((r"b-f0b0089a", "bluebird"));
-    filters.push((r"-f0b0089a", ""));
+    filters.push((r"a-5c305dd9", "albatross"));
+    filters.push((r"b-5c305dd9", "bluebird"));
+    filters.push((r"-5c305dd9", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1027,7 +1025,7 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-f0b0089a[extra_c]")
+            .arg("a-5c305dd9[extra_c]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1050,8 +1048,8 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 
     // Because the user does not request both extras, it is okay that one is
     // incompatible with the other.
-    assert_installed(&venv, "a_f0b0089a", "1.0.0", &temp_dir);
-    assert_installed(&venv, "b_f0b0089a", "2.0.0", &temp_dir);
+    assert_installed(&venv, "a_5c305dd9", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_5c305dd9", "2.0.0", &temp_dir);
 
     Ok(())
 }
@@ -1062,9 +1060,9 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 /// compatible with other requested versions.
 ///
 /// ```text
-/// 9d588075
+/// 743dac5a
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a[extra]
 /// │   │   ├── satisfied by a-1.0.0
@@ -1088,9 +1086,9 @@ fn extra_incompatible_with_root() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-9d588075", "albatross"));
-    filters.push((r"b-9d588075", "bluebird"));
-    filters.push((r"-9d588075", ""));
+    filters.push((r"a-743dac5a", "albatross"));
+    filters.push((r"b-743dac5a", "bluebird"));
+    filters.push((r"-743dac5a", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1098,8 +1096,8 @@ fn extra_incompatible_with_root() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-9d588075[extra]")
-            .arg("b-9d588075==2.0.0")
+            .arg("a-743dac5a[extra]")
+            .arg("b-743dac5a==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1113,15 +1111,15 @@ fn extra_incompatible_with_root() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because albatross[extra]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra]==1.0.0 is available, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
-              And because you require albatross[extra] and you require bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because only albatross[extra]==1.0.0 is available and albatross[extra]==1.0.0 depends on bluebird==1.0.0, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
+              And because you require bluebird==2.0.0 and you require albatross[extra], we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
     // Because the user requested `b==2.0.0` but the requested extra requires
     // `b==1.0.0`, the dependencies cannot be satisfied.
-    assert_not_installed(&venv, "a_9d588075", &temp_dir);
-    assert_not_installed(&venv, "b_9d588075", &temp_dir);
+    assert_not_installed(&venv, "a_743dac5a", &temp_dir);
+    assert_not_installed(&venv, "b_743dac5a", &temp_dir);
 
     Ok(())
 }
@@ -1132,9 +1130,9 @@ fn extra_incompatible_with_root() -> Result<()> {
 /// on an older version.
 ///
 /// ```text
-/// f1877db3
+/// a35e4442
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a[extra]
 /// │       ├── satisfied by a-1.0.0
@@ -1159,9 +1157,9 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-f1877db3", "albatross"));
-    filters.push((r"b-f1877db3", "bluebird"));
-    filters.push((r"-f1877db3", ""));
+    filters.push((r"a-a35e4442", "albatross"));
+    filters.push((r"b-a35e4442", "bluebird"));
+    filters.push((r"-a35e4442", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1169,7 +1167,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-f1877db3[extra]")
+            .arg("a-a35e4442[extra]")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1191,7 +1189,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are
     // allowed during resolution. `b` should not be installed.
-    assert_installed(&venv, "a_f1877db3", "3.0.0", &temp_dir);
+    assert_installed(&venv, "a_a35e4442", "3.0.0", &temp_dir);
 
     Ok(())
 }
@@ -1201,9 +1199,9 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 /// The user requires two incompatible, existing versions of package `a`
 ///
 /// ```text
-/// 80d82ee8
+/// f75c56e2
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a==1.0.0
 /// │   │   └── satisfied by a-1.0.0
@@ -1221,8 +1219,8 @@ fn direct_incompatible_versions() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-80d82ee8", "albatross"));
-    filters.push((r"-80d82ee8", ""));
+    filters.push((r"a-f75c56e2", "albatross"));
+    filters.push((r"-f75c56e2", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1230,8 +1228,8 @@ fn direct_incompatible_versions() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-80d82ee8==1.0.0")
-            .arg("a-80d82ee8==2.0.0")
+            .arg("a-f75c56e2==1.0.0")
+            .arg("a-f75c56e2==2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1249,8 +1247,8 @@ fn direct_incompatible_versions() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_80d82ee8", &temp_dir);
-    assert_not_installed(&venv, "a_80d82ee8", &temp_dir);
+    assert_not_installed(&venv, "a_f75c56e2", &temp_dir);
+    assert_not_installed(&venv, "a_f75c56e2", &temp_dir);
 
     Ok(())
 }
@@ -1261,9 +1259,9 @@ fn direct_incompatible_versions() -> Result<()> {
 /// `b`
 ///
 /// ```text
-/// a967e815
+/// 812a0fda
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -1285,9 +1283,9 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-a967e815", "albatross"));
-    filters.push((r"b-a967e815", "bluebird"));
-    filters.push((r"-a967e815", ""));
+    filters.push((r"a-812a0fda", "albatross"));
+    filters.push((r"b-812a0fda", "bluebird"));
+    filters.push((r"-812a0fda", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1295,8 +1293,8 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-a967e815")
-            .arg("b-a967e815==1.0.0")
+            .arg("a-812a0fda")
+            .arg("b-812a0fda==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1315,8 +1313,8 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_a967e815", &temp_dir);
-    assert_not_installed(&venv, "b_a967e815", &temp_dir);
+    assert_not_installed(&venv, "a_812a0fda", &temp_dir);
+    assert_not_installed(&venv, "b_812a0fda", &temp_dir);
 
     Ok(())
 }
@@ -1327,9 +1325,9 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 /// `c`
 ///
 /// ```text
-/// 6866d8dc
+/// 74531fe0
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -1355,10 +1353,10 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6866d8dc", "albatross"));
-    filters.push((r"b-6866d8dc", "bluebird"));
-    filters.push((r"c-6866d8dc", "crow"));
-    filters.push((r"-6866d8dc", ""));
+    filters.push((r"a-74531fe0", "albatross"));
+    filters.push((r"b-74531fe0", "bluebird"));
+    filters.push((r"c-74531fe0", "crow"));
+    filters.push((r"-74531fe0", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1366,8 +1364,8 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-6866d8dc")
-            .arg("b-6866d8dc")
+            .arg("a-74531fe0")
+            .arg("b-74531fe0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1381,14 +1379,14 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
-              And because albatross==1.0.0 depends on crow==1.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
-              And because you require bluebird and you require albatross, we can conclude that the requirements are unsatisfiable.
+          ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on crow==1.0.0, we can conclude that all versions of albatross depend on crow==1.0.0.
+              And because bluebird==1.0.0 depends on crow==2.0.0 and only bluebird==1.0.0 is available, we can conclude that all versions of albatross and all versions of bluebird are incompatible.
+              And because you require albatross and you require bluebird, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
-    assert_not_installed(&venv, "a_6866d8dc", &temp_dir);
-    assert_not_installed(&venv, "b_6866d8dc", &temp_dir);
+    assert_not_installed(&venv, "a_74531fe0", &temp_dir);
+    assert_not_installed(&venv, "b_74531fe0", &temp_dir);
 
     Ok(())
 }
@@ -1399,9 +1397,9 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 /// available.
 ///
 /// ```text
-/// 9a1b3dda
+/// e2dbc237
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── unsatisfied: no matching version
@@ -1416,8 +1414,8 @@ fn package_only_prereleases() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-9a1b3dda", "albatross"));
-    filters.push((r"-9a1b3dda", ""));
+    filters.push((r"a-e2dbc237", "albatross"));
+    filters.push((r"-e2dbc237", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1425,7 +1423,7 @@ fn package_only_prereleases() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-9a1b3dda")
+            .arg("a-e2dbc237")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1447,7 +1445,7 @@ fn package_only_prereleases() -> Result<()> {
 
     // Since there are only prerelease versions of `a` available, it should be
     // installed even though the user did not include a prerelease specifier.
-    assert_installed(&venv, "a_9a1b3dda", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_e2dbc237", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1458,9 +1456,9 @@ fn package_only_prereleases() -> Result<()> {
 /// versions but they did not include a prerelease specifier.
 ///
 /// ```text
-/// 19673198
+/// 4e199000
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>0.1.0
 /// │       └── unsatisfied: no matching version
@@ -1476,8 +1474,8 @@ fn package_only_prereleases_in_range() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-19673198", "albatross"));
-    filters.push((r"-19673198", ""));
+    filters.push((r"a-4e199000", "albatross"));
+    filters.push((r"-4e199000", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1485,7 +1483,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-19673198>0.1.0")
+            .arg("a-4e199000>0.1.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1507,7 +1505,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 
     // Since there are stable versions of `a` available, prerelease versions should not
     // be selected without explicit opt-in.
-    assert_not_installed(&venv, "a_19673198", &temp_dir);
+    assert_not_installed(&venv, "a_4e199000", &temp_dir);
 
     Ok(())
 }
@@ -1519,9 +1517,9 @@ fn package_only_prereleases_in_range() -> Result<()> {
 /// opted into prereleases globally.
 ///
 /// ```text
-/// 51f94da2
+/// af391f9c
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>0.1.0
 /// │       └── unsatisfied: no matching version
@@ -1537,8 +1535,8 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-51f94da2", "albatross"));
-    filters.push((r"-51f94da2", ""));
+    filters.push((r"a-af391f9c", "albatross"));
+    filters.push((r"-af391f9c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1546,7 +1544,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-51f94da2>0.1.0")
+            .arg("a-af391f9c>0.1.0")
             .arg("--prerelease=allow")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
@@ -1567,7 +1565,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_51f94da2", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_af391f9c", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1578,9 +1576,9 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 /// and an older non-prerelease version.
 ///
 /// ```text
-/// eebe53a6
+/// 81dbab9d
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-0.1.0
@@ -1596,8 +1594,8 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-eebe53a6", "albatross"));
-    filters.push((r"-eebe53a6", ""));
+    filters.push((r"a-81dbab9d", "albatross"));
+    filters.push((r"-81dbab9d", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1605,7 +1603,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-eebe53a6")
+            .arg("a-81dbab9d")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1627,7 +1625,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 
     // Since the user did not provide a prerelease specifier, the older stable version
     // should be selected.
-    assert_installed(&venv, "a_eebe53a6", "0.1.0", &temp_dir);
+    assert_installed(&venv, "a_81dbab9d", "0.1.0", &temp_dir);
 
     Ok(())
 }
@@ -1638,9 +1636,9 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 /// releases are available.
 ///
 /// ```text
-/// 9d4725eb
+/// 2ee8f3f9
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=0.1.0a1
 /// │       ├── satisfied by a-0.1.0
@@ -1659,8 +1657,8 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-9d4725eb", "albatross"));
-    filters.push((r"-9d4725eb", ""));
+    filters.push((r"a-2ee8f3f9", "albatross"));
+    filters.push((r"-2ee8f3f9", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1668,7 +1666,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-9d4725eb>=0.1.0a1")
+            .arg("a-2ee8f3f9>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1689,7 +1687,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
     });
 
     // The latest stable version should be selected.
-    assert_installed(&venv, "a_9d4725eb", "0.3.0", &temp_dir);
+    assert_installed(&venv, "a_2ee8f3f9", "0.3.0", &temp_dir);
 
     Ok(())
 }
@@ -1700,9 +1698,9 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 /// prerelease releases are available.
 ///
 /// ```text
-/// 6cc95bc8
+/// dd6b1e32
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=0.1.0a1
 /// │       ├── satisfied by a-0.1.0a1
@@ -1721,8 +1719,8 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6cc95bc8", "albatross"));
-    filters.push((r"-6cc95bc8", ""));
+    filters.push((r"a-dd6b1e32", "albatross"));
+    filters.push((r"-dd6b1e32", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1730,7 +1728,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-6cc95bc8>=0.1.0a1")
+            .arg("a-dd6b1e32>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1751,7 +1749,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
     });
 
     // The latest prerelease version should be selected.
-    assert_installed(&venv, "a_6cc95bc8", "0.3.0a1", &temp_dir);
+    assert_installed(&venv, "a_dd6b1e32", "0.3.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1762,9 +1760,9 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 /// prerelease and stable releases are available.
 ///
 /// ```text
-/// c97845e2
+/// 794fce4d
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=0.1.0a1
 /// │       ├── satisfied by a-0.1.0
@@ -1785,8 +1783,8 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-c97845e2", "albatross"));
-    filters.push((r"-c97845e2", ""));
+    filters.push((r"a-794fce4d", "albatross"));
+    filters.push((r"-794fce4d", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1794,7 +1792,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-c97845e2>=0.1.0a1")
+            .arg("a-794fce4d>=0.1.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1816,7 +1814,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 
     // Since the user provided a prerelease specifier, the latest prerelease version
     // should be selected.
-    assert_installed(&venv, "a_c97845e2", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_794fce4d", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -1827,9 +1825,9 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 /// labels.
 ///
 /// ```text
-/// e290bf29
+/// 256d4e16
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=1.0.0a1
 /// │       ├── satisfied by a-1.0.0a1
@@ -1848,8 +1846,8 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e290bf29", "albatross"));
-    filters.push((r"-e290bf29", ""));
+    filters.push((r"a-256d4e16", "albatross"));
+    filters.push((r"-256d4e16", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1857,7 +1855,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-e290bf29>=1.0.0a1")
+            .arg("a-256d4e16>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1878,7 +1876,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
     });
 
     // Release candidates should be the highest precedence prerelease kind.
-    assert_installed(&venv, "a_e290bf29", "1.0.0rc1", &temp_dir);
+    assert_installed(&venv, "a_256d4e16", "1.0.0rc1", &temp_dir);
 
     Ok(())
 }
@@ -1888,9 +1886,9 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 /// The user requires `a` which has multiple alphas available.
 ///
 /// ```text
-/// f5948c28
+/// ac82d3fb
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=1.0.0a1
 /// │       ├── satisfied by a-1.0.0a1
@@ -1909,8 +1907,8 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-f5948c28", "albatross"));
-    filters.push((r"-f5948c28", ""));
+    filters.push((r"a-ac82d3fb", "albatross"));
+    filters.push((r"-ac82d3fb", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1918,7 +1916,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-f5948c28>=1.0.0a1")
+            .arg("a-ac82d3fb>=1.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -1939,7 +1937,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
     });
 
     // The latest alpha version should be selected.
-    assert_installed(&venv, "a_f5948c28", "1.0.0a3", &temp_dir);
+    assert_installed(&venv, "a_ac82d3fb", "1.0.0a3", &temp_dir);
 
     Ok(())
 }
@@ -1950,9 +1948,9 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 /// prerelease versions available.
 ///
 /// ```text
-/// 44ebef16
+/// 9da8532e
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-0.1.0
@@ -1971,9 +1969,9 @@ fn transitive_package_only_prereleases() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-44ebef16", "albatross"));
-    filters.push((r"b-44ebef16", "bluebird"));
-    filters.push((r"-44ebef16", ""));
+    filters.push((r"a-9da8532e", "albatross"));
+    filters.push((r"b-9da8532e", "bluebird"));
+    filters.push((r"-9da8532e", ""));
 
     insta::with_settings!({
         filters => filters
@@ -1981,7 +1979,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-44ebef16")
+            .arg("a-9da8532e")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2004,8 +2002,8 @@ fn transitive_package_only_prereleases() -> Result<()> {
 
     // Since there are only prerelease versions of `b` available, it should be selected
     // even though the user did not opt-in to prereleases.
-    assert_installed(&venv, "a_44ebef16", "0.1.0", &temp_dir);
-    assert_installed(&venv, "b_44ebef16", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_9da8532e", "0.1.0", &temp_dir);
+    assert_installed(&venv, "b_9da8532e", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -2016,9 +2014,9 @@ fn transitive_package_only_prereleases() -> Result<()> {
 /// matches prerelease versions but they did not include a prerelease specifier.
 ///
 /// ```text
-/// 27759187
+/// c41a54fc
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-0.1.0
@@ -2038,9 +2036,9 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-27759187", "albatross"));
-    filters.push((r"b-27759187", "bluebird"));
-    filters.push((r"-27759187", ""));
+    filters.push((r"a-c41a54fc", "albatross"));
+    filters.push((r"b-c41a54fc", "bluebird"));
+    filters.push((r"-c41a54fc", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2048,7 +2046,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-27759187")
+            .arg("a-c41a54fc")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2072,7 +2070,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
     // Since there are stable versions of `b` available, the prerelease version should
     // not be selected without explicit opt-in. The available version is excluded by
     // the range requested by the user.
-    assert_not_installed(&venv, "a_27759187", &temp_dir);
+    assert_not_installed(&venv, "a_c41a54fc", &temp_dir);
 
     Ok(())
 }
@@ -2084,9 +2082,9 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 /// explicitly.
 ///
 /// ```text
-/// 26efb6c5
+/// 96f98f65
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-0.1.0
@@ -2108,9 +2106,9 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-26efb6c5", "albatross"));
-    filters.push((r"b-26efb6c5", "bluebird"));
-    filters.push((r"-26efb6c5", ""));
+    filters.push((r"a-96f98f65", "albatross"));
+    filters.push((r"b-96f98f65", "bluebird"));
+    filters.push((r"-96f98f65", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2118,8 +2116,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-26efb6c5")
-            .arg("b-26efb6c5>0.0.0a1")
+            .arg("a-96f98f65")
+            .arg("b-96f98f65>0.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2142,8 +2140,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 
     // Since the user included a dependency on `b` with a prerelease specifier, a
     // prerelease version can be selected.
-    assert_installed(&venv, "a_26efb6c5", "0.1.0", &temp_dir);
-    assert_installed(&venv, "b_26efb6c5", "1.0.0a1", &temp_dir);
+    assert_installed(&venv, "a_96f98f65", "0.1.0", &temp_dir);
+    assert_installed(&venv, "b_96f98f65", "1.0.0a1", &temp_dir);
 
     Ok(())
 }
@@ -2154,9 +2152,9 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 /// only be satisfied by a prerelease
 ///
 /// ```text
-/// f8aeea37
+/// 3d5eb91f
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -2182,10 +2180,10 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-f8aeea37", "albatross"));
-    filters.push((r"b-f8aeea37", "bluebird"));
-    filters.push((r"c-f8aeea37", "crow"));
-    filters.push((r"-f8aeea37", ""));
+    filters.push((r"a-3d5eb91f", "albatross"));
+    filters.push((r"b-3d5eb91f", "bluebird"));
+    filters.push((r"c-3d5eb91f", "crow"));
+    filters.push((r"-3d5eb91f", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2193,8 +2191,8 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-f8aeea37")
-            .arg("b-f8aeea37")
+            .arg("a-3d5eb91f")
+            .arg("b-3d5eb91f")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2216,8 +2214,8 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&venv, "a_f8aeea37", &temp_dir);
-    assert_not_installed(&venv, "b_f8aeea37", &temp_dir);
+    assert_not_installed(&venv, "a_3d5eb91f", &temp_dir);
+    assert_not_installed(&venv, "b_3d5eb91f", &temp_dir);
 
     Ok(())
 }
@@ -2229,9 +2227,9 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 /// the transitive dependency.
 ///
 /// ```text
-/// 184fc65f
+/// 6192ec57
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -2260,10 +2258,10 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-184fc65f", "albatross"));
-    filters.push((r"b-184fc65f", "bluebird"));
-    filters.push((r"c-184fc65f", "crow"));
-    filters.push((r"-184fc65f", ""));
+    filters.push((r"a-6192ec57", "albatross"));
+    filters.push((r"b-6192ec57", "bluebird"));
+    filters.push((r"c-6192ec57", "crow"));
+    filters.push((r"-6192ec57", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2271,9 +2269,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-184fc65f")
-            .arg("b-184fc65f")
-            .arg("c-184fc65f>=0.0.0a1")
+            .arg("a-6192ec57")
+            .arg("b-6192ec57")
+            .arg("c-6192ec57>=0.0.0a1")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2296,9 +2294,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     });
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
-    assert_installed(&venv, "a_184fc65f", "1.0.0", &temp_dir);
-    assert_installed(&venv, "b_184fc65f", "1.0.0", &temp_dir);
-    assert_installed(&venv, "c_184fc65f", "2.0.0b1", &temp_dir);
+    assert_installed(&venv, "a_6192ec57", "1.0.0", &temp_dir);
+    assert_installed(&venv, "b_6192ec57", "1.0.0", &temp_dir);
+    assert_installed(&venv, "c_6192ec57", "2.0.0b1", &temp_dir);
 
     Ok(())
 }
@@ -2309,9 +2307,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
 /// ```text
-/// 7017673e
+/// bcd0f988
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -2362,10 +2360,10 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-7017673e", "albatross"));
-    filters.push((r"b-7017673e", "bluebird"));
-    filters.push((r"c-7017673e", "crow"));
-    filters.push((r"-7017673e", ""));
+    filters.push((r"a-bcd0f988", "albatross"));
+    filters.push((r"b-bcd0f988", "bluebird"));
+    filters.push((r"c-bcd0f988", "crow"));
+    filters.push((r"-bcd0f988", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2373,8 +2371,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-7017673e")
-            .arg("b-7017673e")
+            .arg("a-bcd0f988")
+            .arg("b-bcd0f988")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2398,8 +2396,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&venv, "a_7017673e", &temp_dir);
-    assert_not_installed(&venv, "b_7017673e", &temp_dir);
+    assert_not_installed(&venv, "a_bcd0f988", &temp_dir);
+    assert_not_installed(&venv, "b_bcd0f988", &temp_dir);
 
     Ok(())
 }
@@ -2411,9 +2409,9 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 /// are excluded.
 ///
 /// ```text
-/// aaee5052
+/// 5cee052e
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   ├── requires a
 /// │   │   └── satisfied by a-1.0.0
@@ -2456,10 +2454,10 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-aaee5052", "albatross"));
-    filters.push((r"b-aaee5052", "bluebird"));
-    filters.push((r"c-aaee5052", "crow"));
-    filters.push((r"-aaee5052", ""));
+    filters.push((r"a-5cee052e", "albatross"));
+    filters.push((r"b-5cee052e", "bluebird"));
+    filters.push((r"c-5cee052e", "crow"));
+    filters.push((r"-5cee052e", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2467,8 +2465,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-aaee5052")
-            .arg("b-aaee5052")
+            .arg("a-5cee052e")
+            .arg("b-5cee052e")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2502,8 +2500,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
     });
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&venv, "a_aaee5052", &temp_dir);
-    assert_not_installed(&venv, "b_aaee5052", &temp_dir);
+    assert_not_installed(&venv, "a_5cee052e", &temp_dir);
+    assert_not_installed(&venv, "b_5cee052e", &temp_dir);
 
     Ok(())
 }
@@ -2513,9 +2511,9 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 /// The user requires a package which requires a Python version that does not exist
 ///
 /// ```text
-/// 0825b69c
+/// d004e577
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
@@ -2531,8 +2529,8 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-0825b69c", "albatross"));
-    filters.push((r"-0825b69c", ""));
+    filters.push((r"a-d004e577", "albatross"));
+    filters.push((r"-d004e577", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2540,7 +2538,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-0825b69c==1.0.0")
+            .arg("a-d004e577==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2554,12 +2552,12 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because the current Python version (3.7.17) does not satisfy Python>=4.0 and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
+          ╰─▶ Because the current Python version (3.8.18) does not satisfy Python>=4.0 and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
-    assert_not_installed(&venv, "a_0825b69c", &temp_dir);
+    assert_not_installed(&venv, "a_d004e577", &temp_dir);
 
     Ok(())
 }
@@ -2570,7 +2568,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
 /// current version
 ///
 /// ```text
-/// f9296b84
+/// 5e520203
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2588,8 +2586,8 @@ fn requires_python_version_less_than_current() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-f9296b84", "albatross"));
-    filters.push((r"-f9296b84", ""));
+    filters.push((r"a-5e520203", "albatross"));
+    filters.push((r"-5e520203", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2597,7 +2595,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-f9296b84==1.0.0")
+            .arg("a-5e520203==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2616,7 +2614,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_f9296b84", &temp_dir);
+    assert_not_installed(&venv, "a_5e520203", &temp_dir);
 
     Ok(())
 }
@@ -2627,7 +2625,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
 /// current version
 ///
 /// ```text
-/// a11d5394
+/// 62394505
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2645,8 +2643,8 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-a11d5394", "albatross"));
-    filters.push((r"-a11d5394", ""));
+    filters.push((r"a-62394505", "albatross"));
+    filters.push((r"-62394505", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2654,7 +2652,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-a11d5394==1.0.0")
+            .arg("a-62394505==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2673,7 +2671,56 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_a11d5394", &temp_dir);
+    assert_not_installed(&venv, "a_62394505", &temp_dir);
+
+    Ok(())
+}
+
+/// requires-python-version-greater-than-current-patch
+///
+/// The user requires a package which requires a Python version with a patch version
+/// greater than the current patch version
+///
+/// ```text
+/// dcd76825
+/// ├── environment
+/// │   └── python3.8.0
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=3.8.2 (incompatible with environment)
+/// ```
+#[test]
+fn requires_python_version_greater_than_current_patch() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.8.0");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-dcd76825", "albatross"));
+    filters.push((r"-dcd76825", ""));
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("a-dcd76825==1.0.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"<snapshot>
+        "###);
+    });
+
+    assert_not_installed(&venv, "a_dcd76825", &temp_dir);
 
     Ok(())
 }
@@ -2684,7 +2731,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// version greater than the current version
 ///
 /// ```text
-/// 02dc550c
+/// fd1f719c
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2724,8 +2771,8 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-02dc550c", "albatross"));
-    filters.push((r"-02dc550c", ""));
+    filters.push((r"a-fd1f719c", "albatross"));
+    filters.push((r"-fd1f719c", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2733,7 +2780,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-02dc550c==1.0.0")
+            .arg("a-fd1f719c==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2751,7 +2798,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_02dc550c", &temp_dir);
+    assert_not_installed(&venv, "a_fd1f719c", &temp_dir);
 
     Ok(())
 }
@@ -2762,7 +2809,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
 /// greater than the current version, but an older version is compatible.
 ///
 /// ```text
-/// ef060cef
+/// b2677f9a
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2788,8 +2835,8 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ef060cef", "albatross"));
-    filters.push((r"-ef060cef", ""));
+    filters.push((r"a-b2677f9a", "albatross"));
+    filters.push((r"-b2677f9a", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2797,7 +2844,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-ef060cef")
+            .arg("a-b2677f9a")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2817,7 +2864,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
         "###);
     });
 
-    assert_installed(&venv, "a_ef060cef", "1.0.0", &temp_dir);
+    assert_installed(&venv, "a_b2677f9a", "1.0.0", &temp_dir);
 
     Ok(())
 }
@@ -2828,7 +2875,7 @@ fn requires_python_version_greater_than_current_backtrack() -> Result<()> {
 /// greater than the current version, but an excluded older version is compatible.
 ///
 /// ```text
-/// 1bde0c18
+/// 34ee1c3e
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2853,8 +2900,8 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-1bde0c18", "albatross"));
-    filters.push((r"-1bde0c18", ""));
+    filters.push((r"a-34ee1c3e", "albatross"));
+    filters.push((r"-34ee1c3e", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2862,7 +2909,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-1bde0c18>=2.0.0")
+            .arg("a-34ee1c3e>=2.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2897,7 +2944,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         "###);
     });
 
-    assert_not_installed(&venv, "a_1bde0c18", &temp_dir);
+    assert_not_installed(&venv, "a_34ee1c3e", &temp_dir);
 
     Ok(())
 }
@@ -2907,9 +2954,9 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 /// A wheel for a specific platform is available alongside the default.
 ///
 /// ```text
-/// 74e4a459
+/// ce63fb65
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
@@ -2924,8 +2971,8 @@ fn specific_tag_and_default() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-74e4a459", "albatross"));
-    filters.push((r"-74e4a459", ""));
+    filters.push((r"a-ce63fb65", "albatross"));
+    filters.push((r"-ce63fb65", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2933,7 +2980,7 @@ fn specific_tag_and_default() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-74e4a459")
+            .arg("a-ce63fb65")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2961,9 +3008,9 @@ fn specific_tag_and_default() -> Result<()> {
 /// No source distributions are available, only wheels.
 ///
 /// ```text
-/// 4f019491
+/// 08df4319
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
@@ -2978,8 +3025,8 @@ fn only_wheels() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-4f019491", "albatross"));
-    filters.push((r"-4f019491", ""));
+    filters.push((r"a-08df4319", "albatross"));
+    filters.push((r"-08df4319", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2987,7 +3034,7 @@ fn only_wheels() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-4f019491")
+            .arg("a-08df4319")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -3015,9 +3062,9 @@ fn only_wheels() -> Result<()> {
 /// No wheels are available, only source distributions.
 ///
 /// ```text
-/// 614d801c
+/// 0a9090ba
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
@@ -3032,8 +3079,8 @@ fn no_wheels() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-614d801c", "albatross"));
-    filters.push((r"-614d801c", ""));
+    filters.push((r"a-0a9090ba", "albatross"));
+    filters.push((r"-0a9090ba", ""));
 
     insta::with_settings!({
         filters => filters
@@ -3041,7 +3088,7 @@ fn no_wheels() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-614d801c")
+            .arg("a-0a9090ba")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -3054,7 +3101,7 @@ fn no_wheels() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
+        Resolved 1 package in 1m [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + albatross==1.0.0
@@ -3069,9 +3116,9 @@ fn no_wheels() -> Result<()> {
 /// No wheels with valid tags are available, just source distributions.
 ///
 /// ```text
-/// 737bbfd4
+/// b595b358
 /// ├── environment
-/// │   └── python3.7
+/// │   └── python3.8
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
@@ -3086,8 +3133,8 @@ fn no_wheels_with_matching_platform() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-737bbfd4", "albatross"));
-    filters.push((r"-737bbfd4", ""));
+    filters.push((r"a-b595b358", "albatross"));
+    filters.push((r"-b595b358", ""));
 
     insta::with_settings!({
         filters => filters
@@ -3095,7 +3142,7 @@ fn no_wheels_with_matching_platform() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-737bbfd4")
+            .arg("a-b595b358")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")

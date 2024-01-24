@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/78f34eec66acfba9c723285764dc1f4b841f4961/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/90f6943721b7b24d58f810cb06b8a9e88e89b00c/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -23,7 +23,7 @@ mod common;
 /// resolution.
 ///
 /// ```text
-/// 818d78ce
+/// 006fed96
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -41,11 +41,11 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-818d78ce", "albatross"));
-    filters.push((r"-818d78ce", ""));
+    filters.push((r"a-006fed96", "albatross"));
+    filters.push((r"-006fed96", ""));
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str("a-818d78ce==1.0.0")?;
+    requirements_in.write_str("a-006fed96==1.0.0")?;
 
     insta::with_settings!({
         filters => filters
@@ -83,7 +83,7 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
 /// request an incompatible Python version for package resolution.
 ///
 /// ```text
-/// e94b8bc2
+/// 8c1b0389
 /// ├── environment
 /// │   └── python3.11
 /// ├── root
@@ -101,11 +101,11 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e94b8bc2", "albatross"));
-    filters.push((r"-e94b8bc2", ""));
+    filters.push((r"a-8c1b0389", "albatross"));
+    filters.push((r"-8c1b0389", ""));
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str("a-e94b8bc2==1.0.0")?;
+    requirements_in.write_str("a-8c1b0389==1.0.0")?;
 
     insta::with_settings!({
         filters => filters
@@ -143,7 +143,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
 /// source distributions available for the package.
 ///
 /// ```text
-/// 367303df
+/// b8ee1c03
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -161,11 +161,11 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-367303df", "albatross"));
-    filters.push((r"-367303df", ""));
+    filters.push((r"a-b8ee1c03", "albatross"));
+    filters.push((r"-b8ee1c03", ""));
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str("a-367303df==1.0.0")?;
+    requirements_in.write_str("a-b8ee1c03==1.0.0")?;
 
     // Since there are no wheels for the package and it is not compatible with the
     // local installation, we cannot build the source distribution to determine its
@@ -207,7 +207,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 /// wheel available for the package, but it does not have a compatible tag.
 ///
 /// ```text
-/// 7d66d27e
+/// bbf0da53
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -225,11 +225,11 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-7d66d27e", "albatross"));
-    filters.push((r"-7d66d27e", ""));
+    filters.push((r"a-bbf0da53", "albatross"));
+    filters.push((r"-bbf0da53", ""));
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str("a-7d66d27e==1.0.0")?;
+    requirements_in.write_str("a-bbf0da53==1.0.0")?;
 
     // Since there are no compatible wheels for the package and it is not compatible
     // with the local installation, we cannot build the source distribution to
@@ -250,11 +250,13 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
             .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
         success: false
-        exit_code: 2
+        exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-        error: Package `albatross` was not found in the registry.
+          × No solution found when resolving dependencies:
+          ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
+              And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
@@ -269,7 +271,7 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
 /// there is an incompatible version with a wheel available.
 ///
 /// ```text
-/// 47c905cb
+/// 08a4e843
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -290,11 +292,11 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-47c905cb", "albatross"));
-    filters.push((r"-47c905cb", ""));
+    filters.push((r"a-08a4e843", "albatross"));
+    filters.push((r"-08a4e843", ""));
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str("a-47c905cb")?;
+    requirements_in.write_str("a-08a4e843")?;
 
     // Since there are no wheels for the version of the package compatible with the
     // target and it is not compatible with the local installation, we cannot build the
@@ -320,6 +322,128 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
         ----- stdout -----
         # This file was autogenerated by Puffin v[VERSION] via the following command:
         #    puffin pip compile requirements.in --python-version=3.11 --extra-index-url https://test.pypi.org/simple --cache-dir [CACHE_DIR]
+        albatross==1.0.0
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-patch-version-override-no-patch
+///
+/// The user requires a package which requires a Python version with a patch version
+/// and the user provides a target version without a patch version.
+///
+/// ```text
+/// 2e1edfd6
+/// ├── environment
+/// │   └── python3.8.18
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=3.8.4
+/// ```
+#[test]
+fn requires_python_patch_version_override_no_patch() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.8.18");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-2e1edfd6", "albatross"));
+    filters.push((r"-2e1edfd6", ""));
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("a-2e1edfd6==1.0.0")?;
+
+    // Since the resolver is asked to solve with 3.8, the minimum compatible Python
+    // requirement is treated as 3.8.0.
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--python-version=3.8")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        # This file was autogenerated by Puffin v[VERSION] via the following command:
+        #    puffin pip compile requirements.in --python-version=3.8 --extra-index-url https://test.pypi.org/simple --cache-dir [CACHE_DIR]
+        albatross==1.0.0
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-python-patch-version-override-patch-compatible
+///
+/// The user requires a package which requires a Python version with a patch version
+/// and the user provides a target version with a compatible patch version.
+///
+/// ```text
+/// 844899bd
+/// ├── environment
+/// │   └── python3.8.18
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=3.8.0
+/// ```
+#[test]
+fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "python3.8.18");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-844899bd", "albatross"));
+    filters.push((r"-844899bd", ""));
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("a-844899bd==1.0.0")?;
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--python-version=3.8.0")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        # This file was autogenerated by Puffin v[VERSION] via the following command:
+        #    puffin pip compile requirements.in --python-version=3.8.0 --extra-index-url https://test.pypi.org/simple --cache-dir [CACHE_DIR]
         albatross==1.0.0
 
         ----- stderr -----
