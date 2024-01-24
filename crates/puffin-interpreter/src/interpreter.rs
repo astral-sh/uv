@@ -92,113 +92,112 @@ impl Interpreter {
     /// without comparing the patch version number. If that cannot be found, we fall back to
     /// the first available version.
     ///
-    /// See [`Self::find_strict`] for details on the precedence of Python lookup locations.
-    pub fn find_best(
-        python_version: Option<&PythonVersion>,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        // First, check for an exact match (or the first available version if no Python version was provided)
-        if let Some(interpreter) = Self::find_version(python_version, platform, cache)? {
-            return Ok(interpreter);
-        }
-
-        if let Some(python_version) = python_version {
-            // If that fails, and a specific patch version was requested try again allowing a
-            // different patch version
-            if python_version.patch().is_some() {
-                if let Some(interpreter) =
-                    Self::find_version(Some(&python_version.without_patch()), platform, cache)?
-                {
-                    return Ok(interpreter);
-                }
-            }
-
-            // If a Python version was requested but cannot be fulfilled, just take any version
-            if let Some(interpreter) = Self::find_version(None, platform, cache)? {
-                return Ok(interpreter);
-            }
-        }
-
-        Err(Error::PythonNotFound)
-    }
-
-    /// Find a Python interpreter.
-    ///
     /// We check, in order, the following locations:
     ///
     /// - `VIRTUAL_ENV` and `CONDA_PREFIX`
     /// - A `.venv` folder
     /// - If a python version is given: `pythonx.y`
     /// - `python3` (unix) or `python.exe` (windows)
-    ///
-    /// If a version is provided and an interpreter cannot be found with the given version,
-    /// we will return [`None`].
-    pub fn find_version(
+    pub fn find_best(
         python_version: Option<&PythonVersion>,
         platform: &Platform,
         cache: &Cache,
-    ) -> Result<Option<Self>, Error> {
-        let version_matches = |interpreter: &Self| -> bool {
-            if let Some(python_version) = python_version {
-                // If a patch version was provided, check for an exact match
-                python_version.is_satisfied_by(interpreter)
-            } else {
-                // The version always matches if one was not provided
-                true
-            }
-        };
-
+    ) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform.to_owned());
-        if let Some(venv) = detect_virtual_env(&platform)? {
-            let executable = platform.venv_python(venv);
-            let interpreter = Self::query(&executable, &platform.0, cache)?;
 
-            if version_matches(&interpreter) {
-                return Ok(Some(interpreter));
+        // Locate the base interpreter, which is our first choice.
+        let base_interpreter = Self::find_generic(&platform, cache)?;
+
+        // If a Python version was requested, look for an exact match.
+        if let Some(python_version) = python_version {
+            // If the base interpreter satisfies the requested Python version, we're done.
+            if let Some(interpreter) =
+                base_interpreter.filter(|interpreter| python_version.is_satisfied_by(interpreter))
+            {
+                return Ok(interpreter);
             }
-        };
 
-        if cfg!(unix) {
-            if let Some(python_version) = python_version {
-                let requested = format!(
-                    "python{}.{}",
-                    python_version.major(),
-                    python_version.minor()
-                );
-                if let Ok(executable) = which::which(&requested) {
-                    debug!("Resolved {requested} to {}", executable.display());
-                    let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-                    if version_matches(&interpreter) {
-                        return Ok(Some(interpreter));
-                    }
+            // If we can find an interpreter with the requested Python version, we're done.
+            if let Some(interpreter) = Self::find_version(python_version, &platform, cache)? {
+                return Ok(interpreter);
+            }
+
+            // If that fails, and a specific patch version was requested try again allowing a
+            // different patch version
+            if python_version.patch().is_some() {
+                if let Some(interpreter) =
+                    Self::find_version(&python_version.without_patch(), &platform, cache)?
+                {
+                    return Ok(interpreter);
                 }
             }
+        } else if let Some(interpreter) = base_interpreter {
+            return Ok(interpreter);
+        }
 
-            if let Ok(executable) = which::which("python3") {
-                debug!("Resolved python3 to {}", executable.display());
+        Err(Error::PythonNotFound)
+    }
+
+    /// Find a Python interpreter that matches the given version.
+    ///
+    /// If an interpreter cannot be found with the given version, we will return [`None`].
+    fn find_version(
+        python_version: &PythonVersion,
+        platform: &PythonPlatform,
+        cache: &Cache,
+    ) -> Result<Option<Self>, Error> {
+        if cfg!(unix) {
+            let requested = format!(
+                "python{}.{}",
+                python_version.major(),
+                python_version.minor()
+            );
+            if let Ok(executable) = which::which(&requested) {
+                debug!("Resolved {requested} to {}", executable.display());
                 let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-                if version_matches(&interpreter) {
+                if python_version.is_satisfied_by(&interpreter) {
                     return Ok(Some(interpreter));
                 }
             }
         } else if cfg!(windows) {
-            if let Some(python_version) = python_version {
-                if let Some(path) =
-                    find_python_windows(python_version.major(), python_version.minor())?
-                {
-                    let interpreter = Interpreter::query(&path, &platform.0, cache)?;
-                    if version_matches(&interpreter) {
-                        return Ok(Some(interpreter));
-                    }
-                }
-            }
-
-            if let Ok(executable) = which::which("python.exe") {
-                let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-                if version_matches(&interpreter) {
+            if let Some(path) = find_python_windows(python_version.major(), python_version.minor())?
+            {
+                let interpreter = Interpreter::query(&path, &platform.0, cache)?;
+                if python_version.is_satisfied_by(&interpreter) {
                     return Ok(Some(interpreter));
                 }
+            }
+        } else {
+            unimplemented!("Only Windows and Unix are supported");
+        }
+
+        Ok(None)
+    }
+
+    /// Find a generic Python interpreter.
+    ///
+    /// We check, in order, the following locations:
+    ///
+    /// - `VIRTUAL_ENV` and `CONDA_PREFIX`
+    /// - A `.venv` folder
+    /// - `python3` (unix) or `python.exe` (windows)
+    fn find_generic(platform: &PythonPlatform, cache: &Cache) -> Result<Option<Self>, Error> {
+        if let Some(venv) = detect_virtual_env(platform)? {
+            let executable = platform.venv_python(venv);
+            let interpreter = Self::query(&executable, &platform.0, cache)?;
+            return Ok(Some(interpreter));
+        };
+
+        if cfg!(unix) {
+            if let Ok(executable) = which::which("python3") {
+                debug!("Resolved python3 to {}", executable.display());
+                let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+                return Ok(Some(interpreter));
+            }
+        } else if cfg!(windows) {
+            if let Ok(executable) = which::which("python.exe") {
+                let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+                return Ok(Some(interpreter));
             }
         } else {
             unimplemented!("Only Windows and Unix are supported");
