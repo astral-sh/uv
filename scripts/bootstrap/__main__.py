@@ -44,6 +44,7 @@ import sys
 import logging
 import shutil
 import functools
+import bz2
 import zstandard
 
 from itertools import chain
@@ -101,6 +102,17 @@ PLATFORM_MAPPING = {
     "darwin": "macos",
     "windows": "windows",
     "linux": "linux",
+}
+
+# matches these: https://repo.anaconda.com/pkgs/
+CONDA_MAPPING = {
+    ("darwin", "arm64"): "osx-arm64",
+    ("darwin", "x86_64"): "osx-64",
+    ("linux", "x86_64"): "linux-64",
+    ("linux", "x86"): "linux-32",
+    ("linux", "aarch64"): "linux-aarch64",
+    ("windows", "x86_64"): "win-64",
+    ("windows", "x86"): "win-32",
 }
 
 
@@ -226,8 +238,59 @@ def decompress_file(archive_path: Path, output_path: Path):
             ofh.seek(0)
             with tarfile.open(fileobj=ofh) as z:
                 z.extractall(output_path)
+    elif archive_path.suffix == ".bz2":
+        with tempfile.TemporaryFile(suffix=".tar") as ofh:
+            with archive_path.open("rb") as ifh:
+                # TODO: Chunked decompression
+                ofh.write(bz2.decompress(ifh.read()))
+            ofh.seek(0)
+            with tarfile.open(fileobj=ofh) as z:
+                z.extractall(output_path)
+
     else:
         raise ValueError(f"Unknown archive type {archive_path.suffix}")
+
+
+def find_conda():
+    session = requests.Session()
+    results = []
+    for (py_os, py_arch), conda_arch in CONDA_MAPPING.items():
+        response = session.get(
+            f"https://repo.anaconda.com/pkgs/main/{conda_arch}/repodata.json"
+        )
+        response.raise_for_status()
+        repodata = response.json()
+        packages = {}
+        for fullname, package in repodata["packages"].items():
+            if package["name"] != "python":
+                # Only grab Python versions
+                continue
+            if int(package["version"].split(".")[0]) < 3:
+                # Skip Python 2 releases
+                continue
+            if package["version"] in packages:
+                # Use the newest build
+                if (
+                    packages[package["version"]]["build_number"]
+                    > package["build_number"]
+                ):
+                    continue
+
+            packages[package["version"]] = package
+            package["fullname"] = fullname
+
+        for version, package in packages.items():
+            results.append(
+                {
+                    "version": version,
+                    "url": f"https://repo.anaconda.com/pkgs/main/{conda_arch}/{package['fullname']}",
+                    "sha256": package["sha256"],
+                    "os": py_os,
+                    "arch": py_arch,
+                }
+            )
+
+    return results
 
 
 def find(args):
@@ -302,6 +365,28 @@ def find(args):
                     "sha256": sha256,
                 }
             )
+
+    conda_results = find_conda()
+    for result in sorted(
+        conda_results, key=lambda x: (x["os"], x["arch"], x["version"])
+    ):
+        py_ver = tuple(map(int, result["version"].split(".")))
+        interpreter = "conda"
+        arch = ARCH_MAPPING[result["arch"]]
+        py_os = PLATFORM_MAPPING[result["os"]]
+        logging.info("Found %s-%s.%s.%s-%s-%s", interpreter, *py_ver, arch, py_os)
+        final_results.append(
+            {
+                "name": interpreter,
+                "arch": arch,
+                "os": py_os,
+                "major": py_ver[0],
+                "minor": py_ver[1],
+                "patch": py_ver[2],
+                "url": result["url"],
+                "sha256": result["sha256"],
+            }
+        )
 
     VERSIONS_METADATA.parent.mkdir(parents=True, exist_ok=True)
     VERSIONS_METADATA.write_text(json.dumps(final_results, indent=2))
@@ -457,15 +542,32 @@ def install(args):
         # Remove the downloaded archive
         archive_file.unlink()
 
-        # Rename the extracted direcotry
-        (tmp_dir / "python").rename(install_path)
+        # Rename the extracted directory
+        if version["name"] == "cpython":
+            result_path = tmp_dir / "python"
+        elif version["name"] == "conda":
+            result_path = tmp_dir
+        else:
+            raise ValueError(f"Unknown interpreter name: {version['name']}")
+
+        result_path.rename(install_path)
 
         # Remove the temporary directory
-        tmp_dir.rmdir()
+        if tmp_dir.exists():
+            tmp_dir.rmdir()
 
     # Link binaries
     BIN_DIR.mkdir(exist_ok=True, parents=True)
-    python_executable = install_path / "install" / "bin" / f"python{python_version[0]}"
+
+    if version["name"] == "cpython":
+        python_executable = (
+            install_path / "install" / "bin" / f"python{python_version[0]}"
+        )
+    elif version["name"] == "conda":
+        python_executable = install_path / "bin" / f"python{python_version[0]}"
+    else:
+        raise ValueError(f"Unknown interpreter name: {version['name']}")
+
     if not python_executable.exists():
         logging.critical("Python executable not found at %s", python_executable)
         sys.exit(1)
