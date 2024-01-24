@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/90f6943721b7b24d58f810cb06b8a9e88e89b00c/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/5fee2b6d17a995e88a1d722900d964fd3315f929/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -56,7 +56,7 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 fn requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -108,7 +108,7 @@ fn requires_package_does_not_exist() -> Result<()> {
 fn requires_exact_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -164,7 +164,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
 fn requires_greater_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -221,7 +221,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
 fn requires_less_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -277,7 +277,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
 fn transitive_requires_package_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -331,7 +331,7 @@ fn transitive_requires_package_does_not_exist() -> Result<()> {
 fn excluded_only_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -405,7 +405,7 @@ fn excluded_only_version() -> Result<()> {
 fn excluded_only_compatible_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -520,7 +520,7 @@ fn excluded_only_compatible_version() -> Result<()> {
 fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -566,8 +566,8 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -651,7 +651,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -738,7 +738,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 fn extra_required() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -798,7 +798,7 @@ fn extra_required() -> Result<()> {
 fn missing_extra() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -867,7 +867,7 @@ fn missing_extra() -> Result<()> {
 fn multiple_extras_required() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -941,7 +941,7 @@ fn multiple_extras_required() -> Result<()> {
 fn extra_incompatible_with_extra() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1011,7 +1011,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
 fn extra_incompatible_with_extra_not_requested() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1082,7 +1082,7 @@ fn extra_incompatible_with_extra_not_requested() -> Result<()> {
 fn extra_incompatible_with_root() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1153,7 +1153,7 @@ fn extra_incompatible_with_root() -> Result<()> {
 fn extra_does_not_exist_backtrack() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1215,7 +1215,7 @@ fn extra_does_not_exist_backtrack() -> Result<()> {
 fn direct_incompatible_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1279,7 +1279,7 @@ fn direct_incompatible_versions() -> Result<()> {
 fn transitive_incompatible_with_root_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1349,7 +1349,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
 fn transitive_incompatible_with_transitive() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1410,7 +1410,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
 fn package_only_prereleases() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1470,7 +1470,7 @@ fn package_only_prereleases() -> Result<()> {
 fn package_only_prereleases_in_range() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1531,7 +1531,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
 fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1590,7 +1590,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() -> Result<()> {
 fn requires_package_prerelease_and_final_any() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1653,7 +1653,7 @@ fn requires_package_prerelease_and_final_any() -> Result<()> {
 fn package_prerelease_specified_only_final_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1715,7 +1715,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
 fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1779,7 +1779,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
 fn package_prerelease_specified_mixed_available() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1842,7 +1842,7 @@ fn package_prerelease_specified_mixed_available() -> Result<()> {
 fn package_multiple_prereleases_kinds() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1903,7 +1903,7 @@ fn package_multiple_prereleases_kinds() -> Result<()> {
 fn package_multiple_prereleases_numbers() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -1965,7 +1965,7 @@ fn package_multiple_prereleases_numbers() -> Result<()> {
 fn transitive_package_only_prereleases() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2032,7 +2032,7 @@ fn transitive_package_only_prereleases() -> Result<()> {
 fn transitive_package_only_prereleases_in_range() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2102,7 +2102,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
 fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2176,7 +2176,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() -> Result<()> {
 fn transitive_prerelease_and_stable_dependency() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2254,7 +2254,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
 fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2356,7 +2356,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() -> Result<()> {
 fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2450,7 +2450,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2525,7 +2525,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
 fn requires_python_version_does_not_exist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2696,7 +2696,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 fn requires_python_version_greater_than_current_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python3.8.0");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8.0");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2967,7 +2967,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
 fn specific_tag_and_default() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -3021,7 +3021,7 @@ fn specific_tag_and_default() -> Result<()> {
 fn only_wheels() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -3075,7 +3075,7 @@ fn only_wheels() -> Result<()> {
 fn no_wheels() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -3101,7 +3101,7 @@ fn no_wheels() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in 1m [TIME]
+        Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + albatross==1.0.0
@@ -3129,7 +3129,7 @@ fn no_wheels() -> Result<()> {
 fn no_wheels_with_matching_platform() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.7");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
