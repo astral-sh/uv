@@ -184,12 +184,48 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × Couldn't find `3.8.0` in PATH
+          × Couldn't find `python3.8.0` in PATH
           ╰─▶ cannot find binary path
         "###);
     });
 
     venv.assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn create_venv_python_patch() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = temp_dir.child(".venv");
+
+    let filter_venv = regex::escape(&venv.display().to_string());
+    insta::with_settings!({
+        filters => vec![
+            (r"interpreter at .+", "interpreter at [PATH]"),
+            (&filter_venv, "/home/ferris/project/.venv"),
+        ]
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("venv")
+            .arg(venv.as_os_str())
+            .arg("--python")
+            .arg("3.12.1")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Using Python 3.12.1 interpreter at [PATH]
+        Creating virtual environment at: /home/ferris/project/.venv
+        "###);
+    });
+
+    venv.assert(predicates::path::is_dir());
 
     Ok(())
 }
