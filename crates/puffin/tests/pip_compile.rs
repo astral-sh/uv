@@ -696,6 +696,7 @@ fn compile_python_37() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        warning: The requested Python version 3.7 is not available; 3.12.1 will be used to build dependencies instead.
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (3.7) does not satisfy Python>=3.8
               and black==23.10.1 depends on Python>=3.8, we can conclude that

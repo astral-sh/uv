@@ -148,7 +148,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × Couldn't find `python3.15` in PATH
+          × Couldn't find "python3.15" in PATH
           ╰─▶ cannot find binary path
         "###);
     });
@@ -184,7 +184,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × Couldn't find `python3.8.0` in PATH
+          × Couldn't find "python3.8.0" in PATH
           ╰─▶ cannot find binary path
         "###);
     });

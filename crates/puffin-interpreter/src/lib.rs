@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 use std::time::SystemTimeError;
@@ -63,6 +64,6 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Failed to parse pyvenv.cfg")]
     Cfg(#[from] cfg::Error),
-    #[error("Couldn't find `{0}` in PATH")]
-    Which(PathBuf, #[source] which::Error),
+    #[error("Couldn't find {0:?} in PATH")]
+    Which(OsString, #[source] which::Error),
 }
