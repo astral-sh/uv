@@ -19,3 +19,4 @@ fs-err = { workspace = true, features = ["tokio"] }
 fs2 = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
+junction = "1.0.0"

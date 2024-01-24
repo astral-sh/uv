@@ -206,6 +206,10 @@ impl Cache {
         // Create a symlink to the directory store.
         let temp_dir = tempfile::tempdir_in(self.root())?;
         let temp_file = temp_dir.path().join("symlink");
+
+        println!("src: {}", archive_entry.path().display());
+        println!("dst: {}", temp_file.display());
+
         puffin_fs::symlink_dir(archive_entry.path(), &temp_file)?;
 
         // Move the symlink into the wheel cache.

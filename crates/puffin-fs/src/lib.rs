@@ -11,7 +11,7 @@ use puffin_warnings::warn_user;
 /// Symlink a directory.
 #[cfg(windows)]
 pub fn symlink_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_dir(src, dst)
+    junction::create(src, dst)
 }
 
 /// Symlink a directory.
