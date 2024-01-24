@@ -30,7 +30,6 @@ puffin-traits = { path = "../puffin-traits" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
-bytesize = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 nanoid = { workspace = true }
