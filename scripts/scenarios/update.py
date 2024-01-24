@@ -39,7 +39,6 @@ Requirements:
 
 import json
 import shutil
-import os
 import subprocess
 import sys
 import textwrap
@@ -149,6 +148,8 @@ print("Loading scenario metadata...", file=sys.stderr)
 data = json.loads(
     subprocess.check_output(
         [
+            sys.executable,
+            "-m",
             "packse",
             "inspect",
             "--short-names",
