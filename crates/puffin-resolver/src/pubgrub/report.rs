@@ -1,15 +1,16 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::ops::Bound;
 
 use derivative::Derivative;
+use indexmap::{IndexMap, IndexSet};
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::prerelease_mode::PreReleaseStrategy;
@@ -20,7 +21,7 @@ use super::PubGrubPackage;
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, Vec<Version>>,
+    pub(crate) available_versions: &'a IndexMap<PubGrubPackage, BTreeSet<Version>>,
 
     /// The versions that were available for each package
     pub(crate) python_requirement: Option<&'a PythonRequirement>,
@@ -151,8 +152,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
             [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
                 let range = range.simplify(
                     self.available_versions
-                        .get(package)
-                        .unwrap_or(&vec![])
+                        .get(*package)
+                        .unwrap_or(&BTreeSet::new())
                         .iter(),
                 );
                 format!(
@@ -163,8 +164,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
             [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
                 let range = range.simplify(
                     self.available_versions
-                        .get(package)
-                        .unwrap_or(&vec![])
+                        .get(*package)
+                        .unwrap_or(&BTreeSet::new())
                         .iter(),
                 );
                 format!(
@@ -347,7 +348,7 @@ impl PubGrubReportFormatter<'_> {
         &self,
         derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>>,
         selector: &CandidateSelector,
-    ) -> FxHashSet<PubGrubHint> {
+    ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
             match selector.prerelease_strategy() {
@@ -371,7 +372,7 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
-        let mut hints = FxHashSet::default();
+        let mut hints = IndexSet::default();
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::NoVersions(package, set) => {
