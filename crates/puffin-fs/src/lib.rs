@@ -68,10 +68,8 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
 pub fn force_remove_all(path: impl AsRef<Path>) -> Result<bool, std::io::Error> {
     let path = path.as_ref();
 
-    let metadata = match fs::metadata(path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(err) => return Err(err),
+    let Some(metadata) = metadata_if_exists(path)? else {
+        return Ok(false);
     };
 
     if metadata.is_dir() {
@@ -187,5 +185,16 @@ impl Drop for LockedFile {
                 err
             );
         }
+    }
+}
+
+/// Given a path, return its metadata if the file exists, or `None` if it does not.
+///
+/// If the file exists but cannot be read, returns an error.
+pub fn metadata_if_exists(path: impl AsRef<Path>) -> std::io::Result<Option<std::fs::Metadata>> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
     }
 }
