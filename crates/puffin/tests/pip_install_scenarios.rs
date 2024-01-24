@@ -566,8 +566,8 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird==1.0.0
-                  bluebird==3.0.0
+                  bluebird<=1.0.0
+                  bluebird>=3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -2696,7 +2696,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 fn requires_python_version_greater_than_current_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.8.0");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8.12");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -2716,7 +2716,16 @@ fn requires_python_version_greater_than_current_patch() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .current_dir(&temp_dir), @r###"<snapshot>
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + albatross==1.0.0
         "###);
     });
 
