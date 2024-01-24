@@ -1,14 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
-use zip::ZipArchive;
-
 use distribution_filename::WheelFilename;
 use distribution_types::{CachedDist, Dist};
-use install_wheel_rs::read_dist_info;
-use pypi_types::Metadata21;
-
-use crate::error::Error;
 
 /// A wheel that's been unzipped while downloading
 #[derive(Debug, Clone)]
@@ -124,16 +117,5 @@ impl BuiltWheel {
 impl std::fmt::Display for LocalWheel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.remote())
-    }
-}
-
-impl BuiltWheel {
-    /// Read the [`Metadata21`] from a wheel.
-    pub fn read_dist_info(&self) -> Result<Metadata21, Error> {
-        let mut archive = ZipArchive::new(fs_err::File::open(&self.path)?)?;
-        let dist_info = read_dist_info(&self.filename, &mut archive).map_err(|err| {
-            Error::DistInfo(Box::new(self.filename.clone()), self.dist.to_string(), err)
-        })?;
-        Ok(Metadata21::parse(&dist_info)?)
     }
 }

@@ -245,7 +245,8 @@ impl RegistryClient {
                         .await?
                 }
                 FileLocation::Path(path) => {
-                    let reader = fs_err::tokio::File::open(&path).await?;
+                    let file = fs_err::tokio::File::open(&path).await?;
+                    let reader = tokio::io::BufReader::new(file);
                     read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
                 }
             },
@@ -258,7 +259,8 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let reader = fs_err::tokio::File::open(&wheel.path).await?;
+                let file = fs_err::tokio::File::open(&wheel.path).await?;
+                let reader = tokio::io::BufReader::new(file);
                 read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
             }
         };
