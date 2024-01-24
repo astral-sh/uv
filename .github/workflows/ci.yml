@@ -83,6 +83,8 @@ jobs:
     name: "cargo check | windows"
     steps:
       - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
       - name: "Install Pythons"
         uses: actions/setup-python@v4
         with:
