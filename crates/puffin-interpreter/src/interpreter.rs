@@ -96,7 +96,7 @@ impl Interpreter {
     /// without comparing the patch version number. If that cannot be found, we fall back to
     /// the first available version.
     ///
-    /// See [`Self::find_strict`] for details on the precedence of Python lookup locations.
+    /// See [`Self::find_version`] for details on the precedence of Python lookup locations.
     pub fn find_best(
         python_version: Option<&PythonVersion>,
         platform: &Platform,
