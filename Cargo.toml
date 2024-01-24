@@ -49,6 +49,7 @@ itertools = { version = "0.12.0" }
 mailparse = { version = "0.14.0" }
 # For additional textwrap options: https://github.com/zkat/miette/pull/321, https://github.com/zkat/miette/pull/328
 miette =  { git = "https://github.com/zkat/miette.git", rev = "b0744462adbbfbb6d845f382db36be883c7f3c45" }
+nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "3.5.0" }
 petgraph = { version = "0.6.4" }

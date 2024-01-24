@@ -35,7 +35,7 @@ impl BuiltWheelIndex {
         };
 
         Ok(Self::find(
-            &cache_shard.shard(manifest.digest()),
+            &cache_shard.shard(manifest.id()),
             source_dist.name(),
             cache,
             tags,
@@ -66,7 +66,7 @@ impl BuiltWheelIndex {
         };
 
         Ok(Self::find(
-            &cache_shard.shard(manifest.digest()),
+            &cache_shard.shard(manifest.id()),
             source_dist.name(),
             cache,
             tags,

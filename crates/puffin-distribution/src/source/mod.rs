@@ -263,7 +263,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source_dist}");
-                let source_dist_entry = cache_shard.shard(manifest.digest()).entry(filename);
+                let source_dist_entry = cache_shard.shard(manifest.id()).entry(filename);
                 self.persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
                     .await?;
 
@@ -284,7 +284,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself.
-        let cache_shard = cache_shard.shard(manifest.digest());
+        let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(self.tags, &cache_shard) {
@@ -352,7 +352,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source_dist}");
-                let source_dist_entry = cache_shard.shard(manifest.digest()).entry(filename);
+                let source_dist_entry = cache_shard.shard(manifest.id()).entry(filename);
                 self.persist_source_dist_url(response, source_dist, filename, &source_dist_entry)
                     .await?;
 
@@ -373,7 +373,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself.
-        let cache_shard = cache_shard.shard(manifest.digest());
+        let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -456,7 +456,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself.
-        let cache_shard = cache_shard.shard(manifest.digest());
+        let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(self.tags, &cache_shard) {
@@ -522,7 +522,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself.
-        let cache_shard = cache_shard.shard(manifest.digest());
+        let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -983,7 +983,7 @@ pub(crate) async fn refresh_timestamp_manifest(
         cache_entry.path(),
         rmp_serde::to_vec(&CachedByTimestamp {
             timestamp: modified.timestamp(),
-            data: manifest,
+            data: manifest.clone(),
         })?,
     )
     .await?;

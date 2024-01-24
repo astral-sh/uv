@@ -110,7 +110,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let manifest_entry = cache_shard.entry(MANIFEST);
                 if let Ok(Some(manifest)) = read_http_manifest(&manifest_entry) {
                     Self::add_directory(
-                        cache_shard.join(manifest.digest()),
+                        cache_shard.join(manifest.id()),
                         package,
                         cache,
                         tags,
