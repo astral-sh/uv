@@ -122,9 +122,9 @@ pub(crate) async fn pip_compile(
         })
         .unwrap_or_default();
 
-    // Detect the current Python interpreter.
+    // Find an interpreter to use for building distributions
     let platform = Platform::current()?;
-    let interpreter = Interpreter::find(python_version.as_ref(), platform, &cache)?;
+    let interpreter = Interpreter::find_best(python_version.as_ref(), &platform, &cache)?;
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
@@ -147,7 +147,7 @@ pub(crate) async fn pip_compile(
     let tags = if let Some(python_version) = python_version.as_ref() {
         Cow::Owned(Tags::from_env(
             interpreter.platform(),
-            python_version.simple_version(),
+            (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
         )?)

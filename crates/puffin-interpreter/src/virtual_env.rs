@@ -27,7 +27,7 @@ impl Virtualenv {
         };
         let venv = fs_err::canonicalize(venv)?;
         let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+        let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
 
         Ok(Self {
             root: venv,

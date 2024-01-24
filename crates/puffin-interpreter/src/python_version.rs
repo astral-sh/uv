@@ -1,9 +1,8 @@
-use std::str::FromStr;
-
-use tracing::debug;
-
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
+use std::str::FromStr;
+
+use crate::Interpreter;
 
 #[derive(Debug, Clone)]
 pub struct PythonVersion(StringVersion);
@@ -29,34 +28,7 @@ impl FromStr for PythonVersion {
             return Err(format!("Python version {s} must be < 4.0"));
         }
 
-        // If the version lacks a patch, assume the most recent known patch for that minor version.
-        match version.release() {
-            [3, 7] => {
-                debug!("Assuming Python 3.7.17");
-                Ok(Self(StringVersion::from_str("3.7.17")?))
-            }
-            [3, 8] => {
-                debug!("Assuming Python 3.8.18");
-                Ok(Self(StringVersion::from_str("3.8.18")?))
-            }
-            [3, 9] => {
-                debug!("Assuming Python 3.9.18");
-                Ok(Self(StringVersion::from_str("3.9.18")?))
-            }
-            [3, 10] => {
-                debug!("Assuming Python 3.10.13");
-                Ok(Self(StringVersion::from_str("3.10.13")?))
-            }
-            [3, 11] => {
-                debug!("Assuming Python 3.11.6");
-                Ok(Self(StringVersion::from_str("3.11.6")?))
-            }
-            [3, 12] => {
-                debug!("Assuming Python 3.12.0");
-                Ok(Self(StringVersion::from_str("3.12.0")?))
-            }
-            _ => Ok(Self(version)),
-        }
+        Ok(Self(version))
     }
 }
 
@@ -83,6 +55,11 @@ impl PythonVersion {
         markers
     }
 
+    /// Return the full parsed Python version.
+    pub fn version(&self) -> &Version {
+        &self.0.version
+    }
+
     /// Return the major version of this Python version.
     pub fn major(&self) -> u8 {
         u8::try_from(self.0.release()[0]).expect("invalid major version")
@@ -93,8 +70,31 @@ impl PythonVersion {
         u8::try_from(self.0.release()[1]).expect("invalid minor version")
     }
 
-    /// Returns the Python version as a simple tuple.
-    pub fn simple_version(&self) -> (u8, u8) {
-        (self.major(), self.minor())
+    /// Check if this Python version is satisfied by the given interpreter.
+    ///
+    /// If a patch version is present, we will require an exact match.
+    /// Otherwise, just the major and minor version numbers need to match.
+    pub fn is_satisfied_by(&self, interpreter: &Interpreter) -> bool {
+        if self.patch().is_some() {
+            self.version() == interpreter.python_version()
+        } else {
+            (self.major(), self.minor()) == interpreter.python_tuple()
+        }
+    }
+
+    /// Return the patch version of this Python version, if set.
+    pub fn patch(&self) -> Option<u8> {
+        self.0
+            .release()
+            .get(2)
+            .copied()
+            .map(|patch| u8::try_from(patch).expect("invalid patch version"))
+    }
+
+    /// Returns a copy of the Python version without the patch version
+    #[must_use]
+    pub fn without_patch(&self) -> Self {
+        Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
+            .expect("dropping a patch should always be valid")
     }
 }
