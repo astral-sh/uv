@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+use crate::timestamp::Timestamp;
+
 #[derive(Deserialize, Serialize)]
-pub struct CachedByTimestamp<Timestamp, Data> {
+pub struct CachedByTimestamp<Data> {
     pub timestamp: Timestamp,
     pub data: Data,
 }

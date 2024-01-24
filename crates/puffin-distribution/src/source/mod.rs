@@ -3,7 +3,6 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 use anyhow::Result;
 use fs_err::tokio as fs;
@@ -950,7 +949,7 @@ pub(crate) fn read_timestamp_manifest(
     // If the cache entry is up-to-date, return it.
     match std::fs::read(cache_entry.path()) {
         Ok(cached) => {
-            let cached = rmp_serde::from_slice::<CachedByTimestamp<SystemTime, Manifest>>(&cached)?;
+            let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
             if cached.timestamp == modified.timestamp() {
                 return Ok(Some(cached.data));
             }

@@ -12,7 +12,9 @@ use distribution_types::{
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Freshness, WheelCache};
+use puffin_cache::{
+    ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Freshness, Timestamp, WheelCache,
+};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
@@ -373,11 +375,11 @@ impl<'a> Planner<'a> {
 ///
 /// A cache entry is not modified if it exists and is newer than the file at the given path.
 fn not_modified_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
-    match fs_err::metadata(cache_entry.path()).and_then(|metadata| metadata.modified()) {
-        Ok(cache_mtime) => {
+    match fs_err::metadata(cache_entry.path()).map(|metadata| Timestamp::from_metadata(&metadata)) {
+        Ok(cache_timestamp) => {
             // Determine the modification time of the wheel.
-            if let Some(artifact_mtime) = ArchiveTimestamp::from_path(artifact)? {
-                Ok(cache_mtime >= artifact_mtime.timestamp())
+            if let Some(artifact_timestamp) = ArchiveTimestamp::from_path(artifact)? {
+                Ok(cache_timestamp >= artifact_timestamp.timestamp())
             } else {
                 // The artifact doesn't exist, so it's not fresh.
                 Ok(false)
@@ -396,11 +398,11 @@ fn not_modified_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool,
 fn not_modified_install(dist: &InstalledDirectUrlDist, artifact: &Path) -> Result<bool, io::Error> {
     // Determine the modification time of the installed distribution.
     let dist_metadata = fs_err::metadata(&dist.path)?;
-    let dist_mtime = dist_metadata.modified()?;
+    let dist_timestamp = Timestamp::from_metadata(&dist_metadata);
 
     // Determine the modification time of the wheel.
-    if let Some(artifact_mtime) = ArchiveTimestamp::from_path(artifact)? {
-        Ok(dist_mtime >= artifact_mtime.timestamp())
+    if let Some(artifact_timestamp) = ArchiveTimestamp::from_path(artifact)? {
+        Ok(dist_timestamp >= artifact_timestamp.timestamp())
     } else {
         // The artifact doesn't exist, so it's not fresh.
         Ok(false)

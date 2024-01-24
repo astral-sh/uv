@@ -11,7 +11,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
-use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
+use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
@@ -355,7 +355,7 @@ impl InterpreterQueryResult {
             format!("{}.msgpack", digest(&executable_bytes)),
         );
 
-        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?.as_ref())?;
+        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?)?;
 
         // Read from the cache.
         if cache
@@ -363,7 +363,7 @@ impl InterpreterQueryResult {
             .is_ok_and(Freshness::is_fresh)
         {
             if let Ok(data) = fs::read(cache_entry.path()) {
-                match rmp_serde::from_slice::<CachedByTimestamp<Timestamp, Self>>(&data) {
+                match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
                     Ok(cached) => {
                         if cached.timestamp == modified {
                             debug!("Using cached markers for: {}", executable.display());
@@ -404,52 +404,6 @@ impl InterpreterQueryResult {
         }
 
         Ok(info)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-enum Timestamp {
-    // On Unix, use `ctime` and `ctime_nsec`.
-    Unix(i64, i64),
-    // On Windows, use `last_write_time`.
-    Windows(u64),
-    // On other platforms, use Rust's modified time.
-    Generic(std::time::SystemTime),
-}
-
-impl Timestamp {
-    /// Return the [`Timestamp`] for the given path.
-    ///
-    /// On Unix, this uses `ctime` as a conservative approach. `ctime` should detect all
-    /// modifications, including some that we don't care about, like hardlink modifications.
-    /// On other platforms, it uses `mtime`.
-    fn from_path(path: &Path) -> Result<Self, Error> {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-
-            let metadata = path.metadata()?;
-            let ctime = metadata.ctime();
-            let ctime_nsec = metadata.ctime_nsec();
-
-            Ok(Self::Unix(ctime, ctime_nsec))
-        }
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-
-            let metadata = path.metadata()?;
-            let modified = metadata.last_write_time();
-            Ok(Self::Windows(modified))
-        }
-
-        #[cfg(not(any(unix, windows)))]
-        {
-            let metadata = path.metadata()?;
-            let modified = metadata.modified()?;
-            Ok(Self::Generic(modified))
-        }
     }
 }
 

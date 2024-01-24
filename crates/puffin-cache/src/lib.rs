@@ -4,7 +4,6 @@ use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::SystemTime;
 
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
@@ -16,11 +15,13 @@ use puffin_normalize::PackageName;
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
+pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
 mod by_timestamp;
 mod cli;
+mod timestamp;
 mod wheel;
 
 /// A [`CacheEntry`] which may or may not exist yet.
@@ -180,7 +181,7 @@ impl Cache {
 
         match fs::metadata(entry.path()) {
             Ok(metadata) => {
-                if metadata.modified()? >= *timestamp {
+                if Timestamp::from_metadata(&metadata) >= *timestamp {
                     Ok(Freshness::Fresh)
                 } else {
                     Ok(Freshness::Stale)
@@ -631,10 +632,10 @@ impl Display for CacheBucket {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveTimestamp {
     /// The archive consists of a single file with the given modification time.
-    Exact(SystemTime),
+    Exact(Timestamp),
     /// The archive consists of a directory. The modification time is the latest modification time
     /// of the `pyproject.toml` or `setup.py` file in the directory.
-    Approximate(SystemTime),
+    Approximate(Timestamp),
 }
 
 impl ArchiveTimestamp {
@@ -646,8 +647,7 @@ impl ArchiveTimestamp {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
-            // `modified()` is infallible on Windows and Unix (i.e., all platforms we support).
-            Ok(Some(Self::Exact(metadata.modified()?)))
+            Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
         } else {
             if let Some(metadata) = path
                 .as_ref()
@@ -656,7 +656,7 @@ impl ArchiveTimestamp {
                 .ok()
                 .filter(std::fs::Metadata::is_file)
             {
-                Ok(Some(Self::Approximate(metadata.modified()?)))
+                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
             } else if let Some(metadata) = path
                 .as_ref()
                 .join("setup.py")
@@ -664,7 +664,7 @@ impl ArchiveTimestamp {
                 .ok()
                 .filter(std::fs::Metadata::is_file)
             {
-                Ok(Some(Self::Approximate(metadata.modified()?)))
+                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
             } else {
                 Ok(None)
             }
@@ -672,7 +672,7 @@ impl ArchiveTimestamp {
     }
 
     /// Return the modification timestamp for an archive.
-    pub fn timestamp(&self) -> SystemTime {
+    pub fn timestamp(&self) -> Timestamp {
         match self {
             Self::Exact(timestamp) => *timestamp,
             Self::Approximate(timestamp) => *timestamp,
@@ -706,18 +706,18 @@ pub enum Refresh {
     /// Don't refresh any entries.
     None,
     /// Refresh entries linked to the given packages, if created before the given timestamp.
-    Packages(Vec<PackageName>, SystemTime),
+    Packages(Vec<PackageName>, Timestamp),
     /// Refresh all entries created before the given timestamp.
-    All(SystemTime),
+    All(Timestamp),
 }
 
 impl Refresh {
     /// Determine the refresh strategy to use based on the command-line arguments.
     pub fn from_args(refresh: bool, refresh_package: Vec<PackageName>) -> Self {
         if refresh {
-            Self::All(SystemTime::now())
+            Self::All(Timestamp::now())
         } else if !refresh_package.is_empty() {
-            Self::Packages(refresh_package, SystemTime::now())
+            Self::Packages(refresh_package, Timestamp::now())
         } else {
             Self::None
         }
