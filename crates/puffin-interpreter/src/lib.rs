@@ -25,6 +25,8 @@ pub enum Error {
     BrokenVenv(PathBuf, PathBuf),
     #[error("Both VIRTUAL_ENV and CONDA_PREFIX are set. Please unset one of them.")]
     Conflict,
+    #[error("No versions of Python could be found. Is Python installed?")]
+    PythonNotFound,
     #[error("Could not find `{0}` in PATH")]
     WhichNotFound(String, #[source] which::Error),
     #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `puffin venv` to create a virtual environment.")]

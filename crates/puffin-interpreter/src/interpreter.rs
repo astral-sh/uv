@@ -15,7 +15,6 @@ use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
-use crate::python_query::find_python_windows;
 use crate::virtual_env::detect_virtual_env;
 use crate::{Error, PythonVersion};
 
@@ -83,7 +82,47 @@ impl Interpreter {
         }
     }
 
-    /// Detect the python interpreter to use.
+    /// Find the best available Python interpreter to use.
+    ///
+    /// If no Python version is provided, we will use the first available interpreter.
+    ///
+    /// If a Python version is provided, we will first try to find an exact match. If
+    /// that cannot be found and a patch version was requested, we will look for a match
+    /// without comparing the patch version number. If that cannot be found, we fall back to
+    /// the first available version.
+    ///
+    /// See [`Self::find_strict`] for details on the precedence of Python lookup locations.
+    pub fn find_best(
+        python_version: Option<&PythonVersion>,
+        platform: &Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        // First, check for an exact match (or the first available version if no Python version was provided)
+        if let Some(interpreter) = Self::find_version(python_version, platform, cache)? {
+            return Ok(interpreter);
+        }
+
+        if let Some(python_version) = python_version {
+            // If that fails, and a specific patch version was requested try again allowing a
+            // different patch version
+            if python_version.patch().is_some() {
+                if let Some(interpreter) =
+                    Self::find_version(Some(&python_version.without_patch()), platform, cache)?
+                {
+                    return Ok(interpreter);
+                }
+            }
+
+            // If a Python version was requested but cannot be fulfilled, just take any version
+            if let Some(interpreter) = Self::find_version(None, platform, cache)? {
+                return Ok(interpreter);
+            }
+        }
+
+        Err(Error::PythonNotFound)
+    }
+
+    /// Find a Python interpreter.
     ///
     /// We check, in order, the following locations:
     ///
@@ -92,92 +131,24 @@ impl Interpreter {
     /// - If a python version is given: `pythonx.y`
     /// - `python3` (unix) or `python.exe` (windows)
     ///
-    /// If provided, we will prefer the given Python version in a later location than a
-    /// different version in an earlier location. If a matching patch version cannot be
-    /// found, we will attempt to find a matching minor version before resorting to the
-    /// first available Python version.
-    pub fn find(
+    /// If a version is provided and an interpreter cannot be found with the given version,
+    /// we will return [`None`].
+    pub fn find_version(
         python_version: Option<&PythonVersion>,
-        platform: Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        if let Some(python_version) = python_version {
-            // First, try to find a strict match
-            if let Some(interpreter) = Self::find_strict(python_version, &platform, cache)? {
-                return Ok(interpreter);
-            }
-
-            // If that fails, and a specific patch version was requested try again allowing a
-            // different patch version
-            if python_version.patch().is_some() {
-                if let Some(interpreter) =
-                    Self::find_strict(&python_version.without_patch(), &platform, cache)?
-                {
-                    return Ok(interpreter);
-                }
-            }
-
-            // If a Python version was requested but cannot be fulfilled, just take any version
-        }
-
-        let platform = PythonPlatform::from(platform);
-        if let Some(venv) = detect_virtual_env(&platform)? {
-            let executable = platform.venv_python(venv);
-            let interpreter = Self::query(&executable, &platform.0, cache)?;
-            return Ok(interpreter);
-        };
-
-        if cfg!(unix) {
-            if let Some(python_version) = python_version {
-                let requested = format!(
-                    "python{}.{}",
-                    python_version.major(),
-                    python_version.minor()
-                );
-                if let Ok(executable) = which::which(&requested) {
-                    debug!("Resolved {requested} to {}", executable.display());
-                    let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-                    return Ok(interpreter);
-                }
-            }
-
-            let executable = which::which("python3")
-                .map_err(|err| Error::WhichNotFound("python3".to_string(), err))?;
-            debug!("Resolved python3 to {}", executable.display());
-            let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-            Ok(interpreter)
-        } else if cfg!(windows) {
-            if let Some(python_version) = python_version {
-                if let Some(path) =
-                    find_python_windows(python_version.major(), python_version.minor())?
-                {
-                    return Interpreter::query(&path, &platform.0, cache);
-                }
-            }
-
-            let executable = which::which("python.exe")
-                .map_err(|err| Error::WhichNotFound("python.exe".to_string(), err))?;
-            let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-            Ok(interpreter)
-        } else {
-            unimplemented!("Only Windows and Unix are supported");
-        }
-    }
-
-    /// Find a Python interpreter to use.
-    ///
-    /// If an interpreter cannot be found with the given version, we will return [`None`].
-    pub fn find_strict(
-        python_version: &PythonVersion,
         platform: &Platform,
         cache: &Cache,
     ) -> Result<Option<Self>, Error> {
         let version_matches = |interpreter: &Self| -> bool {
-            // If a patch version was provided, check for an exact match
-            if python_version.patch().is_some() {
-                python_version.version() == interpreter.python_version()
+            if let Some(python_version) = python_version {
+                // If a patch version was provided, check for an exact match
+                if python_version.patch().is_some() {
+                    python_version.version() == interpreter.python_version()
+                } else {
+                    (python_version.major(), python_version.minor()) == interpreter.python_tuple()
+                }
             } else {
-                (python_version.major(), python_version.minor()) == interpreter.python_tuple()
+                // The version always matches if one was not provided
+                true
             }
         };
 
@@ -193,16 +164,18 @@ impl Interpreter {
 
         #[cfg(unix)]
         {
-            let requested = format!(
-                "python{}.{}",
-                python_version.major(),
-                python_version.minor()
-            );
-            if let Ok(executable) = which::which(&requested) {
-                debug!("Resolved {requested} to {}", executable.display());
-                let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
+            if let Some(python_version) = python_version {
+                let requested = format!(
+                    "python{}.{}",
+                    python_version.major(),
+                    python_version.minor()
+                );
+                if let Ok(executable) = which::which(&requested) {
+                    debug!("Resolved {requested} to {}", executable.display());
+                    let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+                    if version_matches(&interpreter) {
+                        return Ok(Some(interpreter));
+                    }
                 }
             }
 
