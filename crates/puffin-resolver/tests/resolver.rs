@@ -112,6 +112,7 @@ async fn resolve(
         PathBuf::from("/dev/null"),
         PathBuf::from("/dev/null"),
         PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null"),
     );
     let build_context = DummyContext {
         cache: Cache::temp()?,

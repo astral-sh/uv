@@ -5,10 +5,11 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use url::Url;
 
 use common::{BIN_NAME, INSTA_FILTERS};
 
-use crate::common::create_venv_py312;
+use crate::common::{create_venv_py312, venv_to_interpreter};
 
 mod common;
 
@@ -16,10 +17,13 @@ mod common;
 fn no_arguments() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
         .arg("uninstall")
-        .current_dir(&temp_dir), @r###"
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -32,6 +36,7 @@ fn no_arguments() -> Result<()> {
 
     For more information, try '--help'.
     "###);
+    });
 
     Ok(())
 }
@@ -63,12 +68,15 @@ fn invalid_requirement() -> Result<()> {
 fn missing_requirements_txt() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
         .arg("uninstall")
-        .arg("-r")
-        .arg("requirements.txt")
-        .current_dir(&temp_dir), @r###"
+            .arg("-r")
+            .arg("requirements.txt")
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -77,6 +85,7 @@ fn missing_requirements_txt() -> Result<()> {
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###);
+    });
 
     Ok(())
 }
@@ -112,12 +121,15 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 fn missing_pyproject_toml() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
         .arg("uninstall")
-        .arg("-r")
-        .arg("pyproject.toml")
-        .current_dir(&temp_dir), @r###"
+            .arg("-r")
+            .arg("pyproject.toml")
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -126,6 +138,7 @@ fn missing_pyproject_toml() -> Result<()> {
     error: failed to open file `pyproject.toml`
       Caused by: No such file or directory (os error 2)
     "###);
+    });
 
     Ok(())
 }
@@ -248,7 +261,7 @@ fn uninstall() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import markupsafe")
         .current_dir(&temp_dir)
@@ -276,7 +289,7 @@ fn uninstall() -> Result<()> {
         "###);
     });
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import markupsafe")
         .current_dir(&temp_dir)
@@ -307,7 +320,7 @@ fn missing_record() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import markupsafe")
         .current_dir(&temp_dir)
@@ -315,24 +328,38 @@ fn missing_record() -> Result<()> {
         .success();
 
     // Delete the RECORD file.
-    let dist_info = venv
-        .join("lib")
-        .join("python3.12")
-        .join("site-packages")
-        .join("MarkupSafe-2.1.3.dist-info");
+    let dist_info = fs_err::canonicalize(if cfg!(unix) {
+        venv.join("lib")
+            .join("python3.12")
+            .join("site-packages")
+            .join("MarkupSafe-2.1.3.dist-info")
+    } else if cfg!(windows) {
+        venv.join("Lib")
+            .join("site-packages")
+            .join("MarkupSafe-2.1.3.dist-info")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    })
+    .unwrap();
     std::fs::remove_file(dist_info.join("RECORD"))?;
 
+    let dist_info_str = regex::escape(&format!(
+        "RECORD file not found at: {}",
+        dist_info.display()
+    ));
     let filters: Vec<_> = iter::once((
-        "RECORD file not found at: .*/.venv",
-        "RECORD file not found at: [VENV_PATH]",
+        dist_info_str.as_str(),
+        "RECORD file not found at: [DIST_INFO]",
     ))
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    insta::with_settings!({
-        filters => filters,
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    insta::with_settings!(
+        {
+            filters => filters,
+        },
+        {
+            assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("uninstall")
             .arg("MarkupSafe")
@@ -345,9 +372,10 @@ fn missing_record() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Cannot uninstall package; RECORD file not found at: [VENV_PATH]/lib/python3.12/site-packages/MarkupSafe-2.1.3.dist-info/RECORD
+        error: Cannot uninstall package; RECORD file not found at: [DIST_INFO]/RECORD
         "###);
-    });
+        }
+    );
 
     Ok(())
 }
@@ -359,9 +387,13 @@ fn uninstall_editable_by_name() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
 
-    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "file://[WORKSPACE_DIR]/"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -379,7 +411,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -407,7 +439,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         "###);
     });
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -423,9 +455,13 @@ fn uninstall_editable_by_path() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
 
-    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "file://[WORKSPACE_DIR]/"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -443,7 +479,7 @@ fn uninstall_editable_by_path() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -471,7 +507,7 @@ fn uninstall_editable_by_path() -> Result<()> {
         "###);
     });
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -487,9 +523,13 @@ fn uninstall_duplicate_editable() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
 
-    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "file://[WORKSPACE_DIR]/"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -507,7 +547,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -536,7 +576,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
         "###);
     });
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()

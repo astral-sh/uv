@@ -4,19 +4,20 @@ use std::path::Path;
 use std::process::Command;
 use std::{fs, iter};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use url::Url;
 
-use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv_py312, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(venv))
         // https://github.com/python/cpython/issues/75953
         .arg("-B")
         .arg("-c")
@@ -32,14 +33,17 @@ fn missing_requirements_txt() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let requirements_txt = temp_dir.child("requirements.txt");
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
-        .arg("requirements.txt")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(&temp_dir), @r###"
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -48,6 +52,7 @@ fn missing_requirements_txt() -> Result<()> {
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###);
+    });
 
     requirements_txt.assert(predicates::path::missing());
 
@@ -60,15 +65,18 @@ fn missing_venv() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
-        .arg("requirements.txt")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir), @r###"
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("sync")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -77,6 +85,7 @@ fn missing_venv() -> Result<()> {
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###);
+    });
 
     venv.assert(predicates::path::missing());
 
@@ -344,7 +353,7 @@ fn link() -> Result<()> {
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--python")
-        .arg("python3.12")
+        .arg("3.12")
         .current_dir(&temp_dir)
         .assert()
         .success();
@@ -433,7 +442,7 @@ fn add_remove() -> Result<()> {
 
     check_command(&venv, "import tomli", &temp_dir);
 
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(&venv))
         .arg("-c")
         .arg("import markupsafe")
         .current_dir(&temp_dir)
@@ -998,8 +1007,7 @@ fn install_numpy_py38() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        // TODO(konstin): Mock the venv in the installer test so we don't need this anymore
-        .arg(which::which("python3.8").context("python3.8 must be installed")?)
+        .arg("3.8")
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .current_dir(&temp_dir)
@@ -1135,7 +1143,10 @@ fn install_local_wheel() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "tomli @ {}",
+        Url::from_file_path(archive.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -1200,8 +1211,8 @@ fn install_local_wheel() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     // "Modify" the wheel.
-    let archive_file = std::fs::File::open(&archive)?;
-    archive_file.set_modified(std::time::SystemTime::now())?;
+    // The `filetime` crate works on Windows unlike the std.
+    filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall. The wheel should be "downloaded" again.
     insta::with_settings!({
@@ -1231,8 +1242,7 @@ fn install_local_wheel() -> Result<()> {
     check_command(&venv, "import tomli", &temp_dir);
 
     // "Modify" the wheel.
-    let archive_file = std::fs::File::open(&archive)?;
-    archive_file.set_modified(std::time::SystemTime::now())?;
+    filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall into the same virtual environment. The wheel should be reinstalled.
     insta::with_settings!({
@@ -1280,7 +1290,10 @@ fn mismatched_version() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "tomli @ {}",
+        Url::from_file_path(archive.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -1328,7 +1341,10 @@ fn mismatched_name() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "tomli @ {}",
+        Url::from_file_path(archive.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -1376,7 +1392,10 @@ fn install_local_source_distribution() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("wheel @ file://{}", archive.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "wheel @ {}",
+        Url::from_file_path(archive.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -1877,7 +1896,10 @@ fn install_path_source_dist_cached() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("wheel @ file://{}", archive.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "wheel @ {}",
+        Url::from_file_path(archive.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -2004,7 +2026,10 @@ fn install_path_built_dist_cached() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("tomli @ file://{}", archive.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "tomli @ {}",
+        Url::from_file_path(archive.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -2684,7 +2709,14 @@ fn sync_editable() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        current_dir
+            .join("..")
+            .join("..")
+            .canonicalize()?
+            .to_str()
+            .unwrap(),
+    );
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
@@ -2697,7 +2729,7 @@ fn sync_editable() -> Result<()> {
         current_dir = current_dir.display(),
     })?;
 
-    let filter_path = requirements_txt.display().to_string();
+    let filter_path = regex::escape(&requirements_txt.display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2706,7 +2738,7 @@ fn sync_editable() -> Result<()> {
                 r"file://.*/../../scripts/editable-installs/poetry_editable",
                 "file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable",
             ),
-            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
+            (&workspace_dir, "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2837,7 +2869,14 @@ fn sync_editable_and_registry() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        current_dir
+            .join("..")
+            .join("..")
+            .canonicalize()?
+            .to_str()
+            .unwrap(),
+    );
 
     // Install the registry-based version of Black.
     let requirements_txt = temp_dir.child("requirements.txt");
@@ -2846,12 +2885,12 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = requirements_txt.display().to_string();
+    let filter_path = regex::escape(&requirements_txt.display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
+            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2898,7 +2937,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
+            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2940,7 +2979,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
+            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2977,7 +3016,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"),
+            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -3026,9 +3065,12 @@ fn incompatible_wheel() -> Result<()> {
     wheel.touch()?;
 
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("foo @ file://{}", wheel.path().display()))?;
+    requirements_txt.write_str(&format!(
+        "foo @ {}",
+        Url::from_file_path(wheel.path()).unwrap()
+    ))?;
 
-    let wheel_dir = wheel_dir.path().canonicalize()?.display().to_string();
+    let wheel_dir = regex::escape(&wheel_dir.path().canonicalize()?.display().to_string());
     let filters: Vec<_> = iter::once((wheel_dir.as_str(), "[TEMP_DIR]"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
@@ -3147,7 +3189,7 @@ fn find_links() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = project_root.display().to_string();
+    let project_root_string = regex::escape(&project_root.display().to_string());
     let filters: Vec<_> = iter::once((project_root_string.as_str(), "[PROJECT_ROOT]"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();

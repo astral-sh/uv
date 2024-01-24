@@ -89,11 +89,13 @@ impl<T: AsRef<Path>> InstallLocation<T> {
 
     /// Returns the location of the `python` interpreter.
     pub fn python(&self) -> PathBuf {
-        if cfg!(windows) {
-            self.venv_root.as_ref().join("Scripts").join("python.exe")
-        } else {
+        if cfg!(unix) {
             // canonicalize on python would resolve the symlink
             self.venv_root.as_ref().join("bin").join("python")
+        } else if cfg!(windows) {
+            self.venv_root.as_ref().join("Scripts").join("python.exe")
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
         }
     }
 

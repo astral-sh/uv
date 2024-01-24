@@ -2,6 +2,7 @@ import json
 import os
 import platform
 import sys
+import sysconfig
 
 
 def format_full_version(info):
@@ -35,6 +36,7 @@ interpreter_info = {
     "markers": markers,
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,
+    "stdlib": sysconfig.get_path("stdlib"),
     "sys_executable": sys.executable,
 }
 print(json.dumps(interpreter_info))

@@ -45,17 +45,12 @@ impl Virtualenv {
 
     /// Returns the location of the python interpreter
     pub fn python_executable(&self) -> PathBuf {
-        #[cfg(unix)]
-        {
-            self.root.join("bin").join("python")
-        }
-        #[cfg(windows)]
-        {
-            self.root.join("Scripts").join("python.exe")
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("Only windows and unix (linux, mac os, etc.) are supported")
+        if cfg!(unix) {
+            self.bin_dir().join("python")
+        } else if cfg!(windows) {
+            self.bin_dir().join("python.exe")
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
         }
     }
 
@@ -82,17 +77,12 @@ impl Virtualenv {
     }
 
     pub fn bin_dir(&self) -> PathBuf {
-        #[cfg(unix)]
-        {
+        if cfg!(unix) {
             self.root().join("bin")
-        }
-        #[cfg(windows)]
-        {
+        } else if cfg!(windows) {
             self.root().join("Scripts")
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("only unix (like mac and linux) and windows are supported")
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
         }
     }
 

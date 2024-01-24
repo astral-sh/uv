@@ -26,6 +26,7 @@ pub struct Interpreter {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
+    pub(crate) stdlib: PathBuf,
     pub(crate) sys_executable: PathBuf,
     tags: OnceCell<Tags>,
 }
@@ -51,6 +52,7 @@ impl Interpreter {
             markers: info.markers,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
+            stdlib: info.stdlib,
             sys_executable: info.sys_executable,
             tags: OnceCell::new(),
         })
@@ -63,12 +65,14 @@ impl Interpreter {
         base_exec_prefix: PathBuf,
         base_prefix: PathBuf,
         sys_executable: PathBuf,
+        stdlib: PathBuf,
     ) -> Self {
         Self {
             platform: PythonPlatform(platform),
             markers,
             base_exec_prefix,
             base_prefix,
+            stdlib,
             sys_executable,
             tags: OnceCell::new(),
         }
@@ -280,6 +284,11 @@ impl Interpreter {
     pub fn base_prefix(&self) -> &Path {
         &self.base_prefix
     }
+
+    /// `sysconfig.get_path("stdlib")`
+    pub fn stdlib(&self) -> &Path {
+        &self.stdlib
+    }
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
     }
@@ -290,6 +299,7 @@ pub(crate) struct InterpreterQueryResult {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
+    pub(crate) stdlib: PathBuf,
     pub(crate) sys_executable: PathBuf,
 }
 
@@ -443,6 +453,7 @@ impl Timestamp {
     }
 }
 
+#[cfg(unix)]
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -458,7 +469,6 @@ mod tests {
     use crate::Interpreter;
 
     #[test]
-    #[cfg(unix)]
     fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
         let mocked_interpreter = mock_dir.path().join("python");
@@ -479,6 +489,7 @@ mod tests {
                 },
                 "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+                "stdlib": "/usr/lib/python3.12",
                 "sys_executable": "/home/ferris/projects/puffin/.venv/bin/python"
             }
         "##};

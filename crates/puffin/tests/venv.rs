@@ -16,17 +16,18 @@ fn create_venv() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
+    let filter_venv = regex::escape(&venv.display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
-            (temp_dir.to_str().unwrap(), "/home/ferris/project"),
+            (&filter_venv, "/home/ferris/project/.venv"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("venv")
             .arg(venv.as_os_str())
             .arg("--python")
-            .arg("python3.12")
+            .arg("3.12")
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
@@ -48,16 +49,17 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
+    let filter_venv = regex::escape(&venv.display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
-            (temp_dir.to_str().unwrap(), "/home/ferris/project"),
+            (&filter_venv, "/home/ferris/project/.venv"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("venv")
             .arg("--python")
-            .arg("python3.12")
+            .arg("3.12")
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
@@ -79,10 +81,11 @@ fn seed() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
+    let filter_venv = regex::escape(&venv.display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
-            (temp_dir.to_str().unwrap(), "/home/ferris/project"),
+            (&filter_venv, "/home/ferris/project/.venv"),
         ]
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -90,7 +93,7 @@ fn seed() -> Result<()> {
             .arg(venv.as_os_str())
             .arg("--seed")
             .arg("--python")
-            .arg("python3.12")
+            .arg("3.12")
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0

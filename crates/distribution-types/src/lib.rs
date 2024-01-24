@@ -864,8 +864,22 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        assert!(std::mem::size_of::<Dist>() <= 240);
-        assert!(std::mem::size_of::<BuiltDist>() <= 240);
-        assert!(std::mem::size_of::<SourceDist>() <= 168);
+        // At time of writing, Unix is at 240, Windows is at 248.
+        assert!(
+            std::mem::size_of::<Dist>() <= 248,
+            "{}",
+            std::mem::size_of::<Dist>()
+        );
+        assert!(
+            std::mem::size_of::<BuiltDist>() <= 248,
+            "{}",
+            std::mem::size_of::<BuiltDist>()
+        );
+        // At time of writing, unix is at 168, windows is at 176.
+        assert!(
+            std::mem::size_of::<SourceDist>() <= 176,
+            "{}",
+            std::mem::size_of::<SourceDist>()
+        );
     }
 }

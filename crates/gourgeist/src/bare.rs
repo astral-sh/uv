@@ -5,8 +5,6 @@ use std::io::{BufWriter, Write};
 
 use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
-#[cfg(unix)]
-use fs_err::os::unix::fs::symlink;
 use fs_err::File;
 use tracing::info;
 
@@ -76,41 +74,33 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     fs::create_dir_all(location)?;
     // TODO(konstin): I bet on windows we'll have to strip the prefix again
     let location = location.canonicalize_utf8()?;
-    let bin_dir = {
-        #[cfg(unix)]
-        {
-            location.join("bin")
-        }
-        #[cfg(windows)]
-        {
-            location.join("Scripts")
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("only unix (like mac and linux) and windows are supported")
-        }
+    let bin_name = if cfg!(unix) {
+        "bin"
+    } else if cfg!(windows) {
+        "Scripts"
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
     };
+    let bin_dir = location.join(bin_name);
 
     fs::write(location.join(".gitignore"), "*")?;
 
     // Different names for the python interpreter
     fs::create_dir(&bin_dir)?;
     let venv_python = {
-        #[cfg(unix)]
-        {
+        if cfg!(unix) {
             bin_dir.join("python")
-        }
-        #[cfg(windows)]
-        {
+        } else if cfg!(windows) {
             bin_dir.join("python.exe")
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            compile_error!("only unix (like mac and linux) and windows are supported")
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
         }
     };
+    // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
     #[cfg(unix)]
     {
+        use fs_err::os::unix::fs::symlink;
+
         symlink(&base_python, &venv_python)?;
         symlink(
             "python",
@@ -125,11 +115,29 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
             )),
         )?;
     }
+    #[cfg(windows)]
+    {
+        // https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267
+        // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/create/via_global_ref/builtin/cpython/cpython3.py#L78-L83
+        let shim = interpreter
+            .stdlib()
+            .join("venv")
+            .join("scripts")
+            .join("nt")
+            .join("python.exe");
+        fs_err::copy(shim, bin_dir.join("python.exe"))?;
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        compile_error!("Only Windows and Unix are supported")
+    }
 
     // Add all the activate scripts for different shells
+    // TODO(konstin): That's unix!
     for (name, template) in ACTIVATE_TEMPLATES {
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
+            .replace("{{ BIN_NAME }}", bin_name)
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
@@ -142,15 +150,26 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     }
 
     // pyvenv.cfg
-    let python_home = base_python
-        .parent()
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "The python interpreter needs to have a parent directory",
-            )
-        })?
-        .to_string();
+    let python_home = if cfg!(unix) {
+        // On Linux and Mac, Python is symlinked so the base home is the parent of the resolved-by-canonicalize path.
+        base_python
+            .parent()
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "The python interpreter needs to have a parent directory",
+                )
+            })?
+            .to_string()
+    } else if cfg!(windows) {
+        // `virtualenv` seems to rely on the undocumented, private `sys._base_executable`. When I tried,
+        // `sys.base_prefix` was the same as the parent of `sys._base_executable`, but a much simpler logic and
+        // documented.
+        // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/discovery/py_info.py#L136-L156
+        interpreter.base_prefix().display().to_string()
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    };
     let pyvenv_cfg_data = &[
         ("home", python_home),
         ("implementation", "CPython".to_string()),
@@ -175,15 +194,20 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data)?;
     drop(pyvenv_cfg);
 
-    // TODO: This is different on windows
-    let site_packages = location
-        .join("lib")
-        .join(format!(
-            "python{}.{}",
-            interpreter.python_major(),
-            interpreter.python_minor(),
-        ))
-        .join("site-packages");
+    let site_packages = if cfg!(unix) {
+        location
+            .join("lib")
+            .join(format!(
+                "python{}.{}",
+                interpreter.python_major(),
+                interpreter.python_minor(),
+            ))
+            .join("site-packages")
+    } else if cfg!(windows) {
+        location.join("Lib").join("site-packages")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    };
     fs::create_dir_all(&site_packages)?;
     // Install _virtualenv.py patch.
     // Frankly no idea what that does, i just copied it from virtualenv knowing that

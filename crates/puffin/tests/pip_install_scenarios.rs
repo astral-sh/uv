@@ -14,12 +14,12 @@ use assert_cmd::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{create_venv, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(venv))
         .arg("-c")
         .arg(command)
         .current_dir(temp_dir)
