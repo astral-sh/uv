@@ -65,7 +65,7 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 fn {{module_name}}() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python{{environment.python}}");
+    let venv = create_venv(&temp_dir, &cache_dir, "{{environment.python}}");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();

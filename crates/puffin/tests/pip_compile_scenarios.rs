@@ -37,7 +37,7 @@ mod common;
 fn requires_incompatible_python_version_compatible_override() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -97,7 +97,7 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
 fn requires_compatible_python_version_incompatible_override() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python3.11");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.11");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -157,7 +157,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
 fn requires_incompatible_python_version_compatible_override_no_wheels() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -220,7 +220,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 fn requires_incompatible_python_version_compatible_override_no_compatible_wheels() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -285,7 +285,7 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
 fn requires_incompatible_python_version_compatible_override_other_wheel() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "python3.9");
+    let venv = create_venv(&temp_dir, &cache_dir, "3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
