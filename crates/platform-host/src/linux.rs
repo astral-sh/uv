@@ -1,14 +1,16 @@
 //! Taken from `glibc_version` (<https://github.com/delta-incubator/glibc-version-rs>),
 //! which used the Apache 2.0 license (but not the MIT license)
 
-use crate::{Os, PlatformError};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
 use fs_err as fs;
 use goblin::elf::Elf;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use tracing::trace;
+
+use crate::{Os, PlatformError};
 
 // glibc version is taken from std/sys/unix/os.rs
 fn glibc_version_from_ldd() -> Result<Os, PlatformError> {

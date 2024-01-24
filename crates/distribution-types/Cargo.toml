@@ -21,7 +21,6 @@ platform-tags = { path = "../platform-tags" }
 puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
 
 anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }

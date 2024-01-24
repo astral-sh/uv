@@ -31,11 +31,9 @@ puffin-normalize = { path = "../puffin-normalize" }
 puffin-traits = { path = "../puffin-traits" }
 puffin-warnings = { path = "../puffin-warnings" }
 pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-bitflags = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }

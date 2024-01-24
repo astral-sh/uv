@@ -44,7 +44,6 @@ flate2 = { workspace = true, default-features = false }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-bitflags = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 fs-err = { workspace = true, features = ["tokio"] }
