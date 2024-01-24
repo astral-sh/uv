@@ -16,6 +16,7 @@
 
 #![deny(missing_docs)]
 
+use std::borrow::Cow;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -714,10 +715,32 @@ fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Verbatim
         });
     }
 
-    // Create a `VerbatimUrl` to represent the requirement.
+    let url = preprocess_url(url, working_dir, cursor, start, len)?;
+
+    Ok(url)
+}
+
+/// Create a `VerbatimUrl` to represent the requirement.
+fn preprocess_url(
+    url: &str,
+    working_dir: Option<&Path>,
+    cursor: &Cursor,
+    start: usize,
+    len: usize,
+) -> Result<VerbatimUrl, Pep508Error> {
     let url = if let Some((scheme, path)) = split_scheme(url) {
         if scheme == "file" {
             if let Some(path) = path.strip_prefix("//") {
+                let path = if cfg!(windows) {
+                    // Transform `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`
+                    Cow::Owned(
+                        path.strip_prefix('/')
+                            .unwrap_or(path)
+                            .replace('/', std::path::MAIN_SEPARATOR_STR),
+                    )
+                } else {
+                    Cow::Borrowed(path)
+                };
                 // Ex) `file:///home/ferris/project/scripts/...`
                 if let Some(working_dir) = working_dir {
                     VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
@@ -770,7 +793,6 @@ fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Verbatim
                 .with_given(url.to_string())
         }
     };
-
     Ok(url)
 }
 
@@ -1002,6 +1024,24 @@ mod tests {
 
     fn assert_err(input: &str, error: &str) {
         assert_eq!(Requirement::from_str(input).unwrap_err().to_string(), error);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_preprocess_url_windows() {
+        use std::path::PathBuf;
+
+        let actual = crate::preprocess_url(
+            "file:///C:/Users/ferris/wheel-0.42.0.tar.gz",
+            None,
+            &Cursor::new(""),
+            0,
+            0,
+        )
+        .unwrap()
+        .to_file_path();
+        let expected = PathBuf::from(r"C:\Users\ferris\wheel-0.42.0.tar.gz");
+        assert_eq!(actual, Ok(expected));
     }
 
     #[test]

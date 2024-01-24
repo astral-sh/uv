@@ -744,7 +744,8 @@ mod test {
         let err = RequirementsTxt::parse(basic, &working_dir).unwrap_err();
         let errors = anyhow::Error::new(err)
             .chain()
-            .map(ToString::to_string)
+            // Windows support
+            .map(|err| err.to_string().replace('\\', "/"))
             .collect::<Vec<_>>();
         let expected = &[
             "Unsupported URL (expected a `file://` scheme) in `./test-data/requirements-txt/unsupported-editable.txt`: http://localhost:8080/".to_string()

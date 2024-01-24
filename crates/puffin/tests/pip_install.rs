@@ -12,7 +12,7 @@ use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv_py312, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
@@ -20,7 +20,9 @@ mod common;
 static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
-    Command::new(venv.join("bin").join("python"))
+    Command::new(venv_to_interpreter(venv))
+        // https://github.com/python/cpython/issues/75953
+        .arg("-B")
         .arg("-c")
         .arg(command)
         .current_dir(temp_dir)
@@ -33,15 +35,18 @@ fn missing_requirements_txt() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let requirements_txt = temp_dir.child("requirements.txt");
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("install")
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(&temp_dir), @r###"
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -50,6 +55,7 @@ fn missing_requirements_txt() -> Result<()> {
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###);
+    });
 
     requirements_txt.assert(predicates::path::missing());
 
@@ -458,9 +464,16 @@ fn install_editable() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        current_dir
+            .join("..")
+            .join("..")
+            .canonicalize()?
+            .to_str()
+            .unwrap(),
+    );
 
-    let filters = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+    let filters = iter::once((workspace_dir.as_str(), "[WORKSPACE_DIR]"))
         .chain(INSTA_FILTERS.to_vec())
         .collect::<Vec<_>>();
 
@@ -566,9 +579,16 @@ fn install_editable_and_registry() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = current_dir.join("..").join("..").canonicalize()?;
+    let workspace_dir = regex::escape(
+        current_dir
+            .join("..")
+            .join("..")
+            .canonicalize()?
+            .to_str()
+            .unwrap(),
+    );
 
-    let filters: Vec<_> = iter::once((workspace_dir.to_str().unwrap(), "[WORKSPACE_DIR]"))
+    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "[WORKSPACE_DIR]"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 

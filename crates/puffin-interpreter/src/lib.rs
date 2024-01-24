@@ -6,7 +6,7 @@ use thiserror::Error;
 
 pub use crate::cfg::Configuration;
 pub use crate::interpreter::Interpreter;
-pub use crate::python_query::find_requested_python;
+pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
 pub use crate::virtual_env::Virtualenv;
 
@@ -41,10 +41,14 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to run `py --list-paths` to find Python installations")]
+    #[error("Failed to run `py --list-paths` to find Python installations. Do you need to install Python?")]
     PyList(#[source] io::Error),
     #[error("No Python {major}.{minor} found through `py --list-paths`")]
     NoSuchPython { major: u8, minor: u8 },
+    #[error("Neither `python` nor `python3` are in `PATH`. Do you need to install Python?")]
+    NoPythonInstalledUnix,
+    #[error("Could not find `python.exe` in PATH and `py --list-paths` did not list any Python versions. Do you need to install Python?")]
+    NoPythonInstalledWindows,
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     PythonSubcommandOutput {
         message: String,

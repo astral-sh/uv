@@ -731,9 +731,9 @@ impl MarkerExpression {
     /// # use std::str::FromStr;
     /// # use pep508_rs::{MarkerTree, Pep508Error};
     /// # use pep440_rs::Version;
+    /// # use puffin_normalize::ExtraName;
     ///
     /// # fn main() -> Result<(), Pep508Error> {
-    /// use puffin_normalize::ExtraName;
     /// let marker_tree = MarkerTree::from_str(r#"("linux" in sys_platform) and extra == 'day'"#)?;
     /// let versions: Vec<Version> = (8..12).map(|minor| Version::new([3, minor])).collect();
     /// assert!(marker_tree.evaluate_extras_and_python_version(&[ExtraName::from_str("day").unwrap()].into(), &versions));

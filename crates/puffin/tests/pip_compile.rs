@@ -5,7 +5,6 @@ use std::process::Command;
 use std::{fs, iter};
 
 use anyhow::{bail, Context, Result};
-use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use assert_fs::TempDir;
 use indoc::indoc;
@@ -13,7 +12,9 @@ use insta::assert_snapshot;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use itertools::Itertools;
+use url::Url;
 
+use crate::common::create_venv;
 use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
 
 mod common;
@@ -69,13 +70,16 @@ fn missing_requirements_in() -> Result<()> {
     let cache_dir = TempDir::new()?;
     let requirements_in = temp_dir.child("requirements.in");
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("compile")
-        .arg("requirements.in")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(&temp_dir), @r###"
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -84,6 +88,8 @@ fn missing_requirements_in() -> Result<()> {
     error: failed to open file `requirements.in`
       Caused by: No such file or directory (os error 2)
     "###);
+        }
+    );
 
     requirements_in.assert(predicates::path::missing());
 
@@ -96,14 +102,17 @@ fn missing_venv() -> Result<()> {
     let cache_dir = TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("compile")
-        .arg("requirements.in")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir), @r###"
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -112,6 +121,7 @@ fn missing_venv() -> Result<()> {
     error: failed to open file `requirements.in`
       Caused by: No such file or directory (os error 2)
     "###);
+    });
 
     venv.assert(predicates::path::missing());
 
@@ -768,20 +778,7 @@ fn compile_python_dev_version() -> Result<()> {
 fn compile_numpy_py38() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let cache_dir = TempDir::new()?;
-    let venv = temp_dir.child(".venv");
-
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg("python3.8")
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
-    let venv = venv.to_path_buf();
+    let venv = create_venv(&temp_dir, &cache_dir, "3.8");
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("numpy")?;
@@ -2064,7 +2061,10 @@ fn compile_wheel_path_dependency() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
+    requirements_in.write_str(&format!(
+        "flask @ {}",
+        Url::from_file_path(flask_wheel.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -2256,7 +2256,10 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
+    requirements_in.write_str(&format!(
+        "flask @ {}",
+        Url::from_file_path(flask_wheel.path()).unwrap()
+    ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
     let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
@@ -2767,7 +2770,7 @@ fn compile_editable() -> Result<()> {
         "
     })?;
 
-    let filter_path = requirements_in.display().to_string();
+    let filter_path = regex::escape(&requirements_in.display().to_string());
     let filters: Vec<_> = iter::once((filter_path.as_str(), "requirements.in"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
@@ -3246,7 +3249,7 @@ fn find_links_directory() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = project_root.display().to_string();
+    let project_root_string = regex::escape(&project_root.display().to_string());
     let filters: Vec<_> = iter::once((project_root_string.as_str(), "[PROJECT_ROOT]"))
         .chain(INSTA_FILTERS.to_vec())
         .collect();
@@ -3560,8 +3563,13 @@ fn missing_path_requirement() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("django @ file:///tmp/django-3.2.8.tar.gz")?;
 
+    let filters: Vec<_> = [(r"/[A-Z]:/", "/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3595,9 +3603,15 @@ fn missing_editable_requirement() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../tmp/django-3.2.8.tar.gz")?;
 
-    let filters: Vec<_> = iter::once((r"(file:/)?/.*/", "file://[TEMP_DIR]/"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
+    // File url, absolute Unix path or absolute Windows path
+    let filters: Vec<_> = [
+        (r" file://.*/", " file://[TEMP_DIR]/"),
+        (r" /.*/", " /[TEMP_DIR]/"),
+        (r" [A-Z]:\\.*\\", " /[TEMP_DIR]/"),
+    ]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect::<Vec<_>>();
 
     insta::with_settings!({
         filters => filters
@@ -3619,7 +3633,7 @@ fn missing_editable_requirement() -> Result<()> {
         ----- stderr -----
         error: Failed to build editables
           Caused by: Failed to build editable: file://[TEMP_DIR]/django-3.2.8.tar.gz
-          Caused by: Source distribution not found at: file://[TEMP_DIR]/django-3.2.8.tar.gz
+          Caused by: Source distribution not found at: /[TEMP_DIR]/django-3.2.8.tar.gz
         "###);
     });
 

@@ -5,7 +5,7 @@ use std::process::Command;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use tracing::info_span;
+use tracing::{info_span, instrument};
 
 use crate::Error;
 
@@ -25,6 +25,7 @@ static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
 ///   Specifying a patch version is not supported.
 /// * `-p python3.10` or `-p python.exe` looks for a binary in `PATH`.
 /// * `-p /home/ferris/.local/bin/python3.10` uses this exact Python.
+#[instrument]
 pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
     let major_minor = request
         .split_once('.')
@@ -49,11 +50,37 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
     }
 }
 
+/// Pick a sensible default for the python a user wants when they didn't specify a version.
+#[instrument]
+pub fn find_default_python() -> Result<PathBuf, Error> {
+    let python = if cfg!(unix) {
+        which::which_global("python3")
+            .or_else(|_| which::which_global("python"))
+            .map_err(|_| Error::NoPythonInstalledUnix)?
+    } else if cfg!(windows) {
+        // TODO(konstin): Is that the right order, or should we look for `py --list-paths` first? With the current way
+        // it works even if the python launcher is not installed.
+        if let Ok(python) = which::which_global("python.exe") {
+            python
+        } else {
+            installed_pythons_windows()?
+                .into_iter()
+                .next()
+                .ok_or(Error::NoPythonInstalledWindows)?
+                .2
+        }
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    };
+    return Ok(fs_err::canonicalize(python)?);
+}
+
 /// Run `py --list-paths` to find the installed pythons.
 ///
 /// The command takes 8ms on my machine. TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python
 /// installations from the registry instead.
 fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
+    // TODO(konstin): Special case the not found error
     let output = info_span!("py_list_paths")
         .in_scope(|| Command::new("py").arg("--list-paths").output())
         .map_err(Error::PyList)?;
@@ -77,7 +104,7 @@ fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
             stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         })?;
-    Ok(PY_LIST_PATHS
+    let pythons = PY_LIST_PATHS
         .captures_iter(&stdout)
         .filter_map(|captures| {
             let (_, [major, minor, path]) = captures.extract();
@@ -87,7 +114,8 @@ fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
                 PathBuf::from(path),
             ))
         })
-        .collect())
+        .collect();
+    Ok(pythons)
 }
 
 pub(crate) fn find_python_windows(major: u8, minor: u8) -> Result<Option<PathBuf>, Error> {
@@ -138,6 +166,7 @@ mod tests {
         "###);
     }
 
+    #[cfg(unix)]
     #[test]
     fn no_such_python_path() {
         assert_display_snapshot!(
@@ -145,5 +174,22 @@ mod tests {
         failed to canonicalize path `/does/not/exists/python3.12`
           Caused by: No such file or directory (os error 2)
         "###);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn no_such_python_path() {
+        insta::with_settings!({
+            filters => vec![
+                // The exact message is host language dependent
+                ("Caused by: .* (os error 3)", "Caused by: The system cannot find the path specified. (os error 3)")
+            ]
+        }, {
+            assert_display_snapshot!(
+                format_err(find_requested_python(r"C:\does\not\exists\python3.12")), @r###"
+        failed to canonicalize path `C:\does\not\exists\python3.12`
+          Caused by: The system cannot find the path specified. (os error 3)
+        "###);
+        });
     }
 }
