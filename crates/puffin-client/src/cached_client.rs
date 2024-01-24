@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::future::Future;
 use std::time::SystemTime;
 
@@ -13,6 +14,38 @@ use puffin_cache::{CacheEntry, Freshness};
 use puffin_fs::write_atomic;
 
 use crate::{cache_headers::CacheHeaders, Error, ErrorKind};
+
+pub trait Cacheable: Sized + Send {
+    type Target;
+
+    fn from_bytes(bytes: Vec<u8>) -> Result<Self::Target, crate::Error>;
+    fn to_bytes(&self) -> Result<Vec<u8>, crate::Error>;
+    fn into_target(self) -> Self::Target;
+}
+
+/// A wrapper type that makes anything with Serde support automatically
+/// implement Cacheable.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct SerdeCacheable<T> {
+    inner: T,
+}
+
+impl<T: Send + Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
+    type Target = T;
+
+    fn from_bytes(bytes: Vec<u8>) -> Result<T, Error> {
+        Ok(rmp_serde::from_slice::<T>(&bytes).map_err(ErrorKind::Decode)?)
+    }
+
+    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        Ok(rmp_serde::to_vec(&self.inner).map_err(ErrorKind::Encode)?)
+    }
+
+    fn into_target(self) -> Self::Target {
+        self.inner
+    }
+}
 
 /// Either a cached client error or a (user specified) error from the callback
 #[derive(Debug)]
@@ -43,11 +76,11 @@ impl<E: Into<Error>> From<CachedClientError<E>> for Error {
 }
 
 #[derive(Debug)]
-enum CachedResponse<Payload: Serialize> {
+enum CachedResponse {
     /// The cached response is fresh without an HTTP request (e.g. immutable)
-    FreshCache(Payload),
+    FreshCache(Vec<u8>),
     /// The cached response is fresh after an HTTP request (e.g. 304 not modified)
-    NotModified(DataWithCachePolicy<Payload>),
+    NotModified(DataWithCachePolicy),
     /// There was no prior cached response or the cache was outdated
     ///
     /// The cache policy is `None` if it isn't storable
@@ -56,8 +89,8 @@ enum CachedResponse<Payload: Serialize> {
 
 /// Serialize the actual payload together with its caching information.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DataWithCachePolicy<Payload: Serialize> {
-    pub data: Payload,
+pub struct DataWithCachePolicy {
+    pub data: Vec<u8>,
     /// Whether the response should be considered immutable.
     immutable: bool,
     /// The [`CachePolicy`] is used to determine if the response is fresh or stale.
@@ -117,6 +150,32 @@ impl CachedClient {
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
+        let payload = self
+            .get_cached_with_callback2(req, cache_entry, cache_control, move |resp| async {
+                let payload = response_callback(resp).await?;
+                Ok(SerdeCacheable { inner: payload })
+            })
+            .await?;
+        Ok(payload)
+    }
+
+    #[instrument(skip_all)]
+    pub async fn get_cached_with_callback2<
+        Payload: Cacheable,
+        CallBackError,
+        Callback,
+        CallbackReturn,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
+    where
+        Callback: FnOnce(Response) -> CallbackReturn,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+    {
         let read_span = info_span!("read_cache", file = %cache_entry.path().display());
         let read_result = fs_err::tokio::read(cache_entry.path())
             .instrument(read_span)
@@ -126,8 +185,8 @@ impl CachedClient {
                 "parse_cache",
                 path = %cache_entry.path().display()
             );
-            let parse_result = parse_span
-                .in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached));
+            let parse_result =
+                parse_span.in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy>(&cached));
             match parse_result {
                 Ok(data) => Some(data),
                 Err(err) => {
@@ -147,7 +206,7 @@ impl CachedClient {
 
         let write_cache = info_span!("write_cache", file = %cache_entry.path().display());
         match cached_response {
-            CachedResponse::FreshCache(data) => Ok(data),
+            CachedResponse::FreshCache(data) => Ok(Payload::from_bytes(data)?),
             CachedResponse::NotModified(data_with_cache_policy) => {
                 async {
                     let data =
@@ -155,7 +214,7 @@ impl CachedClient {
                     write_atomic(cache_entry.path(), data)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
-                    Ok(data_with_cache_policy.data)
+                    Ok(Payload::from_bytes(data_with_cache_policy.data)?)
                 }
                 .instrument(write_cache)
                 .await
@@ -169,7 +228,7 @@ impl CachedClient {
                     .map_err(|err| CachedClientError::Callback(err))?;
                 if let Some(cache_policy) = cache_policy {
                     let data_with_cache_policy = DataWithCachePolicy {
-                        data,
+                        data: data.to_bytes()?,
                         immutable,
                         cache_policy,
                     };
@@ -177,29 +236,29 @@ impl CachedClient {
                         fs_err::tokio::create_dir_all(cache_entry.dir())
                             .await
                             .map_err(ErrorKind::CacheWrite)?;
-                        let data = rmp_serde::to_vec(&data_with_cache_policy)
+                        let envelope = rmp_serde::to_vec(&data_with_cache_policy)
                             .map_err(ErrorKind::Encode)?;
-                        write_atomic(cache_entry.path(), data)
+                        write_atomic(cache_entry.path(), envelope)
                             .await
                             .map_err(ErrorKind::CacheWrite)?;
-                        Ok(data_with_cache_policy.data)
+                        Ok(data.into_target())
                     }
                     .instrument(write_cache)
                     .await
                 } else {
-                    Ok(data)
+                    Ok(data.into_target())
                 }
             }
         }
     }
 
     /// `http-cache-semantics` to `reqwest` wrapper
-    async fn send_cached<T: Serialize + DeserializeOwned>(
+    async fn send_cached(
         &self,
         mut req: Request,
         cache_control: CacheControl,
-        cached: Option<DataWithCachePolicy<T>>,
-    ) -> Result<CachedResponse<T>, Error> {
+        cached: Option<DataWithCachePolicy>,
+    ) -> Result<CachedResponse, Error> {
         // The converted types are from the specific `reqwest` types to the more generic `http`
         // types.
         let mut converted_req = http::Request::try_from(
@@ -300,11 +359,11 @@ impl CachedClient {
     }
 
     #[instrument(skip_all, fields(url = req.url().as_str()))]
-    async fn fresh_request<T: Serialize>(
+    async fn fresh_request(
         &self,
         req: Request,
         converted_req: http::Request<reqwest::Body>,
-    ) -> Result<CachedResponse<T>, Error> {
+    ) -> Result<CachedResponse, Error> {
         trace!("{} {}", req.method(), req.url());
         let res = self
             .0
