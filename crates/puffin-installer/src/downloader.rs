@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
@@ -193,29 +193,27 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     /// Unzip a locally-available wheel into the cache.
     async fn unzip_wheel(&self, download: LocalWheel) -> Result<CachedDist, Error> {
         // Just an optimization: Avoid spawning a blocking task if there is no work to be done.
-        if matches!(download, LocalWheel::Unzipped(_)) {
+        if let LocalWheel::Unzipped(download) = download {
             return Ok(download.into_cached_dist());
         }
 
         // Unzip the wheel.
-        tokio::task::spawn_blocking({
+        let archive = tokio::task::spawn_blocking({
             let download = download.clone();
             let cache = self.cache.clone();
-            move || -> Result<(), puffin_extract::Error> {
+            move || -> Result<PathBuf, puffin_extract::Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(cache.root())?;
                 download.unzip(temp_dir.path())?;
 
                 // Persist the temporary directory to the directory store.
-                cache.persist(temp_dir.into_path(), download.target())?;
-
-                Ok(())
+                Ok(cache.persist(temp_dir.into_path(), download.target())?)
             }
         })
         .await?
         .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
 
-        Ok(download.into_cached_dist())
+        Ok(download.into_cached_dist(archive))
     }
 }
 

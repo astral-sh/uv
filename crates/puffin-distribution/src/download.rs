@@ -10,8 +10,9 @@ pub struct UnzippedWheel {
     pub(crate) dist: Dist,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
-    /// The path in the cache dir where the wheel was downloaded.
-    pub(crate) target: PathBuf,
+    /// The canonicalized path in the cache directory to which the wheel was downloaded.
+    /// Typically, a directory within the archive bucket.
+    pub(crate) archive: PathBuf,
 }
 
 /// A downloaded wheel that's stored on-disk.
@@ -24,6 +25,7 @@ pub struct DiskWheel {
     /// The path to the downloaded wheel.
     pub(crate) path: PathBuf,
     /// The expected path to the downloaded wheel's entry in the cache.
+    /// Typically, a symlink within the wheels or built wheels bucket.
     pub(crate) target: PathBuf,
 }
 
@@ -37,6 +39,7 @@ pub struct BuiltWheel {
     /// The path to the built wheel.
     pub(crate) path: PathBuf,
     /// The expected path to the downloaded wheel's entry in the cache.
+    /// Typically, a symlink within the wheels or built wheels bucket.
     pub(crate) target: PathBuf,
 }
 
@@ -52,7 +55,7 @@ impl LocalWheel {
     /// Return the path to the downloaded wheel's entry in the cache.
     pub fn target(&self) -> &Path {
         match self {
-            LocalWheel::Unzipped(wheel) => &wheel.target,
+            LocalWheel::Unzipped(wheel) => &wheel.archive,
             LocalWheel::Disk(wheel) => &wheel.target,
             LocalWheel::Built(wheel) => &wheel.target,
         }
@@ -77,16 +80,14 @@ impl LocalWheel {
     }
 
     /// Convert a [`LocalWheel`] into a [`CachedDist`].
-    pub fn into_cached_dist(self) -> CachedDist {
+    pub fn into_cached_dist(self, archive: PathBuf) -> CachedDist {
         match self {
             LocalWheel::Unzipped(wheel) => {
-                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+                CachedDist::from_remote(wheel.dist, wheel.filename, archive)
             }
-            LocalWheel::Disk(wheel) => {
-                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
-            }
+            LocalWheel::Disk(wheel) => CachedDist::from_remote(wheel.dist, wheel.filename, archive),
             LocalWheel::Built(wheel) => {
-                CachedDist::from_remote(wheel.dist, wheel.filename, wheel.target)
+                CachedDist::from_remote(wheel.dist, wheel.filename, archive)
             }
         }
     }
@@ -96,6 +97,11 @@ impl UnzippedWheel {
     /// Return the [`Dist`] from which this wheel was downloaded.
     pub fn remote(&self) -> &Dist {
         &self.dist
+    }
+
+    /// Convert an [`UnzippedWheel`] into a [`CachedDist`].
+    pub fn into_cached_dist(self) -> CachedDist {
+        CachedDist::from_remote(self.dist, self.filename, self.archive)
     }
 }
 

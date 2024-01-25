@@ -134,19 +134,24 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                         // If the file is already unzipped, and the unzipped directory is fresh,
                         // return it.
-                        if let (Some(cache_metadata), Some(path_metadata)) = (
-                            metadata_if_exists(cache_entry.path())?,
-                            metadata_if_exists(path)?,
-                        ) {
-                            let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                            let path_modified = Timestamp::from_metadata(&path_metadata);
-                            if cache_modified >= path_modified {
-                                return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                    dist: dist.clone(),
-                                    target: cache_entry.into_path_buf(),
-                                    filename: wheel.filename.clone(),
-                                }));
+                        match cache_entry.path().canonicalize() {
+                            Ok(archive) => {
+                                if let (Some(cache_metadata), Some(path_metadata)) =
+                                    (metadata_if_exists(&archive)?, metadata_if_exists(path)?)
+                                {
+                                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
+                                    let path_modified = Timestamp::from_metadata(&path_metadata);
+                                    if cache_modified >= path_modified {
+                                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                            dist: dist.clone(),
+                                            archive,
+                                            filename: wheel.filename.clone(),
+                                        }));
+                                    }
+                                }
                             }
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                            Err(err) => return Err(err.into()),
                         }
 
                         // Otherwise, unzip the file.
@@ -179,10 +184,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        self.cache
-                            .persist(temp_dir.into_path(), wheel_entry.path())?;
-
-                        Ok(())
+                        Ok(self
+                            .cache
+                            .persist(temp_dir.into_path(), wheel_entry.path())?)
                     }
                     .instrument(info_span!("download", wheel = %wheel))
                 };
@@ -190,7 +194,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let req = self.client.cached_client().uncached().get(url).build()?;
                 let cache_control =
                     CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
-                self.client
+                let archive = self
+                    .client
                     .cached_client()
                     .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
@@ -201,7 +206,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target: wheel_entry.into_path_buf(),
+                    archive,
                     filename: wheel.filename.clone(),
                 }))
             }
@@ -231,10 +236,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        self.cache
-                            .persist(temp_dir.into_path(), wheel_entry.path())?;
-
-                        Ok(())
+                        Ok(self
+                            .cache
+                            .persist(temp_dir.into_path(), wheel_entry.path())?)
                     }
                     .instrument(info_span!("download", wheel = %wheel))
                 };
@@ -247,7 +251,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .build()?;
                 let cache_control =
                     CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
-                self.client
+                let archive = self
+                    .client
                     .cached_client()
                     .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
@@ -258,7 +263,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    target: wheel_entry.into_path_buf(),
+                    archive,
                     filename: wheel.filename.clone(),
                 }))
             }
@@ -276,19 +281,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // If the file is already unzipped, and the unzipped directory is fresh,
                 // return it.
-                if let (Some(cache_metadata), Some(path_metadata)) = (
-                    metadata_if_exists(cache_entry.path())?,
-                    metadata_if_exists(&wheel.path)?,
-                ) {
-                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                    let path_modified = Timestamp::from_metadata(&path_metadata);
-                    if cache_modified >= path_modified {
-                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                            dist: dist.clone(),
-                            target: cache_entry.into_path_buf(),
-                            filename: wheel.filename.clone(),
-                        }));
+                match cache_entry.path().canonicalize() {
+                    Ok(archive) => {
+                        if let (Some(cache_metadata), Some(path_metadata)) = (
+                            metadata_if_exists(&archive)?,
+                            metadata_if_exists(&wheel.path)?,
+                        ) {
+                            let cache_modified = Timestamp::from_metadata(&cache_metadata);
+                            let path_modified = Timestamp::from_metadata(&path_metadata);
+                            if cache_modified >= path_modified {
+                                return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                    dist: dist.clone(),
+                                    archive,
+                                    filename: wheel.filename.clone(),
+                                }));
+                            }
+                        }
                     }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err.into()),
                 }
 
                 Ok(LocalWheel::Disk(DiskWheel {
@@ -307,19 +318,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // If the wheel was unzipped previously, respect it. Source distributions are
                 // cached under a unique build ID, so unzipped directories are never stale.
-                if built_wheel.target.exists() {
-                    Ok(LocalWheel::Unzipped(UnzippedWheel {
+                match built_wheel.target.canonicalize() {
+                    Ok(archive) => Ok(LocalWheel::Unzipped(UnzippedWheel {
                         dist: dist.clone(),
-                        target: built_wheel.target,
+                        archive,
                         filename: built_wheel.filename,
-                    }))
-                } else {
-                    Ok(LocalWheel::Built(BuiltWheel {
-                        dist: dist.clone(),
-                        path: built_wheel.path,
-                        target: built_wheel.target,
-                        filename: built_wheel.filename,
-                    }))
+                    })),
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        Ok(LocalWheel::Built(BuiltWheel {
+                            dist: dist.clone(),
+                            path: built_wheel.path,
+                            target: built_wheel.target,
+                            filename: built_wheel.filename,
+                        }))
+                    }
+                    Err(err) => return Err(err.into()),
                 }
             }
         }

@@ -8,16 +8,42 @@ use tracing::{error, warn};
 
 use puffin_warnings::warn_user;
 
-/// Symlink a directory.
+/// Create a symlink from `src` to `dst`, replacing any existing symlink.
+///
+/// On Windows, this uses the `junction` crate to create a junction point.
 #[cfg(windows)]
-pub fn symlink_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_dir(src, dst)
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // Remove the existing symlink, if any.
+    match junction::delete(dunce::simplified(dst.as_ref())) {
+        Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    };
+
+    // Replace it with a new symlink.
+    junction::create(
+        dunce::simplified(src.as_ref()),
+        dunce::simplified(dst.as_ref()),
+    )
 }
 
-/// Symlink a directory.
+/// Create a symlink from `src` to `dst`, replacing any existing symlink.
 #[cfg(unix)]
-pub fn symlink_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    std::os::unix::fs::symlink(src, dst)
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // Create a symlink to the directory store.
+    let temp_dir =
+        tempfile::tempdir_in(dst.as_ref().parent().expect("Cache entry to have parent"))?;
+    let temp_file = temp_dir.path().join("link");
+    std::os::unix::fs::symlink(src, &temp_file)?;
+
+    // Move the symlink into the wheel cache.
+    fs_err::rename(&temp_file, dst.as_ref())?;
+
+    Ok(())
 }
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
