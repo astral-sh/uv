@@ -12,26 +12,32 @@ use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use puffin_cache::{CacheEntry, Freshness};
 use puffin_fs::write_atomic;
 
-use crate::cache_headers::CacheHeaders;
+use crate::{cache_headers::CacheHeaders, Error, ErrorKind};
 
 /// Either a cached client error or a (user specified) error from the callback
 #[derive(Debug)]
 pub enum CachedClientError<CallbackError> {
-    Client(crate::Error),
+    Client(Error),
     Callback(CallbackError),
 }
 
-impl<CallbackError> From<crate::Error> for CachedClientError<CallbackError> {
-    fn from(error: crate::Error) -> Self {
+impl<CallbackError> From<Error> for CachedClientError<CallbackError> {
+    fn from(error: Error) -> Self {
         CachedClientError::Client(error)
     }
 }
 
-impl From<CachedClientError<crate::Error>> for crate::Error {
-    fn from(error: CachedClientError<crate::Error>) -> crate::Error {
+impl<CallbackError> From<ErrorKind> for CachedClientError<CallbackError> {
+    fn from(error: ErrorKind) -> Self {
+        CachedClientError::Client(error.into())
+    }
+}
+
+impl<E: Into<Error>> From<CachedClientError<E>> for Error {
+    fn from(error: CachedClientError<E>) -> Error {
         match error {
             CachedClientError::Client(error) => error,
-            CachedClientError::Callback(error) => error,
+            CachedClientError::Callback(error) => error.into(),
         }
     }
 }
@@ -145,10 +151,10 @@ impl CachedClient {
             CachedResponse::NotModified(data_with_cache_policy) => {
                 async {
                     let data =
-                        rmp_serde::to_vec(&data_with_cache_policy).map_err(crate::Error::from)?;
+                        rmp_serde::to_vec(&data_with_cache_policy).map_err(ErrorKind::Encode)?;
                     write_atomic(cache_entry.path(), data)
                         .await
-                        .map_err(crate::Error::CacheWrite)?;
+                        .map_err(ErrorKind::CacheWrite)?;
                     Ok(data_with_cache_policy.data)
                 }
                 .instrument(write_cache)
@@ -170,12 +176,12 @@ impl CachedClient {
                     async {
                         fs_err::tokio::create_dir_all(cache_entry.dir())
                             .await
-                            .map_err(crate::Error::CacheWrite)?;
+                            .map_err(ErrorKind::CacheWrite)?;
                         let data = rmp_serde::to_vec(&data_with_cache_policy)
-                            .map_err(crate::Error::from)?;
+                            .map_err(ErrorKind::Encode)?;
                         write_atomic(cache_entry.path(), data)
                             .await
-                            .map_err(crate::Error::CacheWrite)?;
+                            .map_err(ErrorKind::CacheWrite)?;
                         Ok(data_with_cache_policy.data)
                     }
                     .instrument(write_cache)
@@ -193,13 +199,14 @@ impl CachedClient {
         mut req: Request,
         cache_control: CacheControl,
         cached: Option<DataWithCachePolicy<T>>,
-    ) -> Result<CachedResponse<T>, crate::Error> {
+    ) -> Result<CachedResponse<T>, Error> {
         // The converted types are from the specific `reqwest` types to the more generic `http`
         // types.
         let mut converted_req = http::Request::try_from(
             req.try_clone()
                 .expect("You can't use streaming request bodies with this function"),
-        )?;
+        )
+        .map_err(ErrorKind::RequestError)?;
 
         let url = req.url().clone();
         let cached_response = if let Some(cached) = cached {
@@ -246,8 +253,10 @@ impl CachedClient {
                         .0
                         .execute(req)
                         .instrument(info_span!("revalidation_request", url = url.as_str()))
-                        .await?
-                        .error_for_status()?;
+                        .await
+                        .map_err(ErrorKind::RequestMiddlewareError)?
+                        .error_for_status()
+                        .map_err(ErrorKind::RequestError)?;
                     let mut converted_res = http::Response::new(());
                     *converted_res.status_mut() = res.status();
                     for header in res.headers() {
@@ -295,9 +304,15 @@ impl CachedClient {
         &self,
         req: Request,
         converted_req: http::Request<reqwest::Body>,
-    ) -> Result<CachedResponse<T>, crate::Error> {
+    ) -> Result<CachedResponse<T>, Error> {
         trace!("{} {}", req.method(), req.url());
-        let res = self.0.execute(req).await?.error_for_status()?;
+        let res = self
+            .0
+            .execute(req)
+            .await
+            .map_err(ErrorKind::RequestMiddlewareError)?
+            .error_for_status()
+            .map_err(ErrorKind::RequestError)?;
         let mut converted_res = http::Response::new(());
         *converted_res.status_mut() = res.status();
         for header in res.headers() {

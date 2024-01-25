@@ -8,7 +8,35 @@ use puffin_normalize::PackageName;
 use crate::html;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+#[error(transparent)]
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+impl Error {
+    pub fn into_kind(self) -> ErrorKind {
+        *self.kind
+    }
+
+    pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
+        ErrorKind::BadJson { source: err, url }.into()
+    }
+
+    pub(crate) fn from_html_err(err: html::Error, url: Url) -> Self {
+        ErrorKind::BadHtml { source: err, url }.into()
+    }
+}
+
+impl From<ErrorKind> for Error {
+    fn from(kind: ErrorKind) -> Error {
+        Error {
+            kind: Box::new(kind),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ErrorKind {
     /// An invalid URL was provided.
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
@@ -58,7 +86,7 @@ pub enum Error {
     InvalidDistInfo(WheelFilename, String),
 
     #[error("{0} is not a valid wheel filename")]
-    WheelFilename(#[from] WheelFilenameError),
+    WheelFilename(#[source] WheelFilenameError),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
@@ -76,10 +104,10 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Cache deserialization failed")]
-    Decode(#[from] rmp_serde::decode::Error),
+    Decode(#[source] rmp_serde::decode::Error),
 
     #[error("Cache serialization failed")]
-    Encode(#[from] rmp_serde::encode::Error),
+    Encode(#[source] rmp_serde::encode::Error),
 
     /// An [`io::Error`] with a filename attached
     #[error(transparent)]
@@ -93,14 +121,4 @@ pub enum Error {
 
     #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
     UnsupportedMediaType(Url, String),
-}
-
-impl Error {
-    pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
-        Self::BadJson { source: err, url }
-    }
-
-    pub(crate) fn from_html_err(err: html::Error, url: Url) -> Self {
-        Self::BadHtml { source: err, url }
-    }
 }

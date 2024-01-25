@@ -754,17 +754,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Create a temporary directory.
         let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
-            .map_err(puffin_client::Error::CacheWrite)?;
+            .map_err(puffin_client::ErrorKind::CacheWrite)?;
 
         // Download the source distribution to a temporary file.
         let mut writer = tokio::io::BufWriter::new(
             fs_err::tokio::File::create(temp_dir.path().join(source_dist_filename))
                 .await
-                .map_err(puffin_client::Error::CacheWrite)?,
+                .map_err(puffin_client::ErrorKind::CacheWrite)?,
         );
         tokio::io::copy(&mut reader, &mut writer)
             .await
-            .map_err(puffin_client::Error::CacheWrite)?;
+            .map_err(puffin_client::ErrorKind::CacheWrite)?;
 
         Ok(temp_dir)
     }

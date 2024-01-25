@@ -19,9 +19,9 @@ use puffin_cache::{Cache, CacheBucket};
 use puffin_normalize::PackageName;
 use pypi_types::Hashes;
 
-use crate::cached_client::CacheControl;
+use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
-use crate::{Error, RegistryClient};
+use crate::{Error, ErrorKind, RegistryClient};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -92,7 +92,11 @@ impl<'a> FlatIndexClient<'a> {
             "html",
             format!("{}.msgpack", cache_key::digest(&url.to_string())),
         );
-        let cache_control = CacheControl::from(self.cache.freshness(&cache_entry, None)?);
+        let cache_control = CacheControl::from(
+            self.cache
+                .freshness(&cache_entry, None)
+                .map_err(ErrorKind::Io)?,
+        );
 
         let cached_client = self.client.cached_client();
 
@@ -101,10 +105,11 @@ impl<'a> FlatIndexClient<'a> {
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
-            .build()?;
+            .build()
+            .map_err(ErrorKind::RequestError)?;
         let parse_simple_response = |response: Response| {
             async {
-                let text = response.text().await?;
+                let text = response.text().await.map_err(ErrorKind::RequestError)?;
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
@@ -121,7 +126,7 @@ impl<'a> FlatIndexClient<'a> {
                         }
                     })
                     .collect();
-                Ok(files)
+                Ok::<Vec<File>, CachedClientError<Error>>(files)
             }
             .boxed()
             .instrument(info_span!("parse_flat_index_html", url = % url))
