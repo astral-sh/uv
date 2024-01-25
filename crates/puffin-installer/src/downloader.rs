@@ -11,7 +11,7 @@ use distribution_types::{CachedDist, Dist, Identifier, LocalEditable, RemoteSour
 use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::RegistryClient;
-use puffin_distribution::{DistributionDatabase, DistributionDatabaseError, LocalWheel, Unzip};
+use puffin_distribution::{DistributionDatabase, LocalWheel, Unzip};
 use puffin_traits::{BuildContext, InFlight};
 
 use crate::editable::BuiltEditable;
@@ -21,12 +21,12 @@ pub enum Error {
     #[error("Failed to unzip wheel: {0}")]
     Unzip(Dist, #[source] puffin_extract::Error),
     #[error("Failed to fetch wheel: {0}")]
-    Fetch(Dist, #[source] DistributionDatabaseError),
+    Fetch(Dist, #[source] puffin_distribution::Error),
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
     #[error(transparent)]
-    Editable(#[from] DistributionDatabaseError),
+    Editable(#[from] puffin_distribution::Error),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
     #[error(transparent)]

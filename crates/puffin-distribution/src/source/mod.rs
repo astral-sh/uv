@@ -31,14 +31,13 @@ use puffin_git::{Fetch, GitSource};
 use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
 use pypi_types::Metadata21;
 
+use crate::error::Error;
 use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-pub use crate::source::error::SourceDistError;
 use crate::source::manifest::Manifest;
 use crate::Reporter;
 
 mod built_wheel_metadata;
-mod error;
 mod manifest;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
@@ -79,7 +78,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     pub async fn download_and_build(
         &self,
         source_dist: &SourceDist,
-    ) -> Result<BuiltWheelMetadata, SourceDistError> {
+    ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source_dist {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
@@ -108,9 +107,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let url = match &registry_source_dist.file.url {
                     FileLocation::RelativeUrl(base, url) => base
                         .join_relative(url)
-                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
-                    FileLocation::AbsoluteUrl(url) => Url::parse(url)
-                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
+                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::AbsoluteUrl(url) => {
+                        Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
+                    }
                     FileLocation::Path(path) => {
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
@@ -155,7 +155,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     pub async fn download_and_build_metadata(
         &self,
         source_dist: &SourceDist,
-    ) -> Result<Metadata21, SourceDistError> {
+    ) -> Result<Metadata21, Error> {
         let metadata = match &source_dist {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
@@ -184,9 +184,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let url = match &registry_source_dist.file.url {
                     FileLocation::RelativeUrl(base, url) => base
                         .join_relative(url)
-                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
-                    FileLocation::AbsoluteUrl(url) => Url::parse(url)
-                        .map_err(|err| SourceDistError::UrlParse(url.clone(), err))?,
+                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::AbsoluteUrl(url) => {
+                        Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
+                    }
                     FileLocation::Path(path) => {
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
@@ -246,12 +247,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
-    ) -> Result<BuiltWheelMetadata, SourceDistError> {
+    ) -> Result<BuiltWheelMetadata, Error> {
         let cache_entry = cache_shard.entry(MANIFEST);
         let cache_control = CacheControl::from(
             self.build_context
                 .cache()
-                .freshness(&cache_entry, Some(source_dist.name()))?,
+                .freshness(&cache_entry, Some(source_dist.name()))
+                .map_err(Error::CacheRead)?,
         );
 
         let download = |response| {
@@ -277,7 +279,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => SourceDistError::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // From here on, scope all operations to the current build. Within the manifest shard,
@@ -315,7 +317,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Store the metadata.
         let metadata_entry = cache_shard.entry(METADATA);
-        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
@@ -336,12 +340,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
-    ) -> Result<Metadata21, SourceDistError> {
+    ) -> Result<Metadata21, Error> {
         let cache_entry = cache_shard.entry(MANIFEST);
         let cache_control = CacheControl::from(
             self.build_context
                 .cache()
-                .freshness(&cache_entry, Some(source_dist.name()))?,
+                .freshness(&cache_entry, Some(source_dist.name()))
+                .map_err(Error::CacheRead)?,
         );
 
         let download = |response| {
@@ -367,7 +372,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => SourceDistError::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // From here on, scope all operations to the current build. Within the manifest shard,
@@ -394,8 +399,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         {
             // Store the metadata.
             let cache_entry = cache_shard.entry(METADATA);
-            fs::create_dir_all(cache_entry.dir()).await?;
-            write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+            fs::create_dir_all(cache_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
 
             return Ok(metadata);
         }
@@ -417,7 +426,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Store the metadata.
         let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
@@ -433,7 +444,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
-    ) -> Result<BuiltWheelMetadata, SourceDistError> {
+    ) -> Result<BuiltWheelMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
             WheelCache::Path(&path_source_dist.url)
@@ -441,8 +452,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) = ArchiveTimestamp::from_path(&path_source_dist.path)? else {
-            return Err(SourceDistError::DirWithoutEntrypoint);
+        let Some(modified) =
+            ArchiveTimestamp::from_path(&path_source_dist.path).map_err(Error::CacheRead)?
+        else {
+            return Err(Error::DirWithoutEntrypoint);
         };
 
         // Read the existing metadata from the cache.
@@ -450,7 +463,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let manifest_freshness = self
             .build_context
             .cache()
-            .freshness(&manifest_entry, Some(source_dist.name()))?;
+            .freshness(&manifest_entry, Some(source_dist.name()))
+            .map_err(Error::CacheRead)?;
         let manifest =
             refresh_timestamp_manifest(&manifest_entry, manifest_freshness, modified).await?;
 
@@ -483,7 +497,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Store the metadata.
         let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
@@ -500,7 +516,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
-    ) -> Result<Metadata21, SourceDistError> {
+    ) -> Result<Metadata21, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
             WheelCache::Path(&path_source_dist.url)
@@ -508,8 +524,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) = ArchiveTimestamp::from_path(&path_source_dist.path)? else {
-            return Err(SourceDistError::DirWithoutEntrypoint);
+        let Some(modified) =
+            ArchiveTimestamp::from_path(&path_source_dist.path).map_err(Error::CacheRead)?
+        else {
+            return Err(Error::DirWithoutEntrypoint);
         };
 
         // Read the existing metadata from the cache, to clear stale entries.
@@ -517,7 +535,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let manifest_freshness = self
             .build_context
             .cache()
-            .freshness(&manifest_entry, Some(source_dist.name()))?;
+            .freshness(&manifest_entry, Some(source_dist.name()))
+            .map_err(Error::CacheRead)?;
         let manifest =
             refresh_timestamp_manifest(&manifest_entry, manifest_freshness, modified).await?;
 
@@ -549,8 +568,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         {
             // Store the metadata.
             let cache_entry = cache_shard.entry(METADATA);
-            fs::create_dir_all(cache_entry.dir()).await?;
-            write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+            fs::create_dir_all(cache_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
 
             return Ok(metadata);
         }
@@ -573,7 +596,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Store the metadata.
         let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(metadata)
     }
@@ -583,7 +608,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
-    ) -> Result<BuiltWheelMetadata, SourceDistError> {
+    ) -> Result<BuiltWheelMetadata, Error> {
         let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
@@ -620,7 +645,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Store the metadata.
         let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
@@ -637,7 +664,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
-    ) -> Result<Metadata21, SourceDistError> {
+    ) -> Result<Metadata21, Error> {
         let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
@@ -669,8 +696,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         {
             // Store the metadata.
             let cache_entry = cache_shard.entry(METADATA);
-            fs::create_dir_all(cache_entry.dir()).await?;
-            write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+            fs::create_dir_all(cache_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
 
             return Ok(metadata);
         }
@@ -698,7 +729,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Store the metadata.
         let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?).await?;
+        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(metadata)
     }
@@ -710,7 +743,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         filename: &str,
         cache_entry: &'data CacheEntry,
-    ) -> Result<&'data Path, SourceDistError> {
+    ) -> Result<&'data Path, Error> {
         let cache_path = cache_entry.path();
         if cache_path.is_dir() {
             debug!("Distribution is already cached: {source_dist}");
@@ -735,7 +768,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Persist the unzipped distribution to the cache.
         self.build_context
             .cache()
-            .persist(source_dist_dir, cache_path)?;
+            .persist(source_dist_dir, cache_path)
+            .map_err(Error::CacheWrite)?;
 
         Ok(cache_path)
     }
@@ -770,24 +804,23 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     }
 
     /// Download a source distribution from a Git repository.
-    async fn download_source_dist_git(
-        &self,
-        url: &Url,
-    ) -> Result<(Fetch, Option<PathBuf>), SourceDistError> {
+    async fn download_source_dist_git(&self, url: &Url) -> Result<(Fetch, Option<PathBuf>), Error> {
         debug!("Fetching source distribution from Git: {url}");
         let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
 
         // Avoid races between different processes, too.
         let lock_dir = git_dir.join("locks");
-        fs::create_dir_all(&lock_dir).await?;
+        fs::create_dir_all(&lock_dir)
+            .await
+            .map_err(Error::CacheWrite)?;
         let canonical_url = cache_key::CanonicalUrl::new(url);
         let _lock = LockedFile::acquire(
             lock_dir.join(cache_key::digest(&canonical_url)),
             &canonical_url,
-        )?;
+        )
+        .map_err(Error::CacheWrite)?;
 
-        let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(url).map_err(SourceDistError::Git)?;
+        let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
 
         let source = if let Some(reporter) = &self.reporter {
             GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
@@ -796,7 +829,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
-            .map_err(SourceDistError::Git)?;
+            .map_err(Error::Git)?;
         Ok((fetch, subdirectory))
     }
 
@@ -810,15 +843,17 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
-    ) -> Result<(String, WheelFilename, Metadata21), SourceDistError> {
+    ) -> Result<(String, WheelFilename, Metadata21), Error> {
         debug!("Building: {dist}");
 
         if self.build_context.no_build() {
-            return Err(SourceDistError::NoBuild);
+            return Err(Error::NoBuild);
         }
 
         // Build the wheel.
-        fs::create_dir_all(&cache_shard).await?;
+        fs::create_dir_all(&cache_shard)
+            .await
+            .map_err(Error::CacheWrite)?;
         let disk_filename = self
             .build_context
             .setup_build(
@@ -828,10 +863,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 BuildKind::Wheel,
             )
             .await
-            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?
+            .map_err(|err| Error::Build(dist.to_string(), err))?
             .wheel(cache_shard)
             .await
-            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?;
+            .map_err(|err| Error::Build(dist.to_string(), err))?;
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
@@ -839,7 +874,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Validate the metadata.
         if &metadata.name != dist.name() {
-            return Err(SourceDistError::NameMismatch {
+            return Err(Error::NameMismatch {
                 metadata: metadata.name,
                 given: dist.name().clone(),
             });
@@ -856,7 +891,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         dist: &SourceDist,
         source_dist: &Path,
         subdirectory: Option<&Path>,
-    ) -> Result<Option<Metadata21>, SourceDistError> {
+    ) -> Result<Option<Metadata21>, Error> {
         debug!("Preparing metadata for: {dist}");
 
         // Setup the builder.
@@ -869,24 +904,27 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 BuildKind::Wheel,
             )
             .await
-            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?;
+            .map_err(|err| Error::Build(dist.to_string(), err))?;
 
         // Build the metadata.
         let dist_info = builder
             .metadata()
             .await
-            .map_err(|err| SourceDistError::Build(dist.to_string(), err))?;
+            .map_err(|err| Error::Build(dist.to_string(), err))?;
         let Some(dist_info) = dist_info else {
             return Ok(None);
         };
 
         // Read the metadata from disk.
         debug!("Prepared metadata for: {dist}");
-        let metadata = Metadata21::parse(&fs::read(dist_info.join("METADATA")).await?)?;
+        let content = fs::read(dist_info.join("METADATA"))
+            .await
+            .map_err(Error::CacheRead)?;
+        let metadata = Metadata21::parse(&content)?;
 
         // Validate the metadata.
         if &metadata.name != dist.name() {
-            return Err(SourceDistError::NameMismatch {
+            return Err(Error::NameMismatch {
                 metadata: metadata.name,
                 given: dist.name().clone(),
             });
@@ -900,7 +938,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         editable: &LocalEditable,
         editable_wheel_dir: &Path,
-    ) -> Result<(Dist, String, WheelFilename, Metadata21), SourceDistError> {
+    ) -> Result<(Dist, String, WheelFilename, Metadata21), Error> {
         debug!("Building (editable) {editable}");
         let disk_filename = self
             .build_context
@@ -911,10 +949,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 BuildKind::Editable,
             )
             .await
-            .map_err(|err| SourceDistError::BuildEditable(editable.to_string(), err))?
+            .map_err(|err| Error::BuildEditable(editable.to_string(), err))?
             .wheel(editable_wheel_dir)
             .await
-            .map_err(|err| SourceDistError::BuildEditable(editable.to_string(), err))?;
+            .map_err(|err| Error::BuildEditable(editable.to_string(), err))?;
         let filename = WheelFilename::from_str(&disk_filename)?;
         // We finally have the name of the package and can construct the dist.
         let dist = Dist::Source(SourceDist::Path(PathSourceDist {
@@ -931,15 +969,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 }
 
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
-pub(crate) fn read_http_manifest(
-    cache_entry: &CacheEntry,
-) -> Result<Option<Manifest>, SourceDistError> {
+pub(crate) fn read_http_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, Error> {
     match std::fs::read(cache_entry.path()) {
         Ok(cached) => Ok(Some(
             rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?.data,
         )),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(Error::CacheRead(err)),
     }
 }
 
@@ -949,7 +985,7 @@ pub(crate) fn read_http_manifest(
 pub(crate) fn read_timestamp_manifest(
     cache_entry: &CacheEntry,
     modified: ArchiveTimestamp,
-) -> Result<Option<Manifest>, SourceDistError> {
+) -> Result<Option<Manifest>, Error> {
     // If the cache entry is up-to-date, return it.
     match std::fs::read(cache_entry.path()) {
         Ok(cached) => {
@@ -959,7 +995,7 @@ pub(crate) fn read_timestamp_manifest(
             }
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(Error::CacheRead(err)),
     }
     Ok(None)
 }
@@ -971,7 +1007,7 @@ pub(crate) async fn refresh_timestamp_manifest(
     cache_entry: &CacheEntry,
     freshness: Freshness,
     modified: ArchiveTimestamp,
-) -> Result<Manifest, SourceDistError> {
+) -> Result<Manifest, Error> {
     // If we know the exact modification time, we don't need to force a revalidate.
     if matches!(modified, ArchiveTimestamp::Exact(_)) || freshness.is_fresh() {
         if let Some(manifest) = read_timestamp_manifest(cache_entry, modified)? {
@@ -981,7 +1017,9 @@ pub(crate) async fn refresh_timestamp_manifest(
 
     // Otherwise, create a new manifest.
     let manifest = Manifest::new();
-    fs::create_dir_all(&cache_entry.dir()).await?;
+    fs::create_dir_all(&cache_entry.dir())
+        .await
+        .map_err(Error::CacheWrite)?;
     write_atomic(
         cache_entry.path(),
         rmp_serde::to_vec(&CachedByTimestamp {
@@ -989,18 +1027,19 @@ pub(crate) async fn refresh_timestamp_manifest(
             data: manifest.clone(),
         })?,
     )
-    .await?;
+    .await
+    .map_err(Error::CacheWrite)?;
     Ok(manifest)
 }
 
 /// Read an existing cached [`Metadata21`], if it exists.
 pub(crate) async fn read_cached_metadata(
     cache_entry: &CacheEntry,
-) -> Result<Option<Metadata21>, SourceDistError> {
+) -> Result<Option<Metadata21>, Error> {
     match fs::read(&cache_entry.path()).await {
         Ok(cached) => Ok(Some(rmp_serde::from_slice::<Metadata21>(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(Error::CacheRead(err)),
     }
 }
 
@@ -1008,8 +1047,8 @@ pub(crate) async fn read_cached_metadata(
 fn read_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl Into<PathBuf>,
-) -> Result<Metadata21, SourceDistError> {
-    let file = fs_err::File::open(wheel)?;
+) -> Result<Metadata21, Error> {
+    let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_dist_info(filename, &mut archive)?;

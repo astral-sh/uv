@@ -5,14 +5,12 @@ use std::fmt::Formatter;
 use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
-use thiserror::Error;
 use url::Url;
 
 use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::Requirement;
-use puffin_distribution::DistributionDatabaseError;
 use puffin_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
@@ -20,7 +18,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
     #[error("Failed to find a version of {0} that satisfies the requirement")]
     NotFound(Requirement),
@@ -62,16 +60,16 @@ pub enum ResolveError {
     DistributionType(#[from] distribution_types::Error),
 
     #[error("Failed to download: {0}")]
-    Fetch(Box<BuiltDist>, #[source] DistributionDatabaseError),
+    Fetch(Box<BuiltDist>, #[source] puffin_distribution::Error),
 
     #[error("Failed to download and build: {0}")]
-    FetchAndBuild(Box<SourceDist>, #[source] DistributionDatabaseError),
+    FetchAndBuild(Box<SourceDist>, #[source] puffin_distribution::Error),
 
     #[error("Failed to read: {0}")]
-    Read(Box<PathBuiltDist>, #[source] DistributionDatabaseError),
+    Read(Box<PathBuiltDist>, #[source] puffin_distribution::Error),
 
     #[error("Failed to build: {0}")]
-    Build(Box<PathSourceDist>, #[source] DistributionDatabaseError),
+    Build(Box<PathSourceDist>, #[source] puffin_distribution::Error),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),

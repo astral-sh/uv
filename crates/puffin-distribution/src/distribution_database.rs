@@ -4,8 +4,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, TryStreamExt};
-use thiserror::Error;
-use tokio::task::JoinError;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info_span, instrument, Instrument};
 use url::Url;
@@ -25,29 +23,7 @@ use pypi_types::Metadata21;
 use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;
 use crate::reporter::Facade;
-use crate::{DiskWheel, LocalWheel, Reporter, SourceDistCachedBuilder, SourceDistError};
-
-#[derive(Debug, Error)]
-pub enum DistributionDatabaseError {
-    #[error("Failed to parse URL: {0}")]
-    Url(String, #[source] url::ParseError),
-    #[error(transparent)]
-    Client(#[from] puffin_client::Error),
-    #[error(transparent)]
-    Request(#[from] reqwest::Error),
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    SourceBuild(#[from] SourceDistError),
-    #[error("Git operation failed")]
-    Git(#[source] anyhow::Error),
-    #[error("The task executor is broken, did some other task panic?")]
-    Join(#[from] JoinError),
-    #[error("Building source distributions is disabled")]
-    NoBuild,
-    #[error("Using pre-built wheels is disabled")]
-    NoBinary,
-}
+use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistCachedBuilder};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -103,10 +79,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// If `no_remote_wheel` is set, the wheel will be built from a source distribution
     /// even if compatible pre-built wheels are available.
     #[instrument(skip(self))]
-    pub async fn get_or_build_wheel(
-        &self,
-        dist: Dist,
-    ) -> Result<LocalWheel, DistributionDatabaseError> {
+    pub async fn get_or_build_wheel(&self, dist: Dist) -> Result<LocalWheel, Error> {
         let no_binary = match self.build_context.no_binary() {
             NoBinary::None => false,
             NoBinary::All => true,
@@ -115,15 +88,16 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         match &dist {
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 if no_binary {
-                    return Err(DistributionDatabaseError::NoBinary);
+                    return Err(Error::NoBinary);
                 }
 
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => base
                         .join_relative(url)
-                        .map_err(|err| DistributionDatabaseError::Url(url.clone(), err))?,
-                    FileLocation::AbsoluteUrl(url) => Url::parse(url)
-                        .map_err(|err| DistributionDatabaseError::Url(url.clone(), err))?,
+                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::AbsoluteUrl(url) => {
+                        Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
+                    }
                     FileLocation::Path(path) => {
                         let url = Url::from_file_path(path).expect("path is absolute");
                         let cache_entry = self.cache.entry(
@@ -136,9 +110,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // return it.
                         match cache_entry.path().canonicalize() {
                             Ok(archive) => {
-                                if let (Some(cache_metadata), Some(path_metadata)) =
-                                    (metadata_if_exists(&archive)?, metadata_if_exists(path)?)
-                                {
+                                if let (Some(cache_metadata), Some(path_metadata)) = (
+                                    metadata_if_exists(&archive).map_err(Error::CacheRead)?,
+                                    metadata_if_exists(path).map_err(Error::CacheRead)?,
+                                ) {
                                     let cache_modified = Timestamp::from_metadata(&cache_metadata);
                                     let path_modified = Timestamp::from_metadata(&path_metadata);
                                     if cache_modified >= path_modified {
@@ -151,7 +126,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                                 }
                             }
                             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                            Err(err) => return Err(err.into()),
+                            Err(err) => return Err(Error::CacheRead(err)),
                         }
 
                         // Otherwise, unzip the file.
@@ -180,20 +155,26 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
-                        let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                        let temp_dir =
+                            tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        Ok(self
+                        let archive = self
                             .cache
-                            .persist(temp_dir.into_path(), wheel_entry.path())?)
+                            .persist(temp_dir.into_path(), wheel_entry.path())
+                            .map_err(Error::CacheRead)?;
+                        Ok(archive)
                     }
                     .instrument(info_span!("download", wheel = %wheel))
                 };
 
                 let req = self.client.cached_client().uncached().get(url).build()?;
-                let cache_control =
-                    CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
+                let cache_control = CacheControl::from(
+                    self.cache
+                        .freshness(&http_entry, Some(wheel.name()))
+                        .map_err(Error::CacheRead)?,
+                );
                 let archive = self
                     .client
                     .cached_client()
@@ -201,7 +182,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
-                        CachedClientError::Client(err) => SourceDistError::Client(err),
+                        CachedClientError::Client(err) => Error::Client(err),
                     })?;
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
@@ -213,7 +194,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
             Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                 if no_binary {
-                    return Err(DistributionDatabaseError::NoBinary);
+                    return Err(Error::NoBinary);
                 }
 
                 // Create an entry for the wheel itself alongside its HTTP cache.
@@ -232,13 +213,16 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
-                        let temp_dir = tempfile::tempdir_in(self.cache.root())?;
+                        let temp_dir =
+                            tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        Ok(self
+                        let archive = self
                             .cache
-                            .persist(temp_dir.into_path(), wheel_entry.path())?)
+                            .persist(temp_dir.into_path(), wheel_entry.path())
+                            .map_err(Error::CacheRead)?;
+                        Ok(archive)
                     }
                     .instrument(info_span!("download", wheel = %wheel))
                 };
@@ -249,8 +233,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .uncached()
                     .get(wheel.url.raw().clone())
                     .build()?;
-                let cache_control =
-                    CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
+                let cache_control = CacheControl::from(
+                    self.cache
+                        .freshness(&http_entry, Some(wheel.name()))
+                        .map_err(Error::CacheRead)?,
+                );
                 let archive = self
                     .client
                     .cached_client()
@@ -258,7 +245,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
-                        CachedClientError::Client(err) => SourceDistError::Client(err),
+                        CachedClientError::Client(err) => Error::Client(err),
                     })?;
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
@@ -270,7 +257,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
             Dist::Built(BuiltDist::Path(wheel)) => {
                 if no_binary {
-                    return Err(DistributionDatabaseError::NoBinary);
+                    return Err(Error::NoBinary);
                 }
 
                 let cache_entry = self.cache.entry(
@@ -284,8 +271,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 match cache_entry.path().canonicalize() {
                     Ok(archive) => {
                         if let (Some(cache_metadata), Some(path_metadata)) = (
-                            metadata_if_exists(&archive)?,
-                            metadata_if_exists(&wheel.path)?,
+                            metadata_if_exists(&archive).map_err(Error::CacheRead)?,
+                            metadata_if_exists(&wheel.path).map_err(Error::CacheRead)?,
                         ) {
                             let cache_modified = Timestamp::from_metadata(&cache_metadata);
                             let path_modified = Timestamp::from_metadata(&path_metadata);
@@ -299,7 +286,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         }
                     }
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(Error::CacheRead(err)),
                 }
 
                 Ok(LocalWheel::Disk(DiskWheel {
@@ -332,7 +319,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             filename: built_wheel.filename,
                         }))
                     }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(Error::CacheRead(err)),
                 }
             }
         }
@@ -348,7 +335,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-    ) -> Result<(Metadata21, Option<Url>), DistributionDatabaseError> {
+    ) -> Result<(Metadata21, Option<Url>), Error> {
         match dist {
             Dist::Built(built_dist) => {
                 Ok((self.client.wheel_metadata(built_dist).boxed().await?, None))
@@ -356,7 +343,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Dist::Source(source_dist) => {
                 // Optimization: Skip source dist download when we must not build them anyway.
                 if self.build_context.no_build() {
-                    return Err(DistributionDatabaseError::NoBuild);
+                    return Err(Error::NoBuild);
                 }
 
                 let lock = self.locks.acquire(dist).await;
@@ -385,7 +372,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         editable: &LocalEditable,
         editable_wheel_dir: &Path,
-    ) -> Result<(LocalWheel, Metadata21), DistributionDatabaseError> {
+    ) -> Result<(LocalWheel, Metadata21), Error> {
         let (dist, disk_filename, filename, metadata) = self
             .builder
             .build_editable(editable, editable_wheel_dir)
@@ -408,14 +395,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    async fn precise(&self, dist: &SourceDist) -> Result<Option<Url>, DistributionDatabaseError> {
+    async fn precise(&self, dist: &SourceDist) -> Result<Option<Url>, Error> {
         let SourceDist::Git(source_dist) = dist else {
             return Ok(None);
         };
         let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
 
-        let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(source_dist.url.raw())
-            .map_err(DistributionDatabaseError::Git)?;
+        let DirectGitUrl { url, subdirectory } =
+            DirectGitUrl::try_from(source_dist.url.raw()).map_err(Error::Git)?;
 
         // If the commit already contains a complete SHA, short-circuit.
         if url.precise().is_some() {
@@ -431,7 +418,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         };
         let precise = tokio::task::spawn_blocking(move || source.fetch())
             .await?
-            .map_err(DistributionDatabaseError::Git)?;
+            .map_err(Error::Git)?;
         let url = precise.into_git();
 
         // Re-encode as a URL.
