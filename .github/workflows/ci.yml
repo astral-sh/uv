@@ -109,8 +109,11 @@ jobs:
         run: |
           rustup target add x86_64-pc-windows-msvc
           rustup component add clippy
+        working-directory: crates/puffin-trampoline
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/puffin-trampoline"
       - name: "Clippy"
         run: cargo clippy --all-features --locked -- -D warnings
         working-directory: crates/puffin-trampoline
