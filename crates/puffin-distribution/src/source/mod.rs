@@ -282,7 +282,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself.
+        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
@@ -371,7 +372,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself.
+        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains compatible metadata, return it.
@@ -454,7 +456,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself.
+        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
@@ -520,7 +523,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself.
+        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains compatible metadata, return it.

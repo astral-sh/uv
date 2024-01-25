@@ -16,6 +16,8 @@ pub struct CachedWheel {
 impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
     pub fn from_path(path: &Path) -> Option<Self> {
+        // STOPSHIP(charlie): Here, I would canonicalize. If it fails, then the file was
+        // deleted.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
         let entry = CacheEntry::from_path(path);
