@@ -6,7 +6,7 @@ use puffin_normalize::PackageName;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};
-use crate::SourceDistError;
+use crate::Error;
 
 /// A local index of built distributions for a specific source distribution.
 pub struct BuiltWheelIndex;
@@ -20,7 +20,7 @@ impl BuiltWheelIndex {
         source_dist: &DirectUrlSourceDist,
         cache: &Cache,
         tags: &Tags,
-    ) -> Result<Option<CachedWheel>, SourceDistError> {
+    ) -> Result<Option<CachedWheel>, Error> {
         // For direct URLs, cache directly under the hash of the URL itself.
         let cache_shard = cache.shard(
             CacheBucket::BuiltWheels,
@@ -47,7 +47,7 @@ impl BuiltWheelIndex {
         source_dist: &PathSourceDist,
         cache: &Cache,
         tags: &Tags,
-    ) -> Result<Option<CachedWheel>, SourceDistError> {
+    ) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = cache.shard(
             CacheBucket::BuiltWheels,
             WheelCache::Path(&source_dist.url).remote_wheel_dir(source_dist.name().as_ref()),
@@ -56,7 +56,7 @@ impl BuiltWheelIndex {
         // Determine the last-modified time of the source distribution.
         let Some(modified) = ArchiveTimestamp::from_path(&source_dist.path).expect("archived")
         else {
-            return Err(SourceDistError::DirWithoutEntrypoint);
+            return Err(Error::DirWithoutEntrypoint);
         };
 
         // Read the manifest from the cache. There's no need to enforce freshness, since we

@@ -8,7 +8,7 @@ use url::Url;
 use distribution_types::Dist;
 use platform_tags::Tags;
 use puffin_client::{FlatIndex, RegistryClient};
-use puffin_distribution::{DistributionDatabase, DistributionDatabaseError};
+use puffin_distribution::DistributionDatabase;
 use puffin_normalize::PackageName;
 use puffin_traits::{BuildContext, NoBinary};
 use pypi_types::Metadata21;
@@ -18,7 +18,7 @@ use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
 type VersionMapResponse = Result<VersionMap, puffin_client::Error>;
-type WheelMetadataResponse = Result<(Metadata21, Option<Url>), DistributionDatabaseError>;
+type WheelMetadataResponse = Result<(Metadata21, Option<Url>), puffin_distribution::Error>;
 
 pub trait ResolverProvider: Send + Sync {
     /// Get the version map for a package.
