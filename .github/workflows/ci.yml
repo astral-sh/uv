@@ -54,7 +54,7 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Python"
+      - name: "Install Pythons"
         uses: actions/setup-python@v4
         with:
           python-version: |
@@ -75,4 +75,26 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests"
-        run: cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+        run: cargo nextest run --workspace --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+
+  # TODO(konstin): Merge with the cargo-test job once the tests pass
+  windows:
+    runs-on: windows-latest
+    name: "cargo check | windows"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+      - name: "Install Pythons"
+        uses: actions/setup-python@v4
+        with:
+          python-version: |
+            3.7
+            3.8
+            3.9
+            3.10
+            3.11
+            3.12
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
