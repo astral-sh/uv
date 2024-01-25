@@ -2,7 +2,7 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
-use std::env;
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::{env, iter};
 
 use fs_err as fs;
 use indoc::formatdoc;
@@ -90,6 +91,8 @@ pub enum Error {
         #[source]
         missing_header_cause: MissingHeaderCause,
     },
+    #[error("Failed to build PATH for build script")]
+    BuildScriptPath(#[source] env::JoinPathsError),
 }
 
 #[derive(Debug)]
@@ -729,12 +732,13 @@ async fn run_python_script(
     script: &str,
     source_tree: &Path,
 ) -> Result<Output, Error> {
-    // `OsString` doesn't impl `Add`
-    let mut new_path = venv.bin_dir().into_os_string();
-    if let Some(path) = env::var_os("PATH") {
-        new_path.push(":");
-        new_path.push(path);
-    }
+    // Prepend the venv bin dir to PATH
+    let new_path = if let Some(old_path) = env::var_os("PATH") {
+        let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
+        env::join_paths(new_path).map_err(Error::BuildScriptPath)?
+    } else {
+        OsString::from("")
+    };
     Command::new(venv.python_executable())
         .args(["-c", script])
         .current_dir(source_tree)
