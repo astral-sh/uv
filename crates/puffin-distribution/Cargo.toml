@@ -23,7 +23,7 @@ platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache" }
 puffin-client = { path = "../puffin-client" }
 puffin-extract = { path = "../puffin-extract" }
-puffin-fs = { path = "../puffin-fs" }
+puffin-fs = { path = "../puffin-fs", features = ["tokio"] }
 puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
 puffin-normalize = { path = "../puffin-normalize" }
 puffin-traits = { path = "../puffin-traits" }

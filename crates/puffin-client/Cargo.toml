@@ -12,7 +12,7 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
 puffin-cache = { path = "../puffin-cache" }
-puffin-fs = { path = "../puffin-fs" }
+puffin-fs = { path = "../puffin-fs", features = ["tokio"] }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 

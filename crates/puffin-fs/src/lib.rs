@@ -51,6 +51,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 }
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
+#[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let temp_file = NamedTempFile::new_in(
         path.as_ref()

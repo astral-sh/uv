@@ -16,8 +16,12 @@ workspace = true
 puffin-warnings = { path = "../puffin-warnings" }
 
 dunce = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"] }
+fs-err = { workspace = true }
 fs2 = { workspace = true }
 junction = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
+
+[features]
+default = []
+tokio = ["fs-err/tokio"]
