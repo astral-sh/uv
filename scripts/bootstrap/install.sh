@@ -19,14 +19,14 @@
 #
 # Usage
 #
-#   ./scripts/bootstrap/install
+#   ./scripts/bootstrap/install.sh
 #
 # The Python versions are installed from `.python_versions`.
 # Python versions are linked in-order such that the _last_ defined version will be the default.
 #
-# Version metadata can be updated with `fetch-versions` which requires Python 3.12
+# Version metadata can be updated with `fetch-version-metadata.py` which requires Python 3.12
 
-set -eu pipefail
+set -euo pipefail
 
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 
@@ -43,7 +43,7 @@ os=$(uname | tr '[:upper:]' '[:lower:]')
 arch=$(arch)
 interpreter='cpython'
 
-# macOS is horrible
+# On macOS, we need a newer version of `realpath` for `--relative-to` support
 realpath="$(which grealpath || which realpath)"
 
 # Read requested versions into an array

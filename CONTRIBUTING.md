@@ -40,7 +40,7 @@ You can install CMake from the [installers](https://cmake.org/download/) or with
 Install required Python versions with the bootstrapping script:
 
 ```
-scripts/bootstrap/install
+scripts/bootstrap/install.sh
 ```
 
 Then add the Python binaries to your path:
@@ -49,8 +49,8 @@ Then add the Python binaries to your path:
 export PATH=$PWD/bin:$PATH
 ```
 
-We also strongly recommend setting the `PUFFIN_PYTHON_PATH` variable to prevent your system Python versions from
-being found during tests:
+We also strongly recommend setting the `PUFFIN_PYTHON_PATH` variable during development; this will prevent your
+system Python versions from being found during tests:
 
 ```
 export PUFFIN_PYTHON_PATH=$PWD/bin
