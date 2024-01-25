@@ -75,8 +75,7 @@ pub enum Error {
 impl Metadata21 {
     /// Parse distribution metadata from metadata bytes
     pub fn parse(content: &[u8]) -> Result<Self, Error> {
-        let msg = mailparse::parse_mail(content)?;
-        let headers = msg.get_headers();
+        let (headers, _) = mailparse::parse_headers(content)?;
 
         let get_first_value = |name| {
             headers.get_first_header(name).and_then(|header| {
