@@ -185,6 +185,39 @@ fn cityhash128_wheel(c: &mut Criterion<WallTime>) {
     group.finish();
 }
 
+fn blake3_wheel(c: &mut Criterion<WallTime>) {
+    let mut group = c.benchmark_group("blake3_wheel");
+
+    for filename in FILENAMES {
+        group.bench_function(BenchmarkId::from_parameter(filename), |b| {
+            b.iter(|| {
+                let file = fs::read(format!("/Users/crmarsh/workspace/puffin/{filename}")).unwrap();
+                std::hint::black_box(blake3::hash(&file));
+            });
+        });
+    }
+
+    group.finish();
+}
+
+fn blake3_mmap_wheel(c: &mut Criterion<WallTime>) {
+    let mut group = c.benchmark_group("blake3_mmap_wheel");
+
+    for filename in FILENAMES {
+        group.bench_function(BenchmarkId::from_parameter(filename), |b| {
+            b.iter(|| {
+                let mut hasher = blake3::Hasher::new();
+                hasher
+                    .update_mmap_rayon(format!("/Users/crmarsh/workspace/puffin/{filename}"))
+                    .unwrap();
+                std::hint::black_box(hasher.finalize());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 fn crc(c: &mut Criterion<WallTime>) {
     let mut group = c.benchmark_group("crc");
 
@@ -212,13 +245,15 @@ fn crc(c: &mut Criterion<WallTime>) {
 
 criterion_group!(
     checksum,
-    xxhash_wheel,
-    seahash_wheel,
-    metrohash_wheel,
-    cityhash64_wheel,
-    cityhash128_wheel,
-    sha256_wheel,
-    crc32_wheel,
+    blake3_mmap_wheel,
+    blake3_wheel,
+    // xxhash_wheel,
+    // seahash_wheel,
+    // metrohash_wheel,
+    // cityhash64_wheel,
+    // cityhash128_wheel,
+    // sha256_wheel,
+    // crc32_wheel,
     // sha256_record,
     // checksum_record,
     // seahash_record,

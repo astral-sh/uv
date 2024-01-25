@@ -26,3 +26,4 @@ seahash.workspace = true
 sha2.workspace = true
 sha = "1.0.3"
 hex.workspace = true
+blake3 = "1.5.0"

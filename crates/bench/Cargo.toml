@@ -46,3 +46,4 @@ sha2 = { workspace = true }
 metrohash = "1.0.6"
 cityhash = "0.1.1"
 xxhash-rust = { version = "0.8.8", features = ["xxh3"] }
+blake3 = { version = "1.5.0", features = ["rayon", "mmap"] }

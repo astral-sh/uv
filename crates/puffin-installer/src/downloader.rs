@@ -1,10 +1,8 @@
 use std::cmp::Reverse;
-use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
-use sha2::Digest;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
