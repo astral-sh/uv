@@ -2643,6 +2643,7 @@ dependencies = [
  "puffin-fs",
  "regex",
  "rmp-serde",
+ "same-file",
  "serde",
  "serde_json",
  "tempfile",
