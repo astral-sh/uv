@@ -1,8 +1,10 @@
 use std::cmp::Reverse;
+use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use sha2::Digest;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
@@ -70,7 +72,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         &'stream self,
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
-    ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
+    ) -> impl Stream<Item=Result<CachedDist, Error>> + 'stream {
         futures::stream::iter(distributions)
             .map(|dist| async {
                 let wheel = self.get_wheel(dist, in_flight).boxed().await?;
@@ -197,6 +199,15 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             return Ok(download.into_cached_dist());
         }
 
+        // if let LocalWheel::Disk(disk) = &download {
+        //     // Read the wheel.
+        //     let contents = std::fs::read(&disk.path).unwrap();
+        //     // Hash them.
+        //     let mut hasher = sha2::Sha256::default();
+        //     hasher.update(&contents);
+        //     println!("Hash: {:x}", hasher.finalize());
+        // }
+
         // Unzip the wheel.
         let archive = tokio::task::spawn_blocking({
             let download = download.clone();
@@ -210,8 +221,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 Ok(cache.persist(temp_dir.into_path(), download.target())?)
             }
         })
-        .await?
-        .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
+            .await?
+            .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
 
         Ok(download.into_cached_dist(archive))
     }

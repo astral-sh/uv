@@ -23,7 +23,7 @@ pub struct DiskWheel {
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The path to the downloaded wheel.
-    pub(crate) path: PathBuf,
+    pub path: PathBuf,
     /// The expected path to the downloaded wheel's entry in the cache.
     /// Typically, a symlink within the wheels or built wheels bucket.
     pub(crate) target: PathBuf,

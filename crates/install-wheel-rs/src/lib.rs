@@ -158,6 +158,25 @@ pub fn read_dist_info(
     Ok(buffer)
 }
 
+/// Given an archive, read the `dist-info` record into a buffer.
+pub fn read_record(
+    filename: &WheelFilename,
+    archive: &mut ZipArchive<impl Read + Seek + Sized>,
+) -> Result<Vec<u8>, Error> {
+    let dist_info_prefix =
+        find_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
+
+    let mut file = archive
+        .by_name(&format!("{dist_info_prefix}.dist-info/RECORD"))
+        .map_err(|err| Error::Zip(filename.to_string(), err))?;
+
+    #[allow(clippy::cast_possible_truncation)]
+    let mut buffer = Vec::with_capacity(file.size() as usize);
+    file.read_to_end(&mut buffer)?;
+
+    Ok(buffer)
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;

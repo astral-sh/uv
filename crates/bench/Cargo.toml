@@ -22,8 +22,27 @@ name = "distribution-filename"
 path = "benches/distribution_filename.rs"
 harness = false
 
+[[bench]]
+name = "checksum"
+path = "benches/checksum.rs"
+harness = false
+
+[[bench]]
+name = "metadata"
+path = "benches/metadata.rs"
+harness = false
+
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
+install-wheel-rs = { path = "../install-wheel-rs" }
 platform-tags = { path = "../platform-tags" }
+pypi-types = { path = "../pypi-types" }
+crc32fast = {version = "1.3.2" }
 
 criterion = { version = "0.5.1", default-features = false }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+seahash = { version = "4.1.0"  }
+sha2 = { workspace = true }
+metrohash = "1.0.6"
+cityhash = "0.1.1"
+xxhash-rust = { version = "0.8.8", features = ["xxh3"] }

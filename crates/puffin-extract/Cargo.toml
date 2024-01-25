@@ -22,3 +22,7 @@ tar = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-util"] }
 zip = { workspace = true }
+seahash.workspace = true
+sha2.workspace = true
+sha = "1.0.3"
+hex.workspace = true

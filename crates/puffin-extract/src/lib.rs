@@ -1,7 +1,12 @@
+use std::hash::Hasher;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use rayon::prelude::*;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use sha::utils::{Digest, DigestExt};
+use tokio::io::ReadBuf;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use zip::result::ZipError;
 use zip::ZipArchive;
 
@@ -25,6 +30,46 @@ pub enum Error {
     InvalidArchive(Vec<fs_err::DirEntry>),
 }
 
+struct HashingReader<R, H> {
+    reader: R,
+    hasher: H,
+}
+
+impl<R, H> HashingReader<R, H>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    H: std::hash::Hasher + Unpin,
+{
+    fn new(reader: R, hasher: H) -> Self {
+        HashingReader { reader, hasher }
+    }
+
+    fn into_inner(self) -> (R, H) {
+        (self.reader, self.hasher)
+    }
+}
+
+impl<R, H> tokio::io::AsyncRead for HashingReader<R, H>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    H: std::hash::Hasher + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let reader = Pin::new(&mut self.reader);
+        match reader.poll_read(cx, buf) {
+            Poll::Ready(Ok(())) => {
+                self.hasher.write(buf.filled());
+                Poll::Ready(Ok(()))
+            }
+            other => other,
+        }
+    }
+}
+
 /// Unzip a `.zip` archive into the target directory without requiring Seek.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
@@ -34,12 +79,15 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
 ) -> Result<(), Error> {
+    let mut hasher = seahash::SeaHasher::default();
+    let reader = HashingReader::new(reader, &mut hasher);
+
     let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct path
-        let path = entry.reader().entry().filename().as_str()?;
-        let path = target.join(path);
+        let filename = entry.reader().entry().filename().as_str()?;
+        let path = target.join(filename);
         let is_dir = entry.reader().entry().dir()?;
 
         // Create dir or write file
@@ -61,6 +109,8 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
         zip = entry.skip().await?;
     }
+
+    // println!("Hash: {:x}", hasher.finish());
 
     Ok(())
 }
