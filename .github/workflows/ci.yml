@@ -54,14 +54,12 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Python"
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Install boostrap requirements"
+        run: |
+          sudo apt install zstd
       - name: "Install required Python versions"
         run: |
-          python3.12 -m pip install -r scripts/bootstrap/requirements.txt
-          cat .python-versions | xargs -L1 python3.12 scripts/bootstrap install
+          scripts/bootstrap/install
       - name: "Install Rust toolchain"
         run: rustup show
       - uses: rui314/setup-mold@v1
@@ -74,5 +72,5 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests"
         run: |
-          export PATH=$PWD/bootstrap/bin:$PATH
+          export PATH=$PWD/bin:$PATH
           cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
