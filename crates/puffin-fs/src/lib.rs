@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 use fs_err as fs;
-use tempfile::{tempdir_in, NamedTempFile};
+use tempfile::NamedTempFile;
 use tracing::{error, warn};
 
 use puffin_warnings::warn_user;
@@ -35,7 +35,8 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Create a symlink to the directory store.
-    let temp_dir = tempdir_in(dst.as_ref().parent().expect("Cache entry to have parent"))?;
+    let temp_dir =
+        tempfile::tempdir_in(dst.as_ref().parent().expect("Cache entry to have parent"))?;
     let temp_file = temp_dir.path().join("link");
     std::os::unix::fs::symlink(src, &temp_file)?;
 
