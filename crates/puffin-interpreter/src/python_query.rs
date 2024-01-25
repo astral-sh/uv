@@ -49,7 +49,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
         }
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        Interpreter::find_executable(&request)
+        Interpreter::find_executable(request)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         Ok(fs_err::canonicalize(request)?)

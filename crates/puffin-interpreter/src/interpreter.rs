@@ -222,7 +222,7 @@ impl Interpreter {
                 "PUFFIN_PYTHON_PATH is set; ignoring system PATH when looking for binaries."
             );
             if let Ok(cwd) = std::env::current_dir() {
-                which::which_in(&requested, Some(isolated), cwd)
+                which::which_in(requested, Some(isolated), cwd)
                     .map_err(|err| Error::Which(requested.into(), err))
             } else {
                 which::which_in_global(requested, Some(isolated))
@@ -230,7 +230,7 @@ impl Interpreter {
                     .and_then(|mut paths| paths.next().ok_or(Error::PythonNotFound))
             }
         } else {
-            which::which(&requested).map_err(|err| Error::Which(requested.into(), err))
+            which::which(requested).map_err(|err| Error::Which(requested.into(), err))
         }
     }
 
