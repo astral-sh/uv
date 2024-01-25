@@ -188,15 +188,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         let temp_dir = tempfile::tempdir_in(self.cache.root()).expect("make root");
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
-                        // Remove any existing wheel in the cache.
-                        match fs_err::tokio::remove_file(wheel_entry.path()).await {
-                            Ok(()) => {}
-                            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                            Err(err) => {
-                                println!("Failed to remove file: {}", err);
-                                return Err(err.into()); },
-                        }
-
                         // Persist the temporary directory to the directory store.
                         self.cache.persist(temp_dir.path(), wheel_entry.path()).expect("persist");
 
@@ -254,15 +245,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // Download and unzip the wheel to a temporary directory.
                         let temp_dir = tempfile::tempdir_in(self.cache.root()).expect("make root dir");
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
-
-                        // Remove any existing wheel in the cache.
-                        match fs_err::tokio::remove_file(wheel_entry.path()).await {
-                            Ok(()) => {}
-                            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                            Err(err) => {
-                                println!("Failed to remove file: {}", err);
-                                return Err(err.into()); },
-                        }
 
                         // Persist the temporary directory to the directory store.
                         self.cache

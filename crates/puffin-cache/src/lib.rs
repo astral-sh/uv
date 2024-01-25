@@ -208,13 +208,8 @@ impl Cache {
         fs_err::rename(temp_dir.as_ref(), archive_entry.path())?;
 
         // Create a symlink to the directory store.
-        let temp_dir = tempfile::tempdir_in(self.root())?;
-        let temp_file = temp_dir.path().join("symlink");
-        puffin_fs::symlink_dir(archive_entry.path(), &temp_file)?;
-
-        // Move the symlink into the wheel cache.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
-        fs_err::rename(&temp_file, path.as_ref())?;
+        puffin_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
 
         Ok(archive_entry.into_path_buf())
     }
