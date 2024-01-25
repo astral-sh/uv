@@ -211,7 +211,7 @@ fn create_venv_python_patch() -> Result<()> {
             .arg("venv")
             .arg(venv.as_os_str())
             .arg("--python")
-            .arg("3.12.1")
+            .arg("3.8.18")
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .current_dir(&temp_dir), @r###"
@@ -220,7 +220,7 @@ fn create_venv_python_patch() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Using Python 3.12.1 interpreter at [PATH]
+        Using Python 3.8.18 interpreter at [PATH]
         Creating virtual environment at: /home/ferris/project/.venv
         "###);
     });
