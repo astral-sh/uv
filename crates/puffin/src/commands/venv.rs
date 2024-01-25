@@ -13,9 +13,9 @@ use platform_host::Platform;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_fs::NormalizedDisplay;
 use puffin_installer::NoBinary;
 use puffin_interpreter::{find_default_python, find_requested_python, Interpreter};
-use puffin_path::NormalizedDisplay;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 

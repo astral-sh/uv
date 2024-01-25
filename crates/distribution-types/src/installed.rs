@@ -6,8 +6,8 @@ use fs_err as fs;
 use url::Url;
 
 use pep440_rs::Version;
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::PackageName;
-use puffin_path::NormalizedDisplay;
 
 use crate::{InstalledMetadata, InstalledVersion, Name};
 

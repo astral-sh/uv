@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 cache-key = { path = "../cache-key" }
-puffin-path = { path = "../puffin-path" }
+puffin-fs = { path = "../puffin-fs" }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }

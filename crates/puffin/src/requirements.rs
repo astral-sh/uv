@@ -8,8 +8,8 @@ use fs_err as fs;
 use rustc_hash::FxHashSet;
 
 use pep508_rs::Requirement;
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::{ExtraName, PackageName};
-use puffin_path::NormalizedDisplay;
 use requirements_txt::{EditableRequirement, RequirementsTxt};
 
 #[derive(Debug)]

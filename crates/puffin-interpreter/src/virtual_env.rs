@@ -5,8 +5,7 @@ use tracing::debug;
 
 use platform_host::Platform;
 use puffin_cache::Cache;
-use puffin_fs::LockedFile;
-use puffin_path::NormalizedDisplay;
+use puffin_fs::{LockedFile, NormalizedDisplay};
 
 use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;

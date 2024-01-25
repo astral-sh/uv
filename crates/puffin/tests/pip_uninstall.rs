@@ -8,7 +8,7 @@ use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use url::Url;
 
 use common::{BIN_NAME, INSTA_FILTERS};
-use puffin_path::NormalizedDisplay;
+use puffin_fs::NormalizedDisplay;
 
 use crate::common::{create_venv_py312, venv_to_interpreter};
 

@@ -27,10 +27,10 @@ puffin-cache = { path = "../puffin-cache", features = ["clap"] }
 puffin-client = { path = "../puffin-client" }
 puffin-dispatch = { path = "../puffin-dispatch" }
 puffin-distribution = { path = "../puffin-distribution" }
+puffin-fs = { path = "../puffin-fs" }
 puffin-installer = { path = "../puffin-installer" }
 puffin-interpreter = { path = "../puffin-interpreter" }
 puffin-normalize = { path = "../puffin-normalize" }
-puffin-path = { path = "../puffin-path" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-traits = { path = "../puffin-traits" }
 puffin-warnings = { path = "../puffin-warnings" }

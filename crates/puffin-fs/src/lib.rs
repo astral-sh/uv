@@ -3,11 +3,14 @@ use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 use fs_err as fs;
-use puffin_path::NormalizedDisplay;
 use tempfile::NamedTempFile;
 use tracing::{error, warn};
 
 use puffin_warnings::warn_user;
+
+pub use crate::path::*;
+
+mod path;
 
 /// Create a symlink from `src` to `dst`, replacing any existing symlink.
 ///

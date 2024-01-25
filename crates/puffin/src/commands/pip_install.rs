@@ -19,12 +19,12 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_fs::NormalizedDisplay;
 use puffin_installer::{
     BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
-use puffin_path::NormalizedDisplay;
 use puffin_resolver::{
     InMemoryIndex, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions,
     Resolver,

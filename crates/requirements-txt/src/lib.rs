@@ -46,7 +46,7 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use pep508_rs::{split_scheme, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
-use puffin_path::NormalizedDisplay;
+use puffin_fs::NormalizedDisplay;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -625,7 +625,7 @@ mod test {
 
     use fs_err as fs;
     use indoc::indoc;
-    use puffin_path::NormalizedDisplay;
+    use puffin_fs::NormalizedDisplay;
     use tempfile::tempdir;
     use test_case::test_case;
 

@@ -12,11 +12,11 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_fs::NormalizedDisplay;
 use puffin_installer::{
     Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use puffin_interpreter::Virtualenv;
-use puffin_path::NormalizedDisplay;
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{InFlight, SetupPyStrategy};
 use pypi_types::Yanked;

@@ -7,8 +7,8 @@ use tracing::debug;
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use puffin_cache::Cache;
+use puffin_fs::NormalizedDisplay;
 use puffin_interpreter::Virtualenv;
-use puffin_path::NormalizedDisplay;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;

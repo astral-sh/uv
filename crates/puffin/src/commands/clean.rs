@@ -5,8 +5,8 @@ use fs_err as fs;
 use owo_colors::OwoColorize;
 
 use puffin_cache::Cache;
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::PackageName;
-use puffin_path::NormalizedDisplay;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

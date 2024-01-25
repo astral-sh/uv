@@ -22,8 +22,8 @@ use zip::{ZipArchive, ZipWriter};
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::PackageName;
-use puffin_path::NormalizedDisplay;
 use pypi_types::DirectUrl;
 
 use crate::install_location::{InstallLocation, LockedDir};
