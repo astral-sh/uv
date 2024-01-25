@@ -29,4 +29,3 @@ serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-junction = "1.0.0"

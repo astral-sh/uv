@@ -15,9 +15,9 @@ workspace = true
 [dependencies]
 puffin-warnings = { path = "../puffin-warnings" }
 
+dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 fs2 = { workspace = true }
+junction = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
-junction = "1.0.0"
-dunce = "1.0.4"

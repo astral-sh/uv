@@ -1,4 +1,3 @@
-use anyhow::Context;
 use std::borrow::Cow;
 use std::io;
 use std::path::Path;
@@ -18,7 +17,7 @@ use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
 use puffin_client::{CacheControl, CachedClientError, RegistryClient};
 use puffin_extract::unzip_no_seek;
-use puffin_fs::{metadata_if_exists, LockedFile};
+use puffin_fs::metadata_if_exists;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary};
 use pypi_types::Metadata21;
@@ -135,20 +134,24 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                         // If the file is already unzipped, and the unzipped directory is fresh,
                         // return it.
-                        if let Ok(archive) = cache_entry.path().canonicalize() {
-                            if let (Some(cache_metadata), Some(path_metadata)) =
-                                (metadata_if_exists(&archive)?, metadata_if_exists(path)?)
-                            {
-                                let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                                let path_modified = Timestamp::from_metadata(&path_metadata);
-                                if cache_modified >= path_modified {
-                                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                        dist: dist.clone(),
-                                        archive,
-                                        filename: wheel.filename.clone(),
-                                    }));
+                        match cache_entry.path().canonicalize() {
+                            Ok(archive) => {
+                                if let (Some(cache_metadata), Some(path_metadata)) =
+                                    (metadata_if_exists(&archive)?, metadata_if_exists(path)?)
+                                {
+                                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
+                                    let path_modified = Timestamp::from_metadata(&path_metadata);
+                                    if cache_modified >= path_modified {
+                                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                            dist: dist.clone(),
+                                            archive,
+                                            filename: wheel.filename.clone(),
+                                        }));
+                                    }
                                 }
                             }
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                            Err(err) => return Err(err.into()),
                         }
 
                         // Otherwise, unzip the file.
@@ -161,20 +164,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     }
                 };
 
-                let wheel_dir =
-                    WheelCache::Index(&wheel.index).remote_wheel_dir(wheel.name().as_ref());
-
-                // Lock the directory. This ensures that the canonical wheel path (a resolved
-                // symlink into the archive directory) is consistent with the wheel that we download
-                // and unzip.
-                let lock_entry = self.cache.entry(CacheBucket::Wheels, &wheel_dir, ".lock");
-                fs_err::tokio::create_dir_all(lock_entry.dir()).await?;
-                let _lock = LockedFile::acquire(lock_entry.path(), lock_entry.dir().display())?;
-
                 // Create an entry for the wheel itself alongside its HTTP cache.
-                let wheel_entry =
-                    self.cache
-                        .entry(CacheBucket::Wheels, &wheel_dir, wheel.filename.stem());
+                let wheel_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Index(&wheel.index).remote_wheel_dir(wheel.name().as_ref()),
+                    wheel.filename.stem(),
+                );
                 let http_entry = wheel_entry.with_file(format!("{}.http", wheel.filename.stem()));
 
                 let download = |response: reqwest::Response| {
@@ -185,15 +180,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
-                        let temp_dir = tempfile::tempdir_in(self.cache.root()).expect("make root");
+                        let temp_dir = tempfile::tempdir_in(self.cache.root())?;
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        self.cache
-                            .persist(temp_dir.path(), wheel_entry.path())
-                            .expect("persist");
-
-                        Ok(())
+                        Ok(self
+                            .cache
+                            .persist(temp_dir.into_path(), wheel_entry.path())?)
                     }
                     .instrument(info_span!("download", wheel = %wheel))
                 };
@@ -201,7 +194,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let req = self.client.cached_client().uncached().get(url).build()?;
                 let cache_control =
                     CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
-                self.client
+                let archive = self
+                    .client
                     .cached_client()
                     .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
@@ -212,7 +206,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    archive: wheel_entry.path().canonicalize()?,
+                    archive,
                     filename: wheel.filename.clone(),
                 }))
             }
@@ -222,19 +216,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     return Err(DistributionDatabaseError::NoBinary);
                 }
 
-                let wheel_dir = WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref());
-
-                // Lock the directory. This ensures that the canonical wheel path (a resolved
-                // symlink into the archive directory) is consistent with the wheel that we download
-                // and unzip.
-                let lock_entry = self.cache.entry(CacheBucket::Wheels, &wheel_dir, ".lock");
-                fs_err::tokio::create_dir_all(lock_entry.dir()).await?;
-                let _lock = LockedFile::acquire(lock_entry.path(), lock_entry.dir().display())?;
-
                 // Create an entry for the wheel itself alongside its HTTP cache.
-                let wheel_entry =
-                    self.cache
-                        .entry(CacheBucket::Wheels, wheel_dir, wheel.filename.stem());
+                let wheel_entry = self.cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
+                    wheel.filename.stem(),
+                );
                 let http_entry = wheel_entry.with_file(format!("{}.http", wheel.filename.stem()));
 
                 let download = |response: reqwest::Response| {
@@ -245,16 +232,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
-                        let temp_dir =
-                            tempfile::tempdir_in(self.cache.root()).expect("make root dir");
+                        let temp_dir = tempfile::tempdir_in(self.cache.root())?;
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        self.cache
-                            .persist(temp_dir.into_path(), wheel_entry.path())
-                            .expect("persist");
-
-                        Ok(())
+                        Ok(self
+                            .cache
+                            .persist(temp_dir.into_path(), wheel_entry.path())?)
                     }
                     .instrument(info_span!("download", wheel = %wheel))
                 };
@@ -267,7 +251,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .build()?;
                 let cache_control =
                     CacheControl::from(self.cache.freshness(&http_entry, Some(wheel.name()))?);
-                self.client
+                let archive = self
+                    .client
                     .cached_client()
                     .get_cached_with_callback(req, &http_entry, cache_control, download)
                     .await
@@ -278,7 +263,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: dist.clone(),
-                    archive: wheel_entry.path().canonicalize()?,
+                    archive,
                     filename: wheel.filename.clone(),
                 }))
             }
@@ -296,19 +281,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // If the file is already unzipped, and the unzipped directory is fresh,
                 // return it.
-                if let (Some(cache_metadata), Some(path_metadata)) = (
-                    metadata_if_exists(cache_entry.path())?,
-                    metadata_if_exists(&wheel.path)?,
-                ) {
-                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                    let path_modified = Timestamp::from_metadata(&path_metadata);
-                    if cache_modified >= path_modified {
-                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                            dist: dist.clone(),
-                            archive: cache_entry.into_path_buf(),
-                            filename: wheel.filename.clone(),
-                        }));
+                match cache_entry.path().canonicalize() {
+                    Ok(archive) => {
+                        if let (Some(cache_metadata), Some(path_metadata)) = (
+                            metadata_if_exists(&archive)?,
+                            metadata_if_exists(&wheel.path)?,
+                        ) {
+                            let cache_modified = Timestamp::from_metadata(&cache_metadata);
+                            let path_modified = Timestamp::from_metadata(&path_metadata);
+                            if cache_modified >= path_modified {
+                                return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                    dist: dist.clone(),
+                                    archive,
+                                    filename: wheel.filename.clone(),
+                                }));
+                            }
+                        }
                     }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err.into()),
                 }
 
                 Ok(LocalWheel::Disk(DiskWheel {

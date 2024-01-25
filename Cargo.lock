@@ -2376,7 +2376,6 @@ dependencies = [
  "directories",
  "distribution-types",
  "fs-err",
- "junction",
  "nanoid",
  "puffin-fs",
  "puffin-normalize",
