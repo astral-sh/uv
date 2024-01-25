@@ -27,7 +27,7 @@ use pypi_types::{BaseUrl, Metadata21, SimpleJson};
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::{CachedClient, CachedClientError, Error};
+use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -124,7 +124,7 @@ impl RegistryClient {
         package_name: &PackageName,
     ) -> Result<(IndexUrl, SimpleMetadata), Error> {
         if self.index_urls.no_index() {
-            return Err(Error::NoIndex(package_name.as_ref().to_string()));
+            return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
 
         for index in self.index_urls.indexes() {
@@ -132,17 +132,20 @@ impl RegistryClient {
 
             return match result {
                 Ok(metadata) => Ok((index.clone(), metadata)),
-                Err(CachedClientError::Client(Error::RequestError(err))) => {
-                    if err.status() == Some(StatusCode::NOT_FOUND) {
-                        continue;
+                Err(CachedClientError::Client(err)) => match err.into_kind() {
+                    ErrorKind::RequestError(err) => {
+                        if err.status() == Some(StatusCode::NOT_FOUND) {
+                            continue;
+                        }
+                        Err(ErrorKind::RequestError(err).into())
                     }
-                    Err(err.into())
-                }
-                Err(err) => Err(err.into()),
+                    other => Err(other.into()),
+                },
+                Err(CachedClientError::Callback(err)) => Err(err),
             };
         }
 
-        Err(Error::PackageNotFound(package_name.to_string()))
+        Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
     }
 
     async fn simple_single_index(
@@ -167,8 +170,11 @@ impl RegistryClient {
             }),
             format!("{package_name}.msgpack"),
         );
-        let cache_control =
-            CacheControl::from(self.cache.freshness(&cache_entry, Some(package_name))?);
+        let cache_control = CacheControl::from(
+            self.cache
+                .freshness(&cache_entry, Some(package_name))
+                .map_err(ErrorKind::Io)?,
+        );
 
         let simple_request = self
             .client
@@ -176,24 +182,28 @@ impl RegistryClient {
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
-            .build()?;
+            .build()
+            .map_err(ErrorKind::RequestError)?;
         let parse_simple_response = |response: Response| {
             async {
                 let content_type = response
                     .headers()
                     .get("content-type")
-                    .ok_or_else(|| Error::MissingContentType(url.clone()))?;
-                let content_type = content_type
-                    .to_str()
-                    .map_err(|err| Error::InvalidContentTypeHeader(url.clone(), err))?;
+                    .ok_or_else(|| Error::from(ErrorKind::MissingContentType(url.clone())))?;
+                let content_type = content_type.to_str().map_err(|err| {
+                    Error::from(ErrorKind::InvalidContentTypeHeader(url.clone(), err))
+                })?;
                 let media_type = content_type.split(';').next().unwrap_or(content_type);
                 let media_type = MediaType::from_str(media_type).ok_or_else(|| {
-                    Error::UnsupportedMediaType(url.clone(), media_type.to_string())
+                    Error::from(ErrorKind::UnsupportedMediaType(
+                        url.clone(),
+                        media_type.to_string(),
+                    ))
                 })?;
 
                 match media_type {
                     MediaType::Json => {
-                        let bytes = response.bytes().await?;
+                        let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
                         let base = BaseUrl::from(url.clone());
@@ -201,7 +211,7 @@ impl RegistryClient {
                         Ok(metadata)
                     }
                     MediaType::Html => {
-                        let text = response.text().await?;
+                        let text = response.text().await.map_err(ErrorKind::RequestError)?;
                         let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
                         let metadata = SimpleMetadata::from_files(files, package_name, &base);
@@ -235,17 +245,19 @@ impl RegistryClient {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::RelativeUrl(base, url) => {
-                    let url = base.join_relative(url)?;
+                    let url = base.join_relative(url).map_err(ErrorKind::UrlParseError)?;
                     self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
                         .await?
                 }
                 FileLocation::AbsoluteUrl(url) => {
-                    let url = Url::parse(url)?;
+                    let url = Url::parse(url).map_err(ErrorKind::UrlParseError)?;
                     self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
                         .await?
                 }
                 FileLocation::Path(path) => {
-                    let file = fs_err::tokio::File::open(&path).await?;
+                    let file = fs_err::tokio::File::open(&path)
+                        .await
+                        .map_err(ErrorKind::Io)?;
                     let reader = tokio::io::BufReader::new(file);
                     read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
                 }
@@ -259,17 +271,19 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let file = fs_err::tokio::File::open(&wheel.path).await?;
+                let file = fs_err::tokio::File::open(&wheel.path)
+                    .await
+                    .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
                 read_metadata_async(&wheel.filename, built_dist.to_string(), reader).await?
             }
         };
 
         if metadata.name != *built_dist.name() {
-            return Err(Error::NameMismatch {
+            return Err(Error::from(ErrorKind::NameMismatch {
                 metadata: metadata.name,
                 given: built_dist.name().clone(),
-            });
+            }));
         }
 
         Ok(metadata)
@@ -283,32 +297,44 @@ impl RegistryClient {
         url: &Url,
     ) -> Result<Metadata21, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        let filename = WheelFilename::from_str(&file.filename)?;
+        let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file
             .dist_info_metadata
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{}.metadata", url))?;
+            let url = Url::parse(&format!("{}.metadata", url)).map_err(ErrorKind::UrlParseError)?;
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.stem()),
             );
-            let cache_control =
-                CacheControl::from(self.cache.freshness(&cache_entry, Some(&filename.name))?);
+            let cache_control = CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(&filename.name))
+                    .map_err(ErrorKind::Io)?,
+            );
 
             let response_callback = |response: Response| async {
-                let bytes = response.bytes().await?;
+                let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
 
                 info_span!("parse_metadata21")
                     .in_scope(|| Metadata21::parse(bytes.as_ref()))
                     .map_err(|err| {
-                        Error::MetadataParseError(filename, url.to_string(), Box::new(err))
+                        Error::from(ErrorKind::MetadataParseError(
+                            filename,
+                            url.to_string(),
+                            Box::new(err),
+                        ))
                     })
             };
-            let req = self.client.uncached().get(url.clone()).build()?;
+            let req = self
+                .client
+                .uncached()
+                .get(url.clone())
+                .build()
+                .map_err(ErrorKind::RequestError)?;
             Ok(self
                 .client
                 .get_cached_with_callback(req, &cache_entry, cache_control, response_callback)
@@ -334,27 +360,41 @@ impl RegistryClient {
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
             format!("{}.msgpack", filename.stem()),
         );
-        let cache_control =
-            CacheControl::from(self.cache.freshness(&cache_entry, Some(&filename.name))?);
+        let cache_control = CacheControl::from(
+            self.cache
+                .freshness(&cache_entry, Some(&filename.name))
+                .map_err(ErrorKind::Io)?,
+        );
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
         let client = self.client_raw.clone();
         let read_metadata_range_request = |response: Response| {
             async {
-                let mut reader = AsyncHttpRangeReader::from_head_response(client, response).await?;
+                let mut reader = AsyncHttpRangeReader::from_head_response(client, response)
+                    .await
+                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
-                    Error::MetadataParseError(filename.clone(), url.to_string(), Box::new(err))
+                    Error::from(ErrorKind::MetadataParseError(
+                        filename.clone(),
+                        url.to_string(),
+                        Box::new(err),
+                    ))
                 })?;
-                Ok(metadata)
+                Ok::<Metadata21, CachedClientError<Error>>(metadata)
             }
             .boxed()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
-        let req = self.client.uncached().head(url.clone()).build()?;
+        let req = self
+            .client
+            .uncached()
+            .head(url.clone())
+            .build()
+            .map_err(ErrorKind::RequestError)?;
         let result = self
             .client
             .get_cached_with_callback(
@@ -368,10 +408,12 @@ impl RegistryClient {
 
         match result {
             Ok(metadata) => return Ok(metadata),
-            Err(Error::AsyncHttpRangeReader(
-                AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-            )) => {}
-            Err(err) => return Err(err),
+            Err(err) => match err.into_kind() {
+                ErrorKind::AsyncHttpRangeReader(
+                    AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
+                ) => {}
+                kind => return Err(kind.into()),
+            },
         }
 
         // The range request version failed (this is bad, the webserver should support this), fall
@@ -383,12 +425,12 @@ impl RegistryClient {
         // you host your wheels for some reasons doesn't support range requests
         // (tbh we should probably warn here and tell users to get a better registry because
         // their current one makes resolution unnecessary slow).
-        let temp_download = tempfile_in(self.cache.root()).map_err(Error::CacheWrite)?;
+        let temp_download = tempfile_in(self.cache.root()).map_err(ErrorKind::CacheWrite)?;
         let mut writer = BufWriter::new(tokio::fs::File::from_std(temp_download));
         let mut reader = self.stream_external(url).await?.compat();
         tokio::io::copy(&mut reader, &mut writer)
             .await
-            .map_err(Error::CacheWrite)?;
+            .map_err(ErrorKind::CacheWrite)?;
         let reader = writer.into_inner();
 
         read_metadata_async(filename, url.to_string(), reader).await
@@ -404,8 +446,10 @@ impl RegistryClient {
                 .uncached()
                 .get(url.to_string())
                 .send()
-                .await?
-                .error_for_status()?
+                .await
+                .map_err(ErrorKind::RequestMiddlewareError)?
+                .error_for_status()
+                .map_err(ErrorKind::RequestError)?
                 .bytes_stream()
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
                 .into_async_read(),
@@ -421,7 +465,7 @@ pub async fn read_metadata_async(
 ) -> Result<Metadata21, Error> {
     let mut zip_reader = ZipFileReader::with_tokio(reader)
         .await
-        .map_err(|err| Error::Zip(filename.clone(), err))?;
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
     let (metadata_idx, _dist_info_prefix) = find_dist_info(
         filename,
@@ -431,20 +475,22 @@ pub async fn read_metadata_async(
             .iter()
             .enumerate()
             .filter_map(|(idx, e)| Some((idx, e.filename().as_str().ok()?))),
-    )?;
+    )
+    .map_err(ErrorKind::InstallWheel)?;
 
     // Read the contents of the METADATA file
     let mut contents = Vec::new();
     zip_reader
         .reader_with_entry(metadata_idx)
         .await
-        .map_err(|err| Error::Zip(filename.clone(), err))?
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?
         .read_to_end_checked(&mut contents)
         .await
-        .map_err(|err| Error::Zip(filename.clone(), err))?;
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let metadata = Metadata21::parse(&contents)
-        .map_err(|err| Error::MetadataParseError(filename.clone(), debug_source, Box::new(err)))?;
+    let metadata = Metadata21::parse(&contents).map_err(|err| {
+        ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
+    })?;
     Ok(metadata)
 }
 

@@ -105,17 +105,17 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                     self.flat_index.get(package_name).cloned(),
                     self.no_binary,
                 )),
-                Err(
-                    err @ (puffin_client::Error::PackageNotFound(_)
-                    | puffin_client::Error::NoIndex(_)),
-                ) => {
-                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionMap::from(flat_index))
-                    } else {
-                        Err(err)
+                Err(err) => match err.into_kind() {
+                    kind @ (puffin_client::ErrorKind::PackageNotFound(_)
+                    | puffin_client::ErrorKind::NoIndex(_)) => {
+                        if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
+                            Ok(VersionMap::from(flat_index))
+                        } else {
+                            Err(kind.into())
+                        }
                     }
-                }
-                Err(err) => Err(err),
+                    kind => Err(kind.into()),
+                },
             })
     }
 

@@ -5,7 +5,7 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 use distribution_filename::WheelFilename;
 use install_wheel_rs::find_dist_info;
 
-use crate::Error;
+use crate::{Error, ErrorKind};
 
 /// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
 /// entire wheel just for the one file.
@@ -63,7 +63,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
     // Construct a zip reader to uses the stream.
     let mut reader = ZipFileReader::new(reader.compat())
         .await
-        .map_err(|err| Error::Zip(filename.clone(), err))?;
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
     let ((metadata_idx, metadata_entry), _dist_info_prefix) = find_dist_info(
         filename,
@@ -73,7 +73,8 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .iter()
             .enumerate()
             .filter_map(|(idx, e)| Some(((idx, e), e.filename().as_str().ok()?))),
-    )?;
+    )
+    .map_err(ErrorKind::InstallWheel)?;
 
     let offset = metadata_entry.header_offset();
     let size = metadata_entry.compressed_size()
@@ -97,10 +98,10 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
     reader
         .reader_with_entry(metadata_idx)
         .await
-        .map_err(|err| Error::Zip(filename.clone(), err))?
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?
         .read_to_string_checked(&mut contents)
         .await
-        .map_err(|err| Error::Zip(filename.clone(), err))?;
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
     Ok(contents)
 }
