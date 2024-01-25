@@ -11,7 +11,10 @@ use std::process::Command;
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use common::{create_venv, BIN_NAME, INSTA_FILTERS};
-use fs_err::os::unix::fs::symlink;
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use fs_err::os::windows::fs::symlink_file;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use puffin_interpreter::find_requested_python;
@@ -30,7 +33,7 @@ pub(crate) fn create_bin_with_executables(
         let name = executable
             .file_name()
             .expect("Discovered executable must have a filename");
-        symlink(&executable, bin.child(name))?;
+        symlink_file(&executable, bin.child(name))?;
     }
     Ok(bin.canonicalize()?)
 }
