@@ -3,11 +3,10 @@ use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 use fs_err as fs;
-use tempfile::{NamedTempFile, tempdir_in};
+use tempfile::{tempdir_in, NamedTempFile};
 use tracing::{error, warn};
 
 use puffin_warnings::warn_user;
-
 
 /// Create a symlink from `src` to `dst`, replacing any existing symlink.
 ///
@@ -16,13 +15,11 @@ use puffin_warnings::warn_user;
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Remove the existing symlink, if any.
     match junction::delete(dunce::simplified(dst.as_ref())) {
-        Ok(()) => {
-            match fs_err::remove_dir_all(dst.as_ref()) {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => return Err(err),
-            }
-        }
+        Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
     };
@@ -36,7 +33,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 
 /// Create a symlink from `src` to `dst`, replacing any existing symlink.
 #[cfg(unix)]
-pub fn replace_symlink( src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Create a symlink to the directory store.
     let temp_dir = tempdir_in(dst.as_ref().parent().expect("Cache entry to have parent"))?;
     let temp_file = temp_dir.path().join("link");

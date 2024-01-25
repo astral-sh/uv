@@ -1,8 +1,8 @@
+use anyhow::Context;
 use std::borrow::Cow;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
-use anyhow::Context;
 
 use futures::{FutureExt, TryStreamExt};
 use thiserror::Error;
@@ -189,7 +189,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
-                        self.cache.persist(temp_dir.path(), wheel_entry.path()).expect("persist");
+                        self.cache
+                            .persist(temp_dir.path(), wheel_entry.path())
+                            .expect("persist");
 
                         Ok(())
                     }
@@ -243,12 +245,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
-                        let temp_dir = tempfile::tempdir_in(self.cache.root()).expect("make root dir");
+                        let temp_dir =
+                            tempfile::tempdir_in(self.cache.root()).expect("make root dir");
                         unzip_no_seek(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
                         self.cache
-                            .persist(temp_dir.into_path(), wheel_entry.path()).expect("persist");
+                            .persist(temp_dir.into_path(), wheel_entry.path())
+                            .expect("persist");
 
                         Ok(())
                     }

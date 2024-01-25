@@ -251,7 +251,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let cache_control = CacheControl::from(
             self.build_context
                 .cache()
-                .freshness(&cache_entry, Some(source_dist.name())).expect("cache entry exists"),
+                .freshness(&cache_entry, Some(source_dist.name()))
+                .expect("cache entry exists"),
         );
 
         let download = |response| {
@@ -935,7 +936,7 @@ pub(crate) fn read_http_manifest(
             rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?.data,
         )),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => panic!("Error reading HTTP manifest: {}", err)
+        Err(err) => panic!("Error reading HTTP manifest: {}", err),
     }
 }
 
@@ -955,7 +956,7 @@ pub(crate) fn read_timestamp_manifest(
             }
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => panic!("Error reading manifest: {}", err)
+        Err(err) => panic!("Error reading manifest: {}", err),
     }
     Ok(None)
 }
