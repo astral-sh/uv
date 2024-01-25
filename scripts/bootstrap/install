@@ -54,18 +54,18 @@ for version in "${versions[@]}"; do
     key="$interpreter-$version-$os-$arch"
     echo "Installing $key"
 
-    url=$(cat "$versions_metadata" | jq --arg key "$key" '.[$key] | .url' -r)
+    url=$(jq --arg key "$key" '.[$key] | .url' -r < "$versions_metadata")
     
     if [ "$url" == 'null' ]; then
         echo "No matching download for $key"
         exit 1
     fi
 
-    filename=$(basename $url)
-    echo "Downloading $(urldecode $filename)"
-    curl -L --progress-bar -o $filename $url --output-dir "$this_dir"
+    filename=$(basename "$url")
+    echo "Downloading $(urldecode "$filename")"
+    curl -L --progress-bar -o "$filename" "$url" --output-dir "$this_dir"
 
-    expected_sha=$(cat "$versions_metadata" | jq --arg key "$key" '.[$key] | .sha256' -r)
+    expected_sha=$(jq --arg key "$key" '.[$key] | .sha256' -r < "$versions_metadata")
     if [ "$expected_sha" == 'null' ]; then
         echo "WARNING: no checksum for $key"
     else
@@ -76,14 +76,15 @@ for version in "${versions[@]}"; do
 
     install_key="$install_dir/$interpreter@$version"
     rm -rf "$install_key"
-    echo "Extracting to $($realpath --relative-to=$root_dir $install_key)"
+    echo "Extracting to $($realpath --relative-to="$root_dir" "$install_key")"
     mkdir -p "$install_key"
     zstd -d "$this_dir/$filename" --stdout | tar -x -C "$install_key"
     
     # Setup the installation
     mv "$install_key/python/"* "$install_key"
-    link=$($realpath --relative-to=$bin_dir "$install_key/install/bin/python3")
-    minor=$(cat "$versions_metadata" | jq --arg key "$key" '.[$key] | .minor' -r)
+    # Use relative paths for links so if the bin is moved they don't break
+    link=$($realpath --relative-to="$bin_dir" "$install_key/install/bin/python3")
+    minor=$(jq --arg key "$key" '.[$key] | .minor' -r < "$versions_metadata")
 
     # Link as all version tuples, later versions in the file will take precedence
     ln -sf "./$link" "$bin_dir/python$version"
