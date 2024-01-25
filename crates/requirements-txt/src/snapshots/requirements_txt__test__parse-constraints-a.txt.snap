@@ -9,7 +9,7 @@ RequirementsTxt {
                 name: PackageName(
                     "django-debug-toolbar",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -33,7 +33,7 @@ RequirementsTxt {
             name: PackageName(
                 "django",
             ),
-            extras: None,
+            extras: [],
             version_or_url: Some(
                 VersionSpecifier(
                     VersionSpecifiers(
@@ -52,7 +52,7 @@ RequirementsTxt {
             name: PackageName(
                 "pytz",
             ),
-            extras: None,
+            extras: [],
             version_or_url: Some(
                 VersionSpecifier(
                     VersionSpecifiers(

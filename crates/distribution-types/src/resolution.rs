@@ -66,7 +66,7 @@ impl From<Dist> for Requirement {
         match dist {
             Dist::Built(BuiltDist::Registry(wheel)) => Requirement {
                 name: wheel.filename.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
                     pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(wheel.filename.version),
@@ -76,19 +76,19 @@ impl From<Dist> for Requirement {
             },
             Dist::Built(BuiltDist::DirectUrl(wheel)) => Requirement {
                 name: wheel.filename.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(wheel.url)),
                 marker: None,
             },
             Dist::Built(BuiltDist::Path(wheel)) => Requirement {
                 name: wheel.filename.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(wheel.url)),
                 marker: None,
             },
             Dist::Source(SourceDist::Registry(sdist)) => Requirement {
                 name: sdist.filename.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
                     pep440_rs::VersionSpecifiers::from(
                         pep440_rs::VersionSpecifier::equals_version(sdist.filename.version),
@@ -98,19 +98,19 @@ impl From<Dist> for Requirement {
             },
             Dist::Source(SourceDist::DirectUrl(sdist)) => Requirement {
                 name: sdist.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
             },
             Dist::Source(SourceDist::Git(sdist)) => Requirement {
                 name: sdist.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
             },
             Dist::Source(SourceDist::Path(sdist)) => Requirement {
                 name: sdist.name,
-                extras: None,
+                extras: vec![],
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
             },

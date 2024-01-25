@@ -94,7 +94,7 @@ impl<'a> SitePackages<'a> {
     pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.iter().map(|dist| Requirement {
             name: dist.name().clone(),
-            extras: None,
+            extras: vec![],
             version_or_url: Some(match dist.installed_version() {
                 InstalledVersion::Version(version) => {
                     pep508_rs::VersionOrUrl::VersionSpecifier(pep440_rs::VersionSpecifiers::from(

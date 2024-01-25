@@ -9,7 +9,7 @@ RequirementsTxt {
                 name: PackageName(
                     "tqdm",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -32,7 +32,7 @@ RequirementsTxt {
                 name: PackageName(
                     "tomli-w",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(

@@ -9,7 +9,7 @@ RequirementsTxt {
                 name: PackageName(
                     "werkzeug",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -61,7 +61,7 @@ RequirementsTxt {
                 name: PackageName(
                     "urllib3",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -113,7 +113,7 @@ RequirementsTxt {
                 name: PackageName(
                     "ansicon",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -176,7 +176,7 @@ RequirementsTxt {
                 name: PackageName(
                     "requests-oauthlib",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -229,7 +229,7 @@ RequirementsTxt {
                 name: PackageName(
                     "psycopg2",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
