@@ -34,7 +34,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
         // `-p 3.10`
         if cfg!(unix) {
             let formatted = PathBuf::from(format!("python{major}.{minor}"));
-            which::which_global(&formatted).map_err(|err| Error::Which(formatted, err))
+            which::which(&formatted).map_err(|err| Error::Which(formatted, err))
         } else if cfg!(windows) {
             find_python_windows(major, minor)?.ok_or(Error::NoSuchPython { major, minor })
         } else {
@@ -43,7 +43,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
         let request = PathBuf::from(request);
-        which::which_global(&request).map_err(|err| Error::Which(request, err))
+        which::which(&request).map_err(|err| Error::Which(request, err))
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         Ok(fs_err::canonicalize(request)?)
@@ -54,13 +54,13 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
 #[instrument]
 pub fn find_default_python() -> Result<PathBuf, Error> {
     let python = if cfg!(unix) {
-        which::which_global("python3")
-            .or_else(|_| which::which_global("python"))
+        which::which("python3")
+            .or_else(|_| which::which("python"))
             .map_err(|_| Error::NoPythonInstalledUnix)?
     } else if cfg!(windows) {
         // TODO(konstin): Is that the right order, or should we look for `py --list-paths` first? With the current way
         // it works even if the python launcher is not installed.
-        if let Ok(python) = which::which_global("python.exe") {
+        if let Ok(python) = which::which("python.exe") {
             python
         } else {
             installed_pythons_windows()?
