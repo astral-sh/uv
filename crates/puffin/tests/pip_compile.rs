@@ -1516,7 +1516,8 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting URLs for package `werkzeug`:
+          ╰─▶ your requirements cannot be used because there are conflicting URLs for
+              package `werkzeug`:
               - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
               - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
         "###);
@@ -1556,7 +1557,8 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting URLs for package `werkzeug`:
+          ╰─▶ your requirements cannot be used because there are conflicting URLs for
+              package `werkzeug`:
               - git+https://github.com/pallets/werkzeug.git@2.0.0
               - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
         "###);
@@ -1900,8 +1902,8 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ my-project dependencies are unusable: Conflicting versions for `django`:
-              `django==5.0b1` does not intersect with `django==5.0a1`
+          ╰─▶ my-project cannot be used because there are conflicting versions for
+              `django`: `django==5.0b1` does not intersect with `django==5.0a1`
         "###);
     });
 
