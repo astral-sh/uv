@@ -72,7 +72,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         &'stream self,
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
-    ) -> impl Stream<Item=Result<CachedDist, Error>> + 'stream {
+    ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         futures::stream::iter(distributions)
             .map(|dist| async {
                 let wheel = self.get_wheel(dist, in_flight).boxed().await?;
@@ -221,8 +221,8 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 Ok(cache.persist(temp_dir.into_path(), download.target())?)
             }
         })
-            .await?
-            .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
+        .await?
+        .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
 
         Ok(download.into_cached_dist(archive))
     }
