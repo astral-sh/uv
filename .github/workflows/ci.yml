@@ -107,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
         run: |
-          rustup target addnightly-2024-01-23-x86_64-pc-windows-msvc
+          rustup target add nightly-2024-01-23-x86_64-pc-windows-msvc
           rustup component add clippy --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
