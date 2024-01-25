@@ -392,7 +392,7 @@ impl InterpreterQueryResult {
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
-        if executable == info.sys_executable {
+        if same_file::is_same_file(executable, &info.sys_executable).unwrap_or(false) {
             fs::create_dir_all(cache_entry.dir())?;
             write_atomic_sync(
                 cache_entry.path(),

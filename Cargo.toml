@@ -68,6 +68,7 @@ reqwest-middleware = { version = "0.2.4" }
 reqwest-retry = { version = "0.3.0" }
 rmp-serde = { version = "1.1.2" }
 rustc-hash = { version = "1.1.0" }
+same-file = { version = "1.0.6" }
 seahash = { version = "4.1.0" }
 serde = { version = "1.0.194" }
 serde_json = { version = "1.0.111" }

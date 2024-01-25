@@ -25,6 +25,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }
 regex = { workspace = true }
 rmp-serde = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
