@@ -56,6 +56,8 @@ being found during tests:
 export PUFFIN_PYTHON_PATH=$PWD/bin
 ```
 
+If you use [direnv](https://direnv.net/), these variables will be exported automatically after you run `direnv allow`.
+
 ## Testing
 
 To run the tests we recommend [nextest](https://nexte.st/). Make sure to run the tests with `--all-features`, otherwise you'll miss most of our integration tests.
