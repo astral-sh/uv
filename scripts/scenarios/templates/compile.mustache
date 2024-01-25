@@ -5,16 +5,35 @@
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use common::{create_venv, BIN_NAME, INSTA_FILTERS};
+use fs_err::os::unix::fs::symlink;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
-
-use common::{create_venv, BIN_NAME, INSTA_FILTERS};
+use puffin_interpreter::find_requested_python;
 
 mod common;
+
+/// Create a directory with the requested Python binaries available.
+pub(crate) fn create_bin_with_executables(
+    temp_dir: &assert_fs::TempDir,
+    python: Vec<&str>,
+) -> Result<PathBuf> {
+    let bin = temp_dir.child("bin");
+    fs_err::create_dir(&bin)?;
+    for request in python {
+        let executable = find_requested_python(request)?;
+        let name = executable
+            .file_name()
+            .expect("Discovered executable must have a filename");
+        symlink(&executable, bin.child(name))?;
+    }
+    Ok(bin.canonicalize()?)
+}
 {{#scenarios}}
 
 /// {{name}}
@@ -34,6 +53,8 @@ fn {{module_name}}() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "{{environment.python}}");
+    let python_versions = vec![{{#environment.additional_python}}"{{.}}", {{/environment.additional_python}}];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -69,7 +90,7 @@ fn {{module_name}}() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"<snapshot>
         "###);
     });
