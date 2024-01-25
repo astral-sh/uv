@@ -1245,7 +1245,7 @@ fn direct_incompatible_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ root dependencies are unusable: Conflicting versions for `albatross`: `albatross==1.0.0` does not intersect with `albatross==2.0.0`
+          ╰─▶ your requirements cannot be used because there are conflicting versions for `albatross`: `albatross==1.0.0` does not intersect with `albatross==2.0.0`
         "###);
     });
 

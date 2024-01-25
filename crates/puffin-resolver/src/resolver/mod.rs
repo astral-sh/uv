@@ -335,22 +335,30 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .get_dependencies(package, &version, &mut priorities, request_sink)
                     .await?
                 {
-                    Dependencies::Unusable(reason) => {
-                        state.add_incompatibility(Incompatibility::unusable_dependencies(
+                    Dependencies::Unavailable(reason) => {
+                        let message = {
+                            if matches!(package, PubGrubPackage::Root(_)) {
+                                // Including front-matter for the root package is redundant
+                                reason.clone()
+                            } else {
+                                format!("its dependencies are unusable because {reason}")
+                            }
+                        };
+                        state.add_incompatibility(Incompatibility::unavailable(
                             package.clone(),
                             version.clone(),
-                            reason.clone(),
+                            message,
                         ));
                         continue;
                     }
-                    Dependencies::Known(constraints) if constraints.contains_key(package) => {
+                    Dependencies::Available(constraints) if constraints.contains_key(package) => {
                         return Err(PubGrubError::SelfDependency {
                             package: package.clone(),
                             version: version.clone(),
                         }
                         .into());
                     }
-                    Dependencies::Known(constraints) => constraints,
+                    Dependencies::Available(constraints) => constraints,
                 };
 
                 // Add that package and version if the dependencies are not problematic.
@@ -588,7 +596,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     | ResolveError::ConflictingUrls(..)),
                 ) = constraints
                 {
-                    return Ok(Dependencies::Unusable(Some(err.to_string())));
+                    return Ok(Dependencies::Unavailable(uncapitalize(err.to_string())));
                 }
                 let mut constraints = constraints?;
 
@@ -610,10 +618,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     );
                 }
 
-                Ok(Dependencies::Known(constraints.into()))
+                Ok(Dependencies::Available(constraints.into()))
             }
 
-            PubGrubPackage::Python(_) => Ok(Dependencies::Known(DependencyConstraints::default())),
+            PubGrubPackage::Python(_) => {
+                Ok(Dependencies::Available(DependencyConstraints::default()))
+            }
 
             PubGrubPackage::Package(package_name, extra, url) => {
                 // Wait for the metadata to be available.
@@ -640,7 +650,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         version.clone(),
                     );
                     constraints.insert(PubGrubPackage::Python(PubGrubPython::Target), version);
-                    return Ok(Dependencies::Known(constraints));
+                    return Ok(Dependencies::Available(constraints));
                 }
 
                 let entry = self.index.distributions.wait(&package_id).await?;
@@ -670,7 +680,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     );
                 }
 
-                Ok(Dependencies::Known(constraints.into()))
+                Ok(Dependencies::Available(constraints.into()))
             }
         }
     }
@@ -877,8 +887,16 @@ enum Response {
 /// For each [Package] there is a set of versions allowed as a dependency.
 #[derive(Clone)]
 enum Dependencies {
-    /// Package dependencies are not usable
-    Unusable(Option<String>),
+    /// Package dependencies are not available.
+    Unavailable(String),
     /// Container for all available package versions.
-    Known(DependencyConstraints<PubGrubPackage, Range<Version>>),
+    Available(DependencyConstraints<PubGrubPackage, Range<Version>>),
+}
+
+fn uncapitalize<T: AsRef<str>>(string: T) -> String {
+    let mut chars = string.as_ref().chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+    }
 }

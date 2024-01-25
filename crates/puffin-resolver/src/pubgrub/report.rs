@@ -96,32 +96,18 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     }
                 }
             }
-            External::UnavailableDependencies(package, set) => {
-                let set = self.simplify_set(set, package);
-                format!(
-                    "dependencies of {}are unavailable",
-                    Padded::new("", &PackageRange::compatibility(package, &set), " ")
-                )
-            }
-            External::UnusableDependencies(package, set, reason) => {
-                if let Some(reason) = reason {
-                    if matches!(package, PubGrubPackage::Root(_)) {
-                        format!("{package} dependencies are unusable: {reason}")
-                    } else {
-                        let set = self.simplify_set(set, package);
-                        format!(
-                            "dependencies of {}are unusable: {reason}",
-                            Padded::new("", &PackageRange::compatibility(package, &set), " ")
-                        )
-                    }
-                } else {
-                    let set = self.simplify_set(set, package);
-                    format!(
-                        "dependencies of {}are unusable",
-                        Padded::new("", &PackageRange::compatibility(package, &set), " ")
-                    )
+            External::Unavailable(package, set, reason) => match package {
+                PubGrubPackage::Root(Some(name)) => {
+                    format!("{name} cannot be used because {reason}")
                 }
-            }
+                PubGrubPackage::Root(None) => {
+                    format!("your requirements cannot be used because {reason}")
+                }
+                _ => format!(
+                    "{}is unusable because {reason}",
+                    Padded::new("", &PackageRange::compatibility(package, set), " ")
+                ),
+            },
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
@@ -403,8 +389,7 @@ impl PubGrubReportFormatter<'_> {
                     }
                 }
                 External::NotRoot(..) => {}
-                External::UnavailableDependencies(..) => {}
-                External::UnusableDependencies(..) => {}
+                External::Unavailable(..) => {}
                 External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {

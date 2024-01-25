@@ -53,7 +53,7 @@ owo-colors = { version = "3.5.0" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
-pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "0e02ea9fc8d021fb6a6b9e77b09ade4332068f42" }
+pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "7a573e3902ff338abdcf3b87682e4c6d04845f2f" }
 pyo3 = { version = "0.20.2" }
 pyo3-log = { version = "0.9.0"}
 pyproject-toml = { version = "0.8.1" }
