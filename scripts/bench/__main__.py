@@ -36,10 +36,6 @@ import subprocess
 import tempfile
 import typing
 
-import tomli
-import tomli_w
-from packaging.requirements import Requirement
-
 
 class Benchmark(enum.Enum):
     """Enumeration of the benchmarks to run."""
@@ -152,7 +148,9 @@ class Suite(abc.ABC):
         """
 
     @abc.abstractmethod
-    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
         """Resolve a modified lockfile using pip-tools, from a warm cache.
 
         The resolution is performed with an existing lock file, and the cache directory
@@ -217,7 +215,9 @@ class PipCompile(Suite):
             ],
         )
 
-    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
         cache_dir = os.path.join(cwd, ".cache")
         baseline = os.path.join(cwd, "baseline.txt")
 
@@ -268,7 +268,6 @@ class PipCompile(Suite):
 
 
 class PipSync(Suite):
-
     def __init__(self, path: str | None = None) -> None:
         self.name = path or "pip-sync"
         self.path = path or "pip-sync"
@@ -279,7 +278,9 @@ class PipSync(Suite):
     def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
         ...
 
-    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
         ...
 
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
@@ -324,6 +325,10 @@ class Poetry(Suite):
 
     def setup(self, requirements_file: str, *, cwd: str) -> None:
         """Initialize a Poetry project from a requirements file."""
+        import tomli
+        import tomli_w
+        from packaging.requirements import Requirement
+
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
@@ -412,7 +417,12 @@ class Poetry(Suite):
             ],
         )
 
-    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
+        import tomli
+        import tomli_w
+
         self.setup(requirements_file, cwd=cwd)
 
         poetry_lock = os.path.join(cwd, "poetry.lock")
@@ -604,7 +614,9 @@ class Puffin(Suite):
             ],
         )
 
-    def resolve_incremental(self, requirements_file: str, *, cwd: str) -> Command | None:
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
         cache_dir = os.path.join(cwd, ".cache")
         baseline = os.path.join(cwd, "baseline.txt")
 
