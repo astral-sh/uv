@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 #[cfg(unix)]
@@ -17,6 +18,7 @@ use fs_err::os::unix::fs::symlink as symlink_file;
 use fs_err::os::windows::fs::symlink_file;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use predicates::prelude::predicate;
 use puffin_interpreter::find_requested_python;
 
 mod common;
@@ -71,22 +73,25 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-006fed96==1.0.0")?;
 
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.11")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.11")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -99,6 +104,11 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
         Resolved 1 package in [TIME]
         "###);
     });
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("a-006fed96==1.0.0"));
 
     Ok(())
 }
@@ -135,22 +145,25 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-8c1b0389==1.0.0")?;
 
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.9")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.9")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -162,6 +175,8 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
+
+    command.assert().failure();
 
     Ok(())
 }
@@ -199,25 +214,25 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-b8ee1c03==1.0.0")?;
 
-    // Since there are no wheels for the package and it is not compatible with the
-    // local installation, we cannot build the source distribution to determine its
-    // dependencies.
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.11")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.11")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -229,6 +244,11 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
+
+    // Since there are no wheels for the package and it is not compatible with the
+    // local installation, we cannot build the source distribution to determine its
+    // dependencies.
+    command.assert().failure();
 
     Ok(())
 }
@@ -269,24 +289,25 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-ae5b2665==1.0.0")?;
 
-    // Since there is a compatible Python version available on the system, it should be
-    // used to build the source distributions.
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.11")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.11")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -298,6 +319,10 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
         Resolved 1 package in [TIME]
         "###);
     });
+
+    // Since there is a compatible Python version available on the system, it should be
+    // used to build the source distributions.
+    command.assert().success();
 
     Ok(())
 }
@@ -335,25 +360,25 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-c0ea406a==1.0.0")?;
 
-    // Since there are no compatible wheels for the package and it is not compatible
-    // with the local installation, we cannot build the source distribution to
-    // determine its dependencies.
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.11")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.11")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -365,6 +390,11 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
+
+    // Since there are no compatible wheels for the package and it is not compatible
+    // with the local installation, we cannot build the source distribution to
+    // determine its dependencies.
+    command.assert().failure();
 
     Ok(())
 }
@@ -406,26 +436,25 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-08a4e843")?;
 
-    // Since there are no wheels for the version of the package compatible with the
-    // target and it is not compatible with the local installation, we cannot build the
-    // source distribution to determine its dependencies. The other version has wheels
-    // available, but is not compatible with the target version and cannot be used.
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.11")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.11")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -445,6 +474,12 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
               And because you require albatross, we can conclude that the requirements are unsatisfiable.
         "###);
     });
+
+    // Since there are no wheels for the version of the package compatible with the
+    // target and it is not compatible with the local installation, we cannot build the
+    // source distribution to determine its dependencies. The other version has wheels
+    // available, but is not compatible with the target version and cannot be used.
+    command.assert().failure();
 
     Ok(())
 }
@@ -481,24 +516,25 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-2e1edfd6==1.0.0")?;
 
-    // Since the resolver is asked to solve with 3.8, the minimum compatible Python
-    // requirement is treated as 3.8.0.
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.8")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.8")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -509,6 +545,10 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
+
+    // Since the resolver is asked to solve with 3.8, the minimum compatible Python
+    // requirement is treated as 3.8.0.
+    command.assert().failure();
 
     Ok(())
 }
@@ -545,22 +585,25 @@ fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("a-844899bd==1.0.0")?;
 
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        .arg("--python-version=3.8.0")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            .arg("--python-version=3.8.0")
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"
+        assert_cmd_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -573,6 +616,11 @@ fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
         Resolved 1 package in [TIME]
         "###);
     });
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("a-844899bd==1.0.0"));
 
     Ok(())
 }

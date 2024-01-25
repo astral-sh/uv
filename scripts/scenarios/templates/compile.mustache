@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use common::{create_venv, BIN_NAME, INSTA_FILTERS};
 #[cfg(unix)]
@@ -17,6 +18,7 @@ use fs_err::os::unix::fs::symlink as symlink_file;
 use fs_err::os::windows::fs::symlink_file;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use predicates::prelude::predicate;
 use puffin_interpreter::find_requested_python;
 
 mod common;
@@ -33,7 +35,7 @@ pub(crate) fn create_bin_with_executables(
         let name = executable
             .file_name()
             .expect("Discovered executable must have a filename");
-        symlink(&executable, bin.child(name))?;
+        symlink_file(&executable, bin.child(name))?;
     }
     Ok(bin.canonicalize()?)
 }
@@ -71,32 +73,48 @@ fn {{module_name}}() -> Result<()> {
     requirements_in.write_str("{{requirement}}")?;
     {{/root.requires}}
 
-    {{#expected.explanation_lines}}
-    // {{.}}
-    {{/expected.explanation_lines}}
+    let mut inner = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = inner
+        .arg("pip")
+        .arg("compile")
+        .arg("requirements.in")
+        {{#environment.prereleases}}
+        .arg("--prerelease=allow")
+        {{/environment.prereleases}}
+        {{#resolver_options.python}}
+        .arg("--python-version={{.}}")
+        {{/resolver_options.python}}
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_PYTHON_PATH", bin)
+        .current_dir(&temp_dir);
+
     insta::with_settings!({
         filters => filters
     }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("compile")
-            .arg("requirements.in")
-            {{#environment.prereleases}}
-            .arg("--prerelease=allow")
-            {{/environment.prereleases}}
-            {{#resolver_options.python}}
-            .arg("--python-version={{.}}")
-            {{/resolver_options.python}}
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", bin)
-            .current_dir(&temp_dir), @r###"<snapshot>
+        assert_cmd_snapshot!(command, @r###"<snapshot>
         "###);
     });
+
+    {{#expected.explanation_lines}}
+    // {{.}}
+    {{/expected.explanation_lines}}
+    command
+        .assert()
+    {{#expected.satisfiable}}
+        .success()
+    {{#expected.packages}}
+        .stdout(predicate::str::contains("{{name}}=={{version}}"));
+    {{/expected.packages}}
+    {{/expected.satisfiable}}
+    {{^expected.satisfiable}}
+        .failure()
+    {{/expected.satisfiable}}
+    ;
 
     Ok(())
 }
