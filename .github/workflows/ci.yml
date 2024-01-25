@@ -106,16 +106,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
+        working-directory: crates/puffin-trampoline
         run: |
-          rustup target add nightly-2024-01-23-x86_64-pc-windows-msvc
+          rustup target add x86_64-pc-windows-msvc
           rustup component add clippy --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "crates/puffin-trampoline"
       - name: "Clippy"
+        working-directory: crates/puffin-trampoline
         run: cargo clippy --all-features --locked -- -D warnings
-        working-directory: crates/puffin-trampoline
       - name: "Build"
-        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
         working-directory: crates/puffin-trampoline
+        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
