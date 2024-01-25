@@ -263,7 +263,8 @@ Puffin's Git implementation draws on details from [Cargo](https://github.com/rus
 
 Some of Puffin's optimizations are inspired by the great work we've seen in
 [Orogene](https://github.com/orogene/orogene) and [Bun](https://github.com/oven-sh/bun). We've also
-learned a lot from [Posy](https://github.com/njsmith/posy).
+learned a lot from Nathaniel J. Smith's [Posy](https://github.com/njsmith/posy) and adapted its
+[trampoline](https://github.com/njsmith/posy/tree/main/src/trampolines/windows-trampolines/posy-trampoline).
 
 ## License
 

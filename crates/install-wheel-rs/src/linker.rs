@@ -99,8 +99,14 @@ pub fn install_wheel(
 
     debug!(name, "Writing entrypoints");
     let (console_scripts, gui_scripts) = parse_scripts(&wheel, &dist_info_prefix, None)?;
-    write_script_entrypoints(&site_packages, location, &console_scripts, &mut record)?;
-    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record)?;
+    write_script_entrypoints(
+        &site_packages,
+        location,
+        &console_scripts,
+        &mut record,
+        false,
+    )?;
+    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record, true)?;
 
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.

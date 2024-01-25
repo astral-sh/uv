@@ -1,6 +1,10 @@
 [workspace]
 members = ["crates/*"]
-exclude = ["scripts"]
+exclude = [
+    "scripts",
+    # Needs nightly
+    "crates/puffin-trampoline"
+]
 resolver = "2"
 
 [workspace.package]
