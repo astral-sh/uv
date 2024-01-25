@@ -9,7 +9,7 @@ RequirementsTxt {
                 name: PackageName(
                     "tomli",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: None,
                 marker: None,
             },
@@ -21,7 +21,7 @@ RequirementsTxt {
                 name: PackageName(
                     "numpy",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(

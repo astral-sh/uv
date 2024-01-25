@@ -9,7 +9,7 @@ RequirementsTxt {
                 name: PackageName(
                     "numpy",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: None,
                 marker: None,
             },
@@ -21,13 +21,11 @@ RequirementsTxt {
                 name: PackageName(
                     "pandas",
                 ),
-                extras: Some(
-                    [
-                        ExtraName(
-                            "tabulate",
-                        ),
-                    ],
-                ),
+                extras: [
+                    ExtraName(
+                        "tabulate",
+                    ),
+                ],
                 version_or_url: Some(
                     Url(
                         VerbatimUrl {

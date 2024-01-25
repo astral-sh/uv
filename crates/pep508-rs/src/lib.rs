@@ -131,7 +131,7 @@ pub struct Requirement {
     pub name: PackageName,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
-    pub extras: Option<Vec<ExtraName>>,
+    pub extras: Vec<ExtraName>,
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     /// or a url
@@ -145,11 +145,11 @@ pub struct Requirement {
 impl Display for Requirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
-        if let Some(extras) = &self.extras {
+        if !self.extras.is_empty() {
             write!(
                 f,
                 "[{}]",
-                extras
+                self.extras
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
@@ -214,10 +214,8 @@ impl Requirement {
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
-    pub fn extras(&self) -> Option<Vec<String>> {
-        self.extras
-            .as_ref()
-            .map(|extras| extras.iter().map(ToString::to_string).collect())
+    pub fn extras(&self) -> Vec<String> {
+        self.extras.iter().map(ToString::to_string).collect()
     }
 
     /// The marker expression such as  `python_version > "3.8"` in
@@ -600,9 +598,9 @@ fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
 }
 
 /// parses extras in the `[extra1,extra2] format`
-fn parse_extras(cursor: &mut Cursor) -> Result<Option<Vec<ExtraName>>, Pep508Error> {
+fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
     let Some(bracket_pos) = cursor.eat_char('[') else {
-        return Ok(None);
+        return Ok(vec![]);
     };
     let mut extras = Vec::new();
 
@@ -689,7 +687,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Option<Vec<ExtraName>>, Pep508Err
         }
     }
 
-    Ok(Some(extras))
+    Ok(extras)
 }
 
 /// Parse a raw string for a URL requirement, which could be either a URL or a local path, and which
@@ -1087,10 +1085,10 @@ mod tests {
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
             name: PackageName::from_str("requests").unwrap(),
-            extras: Some(vec![
+            extras: vec![
                 ExtraName::from_str("security").unwrap(),
                 ExtraName::from_str("tests").unwrap(),
-            ]),
+            ],
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::new(
@@ -1215,7 +1213,7 @@ mod tests {
     #[test]
     fn error_extras1() {
         let numpy = Requirement::from_str("black[d]").unwrap();
-        assert_eq!(numpy.extras, Some(vec![ExtraName::from_str("d").unwrap()]));
+        assert_eq!(numpy.extras, vec![ExtraName::from_str("d").unwrap()]);
     }
 
     #[test]
@@ -1223,10 +1221,10 @@ mod tests {
         let numpy = Requirement::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
             numpy.extras,
-            Some(vec![
+            vec![
                 ExtraName::from_str("d").unwrap(),
                 ExtraName::from_str("jupyter").unwrap(),
-            ])
+            ]
         );
     }
 
@@ -1274,7 +1272,7 @@ mod tests {
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
             name: PackageName::from_str("pip").unwrap(),
-            extras: None,
+            extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(VerbatimUrl::from_str(url).unwrap())),
         };

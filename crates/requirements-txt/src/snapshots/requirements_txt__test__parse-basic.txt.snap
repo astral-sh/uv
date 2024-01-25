@@ -9,7 +9,7 @@ RequirementsTxt {
                 name: PackageName(
                     "numpy",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -32,7 +32,7 @@ RequirementsTxt {
                 name: PackageName(
                     "pandas",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -55,7 +55,7 @@ RequirementsTxt {
                 name: PackageName(
                     "python-dateutil",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -78,7 +78,7 @@ RequirementsTxt {
                 name: PackageName(
                     "pytz",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -101,7 +101,7 @@ RequirementsTxt {
                 name: PackageName(
                     "six",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
@@ -124,7 +124,7 @@ RequirementsTxt {
                 name: PackageName(
                     "tzdata",
                 ),
-                extras: None,
+                extras: [],
                 version_or_url: Some(
                     VersionSpecifier(
                         VersionSpecifiers(
