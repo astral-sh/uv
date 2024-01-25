@@ -14,6 +14,7 @@ mod common;
 #[test]
 fn create_venv() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.display().to_string());
@@ -28,6 +29,8 @@ fn create_venv() -> Result<()> {
             .arg(venv.as_os_str())
             .arg("--python")
             .arg("3.12")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
@@ -47,6 +50,7 @@ fn create_venv() -> Result<()> {
 #[test]
 fn create_venv_defaults_to_cwd() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.display().to_string());
@@ -60,6 +64,8 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
             .arg("venv")
             .arg("--python")
             .arg("3.12")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
@@ -79,6 +85,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
 #[test]
 fn seed() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.display().to_string());
@@ -94,6 +101,8 @@ fn seed() -> Result<()> {
             .arg("--seed")
             .arg("--python")
             .arg("3.12")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
