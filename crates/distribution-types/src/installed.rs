@@ -6,6 +6,7 @@ use fs_err as fs;
 use url::Url;
 
 use pep440_rs::Version;
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::PackageName;
 
 use crate::{InstalledMetadata, InstalledVersion, Name};
@@ -102,8 +103,12 @@ impl InstalledDist {
     pub fn metadata(&self) -> Result<pypi_types::Metadata21> {
         let path = self.path().join("METADATA");
         let contents = fs::read(&path)?;
-        pypi_types::Metadata21::parse(&contents)
-            .with_context(|| format!("Failed to parse METADATA file at: {}", path.display()))
+        pypi_types::Metadata21::parse(&contents).with_context(|| {
+            format!(
+                "Failed to parse METADATA file at: {}",
+                path.normalized_display()
+            )
+        })
     }
 
     /// Return the [`Url`] of the distribution, if it is editable.

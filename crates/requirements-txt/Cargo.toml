@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
+puffin-fs = { path = "../puffin-fs" }
 puffin-normalize = { path = "../puffin-normalize" }
 
 fs-err = { workspace = true }

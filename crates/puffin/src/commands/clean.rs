@@ -5,6 +5,7 @@ use fs_err as fs;
 use owo_colors::OwoColorize;
 
 use puffin_cache::Cache;
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::PackageName;
 
 use crate::commands::ExitStatus;
@@ -20,7 +21,7 @@ pub(crate) fn clean(
         writeln!(
             printer,
             "No cache found at: {}",
-            cache.root().display().cyan()
+            cache.root().normalized_display().cyan()
         )?;
         return Ok(ExitStatus::Success);
     }
@@ -29,10 +30,14 @@ pub(crate) fn clean(
         writeln!(
             printer,
             "Clearing cache at: {}",
-            cache.root().display().cyan()
+            cache.root().normalized_display().cyan()
         )?;
-        fs::remove_dir_all(cache.root())
-            .with_context(|| format!("Failed to clear cache at: {}", cache.root().display()))?;
+        fs::remove_dir_all(cache.root()).with_context(|| {
+            format!(
+                "Failed to clear cache at: {}",
+                cache.root().normalized_display()
+            )
+        })?;
     } else {
         for package in packages {
             let count = cache.purge(package)?;

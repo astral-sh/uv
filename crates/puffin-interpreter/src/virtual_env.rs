@@ -5,7 +5,7 @@ use tracing::debug;
 
 use platform_host::Platform;
 use puffin_cache::Cache;
-use puffin_fs::LockedFile;
+use puffin_fs::{LockedFile, NormalizedDisplay};
 
 use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;
@@ -88,7 +88,7 @@ impl Virtualenv {
 
     /// Lock the virtual environment to prevent concurrent writes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(self.root.join(".lock"), self.root.display())
+        LockedFile::acquire(self.root.join(".lock"), self.root.normalized_display())
     }
 }
 

@@ -8,6 +8,10 @@ use tracing::{error, warn};
 
 use puffin_warnings::warn_user;
 
+pub use crate::path::*;
+
+mod path;
+
 /// Create a symlink from `src` to `dst`, replacing any existing symlink.
 ///
 /// On Windows, this uses the `junction` crate to create a junction point.
@@ -59,7 +63,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
             std::io::ErrorKind::Other,
             format!(
                 "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
+                path.normalized_display(),
                 err.error
             ),
         )
@@ -80,7 +84,7 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
             std::io::ErrorKind::Other,
             format!(
                 "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
+                path.normalized_display(),
                 err.error
             ),
         )
@@ -192,7 +196,7 @@ impl LockedFile {
                 warn_user!(
                     "Waiting to acquire lock for {} (lockfile: {})",
                     resource,
-                    path.as_ref().display()
+                    path.normalized_display(),
                 );
                 file.file().lock_exclusive()?;
                 Ok(Self(file))

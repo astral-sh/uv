@@ -12,6 +12,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
+use puffin_fs::NormalizedDisplay;
 use puffin_installer::{
     Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
@@ -56,7 +57,7 @@ pub(crate) async fn pip_sync(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().display().cyan()
+        venv.python_executable().normalized_display().cyan()
     );
 
     let _lock = venv.lock()?;

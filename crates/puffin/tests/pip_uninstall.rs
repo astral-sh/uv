@@ -8,6 +8,7 @@ use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use url::Url;
 
 use common::{BIN_NAME, INSTA_FILTERS};
+use puffin_fs::NormalizedDisplay;
 
 use crate::common::{create_venv_py312, venv_to_interpreter};
 
@@ -345,7 +346,7 @@ fn missing_record() -> Result<()> {
 
     let dist_info_str = regex::escape(&format!(
         "RECORD file not found at: {}",
-        dist_info.display()
+        dist_info.normalized_display()
     ));
     let filters: Vec<_> = iter::once((
         dist_info_str.as_str(),

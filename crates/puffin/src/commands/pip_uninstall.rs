@@ -7,6 +7,7 @@ use tracing::debug;
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use puffin_cache::Cache;
+use puffin_fs::NormalizedDisplay;
 use puffin_interpreter::Virtualenv;
 
 use crate::commands::{elapsed, ExitStatus};
@@ -30,7 +31,7 @@ pub(crate) async fn pip_uninstall(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().display().cyan()
+        venv.python_executable().normalized_display().cyan(),
     );
 
     let _lock = venv.lock()?;
