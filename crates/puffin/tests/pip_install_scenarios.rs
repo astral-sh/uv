@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/5fee2b6d17a995e88a1d722900d964fd3315f929/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/e944cb4c8f5d68457d0462ee19106509f63b8d34/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -697,8 +697,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -2682,15 +2682,15 @@ fn requires_python_version_greater_than_current() -> Result<()> {
 /// greater than the current patch version
 ///
 /// ```text
-/// dcd76825
+/// 7b98f5af
 /// ├── environment
-/// │   └── python3.8.0
+/// │   └── python3.8.12
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8.2 (incompatible with environment)
+///         └── requires python>=3.8.14 (incompatible with environment)
 /// ```
 #[test]
 fn requires_python_version_greater_than_current_patch() -> Result<()> {
@@ -2700,8 +2700,8 @@ fn requires_python_version_greater_than_current_patch() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-dcd76825", "albatross"));
-    filters.push((r"-dcd76825", ""));
+    filters.push((r"a-7b98f5af", "albatross"));
+    filters.push((r"-7b98f5af", ""));
 
     insta::with_settings!({
         filters => filters
@@ -2709,7 +2709,7 @@ fn requires_python_version_greater_than_current_patch() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("a-dcd76825==1.0.0")
+            .arg("a-7b98f5af==1.0.0")
             .arg("--extra-index-url")
             .arg("https://test.pypi.org/simple")
             .arg("--cache-dir")
@@ -2717,19 +2717,18 @@ fn requires_python_version_greater_than_current_patch() -> Result<()> {
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
             .current_dir(&temp_dir), @r###"
-        success: true
-        exit_code: 0
+        success: false
+        exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + albatross==1.0.0
+          × No solution found when resolving dependencies:
+          ╰─▶ Because the current Python version (3.8.12) does not satisfy Python>=3.8.14 and albatross==1.0.0 depends on Python>=3.8.14, we can conclude that albatross==1.0.0 cannot be used.
+              And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
     });
 
-    assert_not_installed(&venv, "a_dcd76825", &temp_dir);
+    assert_not_installed(&venv, "a_7b98f5af", &temp_dir);
 
     Ok(())
 }
