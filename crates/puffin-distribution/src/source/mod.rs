@@ -251,7 +251,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let cache_control = CacheControl::from(
             self.build_context
                 .cache()
-                .freshness(&cache_entry, Some(source_dist.name()))?,
+                .freshness(&cache_entry, Some(source_dist.name())).expect("cache entry exists"),
         );
 
         let download = |response| {
@@ -283,7 +283,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself. There's also no need to lock, since we never replace entries within the
-        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
@@ -373,7 +372,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself. There's also no need to lock, since we never replace entries within the
-        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains compatible metadata, return it.
@@ -457,7 +455,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself. There's also no need to lock, since we never replace entries within the
-        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
@@ -524,7 +521,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // From here on, scope all operations to the current build. Within the manifest shard,
         // there's no need to check for freshness, since entries have to be fresher than the
         // manifest itself. There's also no need to lock, since we never replace entries within the
-        // shard.
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains compatible metadata, return it.
@@ -939,7 +935,7 @@ pub(crate) fn read_http_manifest(
             rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?.data,
         )),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err.into()),
+        Err(err) => panic!("Error reading HTTP manifest: {}", err)
     }
 }
 
@@ -959,7 +955,7 @@ pub(crate) fn read_timestamp_manifest(
             }
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
+        Err(err) => panic!("Error reading manifest: {}", err)
     }
     Ok(None)
 }
@@ -1009,7 +1005,7 @@ fn read_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl Into<PathBuf>,
 ) -> Result<Metadata21, SourceDistError> {
-    let file = fs_err::File::open(wheel)?;
+    let file = fs_err::File::open(wheel).expect("Wheel file");
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_dist_info(filename, &mut archive)?;
