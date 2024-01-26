@@ -86,6 +86,8 @@ versions = VERSIONS_FILE.read_text().splitlines()
 # Install each version
 for version in versions:
     key = f"{INTERPRETER}-{version}-{PLATFORM_MAP.get(PLATFORM, PLATFORM)}-{ARCH_MAP.get(ARCH, ARCH)}"
+    install_dir = INSTALL_DIR / f"{INTERPRETER}@{version}"
+    already_exists = False
     print(f"Installing {key}")
 
     url = versions_metadata[key]["url"]
@@ -94,33 +96,38 @@ for version in versions:
         print(f"No matching download for {key}")
         sys.exit(1)
 
-    filename = url.split("/")[-1]
-    print(f"Downloading {urllib.parse.unquote(filename)}")
-    download_path = THIS_DIR / filename
-    with urllib.request.urlopen(url) as response:
-        with download_path.open("wb") as download_file:
-            shutil.copyfileobj(response, download_file)
+    if not install_dir.exists():
+        filename = url.split("/")[-1]
+        print(f"Downloading {urllib.parse.unquote(filename)}")
+        download_path = THIS_DIR / filename
+        with urllib.request.urlopen(url) as response:
+            with download_path.open("wb") as download_file:
+                shutil.copyfileobj(response, download_file)
 
-    sha = versions_metadata[key]["sha256"]
-    if not sha:
-        print(f"WARNING: no checksum for {key}")
+        sha = versions_metadata[key]["sha256"]
+        if not sha:
+            print(f"WARNING: no checksum for {key}")
+        else:
+            print("Verifying checksum...", end="")
+            if sha256_file(download_path) != sha:
+                print(" FAILED!")
+                sys.exit(1)
+            print(" OK")
+
+        if install_dir.exists():
+            shutil.rmtree(install_dir)
+        print("Extracting to", install_dir)
+        install_dir.parent.mkdir(parents=True, exist_ok=True)
+
+        decompress_file(THIS_DIR / filename, install_dir.with_suffix(".tmp"))
+
+        # Setup the installation
+        (install_dir.with_suffix(".tmp") / "python").rename(install_dir)
     else:
-        print("Verifying checksum...", end="")
-        if sha256_file(download_path) != sha:
-            print(" FAILED!")
-            sys.exit(1)
-        print(" OK")
-
-    install_dir = INSTALL_DIR / f"{INTERPRETER}@{version}"
-    if install_dir.exists():
-        shutil.rmtree(install_dir)
-    print("Extracting to", install_dir)
-    install_dir.parent.mkdir(parents=True, exist_ok=True)
-
-    decompress_file(THIS_DIR / filename, install_dir.with_suffix(".tmp"))
-
-    # Setup the installation
-    (install_dir.with_suffix(".tmp") / "python").rename(install_dir)
+        # We need to update executables even if the version is already downloaded and extracted
+        # to ensure that changes to the precedence of versions are respected
+        already_exists = True
+        print("Already available, skipping download")
 
     # Use relative paths for links so if the bin is moved they don't break
     executable = "." / install_dir.relative_to(BIN_DIR) / "install" / "bin" / "python3"
@@ -145,7 +152,10 @@ for version in versions:
         target.unlink(missing_ok=True)
         target.symlink_to(executable)
 
-    print(f"Installed as python{version}")
+    if already_exists:
+        print(f"Updated executables for python{version}")
+    else:
+        print(f"Installed executables for python{version}")
 
     # Cleanup
     install_dir.with_suffix(".tmp").rmdir()
