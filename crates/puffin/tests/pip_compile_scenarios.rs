@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/a451c95105db0c2897d0ad1bde0703ba0fc40d3a/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0563417be973397d05b45cd2c5b415d7215161e3/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -261,7 +261,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 /// version installed elsewhere on their system.
 ///
 /// ```text
-/// ae5b2665
+/// 23e00318
 /// ├── environment
 /// │   ├── python3.11
 /// │   └── python3.9 (active)
@@ -283,11 +283,11 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ae5b2665", "albatross"));
-    filters.push((r"-ae5b2665", ""));
+    filters.push((r"a-23e00318", "albatross"));
+    filters.push((r"-23e00318", ""));
 
     let requirements_in = temp_dir.child("requirements.in");
-    requirements_in.write_str("a-ae5b2665==1.0.0")?;
+    requirements_in.write_str("a-23e00318==1.0.0")?;
 
     let mut inner = Command::new(get_cargo_bin(BIN_NAME));
     let mut command = inner
@@ -322,7 +322,10 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
 
     // Since there is a compatible Python version available on the system, it should be
     // used to build the source distributions.
-    command.assert().success();
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("a-23e00318==1.0.0"));
 
     Ok(())
 }
