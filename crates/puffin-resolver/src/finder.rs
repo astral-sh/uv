@@ -11,7 +11,9 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_client::{FlatDistributions, FlatIndex, RegistryClient, SimpleMetadata};
+use puffin_client::{
+    FlatDistributions, FlatIndex, RegistryClient, SimpleMetadata, SimpleMetadatum,
+};
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 
@@ -158,7 +160,7 @@ impl<'a> DistFinder<'a> {
                 (None, None, None)
             };
 
-        for (version, files) in metadata.into_iter().rev() {
+        for SimpleMetadatum { version, files } in metadata.into_iter().rev() {
             // If we iterated past the first-compatible version, break.
             if best_version
                 .as_ref()

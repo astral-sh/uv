@@ -8,7 +8,7 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_client::{FlatDistributions, SimpleMetadata};
+use puffin_client::{FlatDistributions, SimpleMetadata, SimpleMetadatum};
 use puffin_normalize::PackageName;
 use puffin_traits::NoBinary;
 use puffin_warnings::warn_user_once;
@@ -48,7 +48,7 @@ impl VersionMap {
         };
 
         // Collect compatible distributions.
-        for (version, files) in metadata {
+        for SimpleMetadatum { version, files } in metadata {
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
