@@ -8,7 +8,7 @@ use regex::Regex;
 use url::Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
-#[derive(Debug, Clone, Eq, Ord, derivative::Derivative)]
+#[derive(Debug, Clone, Eq, derivative::Derivative)]
 #[derivative(PartialEq, PartialOrd, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VerbatimUrl {

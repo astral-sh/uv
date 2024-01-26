@@ -10,7 +10,7 @@ use puffin_normalize::{ExtraName, PackageName};
 /// 2. Uses the same strategy as pip and posy to handle extras: for each extra, we create a virtual
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
-#[derive(Debug, Clone, Eq, Derivative, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, Derivative, PartialOrd)]
 #[derivative(PartialEq, Hash)]
 pub enum PubGrubPackage {
     /// The root package, which is used to start the resolution process.

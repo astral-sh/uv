@@ -3,7 +3,6 @@ use std::convert::Infallible;
 use std::fmt::Formatter;
 
 use indexmap::IndexMap;
-use itertools::Itertools;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use url::Url;
@@ -171,7 +170,7 @@ impl NoSolutionError {
         package_versions: &OnceMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
-        for package in self.derivation_tree.packages().iter().sorted() {
+        for package in self.derivation_tree.packages() {
             match package {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(PubGrubPython::Installed) => {
