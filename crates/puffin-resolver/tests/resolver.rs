@@ -185,6 +185,7 @@ async fn black_colorama() -> Result<()> {
     click==8.1.7
         # via black
     colorama==0.4.6
+        # via black
     mypy-extensions==1.0.0
         # via black
     packaging==23.2

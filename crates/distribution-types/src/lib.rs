@@ -278,7 +278,7 @@ impl Dist {
 
     /// Create a [`Dist`] for a local editable distribution.
     pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
-        let LocalEditable { url, path } = editable;
+        let LocalEditable { url, path, .. } = editable;
         Ok(Self::Source(SourceDist::Path(PathSourceDist {
             name,
             url,

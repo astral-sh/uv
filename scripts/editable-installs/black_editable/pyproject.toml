@@ -9,6 +9,18 @@ dependencies = []
 requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
 
+[project.optional-dependencies]
+colorama = ["colorama>=0.4.3"]
+uvloop = ["uvloop>=0.15.2"]
+d = [
+  "aiohttp>=3.7.4; sys_platform != 'win32' or implementation_name != 'pypy'",
+  "aiohttp>=3.7.4, !=3.9.0; sys_platform == 'win32' and implementation_name == 'pypy'",
+]
+jupyter = [
+  "ipython>=7.8.0",
+  "tokenize-rt>=3.2.0",
+]
+
 [build-system]
 requires = ["flit_core>=3.4,<4"]
 build-backend = "flit_core.buildapi"

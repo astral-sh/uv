@@ -607,6 +607,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     self.visit_package(package, priorities, request_sink)?;
                 }
 
+                // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.values() {
                     constraints.insert(
                         PubGrubPackage::Package(
@@ -616,6 +617,16 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         ),
                         Range::singleton(metadata.version.clone()),
                     );
+                    for extra in &editable.extras {
+                        constraints.insert(
+                            PubGrubPackage::Package(
+                                metadata.name.clone(),
+                                Some(extra.clone()),
+                                Some(editable.url().clone()),
+                            ),
+                            Range::singleton(metadata.version.clone()),
+                        );
+                    }
                 }
 
                 Ok(Dependencies::Available(constraints.into()))

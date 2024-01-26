@@ -431,10 +431,11 @@ async fn resolve_editables(
         let local_editables: Vec<LocalEditable> = uninstalled
             .iter()
             .map(|editable| {
-                let EditableRequirement { path, url } = editable;
+                let EditableRequirement { url, path, extras } = editable;
                 Ok(LocalEditable {
-                    path: path.clone(),
                     url: url.clone(),
+                    path: path.clone(),
+                    extras: extras.clone(),
                 })
             })
             .collect::<Result<_>>()?;
