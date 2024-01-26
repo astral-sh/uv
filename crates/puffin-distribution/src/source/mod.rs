@@ -766,9 +766,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         drop(span);
 
         // Persist the unzipped distribution to the cache.
-        self.build_context
-            .cache()
-            .persist(source_dist_dir, cache_path)
+        fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
+            .await
+            .map_err(Error::CacheWrite)?;
+        fs_err::tokio::rename(&source_dist_dir, &cache_path)
+            .await
             .map_err(Error::CacheWrite)?;
 
         Ok(cache_path)
