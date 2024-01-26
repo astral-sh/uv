@@ -649,7 +649,7 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 1 package in [TIME]
         Installed 1 package in [TIME]
          - black==23.11.0
-         + black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
         "###);
     });
 
@@ -701,7 +701,7 @@ fn install_editable_and_registry() -> Result<()> {
         Resolved 6 packages in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
          + black==23.10.0
         "###);
     });

@@ -1,7 +1,7 @@
 [project]
 name = "black"
 version = "0.1.0"
-description = "Default template for PDM package"
+description = "Default template for a Flit project"
 authors = [
     {name = "konstin", email = "konstin@mailbox.org"},
 ]
@@ -10,8 +10,5 @@ requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
 
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
-
-[tool.pdm]
-package-type = "library"
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"
