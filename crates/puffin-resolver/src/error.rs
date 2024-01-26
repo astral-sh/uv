@@ -8,7 +8,7 @@ use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use url::Url;
 
 use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
-use once_map::OnceMap;
+
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
@@ -167,7 +167,7 @@ impl NoSolutionError {
     pub(crate) fn with_available_versions(
         mut self,
         python_requirement: &PythonRequirement,
-        package_versions: &OnceMap<PackageName, VersionMap>,
+        package_versions: &IndexMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
@@ -186,8 +186,7 @@ impl NoSolutionError {
                     );
                 }
                 PubGrubPackage::Package(name, ..) => {
-                    if let Some(entry) = package_versions.get(name) {
-                        let version_map = entry.value();
+                    if let Some(version_map) = package_versions.get(name) {
                         available_versions.insert(
                             package.clone(),
                             version_map

@@ -1,11 +1,13 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+
 use std::sync::Arc;
 
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
@@ -223,7 +225,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     if let ResolveError::NoSolution(err) = err {
                         ResolveError::NoSolution(
                             err
-                            .with_available_versions(&self.python_requirement, &self.index.packages)
                             .with_selector(self.selector.clone())
                             .with_python_requirement(&self.python_requirement)
                         )
@@ -256,6 +257,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>> =
             FxHashMap::default();
         let mut next = root;
+        let mut package_versions: IndexMap<PackageName, VersionMap> = IndexMap::new();
 
         debug!(
             "Solving with target Python version {}",
@@ -264,7 +266,19 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         loop {
             // Run unit propagation.
-            state.unit_propagation(next)?;
+            state.unit_propagation(next).map_err(|err| {
+                let err: ResolveError = err.into();
+                // Add version information to improve unsat error messages.
+                if let ResolveError::NoSolution(err) = err {
+                    ResolveError::NoSolution(
+                        err.with_available_versions(&self.python_requirement, &package_versions)
+                            .with_selector(self.selector.clone())
+                            .with_python_requirement(&self.python_requirement),
+                    )
+                } else {
+                    err
+                }
+            })?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
             Self::pre_visit(state.partial_solution.prioritized_packages(), request_sink)?;
@@ -301,6 +315,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &next,
                     term_intersection.unwrap_positive(),
                     &mut pins,
+                    &mut package_versions,
                     request_sink,
                 )
                 .await?;
@@ -436,6 +451,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
+        package_versions: &mut IndexMap<PackageName, VersionMap>,
         request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
     ) -> Result<Option<Version>, ResolveError> {
         return match package {
@@ -504,6 +520,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await?;
                 let version_map = entry.value();
+                package_versions.insert(package_name.clone(), version_map.clone());
 
                 if let Some(extra) = extra {
                     debug!(
