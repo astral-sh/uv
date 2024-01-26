@@ -57,8 +57,8 @@ pub(crate) fn extra_filters(windows_extra_count: usize, extra_filters: &[(&str, 
             })
             .collect();
         extra_filters
-            .into_iter()
-            .cloned()
+            .iter()
+            .copied()
             .chain(windows_only_deps)
             .chain(
                 reduce_package_counts
@@ -70,8 +70,8 @@ pub(crate) fn extra_filters(windows_extra_count: usize, extra_filters: &[(&str, 
             .into()
     } else if cfg!(unix) {
         extra_filters
-            .into_iter()
-            .cloned()
+            .iter()
+            .copied()
             .chain(INSTA_FILTERS.to_vec())
             .collect::<Vec<_>>()
             .into()

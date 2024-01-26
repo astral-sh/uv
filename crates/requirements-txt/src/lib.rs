@@ -802,7 +802,7 @@ mod test {
             .chain()
             // The last error is operating-system specific.
             .take(2)
-            .map(|err| err.to_string())
+            .map(ToString::to_string)
             .join("\n");
 
         let requirements_txt_str = regex::escape(requirements_txt.path().to_str().unwrap());
@@ -833,7 +833,7 @@ mod test {
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
-            .map(|err| err.to_string())
+            .map(ToString::to_string)
             .join("\n");
 
         let requirements_txt_str = regex::escape(requirements_txt.path().to_str().unwrap());
@@ -862,7 +862,7 @@ mod test {
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
-            .map(|err| err.to_string())
+            .map(ToString::to_string)
             .join("\n");
 
         let requirements_txt_str = regex::escape(requirements_txt.path().to_str().unwrap());
