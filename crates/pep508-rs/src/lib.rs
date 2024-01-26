@@ -407,6 +407,22 @@ impl Requirement {
     }
 }
 
+/// A list of [`ExtraName`] that can be attached to a [`Requirement`].
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct Extras(Vec<ExtraName>);
+
+impl Extras {
+    /// Parse a list of extras.
+    pub fn parse(input: &str) -> Result<Self, Pep508Error> {
+        Ok(Self(parse_extras(&mut Cursor::new(input))?))
+    }
+
+    /// Convert the [`Extras`] into a [`Vec`] of [`ExtraName`].
+    pub fn into_vec(self) -> Vec<ExtraName> {
+        self.0
+    }
+}
+
 /// The actual version specifier or url to install
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum VersionOrUrl {

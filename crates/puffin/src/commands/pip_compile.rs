@@ -220,8 +220,8 @@ pub(crate) async fn pip_compile(
         let editables: Vec<LocalEditable> = editables
             .into_iter()
             .map(|editable| {
-                let EditableRequirement { path, url } = editable;
-                Ok(LocalEditable { url, path })
+                let EditableRequirement { url, extras, path } = editable;
+                Ok(LocalEditable { url, path, extras })
             })
             .collect::<Result<_>>()?;
 

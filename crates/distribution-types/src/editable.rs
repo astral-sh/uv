@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use url::Url;
 
 use pep508_rs::VerbatimUrl;
+use puffin_normalize::ExtraName;
 
 use crate::Verbatim;
 
@@ -13,6 +14,8 @@ pub struct LocalEditable {
     pub url: VerbatimUrl,
     /// Either the path to the editable or its checkout.
     pub path: PathBuf,
+    /// The extras that should be installed.
+    pub extras: Vec<ExtraName>,
 }
 
 impl LocalEditable {

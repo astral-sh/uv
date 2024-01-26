@@ -36,7 +36,6 @@
 
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::io::Error;
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
@@ -45,8 +44,9 @@ use tracing::warn;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-use pep508_rs::{split_scheme, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
+use pep508_rs::{split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
 use puffin_fs::NormalizedDisplay;
+use puffin_normalize::ExtraName;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -71,6 +71,7 @@ enum RequirementsTxtStatement {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EditableRequirement {
     pub url: VerbatimUrl,
+    pub extras: Vec<ExtraName>,
     pub path: PathBuf,
 }
 
@@ -98,8 +99,40 @@ impl EditableRequirement {
         given: &str,
         working_dir: impl AsRef<Path>,
     ) -> Result<EditableRequirement, RequirementsTxtParserError> {
+        // Identify the extras.
+        let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
+            let extras = Extras::parse(extras).map_err(|err| {
+                // Map from error on the extras to error on the whole requirement.
+                let err = Pep508Error {
+                    message: err.message,
+                    start: requirement.len() + err.start,
+                    len: err.len,
+                    input: given.to_string(),
+                };
+                match err.message {
+                    Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                        RequirementsTxtParserError::Pep508 {
+                            start: err.start,
+                            end: err.start + err.len,
+                            source: err,
+                        }
+                    }
+                    Pep508ErrorSource::UnsupportedRequirement(_) => {
+                        RequirementsTxtParserError::UnsupportedRequirement {
+                            start: err.start,
+                            end: err.start + err.len,
+                            source: err,
+                        }
+                    }
+                }
+            })?;
+            (requirement, extras.into_vec())
+        } else {
+            (given, vec![])
+        };
+
         // Create a `VerbatimUrl` to represent the editable requirement.
-        let url = if let Some((scheme, path)) = split_scheme(given) {
+        let url = if let Some((scheme, path)) = split_scheme(requirement) {
             if scheme == "file" {
                 if let Some(path) = path.strip_prefix("//") {
                     // Ex) `file:///home/ferris/project/scripts/...`
@@ -111,23 +144,45 @@ impl EditableRequirement {
             } else {
                 // Ex) `https://...`
                 return Err(RequirementsTxtParserError::UnsupportedUrl(
-                    given.to_string(),
+                    requirement.to_string(),
                 ));
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(given, working_dir.as_ref())
+            VerbatimUrl::from_path(requirement, working_dir.as_ref())
         };
 
         // Create a `PathBuf`.
-        let path = url
-            .to_file_path()
-            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(given.to_string()))?;
+        let path = url.to_file_path().map_err(|()| {
+            RequirementsTxtParserError::InvalidEditablePath(requirement.to_string())
+        })?;
 
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
-        let url = url.with_given(given.to_string());
+        let url = url.with_given(requirement.to_string());
 
-        Ok(EditableRequirement { url, path })
+        Ok(EditableRequirement { url, extras, path })
+    }
+
+    /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
+    ///
+    /// Pip uses `m = re.match(r'^(.+)(\[[^]]+])$', path)`. Our strategy is:
+    /// - If the string ends with a closing bracket (`]`)...
+    /// - Iterate backwards until you find the open bracket (`[`)...
+    /// - But abort if you find another closing bracket (`]`) first.
+    pub fn split_extras(given: &str) -> Option<(&str, &str)> {
+        let mut chars = given.char_indices().rev();
+
+        // If the string ends with a closing bracket (`]`)...
+        if !matches!(chars.next(), Some((_, ']'))) {
+            return None;
+        }
+
+        // Iterate backwards until you find the open bracket (`[`)...
+        let (index, _) = chars
+            .take_while(|(_, c)| *c != ']')
+            .find(|(_, c)| *c == '[')?;
+
+        Some(given.split_at(index))
     }
 }
 
@@ -308,7 +363,8 @@ fn parse_entry(
         }
     } else if s.eat_if("-e") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)?;
+        let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
+            .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.at(char::is_ascii_alphanumeric) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
@@ -407,16 +463,13 @@ fn parse_requirement_and_hashes(
     let requirement =
         Requirement::parse(&content[start..end], Some(working_dir)).map_err(|err| {
             match err.message {
-                Pep508ErrorSource::String(_) => RequirementsTxtParserError::Pep508 {
-                    source: err,
-                    start,
-                    end,
-                },
-                Pep508ErrorSource::UrlError(_) => RequirementsTxtParserError::Pep508 {
-                    source: err,
-                    start,
-                    end,
-                },
+                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                    RequirementsTxtParserError::Pep508 {
+                        source: err,
+                        start,
+                        end,
+                    }
+                }
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     RequirementsTxtParserError::UnsupportedRequirement {
                         source: err,
@@ -513,6 +566,49 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+}
+
+impl RequirementsTxtParserError {
+    /// Add a fixed offset to the location of the error.
+    #[must_use]
+    fn with_offset(self, offset: usize) -> Self {
+        match self {
+            RequirementsTxtParserError::IO(err) => RequirementsTxtParserError::IO(err),
+            RequirementsTxtParserError::InvalidEditablePath(given) => {
+                RequirementsTxtParserError::InvalidEditablePath(given)
+            }
+            RequirementsTxtParserError::UnsupportedUrl(url) => {
+                RequirementsTxtParserError::UnsupportedUrl(url)
+            }
+            RequirementsTxtParserError::Parser { message, location } => {
+                RequirementsTxtParserError::Parser {
+                    message,
+                    location: location + offset,
+                }
+            }
+            RequirementsTxtParserError::UnsupportedRequirement { source, start, end } => {
+                RequirementsTxtParserError::UnsupportedRequirement {
+                    source,
+                    start: start + offset,
+                    end: end + offset,
+                }
+            }
+            RequirementsTxtParserError::Pep508 { source, start, end } => {
+                RequirementsTxtParserError::Pep508 {
+                    source,
+                    start: start + offset,
+                    end: end + offset,
+                }
+            }
+            RequirementsTxtParserError::Subfile { source, start, end } => {
+                RequirementsTxtParserError::Subfile {
+                    source,
+                    start: start + offset,
+                    end: end + offset,
+                }
+            }
+        }
+    }
 }
 
 impl Display for RequirementsTxtParserError {
@@ -614,7 +710,7 @@ impl std::error::Error for RequirementsTxtFileError {
 }
 
 impl From<io::Error> for RequirementsTxtParserError {
-    fn from(err: Error) -> Self {
+    fn from(err: io::Error) -> Self {
         Self::IO(err)
     }
 }
@@ -631,7 +727,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
 
-    use crate::RequirementsTxt;
+    use crate::{EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
@@ -773,5 +869,53 @@ mod test {
         });
 
         Ok(())
+    }
+
+    #[test]
+    fn invalid_editable_extra() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            -e black[,abcdef]
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error)
+            .chain()
+            .map(|err| err.to_string().replace('\\', "/"))
+            .join("\n");
+
+        insta::with_settings!({
+            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+        }, {
+            insta::assert_display_snapshot!(errors, @r###"
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
+            Expected an alphanumeric character starting the extra name, found ','
+            black[,abcdef]
+                  ^
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn editable_extra() {
+        assert_eq!(
+            EditableRequirement::split_extras("../editable[dev]"),
+            Some(("../editable", "[dev]"))
+        );
+        assert_eq!(
+            EditableRequirement::split_extras("../editable[dev]more[extra]"),
+            Some(("../editable[dev]more", "[extra]"))
+        );
+        assert_eq!(
+            EditableRequirement::split_extras("../editable[[dev]]"),
+            None
+        );
+        assert_eq!(
+            EditableRequirement::split_extras("../editable[[dev]"),
+            Some(("../editable[", "[dev]"))
+        );
     }
 }

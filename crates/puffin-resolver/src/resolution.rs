@@ -162,13 +162,18 @@ impl ResolutionGraph {
                     dependency_range,
                 ) = &state.incompatibility_store[*id].kind
                 {
-                    let PubGrubPackage::Package(self_package, None, _) = self_package else {
+                    let PubGrubPackage::Package(self_package, _, _) = self_package else {
                         continue;
                     };
-                    let PubGrubPackage::Package(dependency_package, None, _) = dependency_package
+                    let PubGrubPackage::Package(dependency_package, _, _) = dependency_package
                     else {
                         continue;
                     };
+
+                    // For extras, we include a dependency between the extra and the base package.
+                    if self_package == dependency_package {
+                        continue;
+                    }
 
                     if self_version.contains(version) {
                         let self_index = &inverse[self_package];
