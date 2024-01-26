@@ -1,13 +1,3 @@
 [profile.default]
 # Mark tests that take longer than 10s as slow
 slow-timeout = "10s"
-
-[[profile.default.overrides]]
-# Some of these tests have a non-determinstic snapshot
-filter = 'binary(pip_install_scenarios)'
-retries = 2
-
-[[profile.no-retry.overrides]]
-# An optional profile to avoid retries
-filter = 'binary(pip_install_scenarios)'
-retries = 0
