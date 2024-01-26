@@ -50,9 +50,12 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
                 fs_err::tokio::create_dir_all(parent).await?;
             }
             let file = fs_err::tokio::File::create(path).await?;
-            let size =
-                usize::try_from(entry.reader().entry().uncompressed_size()).unwrap_or(usize::MAX);
-            let mut writer = tokio::io::BufWriter::with_capacity(size, file);
+            let mut writer =
+                if let Ok(size) = usize::try_from(entry.reader().entry().uncompressed_size()) {
+                    tokio::io::BufWriter::with_capacity(size, file)
+                } else {
+                    tokio::io::BufWriter::new(file)
+                };
             let mut reader = entry.reader_mut().compat();
             tokio::io::copy(&mut reader, &mut writer).await?;
         }
