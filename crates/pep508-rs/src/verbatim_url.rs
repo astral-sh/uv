@@ -8,8 +8,8 @@ use regex::Regex;
 use url::Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
-#[derive(Debug, Clone, Eq, derivative::Derivative)]
-#[derivative(PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, Ord, derivative::Derivative)]
+#[derivative(PartialEq, PartialOrd, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VerbatimUrl {
     /// The parsed URL.
@@ -22,6 +22,7 @@ pub struct VerbatimUrl {
     )]
     url: Url,
     /// The URL as it was provided by the user.
+    #[derivative(PartialOrd = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     given: Option<String>,

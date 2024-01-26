@@ -3,6 +3,7 @@ use std::convert::Infallible;
 use std::fmt::Formatter;
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use url::Url;
@@ -170,18 +171,18 @@ impl NoSolutionError {
         package_versions: &OnceMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
-        for package in self.derivation_tree.packages() {
+        for package in self.derivation_tree.packages().iter().sorted() {
             match package {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(PubGrubPython::Installed) => {
                     available_versions.insert(
-                        package.clone(),
+                        (*package).clone(),
                         BTreeSet::from([python_requirement.installed().clone()]),
                     );
                 }
                 PubGrubPackage::Python(PubGrubPython::Target) => {
                     available_versions.insert(
-                        package.clone(),
+                        (*package).clone(),
                         BTreeSet::from([python_requirement.target().clone()]),
                     );
                 }
@@ -189,7 +190,7 @@ impl NoSolutionError {
                     if let Some(entry) = package_versions.get(name) {
                         let version_map = entry.value();
                         available_versions.insert(
-                            package.clone(),
+                            (*package).clone(),
                             version_map
                                 .iter()
                                 .map(|(version, _)| version.clone())
