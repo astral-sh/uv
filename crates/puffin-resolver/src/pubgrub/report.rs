@@ -136,24 +136,14 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         match terms_vec.as_slice() {
             [] | [(PubGrubPackage::Root(_), _)] => "the requirements are unsatisfiable".into(),
             [(package @ PubGrubPackage::Package(..), Term::Positive(range))] => {
-                let range = range.simplify(
-                    self.available_versions
-                        .get(*package)
-                        .unwrap_or(&BTreeSet::new())
-                        .iter(),
-                );
+                let range = self.simplify_set(range, package);
                 format!(
                     "{} cannot be used",
                     PackageRange::compatibility(package, &range)
                 )
             }
             [(package @ PubGrubPackage::Package(..), Term::Negative(range))] => {
-                let range = range.simplify(
-                    self.available_versions
-                        .get(*package)
-                        .unwrap_or(&BTreeSet::new())
-                        .iter(),
-                );
+                let range = self.simplify_set(range, package);
                 format!(
                     "{} must be used",
                     PackageRange::compatibility(package, &range)
