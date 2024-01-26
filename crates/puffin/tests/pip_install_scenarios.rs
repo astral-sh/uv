@@ -134,6 +134,30 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of albatross==2.0.0 and you require albatross==2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -190,6 +214,26 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "1.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "1.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only albatross<=1.0.0 is available and you require albatross>1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -247,6 +291,26 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only albatross>=2.0.0 is available and you require albatross<2.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -357,6 +421,38 @@ fn excluded_only_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "1.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "1.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only albatross==1.0.0 is available and you require one of:
                   albatross<1.0.0
@@ -433,6 +529,174 @@ fn excluded_only_compatible_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Excluded(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Excluded(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of albatross that satisfy any of:
                   albatross<1.0.0
@@ -444,8 +708,8 @@ fn excluded_only_compatible_version() -> Result<()> {
                   albatross<2.0.0
                   albatross>2.0.0
               depends on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require one of:
                   albatross<2.0.0
@@ -550,6 +814,270 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Excluded(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Excluded(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of albatross that satisfy any of:
                   albatross<1.0.0
@@ -683,6 +1211,282 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Excluded(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Excluded(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of crow that satisfy any of:
                   crow<1.0.0
@@ -970,6 +1774,110 @@ fn extra_incompatible_with_extra() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only albatross[extra-c]==1.0.0 is available and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
               And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra-b]==1.0.0 is available, we can conclude that all versions of albatross[extra-b] and all versions of albatross[extra-c] are incompatible.
@@ -1112,6 +2020,94 @@ fn extra_incompatible_with_root() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because albatross[extra]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra]==1.0.0 is available, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
               And because you require albatross[extra] and you require bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
@@ -1309,6 +2305,94 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because albatross==1.0.0 depends on bluebird==2.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of albatross depend on bluebird==2.0.0.
               And because you require bluebird==1.0.0 and you require albatross, we can conclude that the requirements are unsatisfiable.
@@ -1380,6 +2464,110 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Included(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
               And because albatross==1.0.0 depends on crow==1.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
@@ -1498,6 +2686,26 @@ fn package_only_prereleases_in_range() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "0.1.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "0.1.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only albatross<=0.1.0 is available and you require albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
 
@@ -1681,7 +2889,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
+        Resolved 1 package in 5m [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + albatross==0.3.0
@@ -1743,7 +2951,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in [TIME]
+        Resolved 1 package in 5m [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + albatross==0.3.0a1
@@ -2061,6 +3269,42 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "0.1",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "0.1",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only bluebird<=0.1 is available and albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
               And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
@@ -2207,6 +3451,46 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0b1",
+                    ),
+                    Included(
+                        "2.0.0b1",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0b1",
+                    ),
+                    Included(
+                        "2.0.0b1",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of crow==2.0.0b1 and albatross==1.0.0 depends on crow==2.0.0b1, we can conclude that albatross==1.0.0 cannot be used.
               And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
@@ -2387,6 +3671,120 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Excluded(
+                        "2.0.0b1",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0b1",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0b1",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0b1",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depend on crow.
               And because only crow<2.0.0b1 is available, we can conclude that all versions of bluebird depend on crow<2.0.0b1.
@@ -2481,6 +3879,94 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "1.0.0",
+                    ),
+                    Excluded(
+                        "2.0.0a5",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0a5",
+                    ),
+                    Excluded(
+                        "2.0.0a6",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0a6",
+                    ),
+                    Excluded(
+                        "2.0.0a7",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0a7",
+                    ),
+                    Excluded(
+                        "2.0.0b1",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0b1",
+                    ),
+                    Excluded(
+                        "2.0.0b5",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "1.0.0",
+                    ),
+                    Excluded(
+                        "2.0.0a5",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0a7",
+                    ),
+                    Excluded(
+                        "2.0.0b1",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0b1",
+                    ),
+                    Excluded(
+                        "2.0.0b5",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of crow that satisfy any of:
                   crow>1.0.0,<2.0.0a5
@@ -2553,6 +4039,50 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "4.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "4.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.7.17) does not satisfy Python>=4.0 and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -2610,6 +4140,50 @@ fn requires_python_version_less_than_current() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Included(
+                        "3.8",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Included(
+                        "3.8",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python<=3.8 and albatross==1.0.0 depends on Python<=3.8, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -2667,6 +4241,50 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.10",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.10",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -2746,6 +4364,30 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of albatross==1.0.0 and you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -2875,6 +4517,86 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.10",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.10",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.11",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.11",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.12",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.12",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "2.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.18) does not satisfy Python>=3.12, we can conclude that any of:
                   Python>=3.10,<3.11

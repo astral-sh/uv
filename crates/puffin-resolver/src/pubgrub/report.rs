@@ -110,7 +110,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
             },
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
+                dbg!(&dependency_set);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
+                dbg!(&dependency_set);
                 match package {
                     PubGrubPackage::Root(Some(name)) => format!(
                         "{name} depends on {}",

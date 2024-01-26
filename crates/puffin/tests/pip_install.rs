@@ -85,6 +85,86 @@ fn no_solution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        segments: [
+            (
+                Included(
+                    "3.0.0",
+                ),
+                Unbounded,
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        segments: [
+            (
+                Included(
+                    "3.0.0",
+                ),
+                Unbounded,
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        segments: [
+            (
+                Included(
+                    "3.0.0",
+                ),
+                Unbounded,
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        segments: [
+            (
+                Included(
+                    "3.0.0",
+                ),
+                Unbounded,
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        segments: [
+            (
+                Included(
+                    "3.0.0",
+                ),
+                Unbounded,
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        segments: [
+            (
+                Included(
+                    "3.0.0",
+                ),
+                Unbounded,
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        segments: [
+            (
+                Unbounded,
+                Excluded(
+                    "1.0.0",
+                ),
+            ),
+        ],
+    }
+    [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        segments: [
+            (
+                Unbounded,
+                Excluded(
+                    "1.0.0",
+                ),
+            ),
+        ],
+    }
       × No solution found when resolving dependencies:
       ╰─▶ Because only flask<=3.0.0 is available and flask==3.0.0 depends
           on werkzeug>=3.0.0, we can conclude that flask>=3.0.0 depends on

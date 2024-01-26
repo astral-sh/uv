@@ -127,6 +127,50 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.10",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.10",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (3.9) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.

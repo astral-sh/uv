@@ -696,6 +696,50 @@ fn compile_python_37() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.8",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.8",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "23.10.1",
+                    ),
+                    Included(
+                        "23.10.1",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "23.10.1",
+                    ),
+                    Included(
+                        "23.10.1",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (3.7) does not satisfy Python>=3.8
               and black==23.10.1 depends on Python>=3.8, we can conclude that
@@ -1438,6 +1482,30 @@ fn conflicting_direct_url_dependency() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of werkzeug==3.0.0 and you require
               werkzeug==3.0.0, we can conclude that the requirements are
@@ -1595,6 +1663,50 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and only werkzeug<3.0.0
               is available, we can conclude that flask==3.0.0 cannot be used.
@@ -1947,6 +2059,30 @@ dependencies = ["django==300.1.4"]
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "300.1.4",
+                    ),
+                    Included(
+                        "300.1.4",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "300.1.4",
+                    ),
+                    Included(
+                        "300.1.4",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there is no version of django==300.1.4 and my-project
               depends on django==300.1.4, we can conclude that the requirements are
@@ -2416,6 +2552,30 @@ fn compile_yanked_version_indirect() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "20.3.0",
+                    ),
+                    Excluded(
+                        "21.2.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+            segments: [
+                (
+                    Excluded(
+                        "20.3.0",
+                    ),
+                    Excluded(
+                        "21.2.0",
+                    ),
+                ),
+            ],
+        }
           × No solution found when resolving dependencies:
           ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
               and you require attrs>20.3.0,<21.2.0, we can conclude that the
