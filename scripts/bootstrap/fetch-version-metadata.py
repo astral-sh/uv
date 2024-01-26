@@ -6,7 +6,7 @@ Generates the bootstrap `versions.json` file.
 
 Installation:
 
-    python3.12 -m pip install -r scripts/bootstrap/requirements.txt
+    pip install requests==2.31.0
 
 Usage:
 
@@ -18,16 +18,21 @@ Acknowledgements:
     Originally authored by Armin Ronacher under the MIT license
 """
 import argparse
-import os
-import json
-import re
 import hashlib
-import requests
+import json
 import logging
-
+import os
+import re
+import sys
 from itertools import chain
-from urllib.parse import unquote
 from pathlib import Path
+from urllib.parse import unquote
+
+try:
+    import requests
+except ImportError:
+    print("ERROR: requests is required; install with `pip install requests==2.31.0`")
+    sys.exit(1)
 
 SELF_DIR = Path(__file__).parent
 RELEASE_URL = "https://api.github.com/repos/indygreg/python-build-standalone/releases"

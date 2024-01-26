@@ -1,2 +1,0 @@
-requests==2.31.0
-zstandard==0.22.0

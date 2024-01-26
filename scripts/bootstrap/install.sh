@@ -7,15 +7,19 @@
 #
 #   macOS
 #
-#       brew install zstd coreutils
+#       brew install zstd jq coreutils
 #
 #   Ubuntu
 #       
-#       apt install zstd
+#       apt install zstd jq
 #
 #   Arch Linux
 #   
-#       pacman -S zstd
+#       pacman -S zstd jq
+#
+#   Windows
+#
+#       winget install jqlang.jq
 #
 # Usage
 #
@@ -28,7 +32,20 @@
 
 set -euo pipefail
 
+# Convenience function for displaying URLs
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
+# Convenience function for checking that a command exists.
+requires() {
+  cmd="$1"
+  if ! command -v "$cmd" > /dev/null 2>&1; then
+    echo "DEPENDENCY MISSING: $(basename $0) requires $cmd to be installed" >&2
+    exit 1
+  fi
+}
+
+requires jq
+requires zstd
 
 # Setup some file paths
 this_dir=$(realpath "$(dirname "$0")")
@@ -39,8 +56,8 @@ versions_file="$root_dir/.python-versions"
 versions_metadata="$this_dir/versions.json"
 
 # Determine system metadata
-os=$(uname | tr '[:upper:]' '[:lower:]')
-arch=$(arch)
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m)
 interpreter='cpython'
 
 # On macOS, we need a newer version of `realpath` for `--relative-to` support

@@ -43,7 +43,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
                     minor: *minor,
                 })
             } else {
-                unimplemented!("Patch versions cannot be requested on Windows")
+                Err(Error::PatchVersionRequestedWindows)
             }
         } else {
             unimplemented!("Only Windows and Unix are supported")
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn no_such_python_version() {
         assert_snapshot!(format_err(find_requested_python("3.1000")), @r###"
-        Couldn't find "3.1000" in PATH
+        Couldn't find `3.1000` in PATH
           Caused by: cannot find binary path
         "###);
     }
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn no_such_python_binary() {
         assert_display_snapshot!(format_err(find_requested_python("python3.1000")), @r###"
-        Couldn't find "python3.1000" in PATH
+        Couldn't find `python3.1000` in PATH
           Caused by: cannot find binary path
         "###);
     }
