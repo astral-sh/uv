@@ -477,7 +477,7 @@ fn install_editable() -> Result<()> {
 
     let workspace_filters = [
         (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
-        // Ignore extra slash on windows
+        // Ignore the extra slash on windows
         ("file:///", "file://"),
     ];
     let filters = extra_filters(0, &workspace_filters);
@@ -599,7 +599,7 @@ fn install_editable_and_registry() -> Result<()> {
 
     let workspace_filters = [
         (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
-        // Ignore extra slash on windows
+        // Ignore the extra slash on windows
         ("file:///", "file://"),
     ];
     let filters = extra_filters(1, &workspace_filters);

@@ -3633,7 +3633,9 @@ fn missing_editable_requirement() -> Result<()> {
         0,
         &[
             (r" file://.*/", " file://[TEMP_DIR]/"),
+            // Unix
             (r" /.*/", " /[TEMP_DIR]/"),
+            // Windows
             (r" [A-Z]:\\.*\\", " /[TEMP_DIR]/"),
         ],
     );

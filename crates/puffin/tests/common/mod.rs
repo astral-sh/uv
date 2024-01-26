@@ -25,10 +25,17 @@ pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
 ];
 
+/// See [`extra_filters`].
 pub(crate) fn filters(windows_extra_count: usize) -> Filters {
     extra_filters(windows_extra_count, &[])
 }
 
+/// Shared filters for cargo insta.
+///
+/// Extra filters are run before the default filters.
+///
+/// The snapshots are for Unix. We try to remove the extra dependencies on windows and reduce the package counts by
+/// usually one package to make the windows output match the Unix output.    
 pub(crate) fn extra_filters(windows_extra_count: usize, extra_filters: &[(&str, &str)]) -> Filters {
     if cfg!(windows) {
         // Handles both install/remove messages and pip compile output
@@ -61,13 +68,15 @@ pub(crate) fn extra_filters(windows_extra_count: usize, extra_filters: &[(&str, 
             .chain(INSTA_FILTERS.to_vec())
             .collect::<Vec<_>>()
             .into()
-    } else {
+    } else if cfg!(unix) {
         extra_filters
             .into_iter()
             .cloned()
             .chain(INSTA_FILTERS.to_vec())
             .collect::<Vec<_>>()
             .into()
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
     }
 }
 
