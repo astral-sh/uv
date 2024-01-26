@@ -50,7 +50,7 @@ const LAUNCHER_X86_64_CONSOLE: &[u8] = &[];
 /// Wrapper script template function
 ///
 /// <https://github.com/pypa/pip/blob/7f8a6844037fb7255cfd0d34ff8e8cf44f2598d4/src/pip/_vendor/distlib/scripts.py#L41-L48>
-pub fn get_script_launcher(module: &str, import_name: &str, shebang: &str) -> String {
+fn get_script_launcher(module: &str, import_name: &str, shebang: &str) -> String {
     format!(
         r##"{shebang}
 # -*- coding: utf-8 -*-
@@ -129,10 +129,7 @@ fn parse_scripts<R: Read + Seek>(
 /// <https://github.com/richo/hashing-copy/blob/d8dd2fdb63c6faf198de0c9e5713d6249cbb5323/src/lib.rs#L10-L52>
 /// which in turn got it from std
 /// <https://doc.rust-lang.org/1.58.0/src/std/io/copy.rs.html#128-156>
-pub(crate) fn copy_and_hash(
-    reader: &mut impl Read,
-    writer: &mut impl Write,
-) -> io::Result<(u64, String)> {
+fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<(u64, String)> {
     // TODO: Do we need to support anything besides sha256?
     let mut hasher = Sha256::new();
     // Same buf size as std. Note that this number is important for performance
@@ -276,7 +273,7 @@ fn unpack_wheel_files<R: Read + Seek>(
     Ok(extracted_paths)
 }
 
-pub(crate) fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
+fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
     let path = location.python().to_string_lossy().to_string();
     let path = if cfg!(windows) {
         // https://stackoverflow.com/a/50323079
@@ -405,7 +402,7 @@ pub(crate) fn write_script_entrypoints(
     Ok(())
 }
 
-pub(crate) fn bin_rel() -> PathBuf {
+fn bin_rel() -> PathBuf {
     if cfg!(windows) {
         // windows doesn't have the python part, only Lib/site-packages
         Path::new("..").join("..").join("Scripts")
