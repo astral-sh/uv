@@ -623,13 +623,19 @@ impl From<io::Error> for RequirementsTxtParserError {
 mod test {
     use std::path::{Path, PathBuf};
 
+    use anyhow::Result;
+    use assert_fs::prelude::*;
     use fs_err as fs;
     use indoc::indoc;
-    use puffin_fs::NormalizedDisplay;
+    use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
 
     use crate::RequirementsTxt;
+
+    fn workspace_test_data_dir() -> PathBuf {
+        PathBuf::from("./test-data")
+    }
 
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]
@@ -687,71 +693,85 @@ mod test {
     }
 
     #[test]
-    fn invalid_include_missing_file() {
-        let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let basic = working_dir.join("invalid-include.txt");
-        let missing = working_dir.join("missing.txt");
-        let err = RequirementsTxt::parse(&basic, &working_dir).unwrap_err();
-        let errors = anyhow::Error::new(err)
-            .chain()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
-        assert_eq!(errors.len(), 3);
-        assert_eq!(
-            errors[0],
-            format!(
-                "Error parsing included file in `{}` at position 0",
-                basic.normalized_display()
-            )
-        );
-        assert_eq!(
-            errors[1],
-            format!("failed to open file `{}`", missing.normalized_display()),
-        );
-        // The last error message is os specific
-    }
+    fn invalid_include_missing_file() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let missing_txt = temp_dir.child("missing.txt");
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            -r missing.txt
+        "})?;
 
-    #[test]
-    fn invalid_requirement() {
-        let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let basic = working_dir.join("invalid-requirement.txt");
-        let err = RequirementsTxt::parse(&basic, &working_dir).unwrap_err();
-        let errors = anyhow::Error::new(err)
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error)
             .chain()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
-        let expected = &[
-            format!(
-                "Couldn't parse requirement in `{}` at position 0",
-                basic.normalized_display()
-            ),
-            indoc! {"
-                Expected an alphanumeric character starting the extra name, found 'ö'
-                numpy[ö]==1.29
-                      ^"
-            }
-            .to_string(),
-        ];
-        assert_eq!(errors, expected);
-    }
-
-    fn workspace_test_data_dir() -> PathBuf {
-        PathBuf::from("./test-data")
-    }
-
-    #[test]
-    fn unsupported_editable() {
-        let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let basic = working_dir.join("unsupported-editable.txt");
-        let err = RequirementsTxt::parse(basic, &working_dir).unwrap_err();
-        let errors = anyhow::Error::new(err)
-            .chain()
-            // Windows support
+            // The last error is operating-system specific.
+            .take(2)
             .map(|err| err.to_string().replace('\\', "/"))
-            .collect::<Vec<_>>();
-        let expected = &[
-            "Unsupported URL (expected a `file://` scheme) in `./test-data/requirements-txt/unsupported-editable.txt`: http://localhost:8080/".to_string()
-        ];
-        assert_eq!(errors, expected);
+            .join("\n");
+
+        insta::with_settings!({
+            filters => vec![
+                (requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>"),
+                (missing_txt.path().to_str().unwrap(), "<MISSING_TXT>"),
+            ],
+        }, {
+            insta::assert_display_snapshot!(errors, @r###"
+            Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
+            failed to open file `<MISSING_TXT>`
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_requirement() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            numpy[ö]==1.29
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error)
+            .chain()
+            .map(|err| err.to_string().replace('\\', "/"))
+            .join("\n");
+
+        insta::with_settings!({
+            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+        }, {
+            insta::assert_display_snapshot!(errors, @r###"
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
+            Expected an alphanumeric character starting the extra name, found 'ö'
+            numpy[ö]==1.29
+                  ^
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn unsupported_editable() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            -e http://localhost:8080/
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error)
+            .chain()
+            .map(|err| err.to_string().replace('\\', "/"))
+            .join("\n");
+
+        insta::with_settings!({
+            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+        }, {
+            insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: http://localhost:8080/");
+        });
+
+        Ok(())
     }
 }

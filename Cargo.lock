@@ -3021,9 +3021,11 @@ name = "requirements-txt"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "assert_fs",
  "fs-err",
  "indoc",
  "insta",
+ "itertools 0.10.5",
  "once_cell",
  "pep440_rs 0.3.12",
  "pep508_rs",
