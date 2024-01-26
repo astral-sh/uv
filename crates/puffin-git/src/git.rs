@@ -867,9 +867,14 @@ pub(crate) fn with_fetch_options(
 ) -> Result<()> {
     retry::with_retry(|| {
         with_authentication(url, git_config, |f| {
+            let port = Url::parse(url).ok().and_then(|url| url.port());
+
             // TODO(charlie): Restore progress reporting.
             let mut rcb = git2::RemoteCallbacks::new();
             rcb.credentials(f);
+            rcb.certificate_check(|cert, host| {
+                super::known_hosts::certificate_check(cert, host, port)
+            });
 
             // Create a local anonymous remote in the repository to fetch the url.
             let mut opts = git2::FetchOptions::new();
