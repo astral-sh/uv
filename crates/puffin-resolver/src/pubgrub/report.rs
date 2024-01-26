@@ -319,10 +319,12 @@ impl PubGrubReportFormatter<'_> {
         set: &'a Range<Version>,
         package: &PubGrubPackage,
     ) -> Cow<'a, Range<Version>> {
+        let versions = self.available_versions.get(package).into_iter().flatten();
+        dbg!(package, &versions);
         if set == &Range::full() {
             Cow::Borrowed(set)
         } else {
-            Cow::Owned(set.simplify(self.available_versions.get(package).into_iter().flatten()))
+            Cow::Owned(set.simplify(versions))
         }
     }
 
