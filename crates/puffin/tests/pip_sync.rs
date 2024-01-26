@@ -2881,7 +2881,7 @@ fn sync_editable_and_registry() -> Result<()> {
     // Install the registry-based version of Black.
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
-        black
+        black==24.1.0
         "
     })?;
 
