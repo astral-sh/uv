@@ -6,6 +6,7 @@ pub use crate::sha::GitSha;
 pub use crate::source::{Fetch, GitSource, Reporter};
 
 mod git;
+mod known_hosts;
 mod sha;
 mod source;
 mod util;

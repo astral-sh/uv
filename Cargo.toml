@@ -17,6 +17,7 @@ anstream = { version = "0.6.5" }
 anyhow = { version = "1.0.79" }
 async_http_range_reader = { git = "https://github.com/baszalmstra/async_http_range_reader", rev = "8dab2c08ac864fec1df014465264f9a7c8eae905" }
 async_zip = { version = "0.0.16", features = ["tokio", "deflate"] }
+base64 = { version = "0.21.7" }
 cachedir = { version = "0.3.1" }
 camino = { version = "1.1.6", features = ["serde1"] }
 cargo-util = { version = "0.2.8" }
@@ -38,6 +39,8 @@ git2 = { version = "0.18.1" }
 glob = { version = "0.3.1" }
 goblin = { version = "0.8.0" }
 hex = { version = "0.4.3" }
+hmac = { version = "0.12.1" }
+home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "0.2.11" }
 http-cache-semantics = { version = "1.0.2" }
@@ -72,6 +75,7 @@ same-file = { version = "1.0.6" }
 seahash = { version = "4.1.0" }
 serde = { version = "1.0.194" }
 serde_json = { version = "1.0.111" }
+sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
 tar = { version = "0.4.40" }
 target-lexicon = { version = "0.12.13" }
