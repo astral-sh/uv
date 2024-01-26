@@ -200,6 +200,14 @@ struct PipCompileArgs {
     #[clap(short, long)]
     output_file: Option<PathBuf>,
 
+    /// Exclude comment annotations indicating the source of each package.
+    #[clap(long)]
+    no_annotate: bool,
+
+    /// Exclude the comment header at the top of the generated output file.
+    #[clap(long)]
+    no_header: bool,
+
     /// Refresh all cached data.
     #[clap(long)]
     refresh: bool,
@@ -679,6 +687,8 @@ async fn inner() -> Result<ExitStatus> {
                 args.prerelease,
                 upgrade,
                 args.generate_hashes,
+                !args.no_annotate,
+                !args.no_header,
                 index_urls,
                 if args.legacy_setup_py {
                     SetupPyStrategy::Setuptools

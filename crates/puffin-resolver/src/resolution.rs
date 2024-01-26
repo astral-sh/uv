@@ -224,21 +224,29 @@ pub struct DisplayResolutionGraph<'a> {
     resolution: &'a ResolutionGraph,
     /// Whether to include hashes in the output.
     show_hashes: bool,
-}
-
-impl<'a> DisplayResolutionGraph<'a> {
-    /// Create a new [`DisplayResolutionGraph`] for the given graph.
-    pub fn new(underlying: &'a ResolutionGraph, show_hashes: bool) -> DisplayResolutionGraph<'a> {
-        Self {
-            resolution: underlying,
-            show_hashes,
-        }
-    }
+    /// Whether to include annotations in the output, to indicate which dependency or dependencies
+    /// requested each package.
+    include_annotations: bool,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(resolution, false)
+        Self::new(resolution, false, true)
+    }
+}
+
+impl<'a> DisplayResolutionGraph<'a> {
+    /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    pub fn new(
+        underlying: &'a ResolutionGraph,
+        show_hashes: bool,
+        include_annotations: bool,
+    ) -> DisplayResolutionGraph<'a> {
+        Self {
+            resolution: underlying,
+            show_hashes,
+            include_annotations,
+        }
     }
 }
 
@@ -281,26 +289,28 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             }
             writeln!(f)?;
 
-            // Display all dependencies.
-            let mut edges = self
-                .resolution
-                .petgraph
-                .edges_directed(index, Direction::Incoming)
-                .map(|edge| &self.resolution.petgraph[edge.source()])
-                .collect::<Vec<_>>();
-            edges.sort_unstable_by_key(|package| package.name());
+            if self.include_annotations {
+                // Display all dependencies.
+                let mut edges = self
+                    .resolution
+                    .petgraph
+                    .edges_directed(index, Direction::Incoming)
+                    .map(|edge| &self.resolution.petgraph[edge.source()])
+                    .collect::<Vec<_>>();
+                edges.sort_unstable_by_key(|package| package.name());
 
-            match edges.len() {
-                0 => {}
-                1 => {
-                    for dependency in edges {
-                        writeln!(f, "{}", format!("    # via {}", dependency.name()).green())?;
+                match edges.len() {
+                    0 => {}
+                    1 => {
+                        for dependency in edges {
+                            writeln!(f, "{}", format!("    # via {}", dependency.name()).green())?;
+                        }
                     }
-                }
-                _ => {
-                    writeln!(f, "{}", "    # via".green())?;
-                    for dependency in edges {
-                        writeln!(f, "{}", format!("    #   {}", dependency.name()).green())?;
+                    _ => {
+                        writeln!(f, "{}", "    # via".green())?;
+                        for dependency in edges {
+                            writeln!(f, "{}", format!("    #   {}", dependency.name()).green())?;
+                        }
                     }
                 }
             }
