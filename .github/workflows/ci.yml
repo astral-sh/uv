@@ -54,16 +54,11 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Pythons"
-        uses: actions/setup-python@v4
-        with:
-          python-version: |
-            3.7
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
+      - name: "Install required Python versions"
+        run: |
+          sudo apt install direnv
+          scripts/bootstrap/install.sh
+          direnv allow .envrc
       - name: "Install Rust toolchain"
         run: rustup show
       - uses: rui314/setup-mold@v1
@@ -75,7 +70,8 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Tests"
-        run: cargo nextest run --workspace --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+        run: |
+          direnv exec . cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
   # TODO(konstin): Merge with the cargo-test job once the tests pass
   windows:

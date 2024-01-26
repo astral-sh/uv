@@ -39,14 +39,13 @@ Requirements:
 
 import json
 import shutil
-import os
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "78f34eec66acfba9c723285764dc1f4b841f4961"
+PACKSE_COMMIT = "e944cb4c8f5d68457d0462ee19106509f63b8d34"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
@@ -149,6 +148,8 @@ print("Loading scenario metadata...", file=sys.stderr)
 data = json.loads(
     subprocess.check_output(
         [
+            sys.executable,
+            "-m",
             "packse",
             "inspect",
             "--short-names",

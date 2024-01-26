@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use tracing::{info_span, instrument};
 
-use crate::Error;
+use crate::{Error, Interpreter};
 
 /// ```text
 /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
@@ -27,23 +27,30 @@ static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
 /// * `-p /home/ferris/.local/bin/python3.10` uses this exact Python.
 #[instrument]
 pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
-    let major_minor = request
-        .split_once('.')
-        .and_then(|(major, minor)| Some((major.parse::<u8>().ok()?, minor.parse::<u8>().ok()?)));
-    if let Some((major, minor)) = major_minor {
-        // `-p 3.10`
+    let versions = request
+        .splitn(3, '.')
+        .map(str::parse::<u8>)
+        .collect::<Result<Vec<_>, _>>();
+    if let Ok(versions) = versions {
+        // `-p 3.10` or `-p 3.10.1`
         if cfg!(unix) {
-            let formatted = PathBuf::from(format!("python{major}.{minor}"));
-            which::which(&formatted).map_err(|err| Error::Which(formatted, err))
+            let formatted = PathBuf::from(format!("python{request}"));
+            Interpreter::find_executable(&formatted)
         } else if cfg!(windows) {
-            find_python_windows(major, minor)?.ok_or(Error::NoSuchPython { major, minor })
+            if let [major, minor] = versions.as_slice() {
+                find_python_windows(*major, *minor)?.ok_or(Error::NoSuchPython {
+                    major: *major,
+                    minor: *minor,
+                })
+            } else {
+                Err(Error::PatchVersionRequestedWindows)
+            }
         } else {
             unimplemented!("Only Windows and Unix are supported")
         }
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let request = PathBuf::from(request);
-        which::which(&request).map_err(|err| Error::Which(request, err))
+        Interpreter::find_executable(request)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         Ok(fs_err::canonicalize(request)?)

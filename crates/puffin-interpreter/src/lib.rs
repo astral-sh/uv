@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 use std::time::SystemTimeError;
@@ -49,6 +50,8 @@ pub enum Error {
     NoPythonInstalledUnix,
     #[error("Could not find `python.exe` in PATH and `py --list-paths` did not list any Python versions. Do you need to install Python?")]
     NoPythonInstalledWindows,
+    #[error("Patch versions cannot be requested on Windows")]
+    PatchVersionRequestedWindows,
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     PythonSubcommandOutput {
         message: String,
@@ -63,6 +66,6 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Failed to parse pyvenv.cfg")]
     Cfg(#[from] cfg::Error),
-    #[error("Couldn't find `{0}` in PATH")]
-    Which(PathBuf, #[source] which::Error),
+    #[error("Couldn't find `{}` in PATH", _0.to_string_lossy())]
+    Which(OsString, #[source] which::Error),
 }
