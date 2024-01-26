@@ -67,8 +67,8 @@ pub enum Error {
     RecordCsv(#[from] csv::Error),
     #[error("Broken virtualenv: {0}")]
     BrokenVenv(String),
-    #[error("Failed to detect the operating system version: {0}")]
-    OsVersionDetection(String),
+    #[error("Unable to create Windows launch for {0} (only x64_64 is supported)")]
+    UnsupportedWindowsArch(&'static str),
     #[error("Failed to detect the current platform")]
     PlatformInfo(#[source] PlatformInfoError),
     #[error("Invalid version specification, only none or == is supported")]

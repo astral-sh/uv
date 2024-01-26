@@ -119,13 +119,17 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     {
         // https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267
         // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/create/via_global_ref/builtin/cpython/cpython3.py#L78-L83
-        let shim = interpreter
-            .stdlib()
-            .join("venv")
-            .join("scripts")
-            .join("nt")
-            .join("python.exe");
-        fs_err::copy(shim, bin_dir.join("python.exe"))?;
+        // There's two kinds of applications on windows: Those that allocate a console (python.exe) and those that
+        // don't because they use window(s) (pythonw.exe).
+        for python_exe in ["python.exe", "pythonw.exe"] {
+            let shim = interpreter
+                .stdlib()
+                .join("venv")
+                .join("scripts")
+                .join("nt")
+                .join(python_exe);
+            fs_err::copy(shim, bin_dir.join(python_exe))?;
+        }
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -133,7 +137,8 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     }
 
     // Add all the activate scripts for different shells
-    // TODO(konstin): That's unix!
+    // TODO(konstin): RELATIVE_SITE_PACKAGES is currently only the unix path. We should ensure that all launchers work
+    // cross-platform.
     for (name, template) in ACTIVATE_TEMPLATES {
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())

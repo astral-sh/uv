@@ -34,9 +34,10 @@ use crate::{find_dist_info, Error};
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
 
-pub(crate) const LAUNCHER_T32: &[u8] = include_bytes!("../windows-launcher/t32.exe");
-pub(crate) const LAUNCHER_T64: &[u8] = include_bytes!("../windows-launcher/t64.exe");
-pub(crate) const LAUNCHER_T64_ARM: &[u8] = include_bytes!("../windows-launcher/t64-arm.exe");
+pub(crate) const LAUNCHER_X86_64_GUI: &[u8] =
+    include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-gui.exe");
+pub(crate) const LAUNCHER_X86_64_CONSOLE: &[u8] =
+    include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-console.exe");
 
 /// Wrapper script template function
 ///
@@ -283,35 +284,34 @@ pub(crate) fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> Strin
     format!("#!{path}")
 }
 
-/// To get a launcher on windows we write a minimal .exe launcher binary and then attach the actual
-/// python after it.
-///
-/// TODO pyw scripts
-///
-/// TODO: a nice, reproducible-without-distlib rust solution
+/// A windows script is a minimal .exe launcher binary with the python entrypoint script appended as stored zip file.
+/// The launcher will look for `python[w].exe` adjacent to it in the same directory to start the embedded script.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
-pub(crate) fn windows_script_launcher(launcher_python_script: &str) -> Result<Vec<u8>, Error> {
+pub(crate) fn windows_script_launcher(
+    launcher_python_script: &str,
+    is_gui: bool,
+) -> Result<Vec<u8>, Error> {
     let launcher_bin = match env::consts::ARCH {
-        "x84" => LAUNCHER_T32,
-        "x86_64" => LAUNCHER_T64,
-        "aarch64" => LAUNCHER_T64_ARM,
+        "x86_64" => {
+            if is_gui {
+                LAUNCHER_X86_64_GUI
+            } else {
+                LAUNCHER_X86_64_CONSOLE
+            }
+        }
         arch => {
-            let error = format!(
-                "Don't know how to create windows launchers for script for {arch}, \
-                        only x86, x86_64 and aarch64 (64-bit arm) are supported"
-            );
-            return Err(Error::OsVersionDetection(error));
+            return Err(Error::UnsupportedWindowsArch(arch));
         }
     };
 
-    let mut stream: Vec<u8> = Vec::new();
+    let mut payload: Vec<u8> = Vec::new();
     {
-        // We're using the zip writer, but it turns out we're not actually deflating apparently
-        // we're just using an offset
+        // We're using the zip writer, but with stored compression
+        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
         // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
         let stored = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let mut archive = ZipWriter::new(Cursor::new(&mut stream));
+        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
         let error_msg = "Writing to Vec<u8> should never fail";
         archive.start_file("__main__.py", stored).expect(error_msg);
         archive
@@ -320,8 +320,9 @@ pub(crate) fn windows_script_launcher(launcher_python_script: &str) -> Result<Ve
         archive.finish().expect(error_msg);
     }
 
-    let mut launcher: Vec<u8> = launcher_bin.to_vec();
-    launcher.append(&mut stream);
+    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
+    launcher.extend_from_slice(launcher_bin);
+    launcher.extend_from_slice(&payload);
     Ok(launcher)
 }
 
@@ -335,6 +336,7 @@ pub(crate) fn write_script_entrypoints(
     location: &InstallLocation<impl AsRef<Path>>,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
+    is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
         let entrypoint_relative = if cfg!(windows) {
@@ -356,7 +358,7 @@ pub(crate) fn write_script_entrypoints(
             &get_shebang(location),
         );
         if cfg!(windows) {
-            let launcher = windows_script_launcher(&launcher_python_script)?;
+            let launcher = windows_script_launcher(&launcher_python_script, is_gui)?;
             write_file_recorded(site_packages, &entrypoint_relative, &launcher, record)?;
         } else {
             write_file_recorded(
@@ -1009,8 +1011,14 @@ pub fn install_wheel(
 
     debug!(name = name.as_str(), "Writing entrypoints");
     let (console_scripts, gui_scripts) = parse_scripts(&mut archive, &dist_info_prefix, None)?;
-    write_script_entrypoints(&site_packages, location, &console_scripts, &mut record)?;
-    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record)?;
+    write_script_entrypoints(
+        &site_packages,
+        location,
+        &console_scripts,
+        &mut record,
+        false,
+    )?;
+    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record, true)?;
 
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
@@ -1135,7 +1143,9 @@ mod test {
 
     use indoc::{formatdoc, indoc};
 
-    use crate::wheel::{read_record_file, relative_to};
+    use crate::wheel::{
+        read_record_file, relative_to, LAUNCHER_X86_64_CONSOLE, LAUNCHER_X86_64_GUI,
+    };
     use crate::{parse_key_value_file, Script};
 
     use super::parse_wheel_version;
@@ -1262,6 +1272,21 @@ mod test {
                 module: "foomod".to_string(),
                 function: "main_bar".to_string(),
             })
+        );
+    }
+
+    #[test]
+    fn test_launchers_are_small() {
+        // At time of writing, they are 15872 bytes.
+        assert!(
+            LAUNCHER_X86_64_GUI.len() < 20 * 1024,
+            "GUI launcher: {}",
+            LAUNCHER_X86_64_GUI.len()
+        );
+        assert!(
+            LAUNCHER_X86_64_CONSOLE.len() < 20 * 1024,
+            "CLI launcher: {}",
+            LAUNCHER_X86_64_CONSOLE.len()
         );
     }
 }
