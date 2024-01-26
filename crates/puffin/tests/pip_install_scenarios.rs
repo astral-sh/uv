@@ -134,7 +134,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -146,7 +146,7 @@ fn requires_exact_version_does_not_exist() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -214,7 +214,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -224,7 +224,7 @@ fn requires_greater_version_does_not_exist() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -291,7 +291,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -301,7 +301,7 @@ fn requires_less_version_does_not_exist() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -421,7 +421,7 @@ fn excluded_only_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -437,7 +437,7 @@ fn excluded_only_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -529,7 +529,7 @@ fn excluded_only_compatible_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -541,7 +541,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -553,7 +553,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -565,7 +565,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -577,19 +577,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
-            segments: [
-                (
-                    Included(
-                        "3.0.0",
-                    ),
-                    Included(
-                        "3.0.0",
-                    ),
-                ),
-            ],
-        }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -601,7 +589,19 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Included(
+                        "3.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -621,7 +621,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -637,23 +637,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
-            segments: [
-                (
-                    Unbounded,
-                    Excluded(
-                        "2.0.0",
-                    ),
-                ),
-                (
-                    Excluded(
-                        "2.0.0",
-                    ),
-                    Unbounded,
-                ),
-            ],
-        }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -669,7 +653,23 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+                (
+                    Excluded(
+                        "2.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -681,7 +681,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -810,7 +810,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -822,7 +822,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -834,7 +834,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -846,7 +846,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -858,17 +858,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
-            segments: [
-                (
-                    Unbounded,
-                    Excluded(
-                        "2.0.0",
-                    ),
-                ),
-            ],
-        }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -878,7 +868,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -888,7 +878,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -898,7 +888,17 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -908,7 +908,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -918,23 +918,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
-            segments: [
-                (
-                    Unbounded,
-                    Excluded(
-                        "2.0.0",
-                    ),
-                ),
-                (
-                    Included(
-                        "3.0.0",
-                    ),
-                    Unbounded,
-                ),
-            ],
-        }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -950,7 +934,23 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Excluded(
+                        "2.0.0",
+                    ),
+                ),
+                (
+                    Included(
+                        "3.0.0",
+                    ),
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -962,7 +962,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -974,7 +974,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -986,7 +986,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -998,7 +998,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1018,7 +1018,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1034,7 +1034,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1046,7 +1046,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1058,7 +1058,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1066,7 +1066,7 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1207,7 +1207,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1217,7 +1217,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1227,7 +1227,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1237,7 +1237,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1247,7 +1247,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1259,7 +1259,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1271,7 +1271,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1283,7 +1283,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1295,7 +1295,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1305,7 +1305,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1315,7 +1315,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1327,7 +1327,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1339,7 +1339,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1349,7 +1349,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1359,7 +1359,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1371,7 +1371,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1383,7 +1383,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1395,7 +1395,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1407,7 +1407,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1427,12 +1427,10 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
-                    Included(
-                        "1.0.0",
-                    ),
+                    Unbounded,
                     Included(
                         "1.0.0",
                     ),
@@ -1441,13 +1439,11 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                     Included(
                         "3.0.0",
                     ),
-                    Included(
-                        "3.0.0",
-                    ),
+                    Unbounded,
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1455,7 +1451,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1463,7 +1459,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1475,7 +1471,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1503,8 +1499,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird==1.0.0
-                  bluebird==3.0.0
+                  bluebird<=1.0.0
+                  bluebird>=3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -1774,7 +1770,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1786,7 +1782,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1798,7 +1794,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1810,7 +1806,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1822,7 +1818,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1834,7 +1830,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1846,7 +1842,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1854,7 +1850,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1862,7 +1858,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -1870,7 +1866,7 @@ fn extra_incompatible_with_extra() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2020,7 +2016,7 @@ fn extra_incompatible_with_root() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2032,7 +2028,7 @@ fn extra_incompatible_with_root() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2044,7 +2040,7 @@ fn extra_incompatible_with_root() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2056,7 +2052,7 @@ fn extra_incompatible_with_root() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2068,15 +2064,7 @@ fn extra_incompatible_with_root() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
-            segments: [
-                (
-                    Unbounded,
-                    Unbounded,
-                ),
-            ],
-        }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2084,7 +2072,15 @@ fn extra_incompatible_with_root() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
+            segments: [
+                (
+                    Unbounded,
+                    Unbounded,
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2096,7 +2092,7 @@ fn extra_incompatible_with_root() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2305,7 +2301,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2317,7 +2313,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2329,7 +2325,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2341,7 +2337,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2353,19 +2349,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
-            segments: [
-                (
-                    Included(
-                        "1.0.0",
-                    ),
-                    Included(
-                        "1.0.0",
-                    ),
-                ),
-            ],
-        }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2377,7 +2361,19 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
+            segments: [
+                (
+                    Included(
+                        "1.0.0",
+                    ),
+                    Included(
+                        "1.0.0",
+                    ),
+                ),
+            ],
+        }
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2385,7 +2381,7 @@ fn transitive_incompatible_with_root_version() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2464,7 +2460,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2476,7 +2472,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2488,7 +2484,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2500,7 +2496,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2512,7 +2508,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2524,7 +2520,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2536,7 +2532,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2544,7 +2540,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2552,7 +2548,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2560,7 +2556,7 @@ fn transitive_incompatible_with_transitive() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -2686,7 +2682,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -2696,7 +2692,7 @@ fn package_only_prereleases_in_range() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -3269,7 +3265,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -3279,7 +3275,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -3289,7 +3285,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3297,7 +3293,7 @@ fn transitive_package_only_prereleases_in_range() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3451,7 +3447,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3463,7 +3459,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3475,7 +3471,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3483,7 +3479,7 @@ fn transitive_prerelease_and_stable_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3671,7 +3667,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3683,7 +3679,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3691,7 +3687,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3703,7 +3699,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3711,7 +3707,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3723,7 +3719,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3733,7 +3729,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3743,7 +3739,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -3753,7 +3749,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3761,7 +3757,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3769,7 +3765,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3777,7 +3773,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3879,7 +3875,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -3923,7 +3919,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -3951,7 +3947,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -3959,7 +3955,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -4039,7 +4035,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4049,7 +4045,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4059,7 +4055,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4071,7 +4067,7 @@ fn requires_python_version_does_not_exist() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4140,7 +4136,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -4150,7 +4146,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Unbounded,
@@ -4160,7 +4156,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4172,7 +4168,7 @@ fn requires_python_version_less_than_current() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4241,7 +4237,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4251,7 +4247,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4261,7 +4257,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4273,7 +4269,7 @@ fn requires_python_version_greater_than_current() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4364,7 +4360,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4376,7 +4372,7 @@ fn requires_python_version_greater_than_current_many() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4517,7 +4513,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4527,7 +4523,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4537,7 +4533,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4547,7 +4543,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4557,7 +4553,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4567,7 +4563,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4577,7 +4573,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -4587,7 +4583,7 @@ fn requires_python_version_greater_than_current_excluded() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(

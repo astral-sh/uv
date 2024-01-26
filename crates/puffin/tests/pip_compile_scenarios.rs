@@ -127,7 +127,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -137,7 +137,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -147,7 +147,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -159,7 +159,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(

@@ -696,7 +696,7 @@ fn compile_python_37() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -706,7 +706,7 @@ fn compile_python_37() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -716,7 +716,7 @@ fn compile_python_37() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -728,7 +728,7 @@ fn compile_python_37() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1482,7 +1482,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1494,7 +1494,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1663,7 +1663,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1673,7 +1673,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1683,7 +1683,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -1695,7 +1695,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2059,7 +2059,7 @@ dependencies = ["django==300.1.4"]
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2071,7 +2071,7 @@ dependencies = ["django==300.1.4"]
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Included(
@@ -2552,7 +2552,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        [crates/puffin-resolver/src/pubgrub/report.rs:113] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:114] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
@@ -2564,7 +2564,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
                 ),
             ],
         }
-        [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
+        [crates/puffin-resolver/src/pubgrub/report.rs:116] &dependency_set = Range {
             segments: [
                 (
                     Excluded(
