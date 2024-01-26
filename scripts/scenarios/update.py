@@ -45,7 +45,7 @@ import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "e944cb4c8f5d68457d0462ee19106509f63b8d34"
+PACKSE_COMMIT = "a451c95105db0c2897d0ad1bde0703ba0fc40d3a"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"

@@ -1,20 +1,42 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/e944cb4c8f5d68457d0462ee19106509f63b8d34/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/a451c95105db0c2897d0ad1bde0703ba0fc40d3a/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use common::{create_venv, BIN_NAME, INSTA_FILTERS};
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use fs_err::os::windows::fs::symlink_file;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
-
-use common::{create_venv, BIN_NAME, INSTA_FILTERS};
+use puffin_interpreter::find_requested_python;
 
 mod common;
+
+/// Create a directory with the requested Python binaries available.
+pub(crate) fn create_bin_with_executables(
+    temp_dir: &assert_fs::TempDir,
+    python: Vec<&str>,
+) -> Result<PathBuf> {
+    let bin = temp_dir.child("bin");
+    fs_err::create_dir(&bin)?;
+    for request in python {
+        let executable = find_requested_python(request)?;
+        let name = executable
+            .file_name()
+            .expect("Discovered executable must have a filename");
+        symlink_file(&executable, bin.child(name))?;
+    }
+    Ok(bin.canonicalize()?)
+}
 
 /// requires-incompatible-python-version-compatible-override
 ///
@@ -38,6 +60,8 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.9");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -61,7 +85,7 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
@@ -100,6 +124,8 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.11");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -123,7 +149,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -162,6 +188,8 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.9");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -188,7 +216,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -199,6 +227,75 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
+        "###);
+    });
+
+    Ok(())
+}
+
+/// requires-incompatible-python-version-compatible-override-no-wheels-available-system
+///
+/// The user requires a package which requires a incompatible Python version, but
+/// they request a compatible Python version for package resolution. There are only
+/// source distributions available for the package. The user has a compatible Python
+/// version installed elsewhere on their system.
+///
+/// ```text
+/// ae5b2665
+/// ├── environment
+/// │   ├── python3.11
+/// │   └── python3.9 (active)
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=3.10 (incompatible with environment)
+/// ```
+#[test]
+fn requires_incompatible_python_version_compatible_override_no_wheels_available_system(
+) -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv(&temp_dir, &cache_dir, "3.9");
+    let python_versions = vec!["3.11"];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-ae5b2665", "albatross"));
+    filters.push((r"-ae5b2665", ""));
+
+    let requirements_in = temp_dir.child("requirements.in");
+    requirements_in.write_str("a-ae5b2665==1.0.0")?;
+
+    // Since there is a compatible Python version available on the system, it should be
+    // used to build the source distributions.
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("compile")
+            .arg("requirements.in")
+            .arg("--python-version=3.11")
+            .arg("--extra-index-url")
+            .arg("https://test.pypi.org/simple")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .env("PUFFIN_NO_WRAP", "1")
+            .env("PUFFIN_PYTHON_PATH", bin)
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        # This file was autogenerated by Puffin v[VERSION] via the following command:
+        #    puffin pip compile requirements.in --python-version=3.11 --extra-index-url https://test.pypi.org/simple --cache-dir [CACHE_DIR]
+        albatross==1.0.0
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
         "###);
     });
 
@@ -227,6 +324,8 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.9");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -253,7 +352,7 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -296,6 +395,8 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.9");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -323,7 +424,7 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -369,6 +470,8 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.8.18");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -394,7 +497,7 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: false
         exit_code: 1
@@ -431,6 +534,8 @@ fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = create_venv(&temp_dir, &cache_dir, "3.8.18");
+    let python_versions = vec![];
+    let bin = create_bin_with_executables(&temp_dir, python_versions)?;
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -454,7 +559,7 @@ fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .env("PUFFIN_NO_WRAP", "1")
-            .env("PUFFIN_PYTHON_PATH", "")
+            .env("PUFFIN_PYTHON_PATH", bin)
             .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
