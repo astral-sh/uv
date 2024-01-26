@@ -444,8 +444,8 @@ fn excluded_only_compatible_version() -> Result<()> {
                   albatross<2.0.0
                   albatross>2.0.0
               depends on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require one of:
                   albatross<2.0.0
@@ -568,8 +568,8 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
               And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, bluebird!=1.0.0, all versions of crow are incompatible.
               And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require bluebird>=2.0.0,<3.0.0 and you require crow, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -699,8 +699,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -2388,8 +2388,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() -> Result<()> {
 
         ----- stderr -----
           × No solution found when resolving dependencies:
-          ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depend on crow.
-              And because only crow<2.0.0b1 is available, we can conclude that all versions of bluebird depend on crow<2.0.0b1.
+          ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow>=1.0.0,<=3.0.0, we can conclude that all versions of bluebird depend on crow>=1.0.0,<=3.0.0.
+              And because only crow<2.0.0b1 is available, we can conclude that all versions of bluebird depend on crow>=1.0.0,<2.0.0b1.
               And because albatross==1.0.0 depends on crow>=2.0.0b1 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
               And because you require bluebird and you require albatross, we can conclude that the requirements are unsatisfiable.
 
@@ -2488,6 +2488,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() -> Result<(
                   crow>2.0.0b1,<2.0.0b5
               and albatross==1.0.0 depends on one of:
                   crow>1.0.0,<2.0.0a5
+                  crow>2.0.0a5,<2.0.0a6
+                  crow>2.0.0a6,<2.0.0a7
                   crow>2.0.0a7,<2.0.0b1
                   crow>2.0.0b1,<2.0.0b5
               we can conclude that albatross==1.0.0 cannot be used.
