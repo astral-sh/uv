@@ -6,13 +6,14 @@ use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use assert_fs::TempDir;
+use insta::internals::Filters;
 use insta_cmd::get_cargo_bin;
 
 pub(crate) const BIN_NAME: &str = "puffin";
 
 pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
-    (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    (r"(\dm )?(\d+\.)?\d+(ms|s)", "[TIME]"),
     (r"v\d+\.\d+\.\d+", "v[VERSION]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
@@ -23,6 +24,52 @@ pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
         "Caused by: No such file or directory (os error 2)",
     ),
 ];
+
+pub(crate) fn filters(windows_extra_count: usize) -> Filters {
+    extra_filters(windows_extra_count, &[])
+}
+
+pub(crate) fn extra_filters(windows_extra_count: usize, extra_filters: &[(&str, &str)]) -> Filters {
+    if cfg!(windows) {
+        // Handles both install/remove messages and pip compile output
+        let windows_only_deps = [
+            ("( [+-] )?colorama==.*\n(    # via click\n)?", ""),
+            ("( [+-] )?colorama==.*\n(    # via tqdm\n)?", ""),
+            ("( [+-] )?tzdata==.*\n(    # via django\n)?", ""),
+        ];
+        // Usually, this reduces the package counts by one, since we're removing one windows-only dep.
+        let reduce_package_counts: Vec<_> = (2..20)
+            .map(|n| {
+                let windows = format!(" {n} packages");
+                let unix = format!(
+                    " {} package{}",
+                    n - windows_extra_count,
+                    if n - windows_extra_count > 1 { "s" } else { "" }
+                );
+                (windows, unix)
+            })
+            .collect();
+        extra_filters
+            .into_iter()
+            .cloned()
+            .chain(windows_only_deps)
+            .chain(
+                reduce_package_counts
+                    .iter()
+                    .map(|(a, b)| (a.as_str(), b.as_str())),
+            )
+            .chain(INSTA_FILTERS.to_vec())
+            .collect::<Vec<_>>()
+            .into()
+    } else {
+        extra_filters
+            .into_iter()
+            .cloned()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect::<Vec<_>>()
+            .into()
+    }
+}
 
 pub(crate) fn venv_to_interpreter(venv: &Path) -> PathBuf {
     if cfg!(unix) {

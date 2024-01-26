@@ -1,8 +1,8 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::{fs, iter};
 
 use anyhow::{bail, Context, Result};
 use assert_fs::prelude::*;
@@ -14,8 +14,8 @@ use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use itertools::Itertools;
 use url::Url;
 
-use crate::common::create_venv;
-use common::{create_venv_py312, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, create_venv_py312, extra_filters, filters, BIN_NAME};
+use puffin_fs::NormalizedDisplay;
 
 mod common;
 
@@ -33,7 +33,7 @@ fn compile_requirements_in() -> Result<()> {
     requirements_in.write_str("django==5.0b1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -71,7 +71,7 @@ fn missing_requirements_in() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -103,7 +103,7 @@ fn missing_venv() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -149,7 +149,7 @@ dependencies = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -194,7 +194,7 @@ fn compile_constraints_txt() -> Result<()> {
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -242,7 +242,7 @@ fn compile_constraints_inline() -> Result<()> {
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -286,7 +286,7 @@ fn compile_constraints_markers() -> Result<()> {
     constraints_txt.write_str("sniffio==1.3.0;python_version>'3.7'")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -341,7 +341,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -396,7 +396,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -451,7 +451,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -499,7 +499,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -540,7 +540,7 @@ fn compile_requirements_file_extra() -> Result<()> {
     requirements_in.write_str("django==5.0b1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -588,7 +588,7 @@ optional-dependencies.foo = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -627,7 +627,7 @@ fn compile_python_312() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -677,7 +677,7 @@ fn compile_python_37() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -717,7 +717,7 @@ fn compile_python_invalid_version() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -749,7 +749,7 @@ fn compile_python_dev_version() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -784,7 +784,7 @@ fn compile_numpy_py38() -> Result<()> {
     requirements_in.write_str("numpy")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -823,7 +823,7 @@ fn compile_wheel_url_dependency() -> Result<()> {
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -877,7 +877,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -929,10 +929,8 @@ fn compile_git_https_dependency() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git")?;
 
-    // In addition to the standard filters, remove the `main` commit, which will change frequently.
-    let filters: Vec<_> = iter::once((r"@(\d|\w){40}", "@[COMMIT]"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    // Remove the `main` commit, which will change frequently.
+    let filters = extra_filters(1, &[(r"@(\d|\w){40}", "@[COMMIT]")]);
 
     insta::with_settings!({
         filters => filters
@@ -988,7 +986,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@1.0.x")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1039,7 +1037,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1094,7 +1092,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1145,7 +1143,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@d92b64a")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1197,7 +1195,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
         .write_str("flask @ git+https://github.com/pallets/flask.git@refs/pull/5313/head")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1250,7 +1248,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
     requirements_in.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1290,7 +1288,7 @@ fn compile_git_concurrent_access() -> Result<()> {
         .write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1331,7 +1329,7 @@ fn compile_git_mismatched_name() -> Result<()> {
         .write_str("flask @ git+https://github.com/pallets/flask.git@2.0.0\ndask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1368,7 +1366,7 @@ fn mixed_url_dependency() -> Result<()> {
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1421,7 +1419,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1460,7 +1458,7 @@ fn compatible_direct_url_dependency() -> Result<()> {
     requirements_in.write_str("werkzeug==2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1498,7 +1496,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     requirements_in.write_str("werkzeug @ https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1539,7 +1537,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1578,7 +1576,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1619,7 +1617,7 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
     requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/13257454/transitive_url_dependency.zip")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1659,7 +1657,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
     constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug@2.0.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1707,7 +1705,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1763,7 +1761,7 @@ optional-dependencies.bar = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1833,7 +1831,7 @@ optional-dependencies.bar = [
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1884,7 +1882,7 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1930,7 +1928,7 @@ dependencies = ["django==300.1.4"]
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1968,7 +1966,7 @@ fn compile_exclude_newer() -> Result<()> {
     requirements_in.write_str("tqdm")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -1995,7 +1993,7 @@ fn compile_exclude_newer() -> Result<()> {
     });
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         // Use a date as input instead.
         // We interpret a date as including this day
@@ -2022,7 +2020,7 @@ fn compile_exclude_newer() -> Result<()> {
         });
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         // Check the error message for invalid datetime
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
@@ -2069,12 +2067,10 @@ fn compile_wheel_path_dependency() -> Result<()> {
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = extra_filters(1, &[(r"file://.*/", "file://[TEMP_DIR]/")]);
 
     insta::with_settings!({
-        filters => filters
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2117,7 +2113,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str("flask @ file:flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2160,7 +2156,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str("flask @ file://flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters.clone()
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2203,7 +2199,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str("flask @ ./flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2264,9 +2260,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = extra_filters(1, &[(r"file://.*/", "file://[TEMP_DIR]/")]);
 
     insta::with_settings!({
         filters => filters
@@ -2321,9 +2315,7 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
     requirements_in.write_str("flask @ file:///path/to/flask-3.0.0-py3-none-any.whl")?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = extra_filters(0, &[(r"file://.*/", "file://[TEMP_DIR]/")]);
 
     insta::with_settings!({
         filters => filters
@@ -2361,7 +2353,7 @@ fn compile_yanked_version_direct() -> Result<()> {
     requirements_in.write_str("attrs==21.1.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2399,7 +2391,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
     requirements_in.write_str("attrs>20.3.0,<21.2.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2441,7 +2433,7 @@ fn override_dependency() -> Result<()> {
     overrides_txt.write_str("werkzeug==2.3.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2501,7 +2493,7 @@ fn override_multi_dependency() -> Result<()> {
     )?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2553,7 +2545,7 @@ fn missing_registry_extra() -> Result<()> {
     requirements_in.write_str("black[tensorboard]==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2602,7 +2594,7 @@ fn missing_url_extra() -> Result<()> {
     requirements_in.write_str("flask[tensorboard] @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2656,7 +2648,7 @@ fn preserve_url() -> Result<()> {
     requirements_in.write_str("flask @ https://files.PYTHONHOSTED.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2715,7 +2707,7 @@ fn preserve_env_var() -> Result<()> {
     requirements_in.write_str("flask @ file://${PROJECT_ROOT}/flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2772,10 +2764,8 @@ fn compile_editable() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_in.display().to_string());
-    let filters: Vec<_> = iter::once((filter_path.as_str(), "requirements.in"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filter_path = regex::escape(&requirements_in.normalized_display().to_string());
+    let filters = extra_filters(0, &[(filter_path.as_str(), "requirements.in")]);
 
     insta::with_settings!({
         filters => filters
@@ -2867,7 +2857,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
 
     let check = || {
         insta::with_settings!({
-            filters => INSTA_FILTERS.to_vec()
+            filters => filters(0)
         }, {
             assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
                 .arg("pip")
@@ -2897,7 +2887,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
         for file in &cache_files {
             let file = cache_dir.join(file);
             if !file.is_file() {
-                bail!("Missing cache file {}", file.display());
+                bail!("Missing cache file {}", file.normalized_display());
             }
             fs_err::write(file, "I borken you cache")?;
         }
@@ -2912,7 +2902,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
             for file in cache_files {
                 let file = cache_dir.join(file);
                 if !file.is_file() {
-                    bail!("Missing cache file {}", file.display());
+                    bail!("Missing cache file {}", file.normalized_display());
                 }
 
                 fs_err::OpenOptions::new()
@@ -2940,7 +2930,7 @@ fn compile_html() -> Result<()> {
     requirements_in.write_str("jinja2<=3.1.2")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -2980,7 +2970,7 @@ fn trailing_slash() -> Result<()> {
     requirements_in.write_str("jinja2")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3009,7 +2999,7 @@ fn trailing_slash() -> Result<()> {
     });
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3051,7 +3041,7 @@ fn compile_legacy_sdist_pep_517() -> Result<()> {
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3095,7 +3085,7 @@ fn compile_legacy_sdist_setuptools() -> Result<()> {
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3140,7 +3130,7 @@ fn generate_hashes() -> Result<()> {
     requirements_in.write_str("flask==3.0.0")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3269,10 +3259,15 @@ fn find_links_directory() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = regex::escape(&project_root.display().to_string());
-    let filters: Vec<_> = iter::once((project_root_string.as_str(), "[PROJECT_ROOT]"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let project_root_string = regex::escape(&project_root.normalized_display().to_string());
+    let filters = extra_filters(
+        0,
+        &[
+            (project_root_string.as_str(), "[PROJECT_ROOT]"),
+            // Add a trailing slash on windows, the normalization is different on unix
+            (r"scripts\\wheels ", r"scripts\wheels/ "),
+        ],
+    );
 
     insta::with_settings!({
         filters => filters
@@ -3303,7 +3298,8 @@ fn find_links_directory() -> Result<()> {
         ----- stderr -----
         Resolved 4 packages in [TIME]
         "###);
-    });
+        }
+    );
 
     Ok(())
 }
@@ -3319,7 +3315,7 @@ fn find_links_url() -> Result<()> {
     requirements_in.write_str("tqdm")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3376,7 +3372,7 @@ fn upgrade_none() -> Result<()> {
     "})?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3404,7 +3400,10 @@ fn upgrade_none() -> Result<()> {
         .lines()
         .skip_while(|line| line.trim_start().starts_with('#'))
         .join("\n");
-    assert_snapshot!(resolution, @r###"
+    insta::with_settings!({
+        filters => filters(1)
+    }, {
+        assert_snapshot!(resolution, @r###"
     black==23.10.1
     click==8.1.2
         # via black
@@ -3417,6 +3416,7 @@ fn upgrade_none() -> Result<()> {
     platformdirs==4.0.0
         # via black
     "###);
+    });
 
     Ok(())
 }
@@ -3450,7 +3450,7 @@ fn upgrade_all() -> Result<()> {
     "})?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3479,7 +3479,10 @@ fn upgrade_all() -> Result<()> {
         .lines()
         .skip_while(|line| line.trim_start().starts_with('#'))
         .join("\n");
-    assert_snapshot!(resolution, @r###"
+    insta::with_settings!({
+        filters => filters(1)
+    }, {
+        assert_snapshot!(resolution, @r###"
     black==23.10.1
     click==8.1.7
         # via black
@@ -3492,6 +3495,7 @@ fn upgrade_all() -> Result<()> {
     platformdirs==4.0.0
         # via black
     "###);
+    });
 
     Ok(())
 }
@@ -3525,7 +3529,7 @@ fn upgrade_package() -> Result<()> {
     "})?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3555,7 +3559,10 @@ fn upgrade_package() -> Result<()> {
         .lines()
         .skip_while(|line| line.trim_start().starts_with('#'))
         .join("\n");
-    assert_snapshot!(resolution, @r###"
+    insta::with_settings!({
+        filters => filters(1)
+    }, {
+        assert_snapshot!(resolution, @r###"
     black==23.10.1
     click==8.1.7
         # via black
@@ -3569,6 +3576,7 @@ fn upgrade_package() -> Result<()> {
         # via black
     "###
     );
+    });
 
     Ok(())
 }
@@ -3583,10 +3591,7 @@ fn missing_path_requirement() -> Result<()> {
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("django @ file:///tmp/django-3.2.8.tar.gz")?;
 
-    let filters: Vec<_> = [(r"/[A-Z]:/", "/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = extra_filters(1, &[(r"\\", "/"), (r"/[A-Z]:/", "/")]);
 
     insta::with_settings!({
         filters => filters
@@ -3624,14 +3629,14 @@ fn missing_editable_requirement() -> Result<()> {
     requirements_in.write_str("-e ../tmp/django-3.2.8.tar.gz")?;
 
     // File url, absolute Unix path or absolute Windows path
-    let filters: Vec<_> = [
-        (r" file://.*/", " file://[TEMP_DIR]/"),
-        (r" /.*/", " /[TEMP_DIR]/"),
-        (r" [A-Z]:\\.*\\", " /[TEMP_DIR]/"),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
+    let filters = extra_filters(
+        0,
+        &[
+            (r" file://.*/", " file://[TEMP_DIR]/"),
+            (r" /.*/", " /[TEMP_DIR]/"),
+            (r" [A-Z]:\\.*\\", " /[TEMP_DIR]/"),
+        ],
+    );
 
     insta::with_settings!({
         filters => filters
@@ -3671,7 +3676,7 @@ fn missing_package_name() -> Result<()> {
     requirements_in.write_str("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3709,7 +3714,7 @@ fn no_annotate() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -3753,7 +3758,7 @@ fn no_header() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")

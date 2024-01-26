@@ -14,6 +14,7 @@ use distribution_filename::WheelFilename;
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
+use puffin_fs::NormalizedDisplay;
 use puffin_normalize::PackageName;
 pub use record::RecordEntry;
 pub use script::Script;
@@ -77,7 +78,7 @@ pub enum Error {
     DirectUrlJson(#[from] serde_json::Error),
     #[error("No .dist-info directory found")]
     MissingDistInfo,
-    #[error("Cannot uninstall package; RECORD file not found at: {0}")]
+    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.normalized_display())]
     MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),

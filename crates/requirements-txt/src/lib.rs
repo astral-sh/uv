@@ -802,13 +802,15 @@ mod test {
             .chain()
             // The last error is operating-system specific.
             .take(2)
-            .map(|err| err.to_string().replace('\\', "/"))
+            .map(|err| err.to_string())
             .join("\n");
 
+        let requirements_txt_str = regex::escape(requirements_txt.path().to_str().unwrap());
+        let missing_txt_str = regex::escape(missing_txt.path().to_str().unwrap());
         insta::with_settings!({
             filters => vec![
-                (requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>"),
-                (missing_txt.path().to_str().unwrap(), "<MISSING_TXT>"),
+                (requirements_txt_str.as_str(), "<REQUIREMENTS_TXT>"),
+                (missing_txt_str.as_str(), "<MISSING_TXT>"),
             ],
         }, {
             insta::assert_display_snapshot!(errors, @r###"
@@ -831,11 +833,12 @@ mod test {
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
+            .map(|err| err.to_string())
             .join("\n");
 
+        let requirements_txt_str = regex::escape(requirements_txt.path().to_str().unwrap());
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => vec![(requirements_txt_str.as_str(), "<REQUIREMENTS_TXT>")]
         }, {
             insta::assert_display_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
@@ -859,11 +862,12 @@ mod test {
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
+            .map(|err| err.to_string())
             .join("\n");
 
+        let requirements_txt_str = regex::escape(requirements_txt.path().to_str().unwrap());
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => vec![(requirements_txt_str.as_str(), "<REQUIREMENTS_TXT>")]
         }, {
             insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: http://localhost:8080/");
         });

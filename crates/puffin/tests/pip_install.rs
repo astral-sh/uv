@@ -1,6 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::iter;
 use std::path::Path;
 use std::process::Command;
 
@@ -12,7 +11,8 @@ use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{create_venv_py312, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv_py312, extra_filters, filters, venv_to_interpreter, BIN_NAME};
+use puffin_fs::NormalizedDisplay;
 
 mod common;
 
@@ -36,7 +36,7 @@ fn missing_requirements_txt() -> Result<()> {
     let requirements_txt = temp_dir.child("requirements.txt");
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -105,7 +105,7 @@ fn install_package() -> Result<()> {
 
     // Install Flask.
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -153,7 +153,7 @@ fn install_requirements_txt() -> Result<()> {
     requirements_txt.write_str("Flask")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -192,7 +192,7 @@ fn install_requirements_txt() -> Result<()> {
     requirements_txt.write_str("Jinja2")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -233,7 +233,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.write_str("Flask==2.3.2")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -273,7 +273,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.write_str("Flask")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -304,7 +304,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.write_str("Flask==2.3.3")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -337,7 +337,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.write_str("Flask")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -382,7 +382,7 @@ fn allow_incompatibilities() -> Result<()> {
     requirements_txt.write_str("Flask")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -422,7 +422,7 @@ fn allow_incompatibilities() -> Result<()> {
     requirements_txt.write_str("jinja2==2.11.3")?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -465,17 +465,22 @@ fn install_editable() -> Result<()> {
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
-        current_dir
+        &current_dir
             .join("..")
             .join("..")
             .canonicalize()?
-            .to_str()
-            .unwrap(),
+            .normalized_display()
+            .to_string()
+            // Windows-to-url normalization
+            .replace('\\', "/"),
     );
 
-    let filters = iter::once((workspace_dir.as_str(), "[WORKSPACE_DIR]"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
+    let workspace_filters = [
+        (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
+        // Ignore extra slash on windows
+        ("file:///", "file://"),
+    ];
+    let filters = extra_filters(0, &workspace_filters);
 
     // Install the editable package.
     insta::with_settings!({
@@ -532,9 +537,11 @@ fn install_editable() -> Result<()> {
         "###);
     });
 
+    let filters = extra_filters(1, &workspace_filters);
+
     // Add another, non-editable dependency.
     insta::with_settings!({
-        filters => filters.clone()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -580,21 +587,26 @@ fn install_editable_and_registry() -> Result<()> {
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
-        current_dir
+        &current_dir
             .join("..")
             .join("..")
             .canonicalize()?
-            .to_str()
-            .unwrap(),
+            .normalized_display()
+            .to_string()
+            // Windows-to-url normalization
+            .replace('\\', "/"),
     );
 
-    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "[WORKSPACE_DIR]"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let workspace_filters = [
+        (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
+        // Ignore extra slash on windows
+        ("file:///", "file://"),
+    ];
+    let filters = extra_filters(1, &workspace_filters);
 
     // Install the registry-based version of Black.
     insta::with_settings!({
-        filters => filters.clone()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -623,6 +635,8 @@ fn install_editable_and_registry() -> Result<()> {
          + platformdirs==4.0.0
         "###);
     });
+
+    let filters = extra_filters(0, &workspace_filters);
 
     // Install the editable version of Black. This should remove the registry-based version.
     insta::with_settings!({
@@ -680,7 +694,7 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Re-install Black at a specific version. This should replace the editable version.
     insta::with_settings!({
-        filters => filters.clone()
+        filters => filters
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -727,7 +741,7 @@ fn reinstall_build_system() -> Result<()> {
     })?;
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -772,7 +786,7 @@ fn install_no_binary() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -817,7 +831,7 @@ fn install_no_binary_subset() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -866,7 +880,7 @@ fn reinstall_no_binary() -> Result<()> {
 
     // The first installation should use a pre-built wheel
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(1)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -901,7 +915,7 @@ fn reinstall_no_binary() -> Result<()> {
 
     // Running installation again with `--no-binary` should be a no-op
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
@@ -928,7 +942,7 @@ fn reinstall_no_binary() -> Result<()> {
 
     // With `--reinstall`, `--no-binary` should have an affect
     insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
+        filters => filters(0)
     }, {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
