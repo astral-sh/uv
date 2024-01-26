@@ -301,7 +301,7 @@ pub(crate) fn windows_script_launcher(
             }
         }
         arch => {
-            return Err(Error::OsVersionDetection(arch));
+            return Err(Error::UnsupportedWindowsArch(arch));
         }
     };
 
