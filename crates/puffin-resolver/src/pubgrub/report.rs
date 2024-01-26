@@ -5,6 +5,7 @@ use std::ops::Bound;
 
 use derivative::Derivative;
 use indexmap::{IndexMap, IndexSet};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pubgrub::range::Range;
@@ -314,7 +315,15 @@ impl PubGrubReportFormatter<'_> {
         if set == &Range::full() {
             Cow::Borrowed(set)
         } else {
-            Cow::Owned(set.simplify(self.available_versions.get(package).into_iter().flatten()))
+            Cow::Owned(
+                set.simplify(
+                    self.available_versions
+                        .get(package)
+                        .into_iter()
+                        .flatten()
+                        .sorted(),
+                ),
+            )
         }
     }
 
