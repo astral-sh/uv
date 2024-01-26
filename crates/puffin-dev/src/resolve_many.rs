@@ -49,7 +49,7 @@ async fn find_latest_version(
     package_name: &PackageName,
 ) -> Option<Version> {
     let (_, simple_metadata) = client.simple(package_name).await.ok()?;
-    let (version, _) = simple_metadata.into_iter().next()?;
+    let version = simple_metadata.into_iter().next()?.version;
     Some(version.clone())
 }
 

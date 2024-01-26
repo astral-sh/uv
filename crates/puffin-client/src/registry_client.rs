@@ -551,15 +551,23 @@ pub struct VersionSourceDist {
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
-pub struct SimpleMetadata(BTreeMap<Version, VersionFiles>);
+pub struct SimpleMetadata(Vec<SimpleMetadatum>);
+
+#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
+pub struct SimpleMetadatum {
+    pub version: Version,
+    pub files: VersionFiles,
+}
 
 impl SimpleMetadata {
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, &VersionFiles)> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleMetadatum> {
         self.0.iter()
     }
 
     fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName, base: &str) -> Self {
-        let mut metadata = Self::default();
+        let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
         // Group the distributions by version and kind
         for file in files {
@@ -579,7 +587,7 @@ impl SimpleMetadata {
                         continue;
                     }
                 };
-                match metadata.0.entry(version.clone()) {
+                match map.entry(version.clone()) {
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
                         entry.get_mut().push(filename, file);
                     }
@@ -591,14 +599,17 @@ impl SimpleMetadata {
                 }
             }
         }
-
-        metadata
+        SimpleMetadata(
+            map.into_iter()
+                .map(|(version, files)| SimpleMetadatum { version, files })
+                .collect(),
+        )
     }
 }
 
 impl IntoIterator for SimpleMetadata {
-    type Item = (Version, VersionFiles);
-    type IntoIter = std::collections::btree_map::IntoIter<Version, VersionFiles>;
+    type Item = SimpleMetadatum;
+    type IntoIter = std::vec::IntoIter<SimpleMetadatum>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -636,7 +647,7 @@ mod tests {
     use puffin_normalize::PackageName;
     use pypi_types::SimpleJson;
 
-    use crate::SimpleMetadata;
+    use crate::{SimpleMetadata, SimpleMetadatum};
 
     #[test]
     fn ignore_failing_files() {
@@ -678,11 +689,11 @@ mod tests {
         let simple_metadata = SimpleMetadata::from_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
-            &base,
+            base,
         );
         let versions: Vec<String> = simple_metadata
             .iter()
-            .map(|(version, _)| version.to_string())
+            .map(|SimpleMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
     }
