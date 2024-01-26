@@ -43,20 +43,19 @@ Install required Python versions with the bootstrapping script:
 scripts/bootstrap/install.sh
 ```
 
-Then add the Python binaries to your path:
+The installed Python binaries will be available in `<repo>/bin` and must be added to your path to be used. We
+provide a `.env` file with the proper environment variables for development. You may activate it with:
 
 ```
-export PATH=$PWD/bin:$PATH
+source .env
 ```
 
-We also strongly recommend setting the `PUFFIN_PYTHON_PATH` variable during development; this will prevent your
-system Python versions from being found during tests:
+Or, if you use `direnv` to manage your environment:
 
 ```
-export PUFFIN_PYTHON_PATH=$PWD/bin
+echo "dotenv" >> .envrc
+direnv allow
 ```
-
-If you use [direnv](https://direnv.net/), these variables will be exported automatically after you run `direnv allow`.
 
 ## Testing
 
