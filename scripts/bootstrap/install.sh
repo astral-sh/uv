@@ -10,12 +10,12 @@
 #       brew install zstd jq coreutils
 #
 #   Ubuntu
-#       
+#
 #       apt install zstd jq
 #
 #   Arch Linux
-#   
-#       pacman -S zstd jq
+#
+#       pacman -S zstd jq libxcrypt-compat
 #
 #   Windows
 #
@@ -72,7 +72,7 @@ for version in "${versions[@]}"; do
     echo "Installing $key"
 
     url=$(jq --arg key "$key" '.[$key] | .url' -r < "$versions_metadata")
-    
+
     if [ "$url" == 'null' ]; then
         echo "No matching download for $key"
         exit 1
@@ -96,7 +96,7 @@ for version in "${versions[@]}"; do
     echo "Extracting to $($realpath --relative-to="$root_dir" "$install_key")"
     mkdir -p "$install_key"
     zstd -d "$this_dir/$filename" --stdout | tar -x -C "$install_key"
-    
+
     # Setup the installation
     mv "$install_key/python/"* "$install_key"
     # Use relative paths for links so if the bin is moved they don't break
