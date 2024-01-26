@@ -54,7 +54,13 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install required Python versions"
+
+      - name: Cache Python binaries
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: ${{ runner.os }}-py--${{ hashFiles('.python-versions') }}
+      - name: "Install Python binaries"
         run: |
           sudo apt install direnv
           scripts/bootstrap/install.sh
