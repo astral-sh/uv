@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use sha2::Digest;
 use rayon::prelude::*;
 use tokio::io::ReadBuf;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -28,22 +29,21 @@ pub enum Error {
     InvalidArchive(Vec<fs_err::DirEntry>),
 }
 
-struct HashingReader<'a, R> {
+struct Blake3Reader<'a, R> {
     reader: R,
     hasher: &'a mut blake3::Hasher,
 }
 
-impl<'a, R> HashingReader<'a, R>
+impl<'a, R> Blake3Reader<'a, R>
 where
     R: tokio::io::AsyncRead + Unpin,
-    // H: std::hash::Hasher + Unpin,
 {
     fn new(reader: R, hasher: &'a mut blake3::Hasher) -> Self {
-        HashingReader { reader, hasher }
+        Blake3Reader { reader, hasher }
     }
 }
 
-impl<'a, R> tokio::io::AsyncRead for HashingReader<'a, R>
+impl<'a, R> tokio::io::AsyncRead for Blake3Reader<'a, R>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
@@ -55,7 +55,41 @@ where
         let reader = Pin::new(&mut self.reader);
         match reader.poll_read(cx, buf) {
             Poll::Ready(Ok(())) => {
-                self.hasher.update_rayon(buf.filled());
+                self.hasher.update(buf.filled());
+                Poll::Ready(Ok(()))
+            }
+            other => other,
+        }
+    }
+}
+
+struct Sha256Reader<'a, R> {
+    reader: R,
+    hasher: &'a mut sha2::Sha256,
+}
+
+impl<'a, R> Sha256Reader<'a, R>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    fn new(reader: R, hasher: &'a mut sha2::Sha256) -> Self {
+        Sha256Reader { reader, hasher }
+    }
+}
+
+impl<'a, R> tokio::io::AsyncRead for Sha256Reader<'a, R>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let reader = Pin::new(&mut self.reader);
+        match reader.poll_read(cx, buf) {
+            Poll::Ready(Ok(())) => {
+                self.hasher.update(buf.filled());
                 Poll::Ready(Ok(()))
             }
             other => other,
@@ -72,8 +106,48 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
 ) -> Result<(), Error> {
+    let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+
+    while let Some(mut entry) = zip.next_with_entry().await? {
+        // Construct path
+        let filename = entry.reader().entry().filename().as_str()?;
+        let path = target.join(filename);
+        let is_dir = entry.reader().entry().dir()?;
+
+        // Create dir or write file
+        if is_dir {
+            fs_err::tokio::create_dir_all(path).await?;
+        } else {
+            if let Some(parent) = path.parent() {
+                fs_err::tokio::create_dir_all(parent).await?;
+            }
+            let file = fs_err::tokio::File::create(path).await?;
+            let size =
+                usize::try_from(entry.reader().entry().uncompressed_size()).unwrap_or(usize::MAX);
+            let mut writer = tokio::io::BufWriter::with_capacity(size, file);
+            let mut reader = entry.reader_mut().compat();
+            tokio::io::copy(&mut reader, &mut writer).await?;
+        }
+
+        // Close current file to get access to the next one. See docs:
+        // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
+        zip = entry.skip().await?;
+    }
+
+    Ok(())
+}
+
+/// Unzip a `.zip` archive into the target directory without requiring Seek.
+///
+/// This is useful for unzipping files as they're being downloaded. If the archive
+/// is already fully on disk, consider using `unzip_archive`, which can use multiple
+/// threads to work faster in that case.
+pub async fn unzip_no_seek_blake3<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<(), Error> {
     let mut hasher = blake3::Hasher::default();
-    let reader = HashingReader::new(reader, &mut hasher);
+    let reader = Blake3Reader::new(reader, &mut hasher);
 
     let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
 
@@ -103,7 +177,48 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
         zip = entry.skip().await?;
     }
 
-    // println!("Hash: {:x}", hasher.finish());
+    Ok(())
+}
+
+/// Unzip a `.zip` archive into the target directory without requiring Seek.
+///
+/// This is useful for unzipping files as they're being downloaded. If the archive
+/// is already fully on disk, consider using `unzip_archive`, which can use multiple
+/// threads to work faster in that case.
+pub async fn unzip_no_seek_sha256<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<(), Error> {
+    let mut hasher = sha2::Sha256::default();
+    let reader = Sha256Reader::new(reader, &mut hasher);
+
+    let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+
+    while let Some(mut entry) = zip.next_with_entry().await? {
+        // Construct path
+        let filename = entry.reader().entry().filename().as_str()?;
+        let path = target.join(filename);
+        let is_dir = entry.reader().entry().dir()?;
+
+        // Create dir or write file
+        if is_dir {
+            fs_err::tokio::create_dir_all(path).await?;
+        } else {
+            if let Some(parent) = path.parent() {
+                fs_err::tokio::create_dir_all(parent).await?;
+            }
+            let file = fs_err::tokio::File::create(path).await?;
+            let size =
+                usize::try_from(entry.reader().entry().uncompressed_size()).unwrap_or(usize::MAX);
+            let mut writer = tokio::io::BufWriter::with_capacity(size, file);
+            let mut reader = entry.reader_mut().compat();
+            tokio::io::copy(&mut reader, &mut writer).await?;
+        }
+
+        // Close current file to get access to the next one. See docs:
+        // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
+        zip = entry.skip().await?;
+    }
 
     Ok(())
 }

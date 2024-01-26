@@ -36,14 +36,21 @@ harness = false
 distribution-filename = { path = "../distribution-filename" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 platform-tags = { path = "../platform-tags" }
+puffin-extract = { path = "../puffin-extract" }
 pypi-types = { path = "../pypi-types" }
-crc32fast = {version = "1.3.2" }
+anyhow = { workspace = true }
 
-criterion = { version = "0.5.1", default-features = false }
-zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
-seahash = { version = "4.1.0"  }
-sha2 = { workspace = true }
-metrohash = "1.0.6"
-cityhash = "0.1.1"
-xxhash-rust = { version = "0.8.8", features = ["xxh3"] }
 blake3 = { version = "1.5.0", features = ["rayon", "mmap"] }
+cityhash = "0.1.1"
+crc32fast = { version = "1.3.2" }
+criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
+futures = { workspace = true }
+metrohash = "1.0.6"
+reqwest = { workspace = true, features = ["stream"] }
+seahash = { version = "4.1.0" }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+xxhash-rust = { version = "0.8.8", features = ["xxh3"] }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
