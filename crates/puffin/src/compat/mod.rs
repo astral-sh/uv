@@ -1,0 +1,260 @@
+use anyhow::{anyhow, Result};
+use clap::{Args, ValueEnum};
+
+use puffin_warnings::warn_user;
+
+/// Arguments for `pip-compile` compatibility.
+///
+/// These represent a subset of the `pip-compile` interface that Puffin supports by default.
+/// For example, users often pass `--allow-unsafe`, which is unnecessary with Puffin. But it's a
+/// nice user experience to warn, rather than fail, when users pass `--allow-unsafe`.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct PipCompileCompatArgs {
+    #[clap(long, hide = true)]
+    allow_unsafe: bool,
+
+    #[clap(long, hide = true)]
+    no_allow_unsafe: bool,
+
+    #[clap(long, hide = true)]
+    reuse_hashes: bool,
+
+    #[clap(long, hide = true)]
+    no_reuse_hashes: bool,
+
+    #[clap(long, hide = true)]
+    build_isolation: bool,
+
+    #[clap(long, hide = true)]
+    no_build_isolation: bool,
+
+    #[clap(long, hide = true)]
+    resolver: Option<Resolver>,
+
+    #[clap(long, hide = true)]
+    annotation_style: Option<AnnotationStyle>,
+
+    #[clap(long, hide = true)]
+    max_rounds: Option<usize>,
+
+    #[clap(long, hide = true)]
+    cert: Option<String>,
+
+    #[clap(long, hide = true)]
+    client_cert: Option<String>,
+
+    #[clap(long, hide = true)]
+    trusted_host: Option<String>,
+
+    #[clap(long, hide = true)]
+    emit_trusted_host: bool,
+
+    #[clap(long, hide = true)]
+    no_emit_trusted_host: bool,
+
+    #[clap(long, hide = true)]
+    unsafe_package: Vec<String>,
+
+    #[clap(long, hide = true)]
+    no_config: bool,
+
+    #[clap(long, hide = true)]
+    emit_index_url: bool,
+
+    #[clap(long, hide = true)]
+    no_emit_index_url: bool,
+
+    #[clap(long, hide = true)]
+    emit_find_links: bool,
+
+    #[clap(long, hide = true)]
+    no_emit_find_links: bool,
+
+    #[clap(long, hide = true)]
+    emit_options: bool,
+
+    #[clap(long, hide = true)]
+    no_emit_options: bool,
+
+    #[clap(long, hide = true)]
+    strip_extras: bool,
+
+    #[clap(long, hide = true)]
+    no_strip_extras: bool,
+}
+
+impl PipCompileCompatArgs {
+    /// Validate the arguments passed for `pip-compile` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches Puffin's
+    /// behavior. If an argument is passed that does _not_ match Puffin's behavior (e.g.,
+    /// `--no-build-isolation`), this method will return an error.
+    pub(crate) fn validate(&self) -> Result<()> {
+        if self.allow_unsafe {
+            warn_user!(
+                "pip-compile's `--allow-unsafe` has no effect (Puffin can safely pin `pip` and other packages)."
+            );
+        }
+
+        if self.no_allow_unsafe {
+            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (Puffin can safely pin `pip` and other packages).");
+        }
+
+        if self.reuse_hashes {
+            return Err(anyhow!(
+                "pip-compile's `--reuse-hashes` is unsupported (Puffin doesn't reuse hashes)."
+            ));
+        }
+
+        if self.no_reuse_hashes {
+            warn_user!(
+                "pip-compile's `--no-reuse-hashes` has no effect (Puffin doesn't reuse hashes)."
+            );
+        }
+
+        if self.build_isolation {
+            warn_user!("pip-compile's `--build-isolation` has no effect (Puffin always uses build isolation).");
+        }
+
+        if self.no_build_isolation {
+            return Err(anyhow!(
+                "pip-compile's `--no-build-isolation` is unsupported (Puffin always uses build isolation)."
+            ));
+        }
+
+        if let Some(resolver) = self.resolver {
+            match resolver {
+                Resolver::Backtracking => {
+                    warn_user!(
+                        "pip-compile's `--resolver=backtracking` has no effect (Puffin always backtracks)."
+                    );
+                }
+                Resolver::Legacy => {
+                    return Err(anyhow!(
+                        "pip-compile's `--resolver=legacy` is unsupported (Puffin always backtracks)."
+                    ));
+                }
+            }
+        }
+
+        if let Some(annotation_style) = self.annotation_style {
+            match annotation_style {
+                AnnotationStyle::Split => {
+                    warn_user!(
+                        "pip-compile's `--annotation-style=split` has no effect (Puffin always emits split annotations)."
+                    );
+                }
+                AnnotationStyle::Line => {
+                    return Err(anyhow!(
+                        "pip-compile's `--annotation-style=line` is unsupported (Puffin always emits split annotations)."
+                    ));
+                }
+            }
+        }
+
+        if self.max_rounds.is_some() {
+            return Err(anyhow!(
+                "pip-compile's `--max-rounds` is unsupported (Puffin always resolves until convergence)."
+            ));
+        }
+
+        if self.client_cert.is_some() {
+            return Err(anyhow!(
+                "pip-compile's `--client-cert` is unsupported (Puffin doesn't support dedicated client certificates)."
+            ));
+        }
+
+        if self.trusted_host.is_some() {
+            return Err(anyhow!(
+                "pip-compile's `--trusted-host` is unsupported (Puffin always requires HTTPS)."
+            ));
+        }
+
+        if self.emit_trusted_host {
+            return Err(anyhow!(
+                "pip-compile's `--emit-trusted-host` is unsupported (Puffin always requires HTTPS)."
+            ));
+        }
+
+        if self.no_emit_trusted_host {
+            warn_user!(
+                "pip-compile's `--no-emit-trusted-host` has no effect (Puffin never emits trusted hosts)."
+            );
+        }
+
+        if !self.unsafe_package.is_empty() {
+            return Err(anyhow!(
+                "pip-compile's `--unsafe-package` is not supported."
+            ));
+        }
+
+        if self.no_config {
+            warn_user!(
+                "pip-compile's `--no-config` has no effect (Puffin does not use a configuration file)."
+            );
+        }
+
+        if self.emit_index_url {
+            return Err(anyhow!(
+                "pip-compile's `--emit-index-url` is unsupported (Puffin never emits index URLs)."
+            ));
+        }
+
+        if self.no_emit_index_url {
+            warn_user!(
+                "pip-compile's `--no-emit-index-url` has no effect (Puffin never emits index URLs)."
+            );
+        }
+
+        if self.emit_find_links {
+            return Err(anyhow!(
+                "pip-compile's `--emit-find-links` is unsupported (Puffin never emits `--find-links` URLs)."
+            ));
+        }
+
+        if self.no_emit_find_links {
+            warn_user!(
+                "pip-compile's `--no-emit-find-links` has no effect (Puffin never emits `--find-links` URLs)."
+            );
+        }
+
+        if self.emit_options {
+            return Err(anyhow!(
+                "pip-compile's `--emit-options` is unsupported (Puffin never emits options)."
+            ));
+        }
+
+        if self.no_emit_options {
+            warn_user!(
+                "pip-compile's `--no-emit-options` has no effect (Puffin never emits options)."
+            );
+        }
+
+        if self.strip_extras {
+            warn_user!(
+                "pip-compile's `--strip-extras` has no effect (Puffin always strips extras)."
+            );
+        }
+
+        if self.no_strip_extras {
+            return Err(anyhow!(
+                "pip-compile's `--no-strip-extras` is unsupported (Puffin always strips extras)."
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum Resolver {
+    Backtracking,
+    Legacy,
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum AnnotationStyle {
+    Line,
+    Split,
+}

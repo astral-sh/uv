@@ -38,6 +38,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod commands;
+mod compat;
 mod logging;
 mod printer;
 mod requirements;
@@ -282,6 +283,9 @@ struct PipCompileArgs {
     /// day, i.e. until midnight UTC that day.
     #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
+
+    #[command(flatten)]
+    compat_args: compat::PipCompileCompatArgs,
 }
 
 #[derive(Args)]
@@ -647,6 +651,8 @@ async fn inner() -> Result<ExitStatus> {
         Commands::Pip(PipArgs {
             command: PipCommand::Compile(args),
         }) => {
+            args.compat_args.validate()?;
+
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let requirements = args
                 .src_file
