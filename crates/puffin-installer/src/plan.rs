@@ -12,10 +12,9 @@ use distribution_types::{
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::{
-    ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Freshness, Timestamp, WheelCache,
-};
+use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
+use puffin_fs::NormalizedDisplay;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_traits::NoBinary;
@@ -186,6 +185,12 @@ impl<'a> Planner<'a> {
                 }
             }
 
+            if cache.must_revalidate(&requirement.name) {
+                debug!("Must revalidate requirement: {requirement}");
+                remote.push(requirement.clone());
+                continue;
+            }
+
             // Identify any locally-available distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None => {
@@ -247,36 +252,29 @@ impl<'a> Planner<'a> {
                                 )
                                 .entry(wheel.filename.stem());
 
-                            if cache
-                                .freshness(&cache_entry, Some(wheel.name()))
-                                .is_ok_and(Freshness::is_fresh)
-                            {
-                                match cache_entry.path().canonicalize() {
-                                    Ok(archive) => {
-                                        let cached_dist = CachedDirectUrlDist::from_url(
-                                            wheel.filename,
-                                            wheel.url,
-                                            archive,
-                                        );
+                            match cache_entry.path().canonicalize() {
+                                Ok(archive) => {
+                                    let cached_dist = CachedDirectUrlDist::from_url(
+                                        wheel.filename,
+                                        wheel.url,
+                                        archive,
+                                    );
 
-                                        debug!(
-                                            "URL wheel requirement already cached: {cached_dist}"
-                                        );
-                                        local.push(CachedDist::Url(cached_dist));
-                                        continue;
-                                    }
-                                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                                        // The cache entry doesn't exist, so it's not fresh.
-                                    }
-                                    Err(err) => return Err(err.into()),
+                                    debug!("URL wheel requirement already cached: {cached_dist}");
+                                    local.push(CachedDist::Url(cached_dist));
+                                    continue;
                                 }
+                                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                                    // The cache entry doesn't exist, so it's not fresh.
+                                }
+                                Err(err) => return Err(err.into()),
                             }
                         }
                         Dist::Built(BuiltDist::Path(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
                                     "A path dependency is incompatible with the current platform: {}",
-                                    wheel.path.display()
+                                    wheel.path.normalized_display()
                                 );
                             }
 
@@ -297,28 +295,25 @@ impl<'a> Planner<'a> {
                                 )
                                 .entry(wheel.filename.stem());
 
-                            if cache
-                                .freshness(&cache_entry, Some(wheel.name()))
-                                .is_ok_and(Freshness::is_fresh)
-                            {
-                                if not_modified_cache(&cache_entry, &wheel.path)? {
-                                    match cache_entry.path().canonicalize() {
-                                        Ok(archive) => {
-                                            let cached_dist = CachedDirectUrlDist::from_url(
-                                                wheel.filename,
-                                                wheel.url,
-                                                archive,
-                                            );
+                            if not_modified_cache(&cache_entry, &wheel.path)? {
+                                match cache_entry.path().canonicalize() {
+                                    Ok(archive) => {
+                                        let cached_dist = CachedDirectUrlDist::from_url(
+                                            wheel.filename,
+                                            wheel.url,
+                                            archive,
+                                        );
 
-                                            debug!("URL wheel requirement already cached: {cached_dist}");
-                                            local.push(CachedDist::Url(cached_dist));
-                                            continue;
-                                        }
-                                        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                                            // The cache entry doesn't exist, so it's not fresh.
-                                        }
-                                        Err(err) => return Err(err.into()),
+                                        debug!(
+                                            "URL wheel requirement already cached: {cached_dist}"
+                                        );
+                                        local.push(CachedDist::Url(cached_dist));
+                                        continue;
                                     }
+                                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                                        // The cache entry doesn't exist, so it's not fresh.
+                                    }
+                                    Err(err) => return Err(err.into()),
                                 }
                             }
                         }

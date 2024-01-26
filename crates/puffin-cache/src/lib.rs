@@ -160,6 +160,15 @@ impl Cache {
         CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
     }
 
+    /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
+    pub fn must_revalidate(&self, package: &PackageName) -> bool {
+        match &self.refresh {
+            Refresh::None => false,
+            Refresh::All(_) => true,
+            Refresh::Packages(packages, _) => packages.contains(package),
+        }
+    }
+
     /// Returns `true` if a cache entry is up-to-date given the [`Refresh`] policy.
     pub fn freshness(
         &self,
