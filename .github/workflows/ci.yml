@@ -81,17 +81,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
         run: rustup component add clippy
-      - name: "Install Python for boostrapping"
+      - name: "Install Python for bootstrapping"
         uses: actions/setup-python@v4
         with:
           python-version: 3.12
-      - name: "Install required Python versions"
+      - name: "Install Python binaries"
         run: |
           pip install zstandard==0.22.0
-          scripts/bootstrap/install.py
-      - name: "Test Python versions"
-        run: |
-          ./bin/python3.8.18 --version
+          python scripts/bootstrap/install.py
+          # ex) The path needs to be updated downstream
+          $env:Path = "$pwd\bin" + $env:Path
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings

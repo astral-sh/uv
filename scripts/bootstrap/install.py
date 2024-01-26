@@ -11,7 +11,7 @@
 #
 # Usage
 #
-#   scripts/bootstrap/install.py
+#   python scripts/bootstrap/install.py
 #
 # The Python versions are installed from `.python_versions`.
 # Python versions are linked in-order such that the _last_ defined version will be the default.
@@ -43,9 +43,11 @@ INSTALL_DIR = BIN_DIR / "versions"
 VERSIONS_FILE = ROOT_DIR / ".python-versions"
 VERSIONS_METADATA_FILE = THIS_DIR / "versions.json"
 
-ARCH_MAP = {"aarch64": "arm64"}
-OS = sys.platform
-ARCH = platform.machine()
+# Map system information to those in the versions metadata
+ARCH_MAP = {"aarch64": "arm64", "amd64": "x86_64"}
+PLATFORM_MAP = {"win32": "windows"}
+PLATFORM = sys.platform
+ARCH = platform.machine().lower()
 INTERPRETER = "cpython"
 
 
@@ -83,7 +85,7 @@ versions = VERSIONS_FILE.read_text().splitlines()
 
 # Install each version
 for version in versions:
-    key = f"{INTERPRETER}-{version}-{OS}-{ARCH}"
+    key = f"{INTERPRETER}-{version}-{PLATFORM_MAP.get(PLATFORM, PLATFORM)}-{ARCH_MAP.get(ARCH, ARCH)}"
     print(f"Installing {key}")
 
     url = versions_metadata[key]["url"]
@@ -110,9 +112,10 @@ for version in versions:
         print(" OK")
 
     install_dir = INSTALL_DIR / f"{INTERPRETER}@{version}"
-    shutil.rmtree(install_dir)
+    if install_dir.exists():
+        shutil.rmtree(install_dir)
     print("Extracting to", install_dir)
-    install_dir.mkdir(parents=True, exist_ok=True)
+    install_dir.parent.mkdir(parents=True, exist_ok=True)
 
     decompress_file(THIS_DIR / filename, install_dir.with_suffix(".tmp"))
 
@@ -121,11 +124,14 @@ for version in versions:
 
     # Use relative paths for links so if the bin is moved they don't break
     executable = "." / install_dir.relative_to(BIN_DIR) / "install" / "bin" / "python3"
+    if PLATFORM == "win32":
+        executable = executable.with_suffix(".exe")
 
     major = versions_metadata[key]["major"]
     minor = versions_metadata[key]["minor"]
 
     # Link as all version tuples, later versions in the file will take precedence
+    BIN_DIR.mkdir(parents=True, exist_ok=True)
     targets = (
         (BIN_DIR / f"python{version}"),
         (BIN_DIR / f"python{major}.{minor}"),
@@ -133,8 +139,12 @@ for version in versions:
         (BIN_DIR / "python"),
     )
     for target in targets:
-        target.unlink()
+        if PLATFORM == "win32":
+            target = target.with_suffix(".exe")
+
+        target.unlink(missing_ok=True)
         target.symlink_to(executable)
+
     print(f"Installed as python{version}")
 
     # Cleanup
