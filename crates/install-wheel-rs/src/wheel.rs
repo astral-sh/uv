@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -34,10 +33,19 @@ use crate::{find_dist_info, Error};
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
 
-pub(crate) const LAUNCHER_X86_64_GUI: &[u8] =
+#[cfg(windows)]
+const LAUNCHER_X86_64_GUI: &[u8] =
     include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-gui.exe");
-pub(crate) const LAUNCHER_X86_64_CONSOLE: &[u8] =
+
+#[cfg(windows)]
+const LAUNCHER_X86_64_CONSOLE: &[u8] =
     include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-console.exe");
+
+#[cfg(not(windows))]
+const LAUNCHER_X86_64_GUI: &[u8] = &[];
+
+#[cfg(not(windows))]
+const LAUNCHER_X86_64_CONSOLE: &[u8] = &[];
 
 /// Wrapper script template function
 ///
@@ -284,14 +292,21 @@ pub(crate) fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> Strin
     format!("#!{path}")
 }
 
-/// A windows script is a minimal .exe launcher binary with the python entrypoint script appended as stored zip file.
-/// The launcher will look for `python[w].exe` adjacent to it in the same directory to start the embedded script.
+/// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
+/// stored zip file. The launcher will look for `python[w].exe` adjacent to it in the same directory
+/// to start the embedded script.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
 pub(crate) fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
 ) -> Result<Vec<u8>, Error> {
+    // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
+    // compilation on all platforms.
+    if cfg!(not(windows)) {
+        return Err(Error::NotWindows);
+    }
+
     let launcher_bin = match env::consts::ARCH {
         "x86_64" => {
             if is_gui {
@@ -352,14 +367,22 @@ pub(crate) fn write_script_entrypoints(
         } else {
             bin_rel().join(&entrypoint.script_name)
         };
+
+        // Generate the launcher script.
         let launcher_python_script = get_script_launcher(
             &entrypoint.module,
             &entrypoint.function,
             &get_shebang(location),
         );
+
+        // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
-            let launcher = windows_script_launcher(&launcher_python_script, is_gui)?;
-            write_file_recorded(site_packages, &entrypoint_relative, &launcher, record)?;
+            write_file_recorded(
+                site_packages,
+                &entrypoint_relative,
+                &windows_script_launcher(&launcher_python_script, is_gui)?,
+                record,
+            )?;
         } else {
             write_file_recorded(
                 site_packages,
@@ -367,7 +390,8 @@ pub(crate) fn write_script_entrypoints(
                 &launcher_python_script,
                 record,
             )?;
-            // We need to make the launcher executable
+
+            // Make the launcher executable.
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -1143,12 +1167,10 @@ mod test {
 
     use indoc::{formatdoc, indoc};
 
-    use crate::wheel::{
-        read_record_file, relative_to, LAUNCHER_X86_64_CONSOLE, LAUNCHER_X86_64_GUI,
+    use super::{
+        parse_key_value_file, parse_wheel_version, read_record_file, relative_to, Script,
+        LAUNCHER_X86_64_CONSOLE, LAUNCHER_X86_64_GUI,
     };
-    use crate::{parse_key_value_file, Script};
-
-    use super::parse_wheel_version;
 
     #[test]
     fn test_parse_key_value_file() {

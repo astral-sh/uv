@@ -69,6 +69,8 @@ pub enum Error {
     BrokenVenv(String),
     #[error("Unable to create Windows launch for {0} (only x64_64 is supported)")]
     UnsupportedWindowsArch(&'static str),
+    #[error("Unable to create Windows launcher on non-Windows platform")]
+    NotWindows,
     #[error("Failed to detect the current platform")]
     PlatformInfo(#[source] PlatformInfoError),
     #[error("Invalid version specification, only none or == is supported")]
