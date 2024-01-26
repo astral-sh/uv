@@ -624,9 +624,7 @@ fn excluded_only_compatible_version() -> Result<()> {
         [crates/puffin-resolver/src/pubgrub/report.rs:115] &dependency_set = Range {
             segments: [
                 (
-                    Included(
-                        "1.0.0",
-                    ),
+                    Unbounded,
                     Included(
                         "1.0.0",
                     ),
@@ -635,9 +633,7 @@ fn excluded_only_compatible_version() -> Result<()> {
                     Included(
                         "3.0.0",
                     ),
-                    Included(
-                        "3.0.0",
-                    ),
+                    Unbounded,
                 ),
             ],
         }
@@ -708,8 +704,8 @@ fn excluded_only_compatible_version() -> Result<()> {
                   albatross<2.0.0
                   albatross>2.0.0
               depends on one of:
-                  bluebird==1.0.0
-                  bluebird==3.0.0
+                  bluebird<=1.0.0
+                  bluebird>=3.0.0
 
               And because you require one of:
                   albatross<2.0.0
@@ -2889,7 +2885,7 @@ fn package_prerelease_specified_only_final_available() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in 5m [TIME]
+        Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + albatross==0.3.0
@@ -2951,7 +2947,7 @@ fn package_prerelease_specified_only_prerelease_available() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 1 package in 5m [TIME]
+        Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + albatross==0.3.0a1

@@ -679,23 +679,15 @@ fn install_git_tag() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
-        success: false
-        exit_code: 2
+        success: true
+        exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        error: Failed to download distributions
-          Caused by: Failed to fetch wheel: werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0
-          Caused by: Failed to build: werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0
-          Caused by: Failed to install requirements from build-system.requires (install)
-          Caused by: Failed to download and build distributions
-          Caused by: Failed to fetch wheel: wheel==0.42.0
-          Caused by: Failed to extract source distribution: an upstream reader returned an error: request or response body error: error reading a body from connection: connection reset
-          Caused by: an upstream reader returned an error: request or response body error: error reading a body from connection: connection reset
-          Caused by: request or response body error: error reading a body from connection: connection reset
-          Caused by: error reading a body from connection: connection reset
-          Caused by: connection reset
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@2.0.0)
         "###);
     });
 
@@ -1080,22 +1072,15 @@ fn install_no_binary() -> Result<()> {
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
-        success: false
-        exit_code: 2
+        success: true
+        exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        error: Failed to download distributions
-          Caused by: Failed to fetch wheel: markupsafe==2.1.3
-          Caused by: Failed to build: markupsafe==2.1.3
-          Caused by: Failed to install requirements from build-system.requires (install)
-          Caused by: Failed to download and build distributions
-          Caused by: Failed to fetch wheel: setuptools==69.0.3
-          Caused by: Failed to write to the client cache
-          Caused by: request or response body error: error reading a body from connection: connection reset
-          Caused by: error reading a body from connection: connection reset
-          Caused by: connection reset
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + markupsafe==2.1.3
         "###);
     });
 
@@ -2929,13 +2914,12 @@ fn sync_editable_and_registry() -> Result<()> {
         Resolved 1 package in [TIME]
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
-         + black==24.1a1
+         + black==24.1.0
         warning: The package `black` requires `click >=8.0.0`, but it's not installed.
         warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
         warning: The package `black` requires `packaging >=22.0`, but it's not installed.
         warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
         warning: The package `black` requires `platformdirs >=2`, but it's not installed.
-        warning: The package `black` requires `aiohttp >=3.7.4 ; sys_platform != 'win32' or (implementation_name != 'pypy' and extra == 'd')`, but it's not installed.
         "###);
     });
 
@@ -2976,7 +2960,7 @@ fn sync_editable_and_registry() -> Result<()> {
         Built 1 editable in [TIME]
         Uninstalled 1 package in [TIME]
         Installed 1 package in [TIME]
-         - black==24.1a1
+         - black==24.1.0
          + black==0.1.0+editable (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
         "###);
     });
