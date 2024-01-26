@@ -157,6 +157,16 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
 
         ----- stderr -----
         warning: The requested Python version 3.9 is not available; 3.11.7 will be used to build dependencies instead.
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "3.9",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = []
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (3.9) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -224,6 +234,16 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 
         ----- stderr -----
         warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "3.9.18",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = []
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -360,6 +380,16 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
 
         ----- stderr -----
         warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "3.9.18",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = []
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -432,6 +462,25 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
 
         ----- stderr -----
         warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+            "2.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "3.9.18",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+            "2.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+            "2.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "3.11",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = []
           × No solution found when resolving dependencies:
           ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
               And because there are no versions of albatross that satisfy any of:
@@ -504,6 +553,16 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "3.8",
+        ]
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = []
+        [crates/puffin-resolver/src/pubgrub/report.rs:326] self.available_versions.get(package).into_iter().flatten().collect_vec() = [
+            "1.0.0",
+        ]
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (3.8) does not satisfy Python>=3.8.4 and albatross==1.0.0 depends on Python>=3.8.4, we can conclude that albatross==1.0.0 cannot be used.
               And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.

@@ -323,6 +323,13 @@ impl PubGrubReportFormatter<'_> {
         if set == &Range::full() {
             Cow::Borrowed(set)
         } else {
+            dbg!(self
+                .available_versions
+                .get(package)
+                .into_iter()
+                .flatten()
+                .collect_vec());
+
             Cow::Owned(
                 set.simplify(
                     self.available_versions
