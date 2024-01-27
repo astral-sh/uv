@@ -566,8 +566,8 @@ fn dependency_excludes_range_of_compatible_versions() -> Result<()> {
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
@@ -697,8 +697,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() -> Result<(
 
               Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
               And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-                  bluebird<=1.0.0
-                  bluebird>=3.0.0
+                  bluebird==1.0.0
+                  bluebird==3.0.0
 
               And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
         "###);
