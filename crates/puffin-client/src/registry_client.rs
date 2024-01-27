@@ -122,7 +122,7 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, SimpleMetadata), Error> {
+    ) -> Result<(IndexUrl, SimpleMetadataRaw), Error> {
         if self.index_urls.no_index() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
@@ -152,7 +152,7 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
-    ) -> Result<Result<SimpleMetadata, CachedClientError<Error>>, Error> {
+    ) -> Result<Result<SimpleMetadataRaw, CachedClientError<Error>>, Error> {
         // Format the URL for PyPI.
         let mut url: Url = index.clone().into();
         url.path_segments_mut()
@@ -232,7 +232,7 @@ impl RegistryClient {
                 parse_simple_response,
             )
             .await;
-        Ok(result)
+        Ok(result.map(|simple| simple.to_archive().unwrap()))
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -564,6 +564,10 @@ pub struct SimpleMetadatum {
 impl SimpleMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleMetadatum> {
         self.0.iter()
+    }
+
+    fn to_archive(&self) -> Result<SimpleMetadataRaw, Error> {
+        SimpleMetadataRaw::from_unarchived(self)
     }
 
     fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName, base: &str) -> Self {

@@ -8,7 +8,7 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_client::{FlatDistributions, SimpleMetadata, SimpleMetadatum};
+use puffin_client::{FlatDistributions, SimpleMetadataRaw, SimpleMetadatum};
 use puffin_normalize::PackageName;
 use puffin_traits::NoBinary;
 use puffin_warnings::warn_user_once;
@@ -26,7 +26,7 @@ impl VersionMap {
     #[instrument(skip_all, fields(package_name))]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_metadata(
-        metadata: SimpleMetadata,
+        raw_metadata: SimpleMetadataRaw,
         package_name: &PackageName,
         index: &IndexUrl,
         tags: &Tags,
@@ -36,6 +36,15 @@ impl VersionMap {
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
     ) -> Self {
+        // NOTE: We should experiment with refactoring the
+        // code below to work on SimpleMetadataRaw (that is,
+        // rkyv::Archived<SimpleMetadata>). More specifically,
+        // we may want to adjust VersionMap itself to contain an
+        // Archived<SimpleMetadata> of some kind, that in turn is
+        // used in the resolver. The idea here is to avoid eagerly
+        // deserializing all of the metadata for a package up-front.
+        let metadata = raw_metadata.deserialize();
+
         // If we have packages of the same name from find links, gives them priority, otherwise start empty
         let mut version_map: BTreeMap<Version, PrioritizedDistribution> =
             flat_index.map(Into::into).unwrap_or_default();

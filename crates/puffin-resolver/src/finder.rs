@@ -67,7 +67,8 @@ impl<'a> DistFinder<'a> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
-                let (index, metadata) = self.client.simple(&requirement.name).await?;
+                let (index, raw_metadata) = self.client.simple(&requirement.name).await?;
+                let metadata = raw_metadata.deserialize();
 
                 // Pick a version that satisfies the requirement.
                 let Some(dist) = self.select(requirement, metadata, &index, flat_index) else {
