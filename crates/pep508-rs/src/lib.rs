@@ -785,7 +785,7 @@ fn preprocess_url(
                 }
             }
         } else {
-            // Ex) `https://...`
+            // Ex) `https://download.pytorch.org/whl/torch_stable.html`
             VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,

@@ -162,6 +162,35 @@ impl IndexLocations {
             }
         }
     }
+
+    /// Combine a set of index locations.
+    ///
+    /// If either the current or the other index locations have `no_index` set, the result will
+    /// have `no_index` set.
+    ///
+    /// If the current index location has an `index` set, it will be preserved.
+    #[must_use]
+    pub fn combine(
+        self,
+        index: Option<IndexUrl>,
+        extra_index: Vec<IndexUrl>,
+        flat_index: Vec<FlatIndexLocation>,
+        no_index: bool,
+    ) -> Self {
+        if no_index {
+            Self {
+                index: None,
+                extra_index: Vec::new(),
+                flat_index,
+            }
+        } else {
+            Self {
+                index: self.index.or(index),
+                extra_index: self.extra_index.into_iter().chain(extra_index).collect(),
+                flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
+            }
+        }
+    }
 }
 
 impl<'a> IndexLocations {

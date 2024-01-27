@@ -7,10 +7,11 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::FxHashSet;
 
+use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use puffin_fs::NormalizedDisplay;
 use puffin_normalize::{ExtraName, PackageName};
-use requirements_txt::{EditableRequirement, RequirementsTxt};
+use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {
@@ -67,6 +68,14 @@ pub(crate) struct RequirementsSpecification {
     pub(crate) editables: Vec<EditableRequirement>,
     /// The extras used to collect requirements.
     pub(crate) extras: FxHashSet<ExtraName>,
+    /// The index URL to use for fetching packages.
+    pub(crate) index_url: Option<IndexUrl>,
+    /// The extra index URLs to use for fetching packages.
+    pub(crate) extra_index_urls: Vec<IndexUrl>,
+    /// Whether to disallow index usage.
+    pub(crate) no_index: bool,
+    /// The `--find-links` locations to use for fetching packages.
+    pub(crate) find_links: Vec<FlatIndexLocation>,
 }
 
 impl RequirementsSpecification {
@@ -86,6 +95,10 @@ impl RequirementsSpecification {
                     overrides: vec![],
                     editables: vec![],
                     extras: FxHashSet::default(),
+                    index_url: None,
+                    extra_index_urls: vec![],
+                    no_index: false,
+                    find_links: vec![],
                 }
             }
             RequirementsSource::Editable(name) => {
@@ -98,6 +111,10 @@ impl RequirementsSpecification {
                     overrides: vec![],
                     editables: vec![requirement],
                     extras: FxHashSet::default(),
+                    index_url: None,
+                    extra_index_urls: vec![],
+                    no_index: false,
+                    find_links: vec![],
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
@@ -113,6 +130,21 @@ impl RequirementsSpecification {
                     editables: requirements_txt.editables,
                     overrides: vec![],
                     extras: FxHashSet::default(),
+                    index_url: requirements_txt.index_url.map(IndexUrl::from),
+                    extra_index_urls: requirements_txt
+                        .extra_index_urls
+                        .into_iter()
+                        .map(IndexUrl::from)
+                        .collect(),
+                    no_index: requirements_txt.no_index,
+                    find_links: requirements_txt
+                        .find_links
+                        .into_iter()
+                        .map(|link| match link {
+                            FindLink::Url(url) => FlatIndexLocation::Url(url),
+                            FindLink::Path(path) => FlatIndexLocation::Path(path),
+                        })
+                        .collect(),
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
@@ -151,6 +183,10 @@ impl RequirementsSpecification {
                     overrides: vec![],
                     editables: vec![],
                     extras: used_extras,
+                    index_url: None,
+                    extra_index_urls: vec![],
+                    no_index: false,
+                    find_links: vec![],
                 }
             }
         })
@@ -176,10 +212,22 @@ impl RequirementsSpecification {
             spec.extras.extend(source.extras);
             spec.editables.extend(source.editables);
 
-            // Use the first project name discovered
+            // Use the first project name discovered.
             if spec.project.is_none() {
                 spec.project = source.project;
             }
+
+            if let Some(url) = source.index_url {
+                if let Some(existing) = spec.index_url {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs.` {url}",
+                    ));
+                }
+                spec.index_url = Some(url);
+            }
+            spec.no_index |= source.no_index;
+            spec.extra_index_urls.extend(source.extra_index_urls);
+            spec.find_links.extend(source.find_links);
         }
 
         // Read all constraints, treating _everything_ as a constraint.
@@ -188,6 +236,18 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.constraints.extend(source.overrides);
+
+            if let Some(url) = source.index_url {
+                if let Some(existing) = spec.index_url {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs.` {url}",
+                    ));
+                }
+                spec.index_url = Some(url);
+            }
+            spec.no_index |= source.no_index;
+            spec.extra_index_urls.extend(source.extra_index_urls);
+            spec.find_links.extend(source.find_links);
         }
 
         // Read all overrides, treating both requirements _and_ constraints as overrides.
@@ -196,16 +256,25 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.constraints);
             spec.overrides.extend(source.overrides);
+
+            if let Some(url) = source.index_url {
+                if let Some(existing) = spec.index_url {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs.` {url}",
+                    ));
+                }
+                spec.index_url = Some(url);
+            }
+            spec.no_index |= source.no_index;
+            spec.extra_index_urls.extend(source.extra_index_urls);
+            spec.find_links.extend(source.find_links);
         }
 
         Ok(spec)
     }
 
     /// Read the requirements from a set of sources.
-    pub(crate) fn requirements_and_editables(
-        requirements: &[RequirementsSource],
-    ) -> Result<(Vec<Requirement>, Vec<EditableRequirement>)> {
-        let specification = Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)?;
-        Ok((specification.requirements, specification.editables))
+    pub(crate) fn from_simple_sources(requirements: &[RequirementsSource]) -> Result<Self> {
+        Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)
     }
 }

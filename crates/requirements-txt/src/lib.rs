@@ -66,6 +66,58 @@ enum RequirementsTxtStatement {
     RequirementEntry(RequirementEntry),
     /// `-e`
     EditableRequirement(EditableRequirement),
+    /// `--index-url`
+    IndexUrl(Url),
+    /// `--extra-index-url`
+    ExtraIndexUrl(Url),
+    /// `--find-links`
+    FindLinks(FindLink),
+    /// `--no-index`
+    NoIndex,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FindLink {
+    Path(PathBuf),
+    Url(Url),
+}
+
+impl FindLink {
+    /// Parse a raw string for a `--find-links` entry, which could be a URL or a local path.
+    ///
+    /// For example:
+    /// - `file:///home/ferris/project/scripts/...`
+    /// - `file:../ferris/`
+    /// - `../ferris/`
+    /// - `https://download.pytorch.org/whl/torch_stable.html`
+    pub fn parse(given: &str, working_dir: impl AsRef<Path>) -> Result<Self, url::ParseError> {
+        if let Some((scheme, path)) = split_scheme(given) {
+            if scheme == "file" {
+                // Ex) `file:///home/ferris/project/scripts/...`
+                let path = path.strip_prefix("//").unwrap_or(path);
+                let path = PathBuf::from(path);
+                let path = if path.is_absolute() {
+                    path
+                } else {
+                    working_dir.as_ref().join(path)
+                };
+                Ok(Self::Path(path))
+            } else {
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                let url = Url::parse(given)?;
+                Ok(Self::Url(url))
+            }
+        } else {
+            // Ex) `../ferris/`
+            let path = PathBuf::from(given);
+            let path = if path.is_absolute() {
+                path
+            } else {
+                working_dir.as_ref().join(path)
+            };
+            Ok(Self::Path(path))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -142,7 +194,7 @@ impl EditableRequirement {
                     VerbatimUrl::from_path(path, working_dir.as_ref())
                 }
             } else {
-                // Ex) `https://...`
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 return Err(RequirementsTxtParserError::UnsupportedUrl(
                     requirement.to_string(),
                 ));
@@ -218,14 +270,22 @@ impl Display for RequirementEntry {
 }
 
 /// Parsed and flattened requirements.txt with requirements and constraints
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RequirementsTxt {
-    /// The actual requirements with the hashes
+    /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
-    /// Constraints included with `-c`
+    /// Constraints included with `-c`.
     pub constraints: Vec<Requirement>,
-    /// Editables with `-e`
+    /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
+    /// The index URL, specified with `--index-url`.
+    pub index_url: Option<Url>,
+    /// The extra index URLs, specified with `--extra-index-url`.
+    pub extra_index_urls: Vec<Url>,
+    /// The find links locations, specified with `--find-links`.
+    pub find_links: Vec<FindLink>,
+    /// Whether to ignore the index, specified with `--no-index`.
+    pub no_index: bool,
 }
 
 impl RequirementsTxt {
@@ -313,6 +373,24 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::EditableRequirement(editable) => {
                     data.editables.push(editable);
                 }
+                RequirementsTxtStatement::IndexUrl(url) => {
+                    if data.index_url.is_some() {
+                        return Err(RequirementsTxtParserError::Parser {
+                            message: "Multiple `--index-url` values provided".to_string(),
+                            location: s.cursor(),
+                        });
+                    }
+                    data.index_url = Some(url);
+                }
+                RequirementsTxtStatement::ExtraIndexUrl(url) => {
+                    data.extra_index_urls.push(url);
+                }
+                RequirementsTxtStatement::FindLinks(path_or_url) => {
+                    data.find_links.push(path_or_url);
+                }
+                RequirementsTxtStatement::NoIndex => {
+                    data.no_index = true;
+                }
             }
         }
         Ok(data)
@@ -366,6 +444,37 @@ fn parse_entry(
         let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
             .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
+    } else if s.eat_if("-i") || s.eat_if("--index-url") {
+        let url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let url = Url::parse(url).map_err(|err| RequirementsTxtParserError::Url {
+            source: err,
+            url: url.to_string(),
+            start,
+            end: s.cursor(),
+        })?;
+        RequirementsTxtStatement::IndexUrl(url)
+    } else if s.eat_if("--extra-index-url") {
+        let url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let url = Url::parse(url).map_err(|err| RequirementsTxtParserError::Url {
+            source: err,
+            url: url.to_string(),
+            start,
+            end: s.cursor(),
+        })?;
+        RequirementsTxtStatement::ExtraIndexUrl(url)
+    } else if s.eat_if("--no-index") {
+        RequirementsTxtStatement::NoIndex
+    } else if s.eat_if("--find-links") || s.eat_if("-f") {
+        let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let path_or_url = FindLink::parse(path_or_url, working_dir).map_err(|err| {
+            RequirementsTxtParserError::Url {
+                source: err,
+                url: path_or_url.to_string(),
+                start,
+                end: s.cursor(),
+            }
+        })?;
+        RequirementsTxtStatement::FindLinks(path_or_url)
     } else if s.at(char::is_ascii_alphanumeric) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
@@ -545,6 +654,12 @@ pub struct RequirementsTxtFileError {
 #[derive(Debug)]
 pub enum RequirementsTxtParserError {
     IO(io::Error),
+    Url {
+        source: url::ParseError,
+        url: String,
+        start: usize,
+        end: usize,
+    },
     InvalidEditablePath(String),
     UnsupportedUrl(String),
     Parser {
@@ -577,6 +692,17 @@ impl RequirementsTxtParserError {
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 RequirementsTxtParserError::InvalidEditablePath(given)
             }
+            RequirementsTxtParserError::Url {
+                source,
+                url,
+                start,
+                end,
+            } => RequirementsTxtParserError::Url {
+                source,
+                url,
+                start: start + offset,
+                end: end + offset,
+            },
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 RequirementsTxtParserError::UnsupportedUrl(url)
             }
@@ -618,8 +744,11 @@ impl Display for RequirementsTxtParserError {
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 write!(f, "Invalid editable path: {given}")
             }
+            RequirementsTxtParserError::Url { url, start, .. } => {
+                write!(f, "Invalid URL at position {start}: `{url}`")
+            }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
-                write!(f, "Unsupported URL (expected a `file://` scheme): {url}")
+                write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(f, "{message} at position {location}")
@@ -641,6 +770,7 @@ impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self {
             RequirementsTxtParserError::IO(err) => err.source(),
+            RequirementsTxtParserError::Url { source, .. } => Some(source),
             RequirementsTxtParserError::InvalidEditablePath(_) => None,
             RequirementsTxtParserError::UnsupportedUrl(_) => None,
             RequirementsTxtParserError::UnsupportedRequirement { source, .. } => Some(source),
@@ -655,6 +785,13 @@ impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.error {
             RequirementsTxtParserError::IO(err) => err.fmt(f),
+            RequirementsTxtParserError::Url { url, start, .. } => {
+                write!(
+                    f,
+                    "Invalid URL in `{}` at position {start}: `{url}`",
+                    self.file.normalized_display(),
+                )
+            }
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 write!(
                     f,
@@ -665,7 +802,7 @@ impl Display for RequirementsTxtFileError {
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
-                    "Unsupported URL (expected a `file://` scheme) in `{}`: {url}",
+                    "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
                     self.file.normalized_display(),
                 )
             }
@@ -676,13 +813,11 @@ impl Display for RequirementsTxtFileError {
                     self.file.normalized_display(),
                 )
             }
-            RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
+            RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
                 write!(
                     f,
-                    "Unsupported requirement in {} position {} to {}",
+                    "Unsupported requirement in {} at position {start}",
                     self.file.normalized_display(),
-                    start,
-                    end,
                 )
             }
             RequirementsTxtParserError::Pep508 { start, .. } => {
@@ -865,7 +1000,7 @@ mod test {
         insta::with_settings!({
             filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
         }, {
-            insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: http://localhost:8080/");
+            insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
         });
 
         Ok(())
@@ -893,6 +1028,32 @@ mod test {
             Expected an alphanumeric character starting the extra name, found ','
             black[,abcdef]
                   ^
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_index_url() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            --index-url 123
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error)
+            .chain()
+            .map(|err| err.to_string().replace('\\', "/"))
+            .join("\n");
+
+        insta::with_settings!({
+            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+        }, {
+            insta::assert_display_snapshot!(errors, @r###"
+            Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
+            relative URL without a base
             "###);
         });
 
