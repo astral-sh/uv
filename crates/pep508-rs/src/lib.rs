@@ -714,6 +714,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
 /// - `file:///home/ferris/project/scripts/...`
 /// - `file:../editable/`
 /// - `../editable/`
+/// - `https://download.pytorch.org/whl/torch_stable.html`
 fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<VerbatimUrl, Pep508Error> {
     // wsp*
     cursor.eat_whitespace();
