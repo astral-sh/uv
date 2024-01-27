@@ -80,7 +80,7 @@ impl<'a> RegistryWheelIndex<'a> {
 
         // Collect into owned `IndexUrl`
         let flat_index_urls: Vec<IndexUrl> = index_locations
-            .flat_indexes()
+            .flat_index()
             .filter_map(|flat_index| match flat_index {
                 FlatIndexLocation::Path(_) => None,
                 FlatIndexLocation::Url(url) => Some(IndexUrl::Url(url.clone())),
