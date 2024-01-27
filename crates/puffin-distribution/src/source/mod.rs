@@ -942,9 +942,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
 pub(crate) fn read_http_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, Error> {
     match std::fs::read(cache_entry.path()) {
-        Ok(cached) => Ok(Some(
-            rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?.data,
-        )),
+        Ok(cached) => {
+            let raw = rmp_serde::from_slice::<DataWithCachePolicy>(&cached)?;
+            let manifest = rmp_serde::from_slice::<Manifest>(&raw.data)?;
+            Ok(Some(manifest))
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::CacheRead(err)),
     }

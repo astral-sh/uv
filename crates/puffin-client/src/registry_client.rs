@@ -209,7 +209,7 @@ impl RegistryClient {
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
                         let metadata =
                             SimpleMetadata::from_files(data.files, package_name, url.as_str());
-                        Ok(metadata)
+                        Ok(metadata.to_archive().unwrap())
                     }
                     MediaType::Html => {
                         let text = response.text().await.map_err(ErrorKind::RequestError)?;
@@ -217,7 +217,7 @@ impl RegistryClient {
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
                         let metadata =
                             SimpleMetadata::from_files(files, package_name, base.as_url().as_str());
-                        Ok(metadata)
+                        Ok(metadata.to_archive().unwrap())
                     }
                 }
             }
@@ -226,14 +226,14 @@ impl RegistryClient {
         };
         let result = self
             .client
-            .get_cached_with_callback(
+            .get_cached_with_callback2(
                 simple_request,
                 &cache_entry,
                 cache_control,
                 parse_simple_response,
             )
             .await;
-        Ok(result.map(|simple| simple.to_archive().unwrap()))
+        Ok(result)
     }
 
     /// Fetch the metadata for a remote wheel file.
