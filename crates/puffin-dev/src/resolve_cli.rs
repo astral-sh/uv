@@ -63,7 +63,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         .build();
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, venv.interpreter().tags()?)
     };
     let index = InMemoryIndex::default();

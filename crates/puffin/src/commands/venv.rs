@@ -118,7 +118,7 @@ async fn venv_impl(
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(&client, cache);
             let entries = client
-                .fetch(index_locations.flat_indexes())
+                .fetch(index_locations.flat_index())
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(entries, tags)

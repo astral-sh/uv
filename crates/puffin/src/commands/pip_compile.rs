@@ -55,6 +55,8 @@ pub(crate) async fn pip_compile(
     generate_hashes: bool,
     include_annotations: bool,
     include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     no_build: bool,
@@ -190,7 +192,7 @@ pub(crate) async fn pip_compile(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, &tags)
     };
 
@@ -340,6 +342,34 @@ pub(crate) async fn pip_compile(
             "{}",
             format!("#    puffin {}", env::args().skip(1).join(" ")).green()
         )?;
+    }
+
+    // Write the index locations to the output channel.
+    let mut wrote_index = false;
+
+    // If necessary, include the `--index-url` and `--extra-index-url` locations.
+    if include_index_url {
+        if let Some(index) = index_locations.index() {
+            writeln!(writer, "--index-url {index}")?;
+            wrote_index = true;
+        }
+        for extra_index in index_locations.extra_index() {
+            writeln!(writer, "--extra-index-url {extra_index}")?;
+            wrote_index = true;
+        }
+    }
+
+    // If necessary, include the `--find-links` locations.
+    if include_find_links {
+        for flat_index in index_locations.flat_index() {
+            writeln!(writer, "--find-links {flat_index}")?;
+            wrote_index = true;
+        }
+    }
+
+    // If we wrote an index, add a newline to separate it from the requirements
+    if wrote_index {
+        writeln!(writer)?;
     }
 
     write!(

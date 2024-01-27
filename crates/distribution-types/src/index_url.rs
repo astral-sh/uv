@@ -16,6 +16,15 @@ pub enum IndexUrl {
     Url(Url),
 }
 
+impl Display for IndexUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndexUrl::Pypi => Display::fmt(&*PYPI_URL, f),
+            IndexUrl::Url(url) => Display::fmt(url, f),
+        }
+    }
+}
+
 impl FromStr for IndexUrl {
     type Err = url::ParseError;
 
@@ -153,13 +162,23 @@ impl IndexLocations {
 }
 
 impl<'a> IndexLocations {
-    /// Return an iterator over the [`IndexUrl`] entries.
+    /// Return an iterator over all [`IndexUrl`] entries.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
         self.index.iter().chain(self.extra_index.iter())
     }
 
+    /// Return the primary [`IndexUrl`] entry.
+    pub fn index(&'a self) -> Option<&'a IndexUrl> {
+        self.index.as_ref()
+    }
+
+    /// Return an iterator over the extra [`IndexUrl`] entries.
+    pub fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+        self.extra_index.iter()
+    }
+
     /// Return an iterator over the [`FlatIndexLocation`] entries.
-    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
+    pub fn flat_index(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
         self.flat_index.iter()
     }
 

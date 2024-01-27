@@ -60,13 +60,7 @@ pub(crate) struct PipCompileCompatArgs {
     no_config: bool,
 
     #[clap(long, hide = true)]
-    emit_index_url: bool,
-
-    #[clap(long, hide = true)]
     no_emit_index_url: bool,
-
-    #[clap(long, hide = true)]
-    emit_find_links: bool,
 
     #[clap(long, hide = true)]
     no_emit_find_links: bool,
@@ -195,27 +189,15 @@ impl PipCompileCompatArgs {
             );
         }
 
-        if self.emit_index_url {
-            return Err(anyhow!(
-                "pip-compile's `--emit-index-url` is unsupported (Puffin never emits index URLs)."
-            ));
-        }
-
         if self.no_emit_index_url {
             warn_user!(
-                "pip-compile's `--no-emit-index-url` has no effect (Puffin never emits index URLs)."
+                "pip-compile's `--no-emit-index-url` has no effect (Puffin excludes index URLs by default)."
             );
-        }
-
-        if self.emit_find_links {
-            return Err(anyhow!(
-                "pip-compile's `--emit-find-links` is unsupported (Puffin never emits `--find-links` URLs)."
-            ));
         }
 
         if self.no_emit_find_links {
             warn_user!(
-                "pip-compile's `--no-emit-find-links` has no effect (Puffin never emits `--find-links` URLs)."
+                "pip-compile's `--no-emit-find-links` has no effect (Puffin excludes `--find-links` URLs by default)."
             );
         }
 

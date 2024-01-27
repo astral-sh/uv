@@ -225,6 +225,10 @@ struct PipCompileArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
+    /// Ignore the package index, instead relying on local archives and caches.
+    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    no_index: bool,
+
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
     /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
@@ -233,10 +237,6 @@ struct PipCompileArgs {
     /// If a URL, the page must contain a flat list of links to package files.
     #[clap(long)]
     find_links: Vec<FlatIndexLocation>,
-
-    /// Ignore the package index, instead relying on local archives and caches.
-    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
-    no_index: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[clap(long)]
@@ -283,6 +283,14 @@ struct PipCompileArgs {
     /// day, i.e. until midnight UTC that day.
     #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
+
+    /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
+    #[clap(long, hide = true)]
+    emit_index_url: bool,
+
+    /// Include `--find-links` entries in the generated output file.
+    #[clap(long, hide = true)]
+    emit_find_links: bool,
 
     #[command(flatten)]
     compat_args: compat::PipCompileCompatArgs,
@@ -695,6 +703,8 @@ async fn inner() -> Result<ExitStatus> {
                 args.generate_hashes,
                 !args.no_annotate,
                 !args.no_header,
+                args.emit_index_url,
+                args.emit_find_links,
                 index_urls,
                 if args.legacy_setup_py {
                     SetupPyStrategy::Setuptools
