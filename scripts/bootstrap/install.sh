@@ -63,13 +63,38 @@ interpreter='cpython'
 # On macOS, we need a newer version of `realpath` for `--relative-to` support
 realpath="$(which grealpath || which realpath)"
 
+
+# Utility for linking executables for the version being installed
+# We need to update executables even if the version is already downloaded and extracted
+# to ensure that changes to the precedence of versions are respected
+link_executables() {
+    # Use relative paths for links so if the bin is moved they don't break
+    local link=$($realpath --relative-to="$bin_dir" "$install_key/install/bin/python3")
+    local minor=$(jq --arg key "$key" '.[$key] | .minor' -r < "$versions_metadata")
+
+    # Link as all version tuples, later versions in the file will take precedence
+    ln -sf "./$link" "$bin_dir/python$version"
+    ln -sf "./$link" "$bin_dir/python3.$minor"
+    ln -sf "./$link" "$bin_dir/python3"
+    ln -sf "./$link" "$bin_dir/python"
+}
+
 # Read requested versions into an array
 readarray -t versions < "$versions_file"
 
 # Install each version
 for version in "${versions[@]}"; do
     key="$interpreter-$version-$os-$arch"
+    install_key="$install_dir/$interpreter@$version"
     echo "Installing $key"
+
+    if [ -d "$install_key" ]; then
+        echo "Already available, skipping download"
+        link_executables
+        echo "Updated executables for python$version"
+        continue
+    fi
+
 
     url=$(jq --arg key "$key" '.[$key] | .url' -r < "$versions_metadata")
 
@@ -91,7 +116,6 @@ for version in "${versions[@]}"; do
         echo " OK"
     fi
 
-    install_key="$install_dir/$interpreter@$version"
     rm -rf "$install_key"
     echo "Extracting to $($realpath --relative-to="$root_dir" "$install_key")"
     mkdir -p "$install_key"
@@ -99,16 +123,9 @@ for version in "${versions[@]}"; do
 
     # Setup the installation
     mv "$install_key/python/"* "$install_key"
-    # Use relative paths for links so if the bin is moved they don't break
-    link=$($realpath --relative-to="$bin_dir" "$install_key/install/bin/python3")
-    minor=$(jq --arg key "$key" '.[$key] | .minor' -r < "$versions_metadata")
 
-    # Link as all version tuples, later versions in the file will take precedence
-    ln -sf "./$link" "$bin_dir/python$version"
-    ln -sf "./$link" "$bin_dir/python3.$minor"
-    ln -sf "./$link" "$bin_dir/python3"
-    ln -sf "./$link" "$bin_dir/python"
-    echo "Installed as python$version"
+    link_executables
+    echo "Installed executables for python$version"
 
     # Cleanup
     rmdir "$install_key/python/"
