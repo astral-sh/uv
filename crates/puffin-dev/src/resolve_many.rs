@@ -15,7 +15,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_host::Platform;
 use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
+use puffin_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
@@ -48,7 +48,8 @@ async fn find_latest_version(
     client: &RegistryClient,
     package_name: &PackageName,
 ) -> Option<Version> {
-    let (_, simple_metadata) = client.simple(package_name).await.ok()?;
+    let (_, raw_simple_metadata) = client.simple(package_name).await.ok()?;
+    let simple_metadata = OwnedArchive::deserialize(&raw_simple_metadata);
     let version = simple_metadata.into_iter().next()?.version;
     Some(version.clone())
 }

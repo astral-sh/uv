@@ -177,7 +177,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let archive = self
                     .client
                     .cached_client()
-                    .get_cached_with_callback(req, &http_entry, cache_control, download)
+                    .get_serde(req, &http_entry, cache_control, download)
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
@@ -240,7 +240,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let archive = self
                     .client
                     .cached_client()
-                    .get_cached_with_callback(req, &http_entry, cache_control, download)
+                    .get_serde(req, &http_entry, cache_control, download)
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,

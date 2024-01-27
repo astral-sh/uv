@@ -273,7 +273,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let req = self.cached_client.uncached().get(url.clone()).build()?;
         let manifest = self
             .cached_client
-            .get_cached_with_callback(req, &cache_entry, cache_control, download)
+            .get_serde(req, &cache_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -366,7 +366,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let req = self.cached_client.uncached().get(url.clone()).build()?;
         let manifest = self
             .cached_client
-            .get_cached_with_callback(req, &cache_entry, cache_control, download)
+            .get_serde(req, &cache_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -941,10 +941,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
 pub(crate) fn read_http_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, Error> {
-    match std::fs::read(cache_entry.path()) {
-        Ok(cached) => Ok(Some(
-            rmp_serde::from_slice::<DataWithCachePolicy<Manifest>>(&cached)?.data,
-        )),
+    match std::fs::File::open(cache_entry.path()) {
+        Ok(file) => {
+            let data = DataWithCachePolicy::from_reader(file)?.data;
+            Ok(Some(rmp_serde::from_slice::<Manifest>(&data)?))
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::CacheRead(err)),
     }

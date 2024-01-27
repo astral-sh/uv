@@ -132,7 +132,7 @@ impl<'a> FlatIndexClient<'a> {
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
         let files = cached_client
-            .get_cached_with_callback(
+            .get_serde(
                 flat_index_request,
                 &cache_entry,
                 cache_control,

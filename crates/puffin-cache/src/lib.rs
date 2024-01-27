@@ -488,8 +488,8 @@ pub enum CacheBucket {
     /// Index responses through the simple metadata API.
     ///
     /// Cache structure:
-    ///  * `simple-v0/pypi/<package_name>.msgpack`
-    ///  * `simple-v0/<digest(index_url)>/<package_name>.msgpack`
+    ///  * `simple-v0/pypi/<package_name>.rkyv`
+    ///  * `simple-v0/<digest(index_url)>/<package_name>.rkyv`
     ///
     /// The response is parsed into `puffin_client::SimpleMetadata` before storage.
     Simple,
@@ -575,15 +575,15 @@ impl CacheBucket {
                 }
             }
             CacheBucket::Simple => {
-                // For `pypi` wheels, we expect a MsgPack file per package, indexed by name.
+                // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(format!("{name}.msgpack")))?;
+                summary += rm_rf(root.join(format!("{name}.rkyv")))?;
 
                 // For alternate indices, we expect a directory for every index, followed by a
                 // MsgPack file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root) {
-                    summary += rm_rf(directory.join(format!("{name}.msgpack")))?;
+                    summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }
             }
             CacheBucket::FlatIndex => {
