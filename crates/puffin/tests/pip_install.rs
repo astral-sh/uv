@@ -959,3 +959,47 @@ fn reinstall_no_binary() -> Result<()> {
     assert_command(&venv, "import flask", &temp_dir).success();
     Ok(())
 }
+
+/// Install a package into a virtual environment, and ensuring that the executable permissions
+/// are retained.
+#[test]
+fn install_executable() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("black==24.1.0")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 6 packages in [TIME]
+        Downloaded 6 packages in [TIME]
+        Installed 6 packages in [TIME]
+         + black==24.1.0
+         + click==8.1.7
+         + mypy-extensions==1.0.0
+         + packaging==23.2
+         + pathspec==0.12.1
+         + platformdirs==4.1.0
+        "###);
+    });
+
+    // Activate the virtual environment, and verify that `black` is executable.
+    let executable = venv.join("bin/black");
+    Command::new(executable).arg("--version").assert().success();
+
+    Ok(())
+}
