@@ -616,6 +616,103 @@ impl IntoIterator for SimpleMetadata {
     }
 }
 
+/// An owned archived type for `SimpleMetadata`.
+///
+/// This type is effectively a `Archived<SimpleMetadata>`, but owns its buffer.
+/// Constructing the type requires validating that the bytes are valid, but
+/// subsequent accesses are free.
+#[derive(Debug)]
+pub struct SimpleMetadataRaw {
+    raw: rkyv::util::AlignedVec,
+}
+
+impl SimpleMetadataRaw {
+    /// Create a new owned archived value from the raw aligned bytes of the
+    /// serialized representation of a `SimpleMetadata`.
+    ///
+    /// # Errors
+    ///
+    /// If the bytes fail validation (e.g., contains unaligned pointers or
+    /// strings aren't valid UTF-8), then this returns an error.
+    pub fn new(raw: rkyv::util::AlignedVec) -> Result<SimpleMetadataRaw, Error> {
+        // We convert the error to a simple string because... the error type
+        // does not implement Send. And I don't think we really need to keep
+        // the error type around anyway.
+        let _ = rkyv::validation::validators::check_archived_root::<SimpleMetadata>(&raw)
+            .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
+        Ok(SimpleMetadataRaw { raw })
+    }
+
+    /// Like `SimpleMetadataRaw::new`, but reads the value from the given
+    /// reader.
+    ///
+    /// Note that this consumes the entirety of the given reader.
+    ///
+    /// # Errors
+    ///
+    /// If the bytes fail validation (e.g., contains unaligned pointers or
+    /// strings aren't valid UTF-8), then this returns an error.
+    pub fn from_reader<R: std::io::Read>(mut rdr: R) -> Result<SimpleMetadataRaw, Error> {
+        let mut buf = rkyv::util::AlignedVec::with_capacity(1024);
+        buf.extend_from_reader(&mut rdr).map_err(ErrorKind::Io)?;
+        SimpleMetadataRaw::new(buf)
+    }
+
+    /// Creates an owned archive value from the unarchived value.
+    ///
+    /// # Errors
+    ///
+    /// This can fail if creating an archive for the given type fails.
+    /// Currently, this, at minimum, includes cases where a `SimpleMetadata`
+    /// contains a `PathBuf` that is not valid UTF-8.
+    pub fn from_unarchived(unarchived: &SimpleMetadata) -> Result<SimpleMetadataRaw, Error> {
+        use rkyv::ser::Serializer;
+
+        let mut serializer = crate::rkyvutil::Serializer::<4096>::new();
+        serializer
+            .serialize_value(unarchived)
+            .map_err(ErrorKind::ArchiveWrite)?;
+        let raw = serializer.into_serializer().into_inner();
+        Ok(SimpleMetadataRaw { raw })
+    }
+
+    /// Write the underlying bytes of this archived value to the given writer.
+    ///
+    /// # Errors
+    ///
+    /// Any failures from writing are returned to the caller.
+    pub fn write<W: std::io::Write>(&self, mut wtr: W) -> Result<(), Error> {
+        Ok(wtr.write_all(&self.raw).map_err(ErrorKind::Io)?)
+    }
+
+    /// Returns this owned archive value as a borrowed archive value.
+    pub fn as_archived(&self) -> &rkyv::Archived<SimpleMetadata> {
+        // SAFETY: We've validated that our underlying buffer is a valid
+        // archive for SimpleMetadata in the constructor, so we can skip
+        // validation here. Since we don't mutate the buffer, this conversion
+        // is guaranteed to be correct.
+        unsafe { rkyv::archived_root::<SimpleMetadata>(&self.raw) }
+    }
+
+    /// Returns the raw underlying bytes of this owned archive value.
+    ///
+    /// They are guaranteed to be a valid serialization of
+    /// `Archived<SimpleMetadata>`.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.raw
+    }
+
+    /// Deserialize this owned archived value into the original
+    /// `SimpleMetadata`.
+    pub fn deserialize(&self) -> SimpleMetadata {
+        use rkyv::Deserialize;
+
+        self.as_archived()
+            .deserialize(&mut rkyv::de::deserializers::SharedDeserializeMap::new())
+            .expect("valid archive must deserialize correctly")
+    }
+}
+
 #[derive(Debug)]
 enum MediaType {
     Json,
