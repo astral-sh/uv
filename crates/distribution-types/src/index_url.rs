@@ -7,6 +7,8 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use pep508_rs::split_scheme;
+
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
 /// The url of an index, newtype'd to avoid mixing it with file urls.
@@ -73,32 +75,33 @@ pub enum FlatIndexLocation {
 }
 
 impl FromStr for FlatIndexLocation {
-    type Err = FlatIndexError;
+    type Err = url::ParseError;
 
-    fn from_str(location: &str) -> Result<Self, Self::Err> {
-        if location.contains("://") {
-            let url =
-                Url::parse(location).map_err(|err| FlatIndexError::Url(location.into(), err))?;
-            if url.scheme() == "file" {
-                match url.to_file_path() {
-                    Ok(path_buf) => Ok(Self::Path(path_buf)),
-                    Err(()) => Err(FlatIndexError::FilePath(url)),
-                }
+    /// Parse a raw string for a `--find-links` entry, which could be a URL or a local path.
+    ///
+    /// For example:
+    /// - `file:///home/ferris/project/scripts/...`
+    /// - `file:../ferris/`
+    /// - `../ferris/`
+    /// - `https://download.pytorch.org/whl/torch_stable.html`
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((scheme, path)) = split_scheme(s) {
+            if scheme == "file" {
+                // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
+                let path = path.strip_prefix("//").unwrap_or(path);
+                let path = PathBuf::from(path);
+                Ok(Self::Path(path))
             } else {
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                let url = Url::parse(s)?;
                 Ok(Self::Url(url))
             }
         } else {
-            Ok(Self::Path(PathBuf::from(location)))
+            // Ex) `../ferris/`
+            let path = PathBuf::from(s);
+            Ok(Self::Path(path))
         }
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum FlatIndexError {
-    #[error("Invalid file location URL: {0}")]
-    Url(String, #[source] url::ParseError),
-    #[error("Invalid `file://` path in URL: {0}")]
-    FilePath(Url),
 }
 
 impl Display for FlatIndexLocation {
@@ -228,5 +231,33 @@ impl From<IndexLocations> for IndexUrls {
             index: locations.index,
             extra_index: locations.extra_index,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_find_links() {
+        assert_eq!(
+            FlatIndexLocation::from_str("file:///home/ferris/project/scripts/...").unwrap(),
+            FlatIndexLocation::Path(PathBuf::from("/home/ferris/project/scripts/..."))
+        );
+        assert_eq!(
+            FlatIndexLocation::from_str("file:../ferris/").unwrap(),
+            FlatIndexLocation::Path(PathBuf::from("../ferris/"))
+        );
+        assert_eq!(
+            FlatIndexLocation::from_str("../ferris/").unwrap(),
+            FlatIndexLocation::Path(PathBuf::from("../ferris/"))
+        );
+        assert_eq!(
+            FlatIndexLocation::from_str("https://download.pytorch.org/whl/torch_stable.html")
+                .unwrap(),
+            FlatIndexLocation::Url(
+                Url::parse("https://download.pytorch.org/whl/torch_stable.html").unwrap()
+            )
+        );
     }
 }
