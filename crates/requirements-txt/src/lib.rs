@@ -343,7 +343,7 @@ fn parse_entry(
     }
 
     let start = s.cursor();
-    Ok(Some(if s.eat_if("-r") {
+    Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
         let requirements_file = parse_value(s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let end = s.cursor();
         eat_trailing_line(s)?;
@@ -352,7 +352,7 @@ fn parse_entry(
             start,
             end,
         }
-    } else if s.eat_if("-c") {
+    } else if s.eat_if("-c") || s.eat_if("--constraint") {
         let constraints_file = parse_value(s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let end = s.cursor();
         eat_trailing_line(s)?;
@@ -361,7 +361,7 @@ fn parse_entry(
             start,
             end,
         }
-    } else if s.eat_if("-e") {
+    } else if s.eat_if("-e") || s.eat_if("--editable") {
         let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
         let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
             .map_err(|err| err.with_offset(start))?;
