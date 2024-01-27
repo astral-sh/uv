@@ -3,7 +3,7 @@
 # Download required Python versions and install to `bin`
 # Uses prebuilt Python distributions from indygreg/python-build-standalone
 #
-# This script can be run without Python isntalled via `install.sh`
+# This script can be run without Python installed via `install.sh`
 #
 # Requirements
 #
