@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  cargo-fmt:
+    name: "cargo fmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup component add rustfmt
+      - name: "rustfmt"
+        run: cargo fmt --all --check
+
+  cargo-clippy:
+    name: "cargo clippy"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: |
+          rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Clippy"
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  cargo-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on:
+      # We use the large GitHub actions runners for faster testing
+      # For Ubuntu and Windows, this requires Organization-level configuration
+      # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+      labels: ${{ matrix.os }}-large
+    name: "cargo test | ${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install required Python versions"
+        run: |
+          scripts/bootstrap/install.sh
+      - name: "Install Rust toolchain"
+        run: rustup show
+      - uses: rui314/setup-mold@v1
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Tests"
+        run: |
+          source .env
+          cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+
+  # TODO(konstin): Merge with the cargo-test job once the tests pass
+  windows:
+    runs-on: windows-latest
+    name: "cargo check | windows"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+      - name: "Install Pythons"
+        uses: actions/setup-python@v4
+        with:
+          python-version: |
+            3.7
+            3.8
+            3.9
+            3.10
+            3.11
+            3.12
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  # Separate job for the nightly crate
+  windows-trampoline:
+    runs-on: windows-latest
+    name: "check windows trampoline"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        working-directory: crates/puffin-trampoline
+        run: |
+          rustup target add x86_64-pc-windows-msvc
+          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/puffin-trampoline"
+      - name: "Clippy"
+        working-directory: crates/puffin-trampoline
+        run: cargo clippy --all-features --locked -- -D warnings
+      - name: "Build"
+        working-directory: crates/puffin-trampoline
+        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc

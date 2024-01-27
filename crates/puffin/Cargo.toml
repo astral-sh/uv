@@ -38,12 +38,15 @@ puffin-workspace = { path = "../puffin-workspace" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 
+# This tells flate2 (and all libraries that depend on it, including async_compression
+# and async_zip) to use zlib-ng, which about 2x faster than the default flate2 backend
+# at decompression. See https://github.com/rust-lang/flate2-rs#backends
+flate2 = { workspace = true, default-features = false }
+
 anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-dunce = { workspace = true }
-flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
@@ -52,7 +55,6 @@ miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }
 pubgrub = { workspace = true }
 pyproject-toml = { workspace = true }
-reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
@@ -66,6 +68,7 @@ tracing-tree = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 which = { workspace = true }
+dunce = "1.0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = "0.1.39"
@@ -82,10 +85,10 @@ insta = { version = "1.34.0", features = ["filters"] }
 insta-cmd = { version = "0.4.0" }
 predicates = { version = "3.0.4" }
 regex = { version = "1.10.3" }
-reqwest = { version = "0.11.23", default-features = false, features = ["blocking"] }
+reqwest = { version = "0.11.23", features = ["blocking", "rustls"], default-features = false }
 
 [features]
-default = ["flate2/zlib-ng", "reqwest/rustls"]
+default = ["flate2-zlib-ng"]
 # Introduces a dependency on a local Python installation.
 python = []
 # Introduces a dependency on PyPI.
@@ -94,3 +97,7 @@ pypi = []
 git = []
 # Introduces a dependency on Maturin.
 maturin = []
+# Adds the `libz-ng` feature to flate2.
+flate2-zlib-ng = ["flate2/zlib-ng"]
+# Adds the `rust_backend` feature to flate2.
+flate2-rust_backend = ["flate2/rust_backend"]
