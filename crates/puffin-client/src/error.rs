@@ -121,4 +121,10 @@ pub enum ErrorKind {
 
     #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
     UnsupportedMediaType(Url, String),
+
+    #[error("Reading from cache archive failed: {0}")]
+    ArchiveRead(String),
+
+    #[error("Writing to cache archive failed: {0}")]
+    ArchiveWrite(#[source] crate::rkyvutil::SerializerError),
 }
