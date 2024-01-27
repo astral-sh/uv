@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::{pin_mut, FutureExt, StreamExt};
 use itertools::Itertools;
@@ -68,6 +68,8 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     index: &'a InMemoryIndex,
     /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
     incompatibilities: DashMap<PackageId, VersionSpecifiers>,
+    /// The set of all registry-based packages visited during resolution.
+    visited: DashSet<PackageName>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
@@ -167,6 +169,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         Self {
             index,
             incompatibilities: DashMap::default(),
+            visited: DashSet::default(),
             selector,
             allowed_urls,
             project: manifest.project,
@@ -223,7 +226,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     if let ResolveError::NoSolution(err) = err {
                         ResolveError::NoSolution(
                             err
-                            .with_available_versions(&self.python_requirement, &self.index.packages)
+                            .with_available_versions(&self.python_requirement, &self.visited, &self.index.packages)
                             .with_selector(self.selector.clone())
                             .with_python_requirement(&self.python_requirement)
                         )
@@ -504,6 +507,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Wait for the metadata to be available.
                 let entry = self.index.packages.wait(package_name).await?;
                 let version_map = entry.value();
+                self.visited.insert(package_name.clone());
 
                 if let Some(extra) = extra {
                     debug!(
