@@ -74,7 +74,10 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
-        let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut reader);
+        // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
+        // a buffer. The buffer size is semi-arbitrary, but the central directory is usually small.
+        let mut buf = futures::io::BufReader::with_capacity(1024 * 1024, reader);
+        let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut buf);
         while let Some(entry) = directory.next().await? {
             if entry.dir()? {
                 continue;

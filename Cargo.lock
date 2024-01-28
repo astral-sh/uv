@@ -2557,6 +2557,7 @@ dependencies = [
  "async_zip",
  "flate2",
  "fs-err",
+ "futures",
  "rayon",
  "tar",
  "thiserror",
