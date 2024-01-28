@@ -402,7 +402,7 @@ pub enum CacheBucket {
     /// The following requirements:
     /// ```text
     /// # git source dist
-    /// pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git    
+    /// pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git
     /// # pypi source dist
     /// django_allauth==0.51.0
     /// # url source dist
