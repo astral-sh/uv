@@ -353,21 +353,8 @@ fn copy_wheel_files(
             continue;
         }
 
-        // Copy the file.
+        // Copy the file, which will also set its permissions.
         fs::copy(path, &out_path)?;
-
-        #[cfg(unix)]
-        {
-            use std::fs::Permissions;
-            use std::os::unix::fs::PermissionsExt;
-
-            if let Ok(metadata) = entry.metadata() {
-                fs::set_permissions(
-                    &out_path,
-                    Permissions::from_mode(metadata.permissions().mode()),
-                )?;
-            }
-        }
 
         count += 1;
     }
