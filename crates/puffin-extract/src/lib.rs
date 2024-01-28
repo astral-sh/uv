@@ -111,13 +111,12 @@ pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
             let mut file = archive.by_index(file_number)?;
 
             // Determine the path of the file within the wheel.
-            let file_path = match file.enclosed_name() {
-                Some(path) => path.to_owned(),
-                None => return Ok(()),
+            let Some(enclosed_name) = file.enclosed_name() else {
+                return Ok(());
             };
 
             // Create necessary parent directories.
-            let path = target.join(file_path);
+            let path = target.join(enclosed_name);
             if file.is_dir() {
                 fs_err::create_dir_all(path)?;
                 return Ok(());
