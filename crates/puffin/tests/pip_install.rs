@@ -962,6 +962,8 @@ fn reinstall_no_binary() -> Result<()> {
 
 /// Install a package into a virtual environment, and ensuring that the executable permissions
 /// are retained.
+///
+/// This test uses the default link semantics. (On macOS, this is `clone`.)
 #[test]
 fn install_executable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -974,8 +976,8 @@ fn install_executable() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("black==24.1.0")
-            .arg("--strict")
+            .arg("pylint==3.0.3")
+
             .arg("--cache-dir")
             .arg(cache_dir.path())
             .env("VIRTUAL_ENV", venv.as_os_str())
@@ -985,20 +987,114 @@ fn install_executable() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 6 packages in [TIME]
-        Downloaded 6 packages in [TIME]
-        Installed 6 packages in [TIME]
-         + black==24.1.0
-         + click==8.1.7
-         + mypy-extensions==1.0.0
-         + packaging==23.2
-         + pathspec==0.12.1
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + astroid==3.0.2
+         + dill==0.3.8
+         + isort==5.13.2
+         + mccabe==0.7.0
          + platformdirs==4.1.0
+         + pylint==3.0.3
+         + tomlkit==0.12.3
         "###);
     });
 
-    // Activate the virtual environment, and verify that `black` is executable.
-    let executable = venv.join("bin/black");
+    // Verify that `pylint` is executable.
+    let executable = venv.join("bin/pylint");
+    Command::new(executable).arg("--version").assert().success();
+
+    Ok(())
+}
+
+/// Install a package into a virtual environment using copy semantics, and ensure that the
+/// executable permissions are retained.
+#[test]
+fn install_executable_copy() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+            filters => INSTA_FILTERS.to_vec()
+        }, {
+            assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+                .arg("pip")
+                .arg("install")
+                .arg("pylint==3.0.3")
+    .arg("--link-mode")
+                .arg("copy")
+
+                .arg("--cache-dir")
+                .arg(cache_dir.path())
+                .env("VIRTUAL_ENV", venv.as_os_str())
+                .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + astroid==3.0.2
+         + dill==0.3.8
+         + isort==5.13.2
+         + mccabe==0.7.0
+         + platformdirs==4.1.0
+         + pylint==3.0.3
+         + tomlkit==0.12.3
+        "###);
+        });
+
+    // Verify that `pylint` is executable.
+    let executable = venv.join("bin/pylint");
+    Command::new(executable).arg("--version").assert().success();
+
+    Ok(())
+}
+
+/// Install a package into a virtual environment using hardlink semantics, and ensure that the
+/// executable permissions are retained.
+#[test]
+fn install_executable_hardlink() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("pylint==3.0.3")
+            .arg("--link-mode")
+            .arg("hardlink")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + astroid==3.0.2
+         + dill==0.3.8
+         + isort==5.13.2
+         + mccabe==0.7.0
+         + platformdirs==4.1.0
+         + pylint==3.0.3
+         + tomlkit==0.12.3
+        "###);
+    });
+
+    // Verify that `pylint` is executable.
+    let executable = venv.join("bin/pylint");
     Command::new(executable).arg("--version").assert().success();
 
     Ok(())

@@ -1,3 +1,4 @@
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
@@ -125,20 +126,23 @@ pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
                 fs_err::create_dir_all(parent)?;
             }
 
-            // Write the file.
-            let mut outfile = fs_err::File::create(&path)?;
-            std::io::copy(&mut file, &mut outfile)?;
+            // Create the file, with the correct permissions (on Unix).
+            let mut options = OpenOptions::new();
+            options.write(true);
+            options.create_new(true);
 
-            // Set permissions.
             #[cfg(unix)]
             {
-                use std::fs::Permissions;
-                use std::os::unix::fs::PermissionsExt;
+                use std::os::unix::fs::OpenOptionsExt;
 
                 if let Some(mode) = file.unix_mode() {
-                    std::fs::set_permissions(&path, Permissions::from_mode(mode))?;
+                    options.mode(mode);
                 }
             }
+
+            // Copy the file contents.
+            let mut outfile = options.open(&path)?;
+            std::io::copy(&mut file, &mut outfile)?;
 
             Ok(())
         })
