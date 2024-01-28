@@ -172,6 +172,8 @@ pub async fn unzip_no_seek_faster<R: tokio::io::AsyncRead + Unpin>(
     let mut reader = reader.compat();
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
+    let mut directories = FxHashSet::default();
+
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct the (expected) path to the file on-disk.
         let path = entry.reader().entry().filename().as_str()?;
@@ -180,11 +182,17 @@ pub async fn unzip_no_seek_faster<R: tokio::io::AsyncRead + Unpin>(
 
         // Either create the directory or write the file to disk.
         if is_dir {
-            fs_err::tokio::create_dir_all(path).await?;
-        } else {
-            if let Some(parent) = path.parent() {
-                fs_err::tokio::create_dir_all(parent).await?;
+            if directories.insert(path.to_path_buf()) {
+                fs_err::tokio::create_dir_all(path).await?;
             }
+        } else {
+          if let Some(parent) = path.parent() {
+                if directories.insert(parent.to_path_buf()) {
+
+                    fs_err::tokio::create_dir_all(parent).await?;
+                }
+            }
+
             let file = fs_err::tokio::File::create(path).await?;
             let mut writer =
                 if let Ok(size) = usize::try_from(entry.reader().entry().uncompressed_size()) {
@@ -253,7 +261,10 @@ pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
             // Create necessary parent directories.
             let path = target.join(enclosed_name);
             if file.is_dir() {
-                fs_err::create_dir_all(&path)?;
+                let mut directories = directories.lock().unwrap();
+                if directories.insert(path.to_path_buf()) {
+                    fs_err::create_dir_all(path)?;
+                }
                 return Ok(());
             }
 

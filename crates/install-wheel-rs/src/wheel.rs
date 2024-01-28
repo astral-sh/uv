@@ -189,10 +189,9 @@ fn unpack_wheel_files<R: Read + Seek>(
             continue;
         }
 
-        if let Some(p) = out_path.parent() {
-            if !created_dirs.contains(p) {
-                fs::create_dir_all(p)?;
-                created_dirs.insert(p.to_path_buf());
+        if let Some(parent) = out_path.parent() {
+            if created_dirs.insert(parent.to_path_buf()) {
+                fs::create_dir_all(parent)?;
             }
         }
         let mut outfile = BufWriter::new(File::create(&out_path)?);
