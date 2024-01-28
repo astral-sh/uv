@@ -14,6 +14,8 @@ pub enum Error {
     // Network error
     #[error("Failed to parse URL: `{0}`")]
     Url(String, #[source] url::ParseError),
+    #[error(transparent)]
+    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
     #[error(transparent)]

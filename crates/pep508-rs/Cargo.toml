@@ -25,6 +25,7 @@ once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
 regex = { workspace = true }
+rkyv = { workspace = true, features = ["strict"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -40,5 +41,6 @@ testing_logger = { version = "0.1.1" }
 
 [features]
 pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log"]
+rkyv = ["dep:rkyv", "pep440_rs/rkyv"]
 serde = ["dep:serde", "pep440_rs/serde"]
 default = []

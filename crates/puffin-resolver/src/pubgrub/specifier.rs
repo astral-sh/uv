@@ -1,7 +1,7 @@
 use anyhow::Result;
 use pubgrub::range::Range;
 
-use pep440_rs::{Operator, Version, VersionSpecifier};
+use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier};
 
 use crate::ResolveError;
 
@@ -68,10 +68,9 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 if let Some(post) = high.post() {
                     high = high.with_post(Some(post + 1));
                 } else if let Some(pre) = high.pre() {
-                    high = high.with_pre(Some(match pre {
-                        (pep440_rs::PreRelease::Rc, n) => (pep440_rs::PreRelease::Rc, n + 1),
-                        (pep440_rs::PreRelease::Alpha, n) => (pep440_rs::PreRelease::Alpha, n + 1),
-                        (pep440_rs::PreRelease::Beta, n) => (pep440_rs::PreRelease::Beta, n + 1),
+                    high = high.with_pre(Some(PreRelease {
+                        kind: pre.kind,
+                        number: pre.number + 1,
                     }));
                 } else {
                     let mut release = high.release().to_vec();
@@ -86,10 +85,9 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 if let Some(post) = high.post() {
                     high = high.with_post(Some(post + 1));
                 } else if let Some(pre) = high.pre() {
-                    high = high.with_pre(Some(match pre {
-                        (pep440_rs::PreRelease::Rc, n) => (pep440_rs::PreRelease::Rc, n + 1),
-                        (pep440_rs::PreRelease::Alpha, n) => (pep440_rs::PreRelease::Alpha, n + 1),
-                        (pep440_rs::PreRelease::Beta, n) => (pep440_rs::PreRelease::Beta, n + 1),
+                    high = high.with_pre(Some(PreRelease {
+                        kind: pre.kind,
+                        number: pre.number + 1,
                     }));
                 } else {
                     let mut release = high.release().to_vec();

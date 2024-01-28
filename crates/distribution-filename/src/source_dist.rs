@@ -10,6 +10,12 @@ use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+#[cfg_attr(feature = "rkyv", archive_attr(derive(Debug)))]
 pub enum SourceDistExtension {
     Zip,
     TarGz,
@@ -52,6 +58,12 @@ impl SourceDistExtension {
 /// need the latter.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+#[cfg_attr(feature = "rkyv", archive_attr(derive(Debug)))]
 pub struct SourceDistFilename {
     pub name: PackageName,
     pub version: Version,

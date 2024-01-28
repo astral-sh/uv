@@ -36,6 +36,12 @@ use crate::{
 /// assert_eq!(version_specifiers.iter().position(|specifier| *specifier.operator() == Operator::LessThan), Some(1));
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+#[cfg_attr(feature = "rkyv", archive_attr(derive(Debug)))]
 #[cfg_attr(feature = "pyo3", pyclass(sequence))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
@@ -240,6 +246,12 @@ impl std::error::Error for VersionSpecifiersParseError {}
 /// assert!(version_specifier.contains(&version));
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+#[cfg_attr(feature = "rkyv", archive_attr(derive(Debug)))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
@@ -727,7 +739,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::{LocalSegment, PreRelease};
+    use crate::{LocalSegment, PreRelease, PreReleaseKind};
 
     use super::*;
 
@@ -1436,7 +1448,10 @@ mod tests {
                 "==2.0a1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                        version: Version::new([2, 0]).with_pre(Some(PreRelease {
+                            kind: PreReleaseKind::Alpha,
+                            number: 1,
+                        })),
                         remaining: ".*".to_string(),
                     }
                     .into(),
@@ -1447,7 +1462,10 @@ mod tests {
                 "!=2.0a1.*",
                 ParseErrorKind::InvalidVersion(
                     version::ErrorKind::UnexpectedEnd {
-                        version: Version::new([2, 0]).with_pre(Some((PreRelease::Alpha, 1))),
+                        version: Version::new([2, 0]).with_pre(Some(PreRelease {
+                            kind: PreReleaseKind::Alpha,
+                            number: 1,
+                        })),
                         remaining: ".*".to_string(),
                     }
                     .into(),

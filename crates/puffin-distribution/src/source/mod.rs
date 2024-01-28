@@ -105,9 +105,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = match &registry_source_dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => base
-                        .join_relative(url)
-                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::RelativeUrl(base, url) => {
+                        pypi_types::base_url_join_relative(base, url)?
+                    }
                     FileLocation::AbsoluteUrl(url) => {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
@@ -182,9 +182,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Registry(registry_source_dist) => {
                 let url = match &registry_source_dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => base
-                        .join_relative(url)
-                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::RelativeUrl(base, url) => {
+                        pypi_types::base_url_join_relative(base, url)?
+                    }
                     FileLocation::AbsoluteUrl(url) => {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }

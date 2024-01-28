@@ -92,9 +92,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 }
 
                 let url = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => base
-                        .join_relative(url)
-                        .map_err(|err| Error::Url(url.clone(), err))?,
+                    FileLocation::RelativeUrl(base, url) => {
+                        pypi_types::base_url_join_relative(base, url)?
+                    }
                     FileLocation::AbsoluteUrl(url) => {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }

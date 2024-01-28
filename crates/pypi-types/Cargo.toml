@@ -13,14 +13,15 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep440_rs = { path = "../pep440-rs", features = ["serde"] }
-pep508_rs = { path = "../pep508-rs", features = ["serde"] }
+pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
+pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde"] }
 puffin-normalize = { path = "../puffin-normalize" }
 
 chrono = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
+rkyv = { workspace = true, features = ["strict", "validation"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
