@@ -1,6 +1,47 @@
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+/// Join a possibly relative URL to a base URL.
+///
+/// When `maybe_relative` is not relative, then it is parsed and returned with
+/// `base` being ignored.
+///
+/// This is useful for parsing URLs that may be absolute or relative, with a
+/// known base URL, and that doesn't require having already parsed a `BaseUrl`.
+pub fn base_url_join_relative(base: &str, maybe_relative: &str) -> Result<Url, JoinRelativeError> {
+    match Url::parse(maybe_relative) {
+        Ok(absolute) => Ok(absolute),
+        Err(err) => {
+            if err == url::ParseError::RelativeUrlWithoutBase {
+                let base = Url::parse(base).map_err(|err| JoinRelativeError {
+                    original: base.to_string(),
+                    source: err,
+                })?;
+                base.join(maybe_relative).map_err(|err| JoinRelativeError {
+                    original: format!("{base}/{maybe_relative}"),
+                    source: err,
+                })
+            } else {
+                Err(JoinRelativeError {
+                    original: maybe_relative.to_string(),
+                    source: err,
+                })
+            }
+        }
+    }
+}
+
+/// An error that occurs when `base_url_join_relative` fails.
+///
+/// The error message includes the URL (`base` or `maybe_relative`) passed to
+/// `base_url_join_relative` that provoked the error.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("Failed to parse URL: `{original}`")]
+pub struct JoinRelativeError {
+    original: String,
+    source: url::ParseError,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BaseUrl(
     #[serde(

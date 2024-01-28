@@ -22,7 +22,7 @@ use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
 use puffin_cache::{Cache, CacheBucket, WheelCache};
 use puffin_normalize::PackageName;
-use pypi_types::{BaseUrl, Metadata21, SimpleJson};
+use pypi_types::{Metadata21, SimpleJson};
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
@@ -246,8 +246,8 @@ impl RegistryClient {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::RelativeUrl(base, url) => {
-                    let base = BaseUrl::from(Url::parse(base).map_err(ErrorKind::UrlParseError)?);
-                    let url = base.join_relative(url).map_err(ErrorKind::UrlParseError)?;
+                    let url = pypi_types::base_url_join_relative(base, url)
+                        .map_err(ErrorKind::JoinRelativeError)?;
                     self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
                         .await?
                 }

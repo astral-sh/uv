@@ -41,6 +41,10 @@ pub enum ErrorKind {
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
 
+    /// A base URL could not be joined with a possibly relative URL.
+    #[error(transparent)]
+    JoinRelativeError(#[from] pypi_types::JoinRelativeError),
+
     /// Dist-info error
     #[error(transparent)]
     InstallWheel(#[from] install_wheel_rs::Error),
