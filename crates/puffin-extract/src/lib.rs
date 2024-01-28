@@ -23,7 +23,7 @@ pub enum Error {
     #[error("Unsupported archive type: {0}")]
     UnsupportedArchive(PathBuf),
     #[error(
-        "The top level of the archive must only contain a list directory, but it contains: {0:?}"
+    "The top level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
     InvalidArchive(Vec<fs_err::DirEntry>),
 }
@@ -215,6 +215,27 @@ pub fn extract_source(
     // TODO(konstin): Verify the name of the directory.
     let top_level =
         fs_err::read_dir(target.as_ref())?.collect::<std::io::Result<Vec<fs_err::DirEntry>>>()?;
+    let [root] = top_level.as_slice() else {
+        return Err(Error::InvalidArchive(top_level));
+    };
+
+    Ok(root.path())
+}
+
+
+pub async fn untar_no_seek<R: futures::io::AsyncBufRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<PathBuf, Error> {
+    let decompressed_bytes = async_compression::futures::bufread::GzipDecoder::new(reader);
+    let archive = async_tar::Archive::new(decompressed_bytes);
+    archive.unpack(target).await?;
+
+    // > A .tar.gz source distribution (sdist) contains a single top-level directory called
+    // > `{name}-{version}` (e.g. foo-1.0), containing the source files of the package.
+    // TODO(konstin): Verify the name of the directory.
+    let top_level =
+        fs_err::read_dir(target)?.collect::<std::io::Result<Vec<fs_err::DirEntry>>>()?;
     let [root] = top_level.as_slice() else {
         return Err(Error::InvalidArchive(top_level));
     };

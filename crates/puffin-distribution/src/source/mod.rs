@@ -750,29 +750,47 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Ok(cache_path);
         }
 
-        // Download the source distribution to a temporary file.
-        // TODO(charlie): Unzip as we download, as with wheels.
-        let span =
-            info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
-        let download_dir = self.download_source_dist_url(response, filename).await?;
-        drop(span);
+        // Download the source distribution to a temporary file. If it's a zip archive, we can unzip
+        // it directly into the cache.
+        if filename.ends_with(".zip") {
+            // Unzip the source distribution to a temporary directory.
+            let span = info_span!("download_unzip_source_dist", filename = filename, source_dist = %source_dist);
+            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                .map_err(Error::CacheWrite)?;
+            let reader = response
+                .bytes_stream()
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+                .into_async_read();
+            puffin_extract::unzip_no_seek(reader.compat(), temp_dir.path()).await?;
+            drop(span);
 
-        // Unzip the source distribution to a temporary directory.
-        let span =
-            info_span!("extract_source_dist", filename = filename, source_dist = %source_dist);
-        let source_dist_dir = puffin_extract::extract_source(
-            download_dir.path().join(filename),
-            download_dir.path().join("extracted"),
-        )?;
-        drop(span);
+            // Persist the unzipped distribution to the cache.
+            fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
+                .await
+                .map_err(Error::CacheWrite)?;
+            fs_err::tokio::rename(temp_dir.path(), &cache_path)
+                .await
+                .map_err(Error::CacheWrite)?;
+        } else {
+            // Unzip the source distribution to a temporary directory.
+            let span = info_span!("download_unzip_source_dist", filename = filename, source_dist = %source_dist);
+            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                .map_err(Error::CacheWrite)?;
+            let reader = response
+                .bytes_stream()
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+                .into_async_read();
+            let extracted = puffin_extract::untar_no_seek(reader, temp_dir.path()).await?;
+            drop(span);
 
-        // Persist the unzipped distribution to the cache.
-        fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
-            .await
-            .map_err(Error::CacheWrite)?;
-        fs_err::tokio::rename(&source_dist_dir, &cache_path)
-            .await
-            .map_err(Error::CacheWrite)?;
+            // Persist the unzipped distribution to the cache.
+            fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
+                .await
+                .map_err(Error::CacheWrite)?;
+            fs_err::tokio::rename(extracted, &cache_path)
+                .await
+                .map_err(Error::CacheWrite)?;
+        }
 
         Ok(cache_path)
     }
