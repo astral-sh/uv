@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use zip::result::ZipError;
 use zip::ZipArchive;
 
@@ -34,15 +34,16 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
 ) -> Result<(), Error> {
-    let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+    let mut reader = reader.compat();
+    let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
     while let Some(mut entry) = zip.next_with_entry().await? {
-        // Construct path
+        // Construct the (expected) path to the file on-disk.
         let path = entry.reader().entry().filename().as_str()?;
         let path = target.join(path);
         let is_dir = entry.reader().entry().dir()?;
 
-        // Create dir or write file
+        // Either create the directory or write the file to disk.
         if is_dir {
             fs_err::tokio::create_dir_all(path).await?;
         } else {
@@ -63,6 +64,33 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
         // Close current file to get access to the next one. See docs:
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
         zip = entry.skip().await?;
+    }
+
+    // On Unix, we need to set file permissions, which are stored in the central directory, at the
+    // end of the archive. The `ZipFileReader` reads until it sees a central directory signature,
+    // which indicates the first entry in the central directory. So we continue reading from there.
+    #[cfg(unix)]
+    {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+
+        // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
+        // a buffer. The buffer size is semi-arbitrary, but the central directory is usually small.
+        let mut buf = futures::io::BufReader::with_capacity(1024 * 1024, reader);
+        let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut buf);
+        while let Some(entry) = directory.next().await? {
+            if entry.dir()? {
+                continue;
+            }
+
+            // Construct the (expected) path to the file on-disk.
+            let path = entry.filename().as_str()?;
+            let path = target.join(path);
+
+            if let Some(mode) = entry.unix_permissions() {
+                fs_err::set_permissions(&path, Permissions::from_mode(mode))?;
+            }
+        }
     }
 
     Ok(())

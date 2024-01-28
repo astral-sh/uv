@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+futures = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 async_zip = { workspace = true, features = ["tokio"] }
 flate2 = { workspace = true }
