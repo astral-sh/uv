@@ -23,3 +23,5 @@ tar = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-util"] }
 zip = { workspace = true }
+dashmap.workspace = true
+rustc-hash.workspace = true

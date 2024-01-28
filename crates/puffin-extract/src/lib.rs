@@ -1,7 +1,10 @@
 use std::fs::OpenOptions;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use rayon::prelude::*;
+use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use zip::result::ZipError;
 use zip::ZipArchive;
@@ -104,6 +107,7 @@ pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
 ) -> Result<(), Error> {
     // Unzip in parallel.
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
+    let directories = Mutex::new(FxHashSet::default());
     (0..archive.len())
         .par_bridge()
         .map(|file_number| {
@@ -118,11 +122,15 @@ pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
             // Create necessary parent directories.
             let path = target.join(enclosed_name);
             if file.is_dir() {
-                fs_err::create_dir_all(path)?;
+                fs_err::create_dir_all(&path)?;
                 return Ok(());
             }
+
             if let Some(parent) = path.parent() {
-                fs_err::create_dir_all(parent)?;
+                let mut directories = directories.lock().unwrap();
+                if directories.insert(parent.to_path_buf()) {
+                    fs_err::create_dir_all(parent)?;
+                }
             }
 
             // Create the file, with the correct permissions (on Unix).
