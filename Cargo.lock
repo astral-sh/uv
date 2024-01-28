@@ -2559,6 +2559,7 @@ dependencies = [
  "fs-err",
  "futures",
  "rayon",
+ "rustc-hash",
  "tar",
  "thiserror",
  "tokio",
