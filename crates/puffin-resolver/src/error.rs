@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::fmt::Formatter;
 
+use dashmap::DashSet;
 use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
@@ -167,6 +168,7 @@ impl NoSolutionError {
     pub(crate) fn with_available_versions(
         mut self,
         python_requirement: &PythonRequirement,
+        visited: &DashSet<PackageName>,
         package_versions: &OnceMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
@@ -186,15 +188,21 @@ impl NoSolutionError {
                     );
                 }
                 PubGrubPackage::Package(name, ..) => {
-                    if let Some(entry) = package_versions.get(name) {
-                        let version_map = entry.value();
-                        available_versions.insert(
-                            package.clone(),
-                            version_map
-                                .iter()
-                                .map(|(version, _)| version.clone())
-                                .collect(),
-                        );
+                    // Avoid including available versions for packages that exist in the derivation
+                    // tree, but were never visited during resolution. We _may_ have metadata for
+                    // these packages, but it's non-deterministic, and omitting them ensures that
+                    // we represent the state of the resolver at the time of failure.
+                    if visited.contains(name) {
+                        if let Some(entry) = package_versions.get(name) {
+                            let version_map = entry.value();
+                            available_versions.insert(
+                                package.clone(),
+                                version_map
+                                    .iter()
+                                    .map(|(version, _)| version.clone())
+                                    .collect(),
+                            );
+                        }
                     }
                 }
             }
