@@ -40,6 +40,8 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
     let mut reader = reader.compat();
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
+    let mut directories = FxHashSet::default();
+
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct the (expected) path to the file on-disk.
         let path = entry.reader().entry().filename().as_str()?;
@@ -48,11 +50,16 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
 
         // Either create the directory or write the file to disk.
         if is_dir {
-            fs_err::tokio::create_dir_all(path).await?;
+            if directories.insert(path.clone()) {
+                fs_err::tokio::create_dir_all(path).await?;
+            }
         } else {
             if let Some(parent) = path.parent() {
-                fs_err::tokio::create_dir_all(parent).await?;
+                if directories.insert(parent.to_path_buf()) {
+                    fs_err::tokio::create_dir_all(parent).await?;
+                }
             }
+
             let file = fs_err::tokio::File::create(path).await?;
             let mut writer =
                 if let Ok(size) = usize::try_from(entry.reader().entry().uncompressed_size()) {
@@ -78,8 +85,8 @@ pub async fn unzip_no_seek<R: tokio::io::AsyncRead + Unpin>(
         use std::os::unix::fs::PermissionsExt;
 
         // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
-        // a buffer. The buffer size is semi-arbitrary, but the central directory is usually small.
-        let mut buf = futures::io::BufReader::with_capacity(1024 * 1024, reader);
+        // a buffer.
+        let mut buf = futures::io::BufReader::new(reader);
         let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut buf);
         while let Some(entry) = directory.next().await? {
             if entry.dir()? {
@@ -121,7 +128,10 @@ pub fn unzip_archive<R: Send + std::io::Read + std::io::Seek + HasLength>(
             // Create necessary parent directories.
             let path = target.join(enclosed_name);
             if file.is_dir() {
-                fs_err::create_dir_all(&path)?;
+                let mut directories = directories.lock().unwrap();
+                if directories.insert(path.clone()) {
+                    fs_err::create_dir_all(path)?;
+                }
                 return Ok(());
             }
 

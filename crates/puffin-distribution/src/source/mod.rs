@@ -751,6 +751,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Download the source distribution to a temporary file.
+        // TODO(charlie): Unzip as we download, as with wheels.
         let span =
             info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
         let download_dir = self.download_source_dist_url(response, filename).await?;
