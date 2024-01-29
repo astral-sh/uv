@@ -241,7 +241,7 @@ impl RegistryClient {
     /// 1. From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(%built_dist))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
