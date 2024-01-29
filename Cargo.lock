@@ -2465,6 +2465,7 @@ dependencies = [
  "log",
  "once_cell",
  "pep440_rs 0.3.12",
+ "puffin-fs",
  "puffin-normalize",
  "pyo3",
  "pyo3-log",

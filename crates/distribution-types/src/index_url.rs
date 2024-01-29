@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep508_rs::split_scheme;
+use puffin_fs::normalize_url_path;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
@@ -89,7 +90,11 @@ impl FromStr for FlatIndexLocation {
             if scheme == "file" {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
                 let path = path.strip_prefix("//").unwrap_or(path);
-                let path = PathBuf::from(path);
+
+                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                let path = normalize_url_path(path);
+
+                let path = PathBuf::from(path.as_ref());
                 Ok(Self::Path(path))
             } else {
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
