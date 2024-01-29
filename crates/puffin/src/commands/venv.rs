@@ -50,7 +50,7 @@ enum VenvError {
     #[diagnostic(code(puffin::venv::interpreter))]
     Interpreter(#[source] puffin_interpreter::Error),
 
-    #[error("Failed to create virtual environment")]
+    #[error("Failed to create virtualenv")]
     #[diagnostic(code(puffin::venv::creation))]
     Creation(#[source] gourgeist::Error),
 
@@ -97,7 +97,7 @@ async fn venv_impl(
 
     writeln!(
         printer,
-        "Creating virtual environment at: {}",
+        "Creating virtualenv at: {}",
         path.normalized_display().cyan()
     )
     .into_diagnostic()?;

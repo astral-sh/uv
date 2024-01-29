@@ -107,7 +107,7 @@ fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
     // Find the first python of the version we want in the list
     let stdout =
         String::from_utf8(output.stdout.clone()).map_err(|err| Error::PythonSubcommandOutput {
-            message: format!("Running `py --list-paths` stdout isn't UTF-8 encoded: {err}"),
+            message: format!("The stdout of `py --list-paths` isn't UTF-8 encoded: {err}"),
             stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         })?;

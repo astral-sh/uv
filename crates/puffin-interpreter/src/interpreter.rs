@@ -38,13 +38,13 @@ impl Interpreter {
         let info = InterpreterQueryResult::query_cached(executable, cache)?;
         debug_assert!(
             info.base_prefix == info.base_exec_prefix,
-            "Not a virtual environment (Python: {}, prefix: {})",
+            "Not a virtualenv (Python: {}, prefix: {})",
             executable.display(),
             info.base_prefix.display()
         );
         debug_assert!(
             info.sys_executable.is_absolute(),
-            "`sys.executable` is not an absolute python; Python installation is broken: {}",
+            "`sys.executable` is not an absolute Python; Python installation is broken: {}",
             info.sys_executable.display()
         );
 
@@ -342,7 +342,7 @@ impl InterpreterQueryResult {
         if !output.status.success() || !output.stderr.is_empty() {
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
-                    "Querying python at {} failed with status {}",
+                    "Querying Python at `{}` failed with status {}",
                     interpreter.display(),
                     output.status,
                 ),
@@ -353,7 +353,7 @@ impl InterpreterQueryResult {
         let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err| {
             Error::PythonSubcommandOutput {
                 message: format!(
-                    "Querying python at {} did not return the expected data: {err}",
+                    "Querying Python at `{}` did not return the expected data: {err}",
                     interpreter.display(),
                 ),
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),

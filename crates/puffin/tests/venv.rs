@@ -38,7 +38,7 @@ fn create_venv() -> Result<()> {
 
         ----- stderr -----
         Using Python [VERSION] interpreter at [PATH]
-        Creating virtual environment at: /home/ferris/project/.venv
+        Creating virtualenv at: /home/ferris/project/.venv
         "###);
     });
 
@@ -73,7 +73,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
 
         ----- stderr -----
         Using Python [VERSION] interpreter at [PATH]
-        Creating virtual environment at: .venv
+        Creating virtualenv at: .venv
         "###);
     });
 
@@ -110,7 +110,7 @@ fn seed() -> Result<()> {
 
         ----- stderr -----
         Using Python [VERSION] interpreter at [PATH]
-        Creating virtual environment at: /home/ferris/project/.venv
+        Creating virtualenv at: /home/ferris/project/.venv
          + setuptools==69.0.3
          + pip==23.3.2
          + wheel==0.42.0
@@ -221,7 +221,7 @@ fn create_venv_python_patch() -> Result<()> {
 
         ----- stderr -----
         Using Python 3.12.1 interpreter at [PATH]
-        Creating virtual environment at: /home/ferris/project/.venv
+        Creating virtualenv at: /home/ferris/project/.venv
         "###);
     });
 
