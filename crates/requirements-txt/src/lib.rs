@@ -585,12 +585,6 @@ fn parse_requirement_and_hashes(
     if Path::new(requirement)
         .extension()
         .map_or(false, |ext| ext.eq_ignore_ascii_case("txt"))
-        || matches!(
-            requirement,
-            // The following packages are intentionally squated.
-            // See: https://pypi.org/project/requirements-dev.txt/
-            "requirements-txt" | "requirements-dev" | "requirements-test"
-        )
     {
         return Err(RequirementsTxtParserError::MissingRequirementPrefix(
             requirement.to_string(),
