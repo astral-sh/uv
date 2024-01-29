@@ -40,7 +40,7 @@ pub enum Error {
     },
     #[error("Failed to run `py --list-paths` to find Python installations. Is Python installed?")]
     PyList(#[source] io::Error),
-    #[error("No Python {major}.{minor} found through `py --list-paths`. Is this Python {major}.{minor} installed?")]
+    #[error("No Python {major}.{minor} found through `py --list-paths`. Is Python {major}.{minor} installed?")]
     NoSuchPython { major: u8, minor: u8 },
     #[error("Neither `python` nor `python3` are in `PATH`. Is Python installed?")]
     NoPythonInstalledUnix,
