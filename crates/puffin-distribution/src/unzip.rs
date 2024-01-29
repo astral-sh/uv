@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use puffin_extract::{unzip_archive, Error};
+use puffin_extract::Error;
 
 use crate::download::BuiltWheel;
 use crate::{DiskWheel, LocalWheel};
@@ -12,13 +12,13 @@ pub trait Unzip {
 
 impl Unzip for DiskWheel {
     fn unzip(&self, target: &Path) -> Result<(), Error> {
-        unzip_archive(fs_err::File::open(&self.path)?, target)
+        puffin_extract::unzip(fs_err::File::open(&self.path)?, target)
     }
 }
 
 impl Unzip for BuiltWheel {
     fn unzip(&self, target: &Path) -> Result<(), Error> {
-        unzip_archive(fs_err::File::open(&self.path)?, target)
+        puffin_extract::unzip(fs_err::File::open(&self.path)?, target)
     }
 }
 

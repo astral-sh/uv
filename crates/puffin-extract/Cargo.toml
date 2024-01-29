@@ -13,6 +13,10 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+async-compression = { workspace = true, features = ["gzip"] }
+# See: https://github.com/dignifiedquire/async-tar/pull/35
+async-std = { workspace = true, features = ["unstable"] }
+async-tar = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

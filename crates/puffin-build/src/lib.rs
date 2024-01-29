@@ -27,7 +27,6 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
-use puffin_extract::extract_source;
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
@@ -297,8 +296,15 @@ impl SourceBuild {
             source.to_path_buf()
         } else {
             debug!("Unpacking for build: {}", source.display());
+
             let extracted = temp_dir.path().join("extracted");
-            extract_source(source, &extracted)
+
+            // Unzip the archive into the temporary directory.
+            puffin_extract::archive(source, &extracted)
+                .map_err(|err| Error::Extraction(extracted.clone(), err))?;
+
+            // Extract the top-level directory from the archive.
+            puffin_extract::strip_component(&extracted)
                 .map_err(|err| Error::Extraction(extracted.clone(), err))?
         };
         let source_tree = if let Some(subdir) = subdirectory {
