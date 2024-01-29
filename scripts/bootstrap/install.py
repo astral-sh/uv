@@ -19,6 +19,10 @@
 #
 #   python scripts/bootstrap/install.py
 #
+# Or
+#
+#   pipx run scripts/bootstrap/install.py
+#
 # The Python versions are installed from `.python_versions`.
 # Python versions are linked in-order such that the _last_ defined version will be the default.
 #
