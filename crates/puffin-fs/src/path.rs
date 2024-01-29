@@ -32,3 +32,35 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
         Cow::Borrowed(path)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize() {
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_url_path("/C:/Users/ferris/wheel-0.42.0.tar.gz"),
+                "C:\\Users\\ferris\\wheel-0.42.0.tar.gz"
+            );
+        } else {
+            assert_eq!(
+                normalize_url_path("/C:/Users/ferris/wheel-0.42.0.tar.gz"),
+                "/C:/Users/ferris/wheel-0.42.0.tar.gz"
+            );
+        }
+
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_url_path("./ferris/wheel-0.42.0.tar.gz"),
+                ".\\ferris\\wheel-0.42.0.tar.gz"
+            );
+        } else {
+            assert_eq!(
+                normalize_url_path("./ferris/wheel-0.42.0.tar.gz"),
+                "./ferris/wheel-0.42.0.tar.gz"
+            );
+        }
+    }
+}
