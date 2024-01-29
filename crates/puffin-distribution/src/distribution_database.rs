@@ -330,7 +330,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// Returns the [`Metadata21`], along with a "precise" URL for the source distribution, if
     /// possible. For example, given a Git dependency with a reference to a branch or tag, return a
     /// URL with a precise reference to the current commit of that branch or tag.
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(%dist))]
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,

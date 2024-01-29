@@ -79,7 +79,7 @@ pub(crate) fn setup_duration() -> (
         }
         let plot_config = PlotConfig {
             multi_lane: true,
-            min_length: Some(std::time::Duration::from_secs_f32(0.002)),
+            min_length: None,
             remove: Some(
                 ["get_cached_with_callback".to_string()]
                     .into_iter()

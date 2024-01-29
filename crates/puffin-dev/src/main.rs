@@ -4,11 +4,12 @@ use std::env;
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anstream::eprintln;
 use anyhow::Result;
 use clap::Parser;
+use owo_colors::OwoColorize;
 use tracing::debug;
 use tracing_durations_export::plot::PlotConfig;
 use tracing_durations_export::DurationsLayerBuilder;
@@ -17,7 +18,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-use owo_colors::OwoColorize;
 use resolve_many::ResolveManyArgs;
 
 use crate::build::{build, BuildArgs};
@@ -100,7 +100,7 @@ async fn main() -> ExitCode {
         }
         let plot_config = PlotConfig {
             multi_lane: true,
-            min_length: Some(Duration::from_secs_f32(0.002)),
+            min_length: None,
             remove: Some(
                 ["get_cached_with_callback".to_string()]
                     .into_iter()

@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 /// A unique identifier for a package (e.g., `black==23.10.0`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageId(String);
@@ -5,6 +7,12 @@ pub struct PackageId(String);
 impl PackageId {
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
+    }
+}
+
+impl Display for PackageId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 

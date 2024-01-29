@@ -1,5 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -13,7 +14,7 @@ use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::select;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -430,6 +431,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Given a set of candidate packages, choose the next package (and version) to add to the
     /// partial solution.
+    #[instrument(skip_all, fields(%package))]
     async fn choose_version(
         &self,
         package: &PubGrubPackage,
@@ -501,7 +503,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
-                let entry = self.index.packages.wait(package_name).await?;
+                let entry = self
+                    .index
+                    .packages
+                    .wait(package_name)
+                    .instrument(info_span!("package_wait", %package_name))
+                    .await?;
                 let version_map = entry.value();
                 self.visited.insert(package_name.clone());
 
@@ -664,7 +671,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Available(constraints));
                 }
 
-                let entry = self.index.distributions.wait(&package_id).await?;
+                let entry = self
+                    .index
+                    .distributions
+                    .wait(&package_id)
+                    .instrument(info_span!("distributions_wait", %package_id))
+                    .await?;
                 let metadata = entry.value();
 
                 let mut constraints = PubGrubDependencies::from_requirements(
@@ -747,6 +759,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         Ok::<(), ResolveError>(())
     }
 
+    #[instrument(skip_all, fields(%request))]
     async fn process_request(&self, request: Request) -> Result<Option<Response>, ResolveError> {
         match request {
             // Fetch package metadata from the registry.
@@ -879,6 +892,22 @@ enum Request {
     Dist(Dist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>),
+}
+
+impl Display for Request {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Request::Package(package_name) => {
+                write!(f, "Package {package_name}")
+            }
+            Request::Dist(dist) => {
+                write!(f, "Dist {dist}")
+            }
+            Request::Prefetch(package_name, range) => {
+                write!(f, "Prefetch {package_name} {range}")
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
