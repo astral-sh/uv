@@ -74,7 +74,7 @@ jobs:
 
   # TODO(konstin): Merge with the cargo-test job once the tests pass
   windows:
-    runs-on: windows-latest
+    runs-on: windows-latest-large
     name: "cargo check | windows"
     steps:
       - uses: actions/checkout@v4
