@@ -20,8 +20,6 @@ license = "MIT OR Apache-2.0"
 anstream = { version = "0.6.5" }
 anyhow = { version = "1.0.79" }
 async-compression = { version = "0.4.6" }
-async-std = {version = "1.6.0" }
-async-tar = { version = "0.4.2" }
 async_http_range_reader = { git = "https://github.com/baszalmstra/async_http_range_reader", rev = "8dab2c08ac864fec1df014465264f9a7c8eae905" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
 base64 = { version = "0.21.7" }
@@ -92,6 +90,7 @@ textwrap = { version = "0.15.2" }
 thiserror = { version = "1.0.56" }
 tl = { version = "0.7.7" }
 tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
+tokio-tar = { version = "0.3.1" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.8" }
 toml_edit = { version = "0.21.0" }
