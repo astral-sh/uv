@@ -110,6 +110,7 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [patch.crates-io]
 # For pyproject-toml
+pep440_rs = { path = "crates/pep440-rs" }
 pep508_rs = { path = "crates/pep508-rs" }
 
 [workspace.lints.rust]

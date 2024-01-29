@@ -844,7 +844,7 @@ name = "distribution-filename"
 version = "0.0.1"
 dependencies = [
  "insta",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "platform-tags",
  "puffin-normalize",
  "rkyv",
@@ -863,7 +863,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "once_cell",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "puffin-fs",
@@ -1537,7 +1537,7 @@ dependencies = [
  "indoc",
  "mailparse",
  "once_cell",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "platform-host",
  "platform-info",
  "plist",
@@ -2117,18 +2117,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pep440_rs"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "887f66cc62717ea72caac4f1eb4e6f392224da3ffff3f40ec13ab427802746d6"
-dependencies = [
- "lazy_static",
- "regex",
- "serde",
- "unicode-width",
-]
-
-[[package]]
 name = "pep508_rs"
 version = "0.2.3"
 dependencies = [
@@ -2136,7 +2124,7 @@ dependencies = [
  "indoc",
  "log",
  "once_cell",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "puffin-fs",
  "puffin-normalize",
  "pyo3",
@@ -2387,7 +2375,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "platform-host",
  "platform-tags",
@@ -2495,7 +2483,7 @@ dependencies = [
  "http-cache-semantics",
  "insta",
  "install-wheel-rs",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "puffin-cache",
@@ -2538,7 +2526,7 @@ dependencies = [
  "itertools 0.12.0",
  "mimalloc",
  "owo-colors",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "petgraph",
  "platform-host",
@@ -2605,7 +2593,7 @@ dependencies = [
  "futures",
  "install-wheel-rs",
  "nanoid",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "puffin-cache",
@@ -2696,7 +2684,7 @@ dependencies = [
  "futures",
  "install-wheel-rs",
  "once-map",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "puffin-cache",
@@ -2731,7 +2719,7 @@ dependencies = [
  "insta",
  "itertools 0.12.0",
  "once_cell",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "platform-host",
  "platform-tags",
@@ -2781,7 +2769,7 @@ dependencies = [
  "once-map",
  "once_cell",
  "owo-colors",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "petgraph",
  "platform-host",
@@ -2839,7 +2827,7 @@ name = "puffin-workspace"
 version = "0.0.1"
 dependencies = [
  "fs-err",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "puffin-normalize",
  "pyproject-toml",
@@ -2929,7 +2917,7 @@ dependencies = [
  "insta",
  "mailparse",
  "once_cell",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "puffin-normalize",
  "regex",
@@ -2950,7 +2938,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46d4a5e69187f23a29f8aa0ea57491d104ba541bc55f76552c2a74962aa20e04"
 dependencies = [
  "indexmap 2.1.0",
- "pep440_rs 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pep440_rs",
  "pep508_rs",
  "serde",
  "toml",
@@ -3149,7 +3137,7 @@ dependencies = [
  "insta",
  "itertools 0.10.5",
  "once_cell",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "puffin-fs",
  "puffin-normalize",
