@@ -16,7 +16,6 @@
 
 #![deny(missing_docs)]
 
-use std::borrow::Cow;
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -43,6 +42,7 @@ pub use marker::{
     MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use puffin_fs::normalize_url_path;
 #[cfg(feature = "pyo3")]
 use puffin_normalize::InvalidNameError;
 use puffin_normalize::{ExtraName, PackageName};
@@ -745,47 +745,26 @@ fn preprocess_url(
 ) -> Result<VerbatimUrl, Pep508Error> {
     let url = if let Some((scheme, path)) = split_scheme(url) {
         if scheme == "file" {
-            if let Some(path) = path.strip_prefix("//") {
-                let path = if cfg!(windows) {
-                    // Transform `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`
-                    Cow::Owned(
-                        path.strip_prefix('/')
-                            .unwrap_or(path)
-                            .replace('/', std::path::MAIN_SEPARATOR_STR),
-                    )
-                } else {
-                    Cow::Borrowed(path)
-                };
-                // Ex) `file:///home/ferris/project/scripts/...`
-                if let Some(working_dir) = working_dir {
-                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
-                } else {
-                    VerbatimUrl::from_absolute_path(path)
-                        .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(err),
-                            start,
-                            len,
-                            input: cursor.to_string(),
-                        })?
-                        .with_given(url.to_string())
-                }
+            // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
+            let path = path.strip_prefix("//").unwrap_or(path);
+
+            // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+            let path = normalize_url_path(path);
+
+            if let Some(working_dir) = working_dir {
+                VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
             } else {
-                // Ex) `file:../editable/`
-                if let Some(working_dir) = working_dir {
-                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
-                } else {
-                    VerbatimUrl::from_absolute_path(path)
-                        .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(err),
-                            start,
-                            len,
-                            input: cursor.to_string(),
-                        })?
-                        .with_given(url.to_string())
-                }
+                VerbatimUrl::from_absolute_path(path)
+                    .map_err(|err| Pep508Error {
+                        message: Pep508ErrorSource::UrlError(err),
+                        start,
+                        len,
+                        input: cursor.to_string(),
+                    })?
+                    .with_given(url.to_string())
             }
         } else {
-            // Ex) `https://...`
+            // Ex) `https://download.pytorch.org/whl/torch_stable.html`
             VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,

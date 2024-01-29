@@ -69,4 +69,8 @@ RequirementsTxt {
         },
     ],
     editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
 }

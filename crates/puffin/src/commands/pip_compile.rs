@@ -85,8 +85,16 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         editables,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
         extras: used_extras,
     } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)?;
+
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {

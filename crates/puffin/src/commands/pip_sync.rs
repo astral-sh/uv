@@ -44,12 +44,28 @@ pub(crate) async fn pip_sync(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let (requirements, editables) = RequirementsSpecification::requirements_and_editables(sources)?;
+    let RequirementsSpecification {
+        project: _project,
+        requirements,
+        constraints: _constraints,
+        overrides: _overrides,
+        editables,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+        extras: _extras,
+    } = RequirementsSpecification::from_simple_sources(sources)?;
+
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
+
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
