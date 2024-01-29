@@ -270,12 +270,9 @@ Puffin has Tier 2 support ("guaranteed to build") for the following platforms:
 - Linux (PPC64)
 - Linux (PPC64LE)
 - Linux (aarch64)
+- Linux (armv7)
 - Linux (i686)
 - Linux (s390x)
-- Linux with MUSL (aarch64)
-- Linux with MUSL (armv7)
-- Linux with MUSL (i686)
-- Linux with MUSL (x86_64)
 
 Puffin ships pre-built wheels to [PyPI](https://pypi.org/project/puffin-alpha/) for its Tier 1 and
 Tier 2 platforms. However, while Tier 2 platforms are continuously built, they are not continuously
