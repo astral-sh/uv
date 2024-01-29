@@ -90,8 +90,8 @@ pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let decompressed_bytes = async_compression::futures::bufread::GzipDecoder::new(reader.compat());
-    let archive = async_tar::ArchiveBuilder::new(decompressed_bytes)
+    let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_permissions(false)
         .build();
     Ok(archive.unpack(target.as_ref()).await?)
