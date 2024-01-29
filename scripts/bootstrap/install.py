@@ -30,7 +30,6 @@
 
 import hashlib
 import json
-import os
 import platform
 import shutil
 import sys
