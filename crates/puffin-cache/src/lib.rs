@@ -246,7 +246,7 @@ impl Cache {
     /// Remove a package from the cache.
     ///
     /// Returns the number of entries removed from the cache.
-    pub fn purge(&self, name: &PackageName) -> Result<usize, io::Error> {
+    pub fn clean(&self, name: &PackageName) -> Result<usize, io::Error> {
         let mut count = 0;
         for bucket in [
             CacheBucket::Wheels,
@@ -255,7 +255,7 @@ impl Cache {
             CacheBucket::Interpreter,
             CacheBucket::Simple,
         ] {
-            count += bucket.purge(self, name)?;
+            count += bucket.clean(self, name)?;
         }
         Ok(count)
     }
@@ -508,10 +508,10 @@ impl CacheBucket {
         }
     }
 
-    /// Purge a package from the cache bucket.
+    /// Remove a package from the cache bucket.
     ///
     /// Returns the number of entries removed from the cache.
-    fn purge(self, cache: &Cache, name: &PackageName) -> Result<usize, io::Error> {
+    fn clean(self, cache: &Cache, name: &PackageName) -> Result<usize, io::Error> {
         fn remove(path: impl AsRef<Path>) -> Result<bool, io::Error> {
             Ok(if force_remove_all(path.as_ref())? {
                 debug!("Removed cache entry: {}", path.as_ref().display());

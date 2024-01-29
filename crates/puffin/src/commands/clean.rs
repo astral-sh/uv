@@ -40,7 +40,7 @@ pub(crate) fn clean(
         })?;
     } else {
         for package in packages {
-            let count = cache.purge(package)?;
+            let count = cache.clean(package)?;
             match count {
                 0 => writeln!(printer, "No entries found for package: {}", package.cyan())?,
                 1 => writeln!(printer, "Cleared 1 entry for package: {}", package.cyan())?,
