@@ -14,7 +14,6 @@ use distribution_types::{
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
 use puffin_client::{CacheControl, CachedClientError, RegistryClient};
-use puffin_extract::unzip_no_seek;
 use puffin_fs::metadata_if_exists;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary};
@@ -157,7 +156,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // Download and unzip the wheel to a temporary directory.
                         let temp_dir =
                             tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
-                        unzip_no_seek(reader.compat(), temp_dir.path()).await?;
+                        puffin_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
                         let archive = self
@@ -215,7 +214,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // Download and unzip the wheel to a temporary directory.
                         let temp_dir =
                             tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
-                        unzip_no_seek(reader.compat(), temp_dir.path()).await?;
+                        puffin_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
                         let archive = self

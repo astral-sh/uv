@@ -8,7 +8,6 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
-use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
@@ -750,78 +749,30 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Ok(cache_path);
         }
 
-        // Download the source distribution to a temporary file. If it's a zip archive, we can unzip
-        // it directly into the cache.
-        if filename.ends_with(".zip") {
-            // Unzip the source distribution to a temporary directory.
-            let span = info_span!("download_unzip_source_dist", filename = filename, source_dist = %source_dist);
-            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
-                .map_err(Error::CacheWrite)?;
-            let reader = response
-                .bytes_stream()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
-                .into_async_read();
-            puffin_extract::unzip_no_seek(reader.compat(), temp_dir.path()).await?;
-            drop(span);
-
-            // Persist the unzipped distribution to the cache.
-            fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
-                .await
-                .map_err(Error::CacheWrite)?;
-            fs_err::tokio::rename(temp_dir.path(), &cache_path)
-                .await
-                .map_err(Error::CacheWrite)?;
-        } else {
-            // Unzip the source distribution to a temporary directory.
-            let span = info_span!("download_unzip_source_dist", filename = filename, source_dist = %source_dist);
-            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
-                .map_err(Error::CacheWrite)?;
-            let reader = response
-                .bytes_stream()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
-                .into_async_read();
-            let extracted = puffin_extract::untar_no_seek(reader, temp_dir.path()).await?;
-            drop(span);
-
-            // Persist the unzipped distribution to the cache.
-            fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
-                .await
-                .map_err(Error::CacheWrite)?;
-            fs_err::tokio::rename(extracted, &cache_path)
-                .await
-                .map_err(Error::CacheWrite)?;
-        }
-
-        Ok(cache_path)
-    }
-
-    /// Download a source distribution from a URL to a temporary file.
-    async fn download_source_dist_url(
-        &self,
-        response: Response,
-        source_dist_filename: &str,
-    ) -> Result<TempDir, puffin_client::Error> {
+        // Download and unzip the source distribution into a temporary directory.
+        let span =
+            info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
+        let temp_dir =
+            tempfile::tempdir_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
             .into_async_read();
-        let mut reader = tokio::io::BufReader::new(reader.compat());
+        puffin_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
+        drop(span);
 
-        // Create a temporary directory.
-        let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
-            .map_err(puffin_client::ErrorKind::CacheWrite)?;
+        // Extract the top-level directory.
+        let extracted = puffin_extract::strip_component(temp_dir.path())?;
 
-        // Download the source distribution to a temporary file.
-        let mut writer = tokio::io::BufWriter::new(
-            fs_err::tokio::File::create(temp_dir.path().join(source_dist_filename))
-                .await
-                .map_err(puffin_client::ErrorKind::CacheWrite)?,
-        );
-        tokio::io::copy(&mut reader, &mut writer)
+        // Persist it to the cache.
+        fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))
             .await
-            .map_err(puffin_client::ErrorKind::CacheWrite)?;
+            .map_err(Error::CacheWrite)?;
+        fs_err::tokio::rename(extracted, &cache_path)
+            .await
+            .map_err(Error::CacheWrite)?;
 
-        Ok(temp_dir)
+        Ok(cache_path)
     }
 
     /// Download a source distribution from a Git repository.

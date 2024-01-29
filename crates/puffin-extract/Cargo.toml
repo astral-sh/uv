@@ -13,8 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-async-compression = { version = "0.4.6", features = ["gzip"] }
-async-tar = "0.4.2"
+async-compression = { workspace = true, features = ["gzip"] }
+async-tar = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

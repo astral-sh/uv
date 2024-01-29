@@ -26,7 +26,7 @@ pub trait HasLength {
 /// and thus can be cloned cheaply. It supports seeking; each cloned instance
 /// maintains its own pointer into the file, and the underlying instance
 /// is seeked prior to each read.
-pub struct CloneableSeekableReader<R: Read + Seek + HasLength> {
+pub(crate) struct CloneableSeekableReader<R: Read + Seek + HasLength> {
     file: Arc<Mutex<R>>,
     pos: u64,
     // TODO determine and store this once instead of per cloneable file
