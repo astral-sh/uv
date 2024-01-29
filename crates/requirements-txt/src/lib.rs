@@ -573,8 +573,32 @@ fn parse_requirement_and_hashes(
             break (end, false);
         }
     };
+
+    let requirement = &content[start..end];
+
+    // If the requirement looks like a `requirements.txt` file (with a missing `-r`), raise an
+    // error.
+    //
+    // While `requirements.txt` is a valid package name (per the spec), PyPI disallows
+    // `requirements.txt` and some other variants. We take a conservative approach, since there are
+    // so few packages on all of PyPI that end with `.txt`.
+    if Path::new(requirement)
+        .extension()
+        .map_or(false, |ext| ext.eq_ignore_ascii_case("txt"))
+        || matches!(
+            requirement,
+            // The following packages are intentionally squated.
+            // See: https://pypi.org/project/requirements-dev.txt/
+            "requirements-txt" | "requirements-dev" | "requirements-test"
+        )
+    {
+        return Err(RequirementsTxtParserError::MissingRequirementPrefix(
+            requirement.to_string(),
+        ));
+    }
+
     let requirement =
-        Requirement::parse(&content[start..end], working_dir).map_err(|err| match err.message {
+        Requirement::parse(requirement, working_dir).map_err(|err| match err.message {
             Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
                 RequirementsTxtParserError::Pep508 {
                     source: err,
@@ -664,6 +688,7 @@ pub enum RequirementsTxtParserError {
     },
     InvalidEditablePath(String),
     UnsupportedUrl(String),
+    MissingRequirementPrefix(String),
     Parser {
         message: String,
         location: usize,
@@ -707,6 +732,9 @@ impl RequirementsTxtParserError {
             },
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 RequirementsTxtParserError::UnsupportedUrl(url)
+            }
+            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
+                RequirementsTxtParserError::MissingRequirementPrefix(given)
             }
             RequirementsTxtParserError::Parser { message, location } => {
                 RequirementsTxtParserError::Parser {
@@ -752,6 +780,9 @@ impl Display for RequirementsTxtParserError {
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
+            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
+                write!(f, "Requirement `{given}` looks like a requirements file. Did you mean `-r {given}`?")
+            }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(f, "{message} at position {location}")
             }
@@ -775,6 +806,7 @@ impl std::error::Error for RequirementsTxtParserError {
             RequirementsTxtParserError::Url { source, .. } => Some(source),
             RequirementsTxtParserError::InvalidEditablePath(_) => None,
             RequirementsTxtParserError::UnsupportedUrl(_) => None,
+            RequirementsTxtParserError::MissingRequirementPrefix(_) => None,
             RequirementsTxtParserError::UnsupportedRequirement { source, .. } => Some(source),
             RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
@@ -805,6 +837,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
+                    self.file.normalized_display(),
+                )
+            }
+            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
+                write!(
+                    f,
+                    "Requirement `{given}` in `{}` looks like a requirements file. Did you mean `-r {given}`?",
                     self.file.normalized_display(),
                 )
             }
@@ -1057,6 +1096,30 @@ mod test {
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
             relative URL without a base
             "###);
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn missing_r() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            flask
+            requirements.txt
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error)
+            .chain()
+            .map(|err| err.to_string().replace('\\', "/"))
+            .join("\n");
+
+        insta::with_settings!({
+            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+        }, {
+            insta::assert_display_snapshot!(errors, @"Requirement `requirements.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file. Did you mean `-r requirements.txt`?");
         });
 
         Ok(())
