@@ -253,6 +253,37 @@ command line argument. For example, if you're running Puffin on Python 3.9, but 
 Python 3.8, you can run `puffin pip compile --python-version=3.8 requirements.in` to produce a
 Python 3.8-compatible resolution.
 
+## Platform support
+
+Puffin has Tier 1 support for the following platforms:
+
+- macOS (Apple Silicon)
+- macOS (x86_64)
+- Linux (x86_64)
+- Windows (x86_64)
+
+Puffin is continuously built, tested, and developed against its Tier 1 platforms. Inspired by the
+Rust project, Tier 1 can be thought of as ["guaranteed to work"](https://doc.rust-lang.org/beta/rustc/platform-support.html).
+
+Puffin has Tier 2 support ("guaranteed to build") for the following platforms:
+
+- Linux (PPC64)
+- Linux (PPC64LE)
+- Linux (aarch64)
+- Linux (i686)
+- Linux (s390x)
+- Linux with MUSL (aarch64)
+- Linux with MUSL (armv7)
+- Linux with MUSL (i686)
+- Linux with MUSL (x86_64)
+
+Puffin ships pre-built wheels to [PyPI](https://pypi.org/project/puffin-alpha/) for its Tier 1 and
+Tier 2 platforms. However, while Tier 2 platforms are continuously built, they are not continuously
+tested or developed against, and so stability may vary in practice.
+
+Beyond the Tier 1 and Tier 2 platforms, Puffin is known to build on i686 Windows, and known _not_
+to build on aarch64 Windows, but does not consider either platform to be supported at this time.
+
 ## Acknowledgements
 
 Puffin's dependency resolver uses [PubGrub](https://github.com/pubgrub-rs/pubgrub) under the hood.
