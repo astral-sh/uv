@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "zstandard==0.22.0",
+# ]
+# ///
 #
 # Download required Python versions and install to `bin`
 # Uses prebuilt Python distributions from indygreg/python-build-standalone
@@ -20,6 +26,7 @@
 
 import hashlib
 import json
+import os
 import platform
 import shutil
 import sys
@@ -96,8 +103,8 @@ for version in versions:
         print(f"No matching download for {key}")
         sys.exit(1)
 
+    filename = url.split("/")[-1]
     if not install_dir.exists():
-        filename = url.split("/")[-1]
         print(f"Downloading {urllib.parse.unquote(filename)}")
         download_path = THIS_DIR / filename
         with urllib.request.urlopen(url) as response:
@@ -129,28 +136,30 @@ for version in versions:
         already_exists = True
         print("Already available, skipping download")
 
-    # Use relative paths for links so if the bin is moved they don't break
-    executable = "." / install_dir.relative_to(BIN_DIR) / "install" / "bin" / "python3"
     if PLATFORM == "win32":
-        executable = executable.with_suffix(".exe")
+        executable = install_dir / "install" / "python.exe"
+    else:
+        # Use relative paths for links so if the bin is moved they don't break
+        executable = "." / install_dir.relative_to(BIN_DIR) / "install" / "bin" / "python3"
 
     major = versions_metadata[key]["major"]
     minor = versions_metadata[key]["minor"]
 
     # Link as all version tuples, later versions in the file will take precedence
     BIN_DIR.mkdir(parents=True, exist_ok=True)
-    targets = (
+
+    targets = [
         (BIN_DIR / f"python{version}"),
         (BIN_DIR / f"python{major}.{minor}"),
         (BIN_DIR / f"python{major}"),
         (BIN_DIR / "python"),
-    )
+    ]
     for target in targets:
-        if PLATFORM == "win32":
-            target = target.with_suffix(".exe")
-
         target.unlink(missing_ok=True)
-        target.symlink_to(executable)
+        if PLATFORM == "win32":
+            target.hardlink_to(executable)
+        else:
+            target.symlink_to(executable)
 
     if already_exists:
         print(f"Updated executables for python{version}")
