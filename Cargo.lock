@@ -2360,6 +2360,7 @@ dependencies = [
  "assert_fs",
  "chrono",
  "clap",
+ "console",
  "distribution-filename",
  "distribution-types",
  "dunce",

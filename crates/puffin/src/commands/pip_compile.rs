@@ -118,7 +118,7 @@ pub(crate) async fn pip_compile(
         .filter(|_| !upgrade.is_all())
         .filter(|output_file| output_file.exists())
         .map(Path::to_path_buf)
-        .map(RequirementsSource::from)
+        .map(RequirementsSource::from_path)
         .as_ref()
         .map(|source| RequirementsSpecification::from_source(source, &extras))
         .transpose()?
