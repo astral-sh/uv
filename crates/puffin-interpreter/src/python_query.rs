@@ -159,18 +159,12 @@ mod tests {
 
     #[test]
     fn no_such_python_version() {
-        assert_snapshot!(format_err(find_requested_python("3.1000")), @r###"
-        Couldn't find `3.1000` in PATH. Is this Python version installed?
-          Caused by: cannot find binary path
-        "###);
+        assert_snapshot!(format_err(find_requested_python("3.1000")), @"Couldn't find `3.1000` in PATH. Is this Python version installed?");
     }
 
     #[test]
     fn no_such_python_binary() {
-        assert_display_snapshot!(format_err(find_requested_python("python3.1000")), @r###"
-        Couldn't find `python3.1000` in PATH. Is this Python version installed?
-          Caused by: cannot find binary path
-        "###);
+        assert_display_snapshot!(format_err(find_requested_python("python3.1000")), @"Couldn't find `python3.1000` in PATH. Is this Python version installed?");
     }
 
     #[cfg(unix)]

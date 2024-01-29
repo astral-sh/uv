@@ -223,14 +223,14 @@ impl Interpreter {
         if let Some(isolated) = std::env::var_os("PUFFIN_PYTHON_PATH") {
             if let Ok(cwd) = std::env::current_dir() {
                 which::which_in(requested, Some(isolated), cwd)
-                    .map_err(|err| Error::Which(requested.into(), err))
+                    .map_err(|err| Error::from_which_error(requested.into(), err))
             } else {
                 which::which_in_global(requested, Some(isolated))
-                    .map_err(|err| Error::Which(requested.into(), err))
+                    .map_err(|err| Error::from_which_error(requested.into(), err))
                     .and_then(|mut paths| paths.next().ok_or(Error::PythonNotFound))
             }
         } else {
-            which::which(requested).map_err(|err| Error::Which(requested.into(), err))
+            which::which(requested).map_err(|err| Error::from_which_error(requested.into(), err))
         }
     }
 

@@ -9,6 +9,7 @@ pub use crate::interpreter::Interpreter;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
 pub use crate::virtual_env::Virtualenv;
+use crate::Error::WhichError;
 
 mod cfg;
 mod interpreter;
@@ -57,6 +58,17 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Broken virtualenv: Failed to parse pyvenv.cfg")]
     Cfg(#[from] cfg::Error),
+    #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
+    WhichError(OsString, #[source] which::Error),
     #[error("Couldn't find `{}` in PATH. Is this Python version installed?", _0.to_string_lossy())]
-    Which(OsString, #[source] which::Error),
+    NotInPath(OsString),
+}
+
+impl Error {
+    pub(crate) fn from_which_error(requested: OsString, source: which::Error) -> Self {
+        match source {
+            which::Error::CannotFindBinaryPath => Self::NotInPath(requested),
+            _ => WhichError(requested, source),
+        }
+    }
 }
