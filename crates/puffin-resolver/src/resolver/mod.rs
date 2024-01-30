@@ -384,7 +384,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
-    fn visit_package(
+    async fn visit_package(
         &self,
         package: &PubGrubPackage,
         priorities: &mut PubGrubPriorities,
@@ -398,6 +398,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if self.index.packages.register(package_name) {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
+
+                     // Yield after sending on a channel to allow the subscribers to continue.
+                    tokio::task::yield_now().await;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
@@ -406,6 +409,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if self.index.distributions.register_owned(dist.package_id()) {
                     priorities.add(dist.name().clone());
                     request_sink.unbounded_send(Request::Dist(dist))?;
+
+                     // Yield after sending on a channel to allow the subscribers to continue.
+                    tokio::task::yield_now().await;
                 }
             }
         }
@@ -611,7 +617,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)?;
+                    self.visit_package(package, priorities, request_sink).await?;
                 }
 
                 // Add a dependency on each editable.
@@ -692,7 +698,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)?;
+                    self.visit_package(package, priorities, request_sink).await?;
                 }
 
                 // If a package has an extra, insert a constraint on the base package.
