@@ -194,7 +194,7 @@ impl NoSolutionError {
                     // we represent the state of the resolver at the time of failure.
                     if visited.contains(name) {
                         if let Some(entry) = package_versions.get(name) {
-                            let version_map = entry;
+                            let version_map = entry.value();
                             available_versions.insert(
                                 package.clone(),
                                 version_map

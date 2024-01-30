@@ -16,4 +16,3 @@ workspace = true
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 waitmap = { workspace = true }
-tokio = { workspace = true }

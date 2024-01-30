@@ -69,7 +69,7 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index.
                     if let Some(entry) = packages.get(package_name) {
-                        let version_map = entry;
+                        let version_map = entry.value();
                         hashes.insert(package_name.clone(), {
                             let mut hashes = version_map.hashes(version);
                             hashes.sort_unstable();
@@ -95,7 +95,7 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index.
                     if let Some(entry) = packages.get(package_name) {
-                        let version_map = entry;
+                        let version_map = entry.value();
                         hashes.insert(package_name.clone(), {
                             let mut hashes = version_map.hashes(version);
                             hashes.sort_unstable();
@@ -113,7 +113,7 @@ impl ResolutionGraph {
                     let entry = distributions
                         .get(&dist.package_id())
                         .expect("Every package should have metadata");
-                    let metadata = entry;
+                    let metadata = entry.value();
 
                     if !metadata.provides_extras.contains(extra) {
                         let pinned_package = pins
@@ -133,7 +133,7 @@ impl ResolutionGraph {
                     let entry = distributions
                         .get(&dist.package_id())
                         .expect("Every package should have metadata");
-                    let metadata = entry;
+                    let metadata = entry.value();
 
                     if !metadata.provides_extras.contains(extra) {
                         let url = redirects.get(url).map_or_else(
