@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use dashmap::{DashMap, DashSet};
-use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::mpsc::{
+    UnboundedReceiver as MpscUnboundedReceiver, UnboundedSender as MpscUnboundedSender,
+};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
@@ -241,7 +243,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     #[instrument(skip_all)]
     async fn solve(
         &self,
-        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        request_sink: &MpscUnboundedSender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
 
@@ -386,7 +388,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         &self,
         package: &PubGrubPackage,
         priorities: &mut PubGrubPriorities,
-        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        request_sink: &MpscUnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
@@ -413,6 +415,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
             }
         }
+        // Yield after sending on a channel to allow the subscribers to continue
+        tokio::task::yield_now().await;
         Ok(())
     }
 
@@ -420,7 +424,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// metadata for all of the packages in parallel.
     fn pre_visit<'data>(
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
-        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        request_sink: &MpscUnboundedSender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
@@ -441,9 +445,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
-        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        request_sink: &MpscUnboundedSender<Request>,
     ) -> Result<Option<Version>, ResolveError> {
-        return match package {
+        match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
 
             PubGrubPackage::Python(PubGrubPython::Installed) => {
@@ -584,16 +588,17 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 Ok(Some(version))
             }
-        };
+        }
     }
 
     /// Given a candidate package and version, return its dependencies.
+    #[instrument(skip_all, fields(%package, %version))]
     async fn get_dependencies(
         &self,
         package: &PubGrubPackage,
         version: &Version,
         priorities: &mut PubGrubPriorities,
-        request_sink: &futures::channel::mpsc::UnboundedSender<Request>,
+        request_sink: &MpscUnboundedSender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {
@@ -724,7 +729,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     }
 
     /// Fetch the metadata for a stream of packages and versions.
-    async fn fetch(&self, request_stream: UnboundedReceiver<Request>) -> Result<(), ResolveError> {
+    async fn fetch(
+        &self,
+        request_stream: MpscUnboundedReceiver<Request>,
+    ) -> Result<(), ResolveError> {
         let mut response_stream = request_stream
             .map(|request| self.process_request(request).boxed())
             .buffer_unordered(50);
@@ -915,10 +923,10 @@ impl Display for Request {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Request::Package(package_name) => {
-                write!(f, "Package {package_name}")
+                write!(f, "Versions {package_name}")
             }
             Request::Dist(dist) => {
-                write!(f, "Dist {dist}")
+                write!(f, "Metadata {dist}")
             }
             Request::Prefetch(package_name, range) => {
                 write!(f, "Prefetch {package_name} {range}")

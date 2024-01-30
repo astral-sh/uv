@@ -160,7 +160,7 @@ impl Display for BuildKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NoBinary {
     /// Allow installation of any wheel.
     None,

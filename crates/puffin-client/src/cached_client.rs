@@ -104,7 +104,7 @@ impl CachedClient {
     /// client.
     #[instrument(skip_all)]
     pub async fn get_cached_with_callback<
-        Payload: Serialize + DeserializeOwned + Send,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError,
         Callback,
         CallbackReturn,
@@ -172,7 +172,7 @@ impl CachedClient {
         }
     }
 
-    async fn read_cache<Payload: Serialize + DeserializeOwned + Send>(
+    async fn read_cache<Payload: Serialize + DeserializeOwned + Send + 'static>(
         cache_entry: &CacheEntry,
     ) -> Option<DataWithCachePolicy<Payload>> {
         let read_span = info_span!("read_cache", file = %cache_entry.path().display());
@@ -185,8 +185,12 @@ impl CachedClient {
                 "parse_cache",
                 path = %cache_entry.path().display()
             );
-            let parse_result = parse_span
-                .in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached));
+            let parse_result = tokio::task::spawn_blocking(move || {
+                parse_span
+                    .in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached))
+            })
+            .await
+            .expect("Tokio executor failed, was there a panic?");
             match parse_result {
                 Ok(data) => Some(data),
                 Err(err) => {
