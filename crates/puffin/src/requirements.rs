@@ -1,8 +1,9 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use console::Term;
 use fs_err as fs;
 use rustc_hash::FxHashSet;
 
@@ -11,6 +12,8 @@ use pep508_rs::Requirement;
 use puffin_fs::NormalizedDisplay;
 use puffin_normalize::{ExtraName, PackageName};
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
+
+use crate::confirm;
 
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {
@@ -24,13 +27,56 @@ pub(crate) enum RequirementsSource {
     PyprojectToml(PathBuf),
 }
 
-impl From<PathBuf> for RequirementsSource {
-    fn from(path: PathBuf) -> Self {
+impl RequirementsSource {
+    /// Parse a [`RequirementsSource`] from a [`PathBuf`].
+    pub(crate) fn from_path(path: PathBuf) -> Self {
         if path.ends_with("pyproject.toml") {
             Self::PyprojectToml(path)
         } else {
             Self::RequirementsTxt(path)
         }
+    }
+
+    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a package.
+    ///
+    /// If the user provided a value that appears to be a `requirements.txt` file or a local
+    /// directory, prompt them to correct it (if the terminal is interactive).
+    pub(crate) fn from_package(name: String) -> Self {
+        // If the user provided a `requirements.txt` file without `-r` (as in
+        // `puffin pip install requirements.txt`), prompt them to correct it.
+        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        if name.ends_with(".txt") || name.ends_with(".in") {
+            if Path::new(&name).is_file() {
+                let term = Term::stderr();
+                if term.is_term() {
+                    let prompt = format!(
+                        "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
+                    );
+                    let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                    if confirmation {
+                        return Self::RequirementsTxt(name.into());
+                    }
+                }
+            }
+        }
+
+        // If the user provided a path to a local directory without `-e` (as in
+        // `puffin pip install ../flask`), prompt them to correct it.
+        if name.contains('/') || name.contains('\\') {
+            if Path::new(&name).is_dir() {
+                let term = Term::stderr();
+                if term.is_term() {
+                    let prompt =
+                        format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
+                    let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                    if confirmation {
+                        return Self::RequirementsTxt(name.into());
+                    }
+                }
+            }
+        }
+
+        Self::Package(name)
     }
 }
 

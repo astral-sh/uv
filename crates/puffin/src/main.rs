@@ -40,6 +40,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod commands;
 mod compat;
+mod confirm;
 mod logging;
 mod printer;
 mod requirements;
@@ -670,17 +671,17 @@ async fn run() -> Result<ExitStatus> {
             let requirements = args
                 .src_file
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let constraints = args
                 .constraint
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let overrides = args
                 .r#override
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::from_args(
                 args.index_url,
@@ -739,7 +740,7 @@ async fn run() -> Result<ExitStatus> {
             let sources = args
                 .src_file
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             let no_binary = NoBinary::from_args(args.no_binary, args.no_binary_package);
@@ -768,19 +769,23 @@ async fn run() -> Result<ExitStatus> {
             let requirements = args
                 .package
                 .into_iter()
-                .map(RequirementsSource::Package)
+                .map(RequirementsSource::from_package)
                 .chain(args.editable.into_iter().map(RequirementsSource::Editable))
-                .chain(args.requirement.into_iter().map(RequirementsSource::from))
+                .chain(
+                    args.requirement
+                        .into_iter()
+                        .map(RequirementsSource::from_path),
+                )
                 .collect::<Vec<_>>();
             let constraints = args
                 .constraint
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let overrides = args
                 .r#override
                 .into_iter()
-                .map(RequirementsSource::from)
+                .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::from_args(
                 args.index_url,
@@ -827,9 +832,13 @@ async fn run() -> Result<ExitStatus> {
             let sources = args
                 .package
                 .into_iter()
-                .map(RequirementsSource::Package)
+                .map(RequirementsSource::from_package)
                 .chain(args.editable.into_iter().map(RequirementsSource::Editable))
-                .chain(args.requirement.into_iter().map(RequirementsSource::from))
+                .chain(
+                    args.requirement
+                        .into_iter()
+                        .map(RequirementsSource::from_path),
+                )
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await
         }

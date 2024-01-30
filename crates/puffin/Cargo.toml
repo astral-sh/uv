@@ -47,6 +47,8 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+console = { workspace = true }
+dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
@@ -68,7 +70,6 @@ tracing-tree = { workspace = true }
 url = { workspace = true }
 waitmap = { workspace = true }
 which = { workspace = true }
-dunce = "1.0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = "0.1.39"
