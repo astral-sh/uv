@@ -295,6 +295,7 @@ fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
 /// to start the embedded script.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
+#[allow(unused_variables)]
 pub(crate) fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
@@ -305,7 +306,7 @@ pub(crate) fn windows_script_launcher(
         return Err(Error::NotWindows);
     }
 
-    let launcher_bin = match env::consts::ARCH {
+    let launcher_bin: &[u8] = match env::consts::ARCH {
         #[cfg(all(windows, target_arch = "x86_64"))]
         "x86_64" => {
             if is_gui {
@@ -322,9 +323,12 @@ pub(crate) fn windows_script_launcher(
                 LAUNCHER_AARCH64_CONSOLE
             }
         }
+        #[cfg(windows)]
         arch => {
             return Err(Error::UnsupportedWindowsArch(arch));
         }
+        #[cfg(not(windows))]
+        arch => &[],
     };
 
     let mut payload: Vec<u8> = Vec::new();
@@ -1174,10 +1178,7 @@ mod test {
 
     use indoc::{formatdoc, indoc};
 
-    use super::{
-        parse_key_value_file, parse_wheel_version, read_record_file, relative_to, Script,
-        LAUNCHER_X86_64_CONSOLE, LAUNCHER_X86_64_GUI,
-    };
+    use super::{parse_key_value_file, parse_wheel_version, read_record_file, relative_to, Script};
 
     #[test]
     fn test_parse_key_value_file() {
@@ -1305,17 +1306,34 @@ mod test {
     }
 
     #[test]
+    #[cfg(all(windows, target_arch = "x86_64"))]
     fn test_launchers_are_small() {
         // At time of writing, they are 15872 bytes.
         assert!(
-            LAUNCHER_X86_64_GUI.len() < 20 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 20 * 1024,
             "GUI launcher: {}",
-            LAUNCHER_X86_64_GUI.len()
+            super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            LAUNCHER_X86_64_CONSOLE.len() < 20 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 20 * 1024,
             "CLI launcher: {}",
-            LAUNCHER_X86_64_CONSOLE.len()
+            super::LAUNCHER_X86_64_CONSOLE.len()
+        );
+    }
+
+    #[test]
+    #[cfg(all(windows, target_arch = "aarch64"))]
+    fn test_launchers_are_small() {
+        // At time of writing, they are 14848 and 14336 bytes.
+        assert!(
+            super::LAUNCHER_AArch64_GUI.len() < 20 * 1024,
+            "GUI launcher: {}",
+            super::LAUNCHER_AArch64_GUI.len()
+        );
+        assert!(
+            super::LAUNCHER_AArch64_CONSOLE.len() < 20 * 1024,
+            "CLI launcher: {}",
+            super::LAUNCHER_AArch64_CONSOLE.len()
         );
     }
 }
