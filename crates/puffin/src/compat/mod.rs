@@ -57,6 +57,9 @@ pub(crate) struct PipCompileCompatArgs {
     unsafe_package: Vec<String>,
 
     #[clap(long, hide = true)]
+    config: Option<String>,
+
+    #[clap(long, hide = true)]
     no_config: bool,
 
     #[clap(long, hide = true)]
@@ -76,6 +79,9 @@ pub(crate) struct PipCompileCompatArgs {
 
     #[clap(long, hide = true)]
     no_strip_extras: bool,
+
+    #[clap(long, hide = true)]
+    pip_args: Option<String>,
 }
 
 impl PipCompileCompatArgs {
@@ -183,6 +189,12 @@ impl PipCompileCompatArgs {
             ));
         }
 
+        if self.config.is_some() {
+            return Err(anyhow!(
+                "pip-compile's `--config` is unsupported (Puffin does not use a configuration file)."
+            ));
+        }
+
         if self.no_config {
             warn_user!(
                 "pip-compile's `--no-config` has no effect (Puffin does not use a configuration file)."
@@ -222,6 +234,103 @@ impl PipCompileCompatArgs {
         if self.no_strip_extras {
             return Err(anyhow!(
                 "pip-compile's `--no-strip-extras` is unsupported (Puffin always strips extras)."
+            ));
+        }
+
+        if self.pip_args.is_some() {
+            return Err(anyhow!(
+                "pip-compile's `--pip-args` is unsupported (try passing arguments to Puffin directly)."
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+/// Arguments for `pip-sync` compatibility.
+///
+/// These represent a subset of the `pip-sync` interface that Puffin supports by default.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct PipSyncCompatArgs {
+    #[clap(short, long, hide = true)]
+    ask: bool,
+
+    #[clap(long, hide = true)]
+    trusted_host: Option<String>,
+
+    #[clap(long, hide = true)]
+    python_executable: Option<String>,
+
+    #[clap(long, hide = true)]
+    user: bool,
+
+    #[clap(long, hide = true)]
+    cert: Option<String>,
+
+    #[clap(long, hide = true)]
+    client_cert: Option<String>,
+
+    #[clap(long, hide = true)]
+    config: Option<String>,
+
+    #[clap(long, hide = true)]
+    no_config: bool,
+
+    #[clap(long, hide = true)]
+    pip_args: Option<String>,
+}
+
+impl PipSyncCompatArgs {
+    /// Validate the arguments passed for `pip-sync` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches Puffin's
+    /// behavior. If an argument is passed that does _not_ match Puffin's behavior, this method will
+    /// return an error.
+    pub(crate) fn validate(&self) -> Result<()> {
+        if self.ask {
+            return Err(anyhow!(
+                "pip-sync's `--ask` is unsupported (Puffin never asks for confirmation)."
+            ));
+        }
+
+        if self.python_executable.is_some() {
+            return Err(anyhow!(
+                "pip-sync's `--python-executable` is unsupported (to install into a separate Python environment, try setting `VIRTUAL_ENV` instead)."
+            ));
+        }
+
+        if self.user {
+            return Err(anyhow!("pip-sync's `--user` is unsupported."));
+        }
+
+        if self.client_cert.is_some() {
+            return Err(anyhow!(
+                "pip-sync's `--client-cert` is unsupported (Puffin doesn't support dedicated client certificates)."
+            ));
+        }
+
+        if self.trusted_host.is_some() {
+            return Err(anyhow!(
+                "pip-sync's `--trusted-host` is unsupported (Puffin always requires HTTPS)."
+            ));
+        }
+
+        if self.config.is_some() {
+            return Err(anyhow!(
+                "pip-sync's `--config` is unsupported (Puffin does not use a configuration file)."
+            ));
+        }
+
+        if self.no_config {
+            warn_user!(
+                "pip-sync's `--no-config` has no effect (Puffin does not use a configuration file)."
+            );
+        }
+
+        if self.pip_args.is_some() {
+            return Err(anyhow!(
+                "pip-sync's `--pip-args` is unsupported (try passing arguments to Puffin directly)."
             ));
         }
 

@@ -376,6 +376,9 @@ struct PipSyncArgs {
     /// missing dependencies or other issues.
     #[clap(long)]
     strict: bool,
+
+    #[command(flatten)]
+    compat_args: compat::PipSyncCompatArgs,
 }
 
 #[derive(Args)]
@@ -722,6 +725,8 @@ async fn inner() -> Result<ExitStatus> {
         Commands::Pip(PipArgs {
             command: PipCommand::Sync(args),
         }) => {
+            args.compat_args.validate()?;
+
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let index_urls = IndexLocations::from_args(
                 args.index_url,
