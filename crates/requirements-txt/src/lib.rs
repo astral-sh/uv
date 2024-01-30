@@ -34,6 +34,7 @@
 //! wrappable_whitespaces = whitespace ('\\\n' | whitespace)*
 //! ```
 
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -580,15 +581,38 @@ fn parse_requirement_and_hashes(
     // error.
     //
     // While `requirements.txt` is a valid package name (per the spec), PyPI disallows
-    // `requirements.txt` and some other variants. We take a conservative approach, since there are
-    // so few packages on all of PyPI that end with `.txt`.
-    if Path::new(requirement)
-        .extension()
-        .map_or(false, |ext| ext.eq_ignore_ascii_case("txt"))
-    {
-        return Err(RequirementsTxtParserError::MissingRequirementPrefix(
-            requirement.to_string(),
-        ));
+    // `requirements.txt` and some other variants anyway.
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    if requirement.ends_with(".txt") || requirement.ends_with(".in") {
+        let path = Path::new(requirement);
+        let path = if path.is_absolute() {
+            Cow::Borrowed(path)
+        } else {
+            Cow::Owned(working_dir.join(path))
+        };
+        if path.is_file() {
+            return Err(RequirementsTxtParserError::MissingRequirementPrefix(
+                requirement.to_string(),
+            ));
+        }
+    }
+
+    // If the requirement looks like an editable requirement (with a missing `-e`), raise an
+    // error.
+    //
+    // Slashes are not allowed in package names, so these would be rejected in the next step anyway.
+    if requirement.contains('/') || requirement.contains('\\') {
+        let path = Path::new(requirement);
+        let path = if path.is_absolute() {
+            Cow::Borrowed(path)
+        } else {
+            Cow::Owned(working_dir.join(path))
+        };
+        if path.is_dir() {
+            return Err(RequirementsTxtParserError::MissingEditablePrefix(
+                requirement.to_string(),
+            ));
+        }
     }
 
     let requirement =
@@ -683,6 +707,7 @@ pub enum RequirementsTxtParserError {
     InvalidEditablePath(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
+    MissingEditablePrefix(String),
     Parser {
         message: String,
         location: usize,
@@ -730,6 +755,9 @@ impl RequirementsTxtParserError {
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 RequirementsTxtParserError::MissingRequirementPrefix(given)
             }
+            RequirementsTxtParserError::MissingEditablePrefix(given) => {
+                RequirementsTxtParserError::MissingEditablePrefix(given)
+            }
             RequirementsTxtParserError::Parser { message, location } => {
                 RequirementsTxtParserError::Parser {
                     message,
@@ -775,7 +803,13 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
-                write!(f, "Requirement `{given}` looks like a requirements file. Did you mean `-r {given}`?")
+                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
+            }
+            RequirementsTxtParserError::MissingEditablePrefix(given) => {
+                write!(
+                    f,
+                    "Requirement `{given}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?"
+                )
             }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(f, "{message} at position {location}")
@@ -801,6 +835,7 @@ impl std::error::Error for RequirementsTxtParserError {
             RequirementsTxtParserError::InvalidEditablePath(_) => None,
             RequirementsTxtParserError::UnsupportedUrl(_) => None,
             RequirementsTxtParserError::MissingRequirementPrefix(_) => None,
+            RequirementsTxtParserError::MissingEditablePrefix(_) => None,
             RequirementsTxtParserError::UnsupportedRequirement { source, .. } => Some(source),
             RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
             RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
@@ -837,7 +872,14 @@ impl Display for RequirementsTxtFileError {
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
-                    "Requirement `{given}` in `{}` looks like a requirements file. Did you mean `-r {given}`?",
+                    "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
+                    self.file.normalized_display(),
+                )
+            }
+            RequirementsTxtParserError::MissingEditablePrefix(given) => {
+                write!(
+                    f,
+                    "Requirement `{given}` in `{}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?",
                     self.file.normalized_display(),
                 )
             }
@@ -1098,10 +1140,14 @@ mod test {
     #[test]
     fn missing_r() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
+
+        let file_txt = temp_dir.child("file.txt");
+        file_txt.touch()?;
+
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             flask
-            requirements.txt
+            file.txt
         "})?;
 
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
@@ -1113,7 +1159,7 @@ mod test {
         insta::with_settings!({
             filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
         }, {
-            insta::assert_display_snapshot!(errors, @"Requirement `requirements.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file. Did you mean `-r requirements.txt`?");
+            insta::assert_display_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
         });
 
         Ok(())
