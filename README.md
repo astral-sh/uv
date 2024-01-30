@@ -12,6 +12,7 @@ Puffin is backed by [Astral](https://astral.sh), the creators of [Ruff](https://
 - 🐍 Installable via `pip`, `pipx`, `brew` etc. Puffin is a single static binary that can be
   installed without Rust or even a Python environment.
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
+- 🖥️ Support for macOS, Linux, and Windows.
 - ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
 - 🤝 Support for a wide range of advanced `pip` features, including: editable installs, Git
   dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
@@ -78,20 +79,18 @@ immediately useful tool with a minimal barrier to adoption. Try it today in lieu
 
 ## Limitations
 
-Puffin does not yet support Windows ([#73](https://github.com/astral-sh/puffin/issues/73)).
-
-Puffin does not support the entire `pip` feature set. Namely, Puffin won't support the following
-`pip` features:
+Puffin does not support the entire `pip` feature set. Namely, Puffin does not plan to support the
+following `pip` features:
 
 - `.egg` dependencies
-- Editable installs for Git and direct URL dependencies (though editable installs _are_ supported
-  for local dependencies)
-- ...
+- Editable installs for Git and direct URL dependencies (editable installs _are_ supported for local
+  dependencies)
 
 On the other hand, Puffin plans to (but does not currently) support:
 
-- Hash checking
-- ...
+- [Hash-checking mode](https://github.com/astral-sh/puffin/issues/474)
+- [URL requirements without package names](https://github.com/astral-sh/puffin/issues/313)
+  (e.g., `https://...` instead of `package @ https://...`).
 
 Like `pip-compile`, Puffin generates a platform-specific `requirements.txt` file (unlike, e.g.,
 `poetry` and `pdm`, which generate platform-agnostic `poetry.lock` and `pdm.lock` files). As such,
