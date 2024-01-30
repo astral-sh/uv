@@ -1,18 +1,17 @@
 use std::borrow::Borrow;
-use std::collections::hash_map::RandomState;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use dashmap::DashMap;
 use tokio::sync::Notify;
-use waitmap::Ref;
+
 use crate::Error;
 
 pub enum Value<V> {
     Waiting(Arc<Notify>),
     Filled(Arc<V>),
 }
-
 
 /// Run tasks only once and store the results in a parallel hash map.
 ///
@@ -21,10 +20,10 @@ pub enum Value<V> {
 /// dist builds, we want to wait until the other task is done and get a reference to the same
 /// result.
 pub struct CacheMap<K: Eq + Hash, V> {
-    items: Mutex<FxHashMap<K, Value<V>>>,
+    items: DashMap<K, Value<V>>,
 }
 
-impl<K: Eq + Hash, V> CacheMap<K, V> {
+impl<K: Debug + Eq + Hash, V> CacheMap<K, V> {
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`CacheMap::done`] eventually
@@ -33,32 +32,33 @@ impl<K: Eq + Hash, V> CacheMap<K, V> {
     pub fn register<Q>(&self, key: &Q) -> bool
     where
         K: Borrow<Q>,
-        Q: ?Sized + Hash + Eq + ToOwned<Owned = K>,
+        Q: ?Sized + Hash + Eq + Debug + ToOwned<Owned = K>,
     {
-        let mut lock = self.items.lock().unwrap();
-        if lock.contains_key(key) {
-             false
-        } else {
-            lock.insert(key.to_owned(), Value::Waiting(Arc::new(Notify::new())));
-            true
+        let entry = self.items.entry(key.to_owned());
+        match entry {
+            dashmap::mapref::entry::Entry::Occupied(_) => false,
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                entry.insert(Value::Waiting(Arc::new(Notify::new())));
+                true
+            }
         }
     }
 
     /// Like [`CacheMap::register`], but takes ownership of the key.
     pub fn register_owned(&self, key: K) -> bool {
-        let mut lock = self.items.lock().unwrap();
-        if lock.contains_key(&key) {
-             false
-        } else {
-            lock.insert(key, Value::Waiting(Arc::new(Notify::new())));
-            true
+        let entry = self.items.entry(key);
+        match entry {
+            dashmap::mapref::entry::Entry::Occupied(_) => false,
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                entry.insert(Value::Waiting(Arc::new(Notify::new())));
+                true
+            }
         }
     }
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        let mut lock = self.items.lock().unwrap();
-        if let Some(Value::Waiting(notify)) = lock.insert(key, Value::Filled(Arc::new(value))) {
+        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(Arc::new(value))) {
             notify.notify_waiters();
         }
     }
@@ -66,26 +66,28 @@ impl<K: Eq + Hash, V> CacheMap<K, V> {
     /// Wait for the result of a job that is running.
     ///
     /// Will hang if [`CacheMap::done`] isn't called for this key.
-    pub async fn wait<Q: ?Sized + Hash + Eq>(
+    pub async fn wait<Q: ?Sized + Debug + Hash + Eq>(
         &self,
         key: &Q,
     ) -> Result<Arc<V>, Error>
     where
         K: Borrow<Q> + for<'a> From<&'a Q>,
     {
-        let mut lock = self.items.lock().unwrap();
-        let notify = match lock.get(key) {
-            Some(Value::Filled(value)) => return Ok(value.clone()),
-            Some(Value::Waiting(notify)) => notify.clone(),
-            None => return Err(Error::Canceled),
-        };
-        drop(lock);
+        let entry = self.items.get(key).expect("key must be registered");
+        match entry.value() {
+            Value::Filled(value) => Ok(value.clone()),
+            Value::Waiting(notify) => {
+                let notify = notify.clone();
+                drop(entry);
+                notify.notified().await;
 
-        notify.notified().await;
-
-        let lock = self.items.lock().unwrap();
-        let Some(Value::Filled(value)) = lock.get(key) else { return Err(Error::Canceled) };
-        Ok(value.clone())
+                let entry = self.items.get(key).expect("key must be registered");
+                match entry.value() {
+                    Value::Filled(value) => Ok(value.clone()),
+                    Value::Waiting(_) => unreachable!(),
+                }
+            }
+        }
     }
 
     /// Return the result of a previous job, if any.
@@ -93,11 +95,10 @@ impl<K: Eq + Hash, V> CacheMap<K, V> {
     where
         K: Borrow<Q>,
     {
-        let lock = self.items.lock().unwrap();
-        if let Some(Value::Filled(value)) = lock.get(key) {
-            Some(value.clone())
-        } else {
-            None
+        let entry = self.items.get(key)?;
+        match entry.value() {
+            Value::Filled(value) => Some(value.clone()),
+            Value::Waiting(_) => None,
         }
     }
 }
@@ -105,7 +106,7 @@ impl<K: Eq + Hash, V> CacheMap<K, V> {
 impl<K: Eq + Hash + Clone, V> Default for CacheMap<K, V> {
     fn default() -> Self {
         Self {
-            items: Mutex::new(FxHashMap::default()),
+            items: DashMap::new(),
         }
     }
 }
