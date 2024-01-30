@@ -35,4 +35,3 @@ itertools = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-waitmap = { workspace = true }

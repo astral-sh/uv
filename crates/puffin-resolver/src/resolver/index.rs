@@ -23,13 +23,3 @@ pub struct InMemoryIndex {
     /// `git+https://github.com/pallets/flask.git@c2f65dd1cfff0672b902fd5b30815f0b4137214c`.
     pub(crate) redirects: DashMap<Url, Url>,
 }
-
-impl InMemoryIndex {
-    /// Cancel all waiting tasks.
-    ///
-    /// Warning: waiting on tasks that have been canceled will cause the index to hang.
-    pub(crate) fn cancel_all(&self) {
-        self.packages.cancel_all();
-        self.distributions.cancel_all();
-    }
-}

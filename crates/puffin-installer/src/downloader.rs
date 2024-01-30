@@ -29,8 +29,6 @@ pub enum Error {
     Editable(#[from] puffin_distribution::Error),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
-    #[error(transparent)]
-    OnceMap(#[from] once_map::Error),
 }
 
 /// Download, build, and unzip a set of distributions.
@@ -159,7 +157,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
-        let wheel = if in_flight.downloads.register(&id) {
+        if in_flight.downloads.register(id.clone()) {
             let download: LocalWheel = self
                 .database
                 .get_or_build_wheel(dist.clone())
@@ -170,24 +168,25 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
             match result {
                 Ok(cached) => {
                     in_flight.downloads.done(id, Ok(cached.clone()));
-                    cached
+                    Ok(cached)
                 }
                 Err(err) => {
                     in_flight.downloads.done(id, Err(err.to_string()));
-                    return Err(err);
+                    Err(err)
                 }
             }
         } else {
-            in_flight
+            let result = in_flight
                 .downloads
                 .wait(&id)
-                .await?
-                .value()
-                .clone()
-                .map_err(Error::Thread)?
-        };
+                .await
+                .expect("missing value for registered task");
 
-        Ok(wheel)
+            match result.as_ref() {
+                Ok(cached) => Ok(cached.clone()),
+                Err(err) => Err(Error::Thread(err.to_string())),
+            }
+        }
     }
 
     /// Unzip a locally-available wheel into the cache.

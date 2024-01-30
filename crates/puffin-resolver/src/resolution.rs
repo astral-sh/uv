@@ -68,8 +68,7 @@ impl ResolutionGraph {
                         .clone();
 
                     // Add its hashes to the index.
-                    if let Some(entry) = packages.get(package_name) {
-                        let version_map = entry.value();
+                    if let Some(version_map) = packages.get(package_name) {
                         hashes.insert(package_name.clone(), {
                             let mut hashes = version_map.hashes(version);
                             hashes.sort_unstable();
@@ -94,8 +93,7 @@ impl ResolutionGraph {
                     };
 
                     // Add its hashes to the index.
-                    if let Some(entry) = packages.get(package_name) {
-                        let version_map = entry.value();
+                    if let Some(version_map) = packages.get(package_name) {
                         hashes.insert(package_name.clone(), {
                             let mut hashes = version_map.hashes(version);
                             hashes.sort_unstable();
@@ -110,10 +108,9 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, Some(extra), None) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_registry(package_name, version);
-                    let entry = distributions
+                    let metadata = distributions
                         .get(&dist.package_id())
                         .expect("Every package should have metadata");
-                    let metadata = entry.value();
 
                     if !metadata.provides_extras.contains(extra) {
                         let pinned_package = pins
@@ -130,10 +127,9 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
-                    let entry = distributions
+                    let metadata = distributions
                         .get(&dist.package_id())
                         .expect("Every package should have metadata");
-                    let metadata = entry.value();
 
                     if !metadata.provides_extras.contains(extra) {
                         let url = redirects.get(url).map_or_else(

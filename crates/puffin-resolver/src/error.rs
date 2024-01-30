@@ -36,8 +36,8 @@ pub enum ResolveError {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
-    #[error(transparent)]
-    OnceMap(#[from] once_map::Error),
+    #[error("Attempted to wait on an unregistered task")]
+    Unregistered,
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
@@ -193,8 +193,7 @@ impl NoSolutionError {
                     // these packages, but it's non-deterministic, and omitting them ensures that
                     // we represent the state of the resolver at the time of failure.
                     if visited.contains(name) {
-                        if let Some(entry) = package_versions.get(name) {
-                            let version_map = entry.value();
+                        if let Some(version_map) = package_versions.get(name) {
                             available_versions.insert(
                                 package.clone(),
                                 version_map
