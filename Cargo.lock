@@ -206,13 +206,14 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.4.0"
-source = "git+https://github.com/baszalmstra/async_http_range_reader?rev=8dab2c08ac864fec1df014465264f9a7c8eae905#8dab2c08ac864fec1df014465264f9a7c8eae905"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea8c52f8b749ec4e8665041001a31208afdae9ef88916d2edf1610deb8b3616e"
 dependencies = [
  "bisection",
  "futures",
  "http-content-range",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "memmap2",
  "reqwest",
  "thiserror",
@@ -1606,15 +1607,6 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
 dependencies = [
  "either",
 ]
