@@ -50,7 +50,7 @@ rustc-hash = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-durations-export = { version = "0.1.0", features = ["plot"] }
+tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
