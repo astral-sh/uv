@@ -10,7 +10,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use clap::Parser;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, instrument};
 use tracing_durations_export::plot::PlotConfig;
 use tracing_durations_export::DurationsLayerBuilder;
 use tracing_indicatif::IndicatifLayer;
@@ -68,6 +68,7 @@ enum Cli {
     WheelMetadata(WheelMetadataArgs),
 }
 
+#[instrument] // Anchor span to check for overhead
 async fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli {

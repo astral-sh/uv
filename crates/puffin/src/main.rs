@@ -8,6 +8,7 @@ use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use owo_colors::OwoColorize;
+use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use puffin_cache::{Cache, CacheArgs, Refresh};
@@ -605,7 +606,8 @@ struct RemoveArgs {
     name: PackageName,
 }
 
-async fn inner() -> Result<ExitStatus> {
+#[instrument] // Anchor span to check for overhead
+async fn run() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
     // Configure the `tracing` crate, which controls internal logging.
@@ -865,7 +867,7 @@ fn main() -> ExitCode {
                 .thread_stack_size(stack_size)
                 .build()
                 .expect("Failed building the Runtime")
-                .block_on(inner())
+                .block_on(run())
         };
         std::thread::Builder::new()
             .stack_size(stack_size)
@@ -878,7 +880,7 @@ fn main() -> ExitCode {
             .enable_all()
             .build()
             .expect("Failed building the Runtime")
-            .block_on(inner())
+            .block_on(run())
     };
 
     match result {
