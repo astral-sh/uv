@@ -72,6 +72,20 @@ jobs:
           source .env
           cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
+  macos:
+    runs-on: macos-latest-large
+    name: "cargo check | macos"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "macos"
+#      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo build --locked
+
   # TODO(konstin): Merge with the cargo-test job once the tests pass
   windows:
     runs-on: windows-latest-large
