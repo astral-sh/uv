@@ -138,7 +138,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             // Mock editable responses.
             let package_id = dist.package_id();
-            index.distributions.register(&package_id);
+            index.distributions.register(package_id.clone());
             index.distributions.done(package_id, metadata.clone());
             editables.insert(
                 dist.name().clone(),
@@ -391,22 +391,22 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Python(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
-                if self.index.packages.register(package_name) {
+                if self.index.packages.register(package_name.clone()) {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
 
-                    // Yield, to allow subscribers to continue.
+                    // Yield to allow subscribers to continue, as the channel is sync.
                     tokio::task::yield_now().await;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(package_name.clone(), url.clone())?;
-                if self.index.distributions.register_owned(dist.package_id()) {
+                if self.index.distributions.register(dist.package_id()) {
                     priorities.add(dist.name().clone());
                     request_sink.unbounded_send(Request::Dist(dist))?;
 
-                    // Yield, to allow subscribers to continue.
+                    // Yield to allow subscribers to continue, as the channel is sync.
                     tokio::task::yield_now().await;
                 }
             }
@@ -492,7 +492,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 } else {
                     // Otherwise, assume this is a source distribution.
                     let dist = PubGrubDistribution::from_url(package_name, url);
-                    let metadata = self.index.distributions.wait(&dist.package_id()).await?;
+                    let metadata = self
+                        .index
+                        .distributions
+                        .wait(&dist.package_id())
+                        .await
+                        .ok_or(ResolveError::Unregistered)?;
                     let version = &metadata.version;
                     if range.contains(version) {
                         Ok(Some(version.clone()))
@@ -509,7 +514,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .packages
                     .wait(package_name)
                     .instrument(info_span!("package_wait", %package_name))
-                    .await?;
+                    .await
+                    .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
 
                 if let Some(extra) = extra {
@@ -566,15 +572,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self
-                    .index
-                    .distributions
-                    .register_owned(candidate.package_id())
-                {
+                if self.index.distributions.register(candidate.package_id()) {
                     let dist = candidate.resolve().dist.clone();
                     request_sink.unbounded_send(Request::Dist(dist))?;
 
-                    // Yield, to allow subscribers to continue.
+                    // Yield to allow subscribers to continue, as the channel is sync.
                     tokio::task::yield_now().await;
                 }
 
@@ -681,7 +683,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .distributions
                     .wait(&package_id)
                     .instrument(info_span!("distributions_wait", %package_id))
-                    .await?;
+                    .await
+                    .ok_or(ResolveError::Unregistered)?;
 
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
@@ -716,7 +719,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch(&self, request_stream: UnboundedReceiver<Request>) -> Result<(), ResolveError> {
         let mut response_stream = request_stream
-            .map(|request| self.process_request(request))
+            .map(|request| self.process_request(request).boxed())
             .buffer_unordered(50);
 
         while let Some(response) = response_stream.next().await {
@@ -760,7 +763,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 None => {}
             }
 
-            // Yield, to allow subscribers to continue.
+            // Yield to allow subscribers to continue, as the channel is sync.
             tokio::task::yield_now().await;
         }
 
@@ -810,7 +813,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
-                let version_map = self.index.packages.wait(&package_name).await?;
+                let version_map = self
+                    .index
+                    .packages
+                    .wait(&package_name)
+                    .await
+                    .ok_or(ResolveError::Unregistered)?;
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.
@@ -827,11 +835,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Emit a request to fetch the metadata for this version.
-                if self
-                    .index
-                    .distributions
-                    .register_owned(candidate.package_id())
-                {
+                if self.index.distributions.register(candidate.package_id()) {
                     let dist = candidate.resolve().dist.clone();
 
                     let (metadata, precise) = self

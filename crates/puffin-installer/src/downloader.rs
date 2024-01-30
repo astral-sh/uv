@@ -29,8 +29,6 @@ pub enum Error {
     Editable(#[from] puffin_distribution::Error),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
-    #[error(transparent)]
-    OnceMap(#[from] once_map::Error),
 }
 
 /// Download, build, and unzip a set of distributions.
@@ -159,7 +157,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
-        if in_flight.downloads.register(&id) {
+        if in_flight.downloads.register(id.clone()) {
             let download: LocalWheel = self
                 .database
                 .get_or_build_wheel(dist.clone())
@@ -178,7 +176,11 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 }
             }
         } else {
-            let result = in_flight.downloads.wait(&id).await?;
+            let result = in_flight
+                .downloads
+                .wait(&id)
+                .await
+                .expect("missing value for registered task");
 
             match result.as_ref() {
                 Ok(cached) => Ok(cached.clone()),

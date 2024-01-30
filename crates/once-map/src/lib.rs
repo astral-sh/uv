@@ -21,23 +21,7 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
     /// or other tasks will hang. If it returns `false`, this job is already in progress and you
     /// can [`OnceMap::wait`] for the result.
-    pub fn register<Q>(&self, key: &Q) -> bool
-    where
-        K: Borrow<Q>,
-        Q: ?Sized + Hash + Eq + ToOwned<Owned = K>,
-    {
-        let entry = self.items.entry(key.to_owned());
-        match entry {
-            dashmap::mapref::entry::Entry::Occupied(_) => false,
-            dashmap::mapref::entry::Entry::Vacant(entry) => {
-                entry.insert(Value::Waiting(Arc::new(Notify::new())));
-                true
-            }
-        }
-    }
-
-    /// Like [`OnceMap::register`], but takes ownership of the key.
-    pub fn register_owned(&self, key: K) -> bool {
+    pub fn register(&self, key: K) -> bool {
         let entry = self.items.entry(key);
         match entry {
             dashmap::mapref::entry::Entry::Occupied(_) => false,
@@ -59,21 +43,18 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     /// Wait for the result of a job that is running.
     ///
     /// Will hang if [`OnceMap::done`] isn't called for this key.
-    pub async fn wait<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Result<Arc<V>, Error>
-    where
-        K: Borrow<Q> + for<'a> From<&'a Q>,
-    {
-        let entry = self.items.get(key).ok_or(Error::NotRegistered)?;
+    pub async fn wait(&self, key: &K) -> Option<Arc<V>> {
+        let entry = self.items.get(key)?;
         match entry.value() {
-            Value::Filled(value) => Ok(value.clone()),
+            Value::Filled(value) => Some(value.clone()),
             Value::Waiting(notify) => {
                 let notify = notify.clone();
                 drop(entry);
                 notify.notified().await;
 
-                let entry = self.items.get(key).ok_or(Error::NotRegistered)?;
+                let entry = self.items.get(key).expect("map is append-only");
                 match entry.value() {
-                    Value::Filled(value) => Ok(value.clone()),
+                    Value::Filled(value) => Some(value.clone()),
                     Value::Waiting(_) => unreachable!("notify was called"),
                 }
             }
@@ -104,12 +85,4 @@ impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
 enum Value<V> {
     Waiting(Arc<Notify>),
     Filled(Arc<V>),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("The operation was not registered")]
-    NotRegistered,
-    #[error("The operation was canceled")]
-    Canceled,
 }
