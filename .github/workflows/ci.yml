@@ -45,7 +45,7 @@ jobs:
   cargo-test:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on:
       # We use the large GitHub actions runners for faster testing
       # For Ubuntu and Windows, this requires Organization-level configuration
@@ -54,6 +54,10 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+      - name: "Install bootstrap dependencies"
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install coreutils
       - name: "Install required Python versions"
         run: |
           scripts/bootstrap/install.sh
