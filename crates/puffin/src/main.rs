@@ -15,7 +15,7 @@ use puffin_cache::{Cache, CacheArgs, Refresh};
 use puffin_installer::{NoBinary, Reinstall};
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
-use puffin_resolver::{PreReleaseMode, ResolutionMode};
+use puffin_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
 use puffin_traits::SetupPyStrategy;
 use requirements::ExtrasSpecification;
 
@@ -445,6 +445,11 @@ struct PipInstallArgs {
     #[clap(long)]
     refresh_package: Vec<PackageName>,
 
+    /// Ignore package dependencies, instead only installing those packages explicitly listed
+    /// on the command line or in the requirements files.
+    #[clap(long)]
+    no_deps: bool,
+
     /// The method to use when installing packages from the global cache.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
@@ -802,6 +807,11 @@ async fn run() -> Result<ExitStatus> {
             };
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             let no_binary = NoBinary::from_args(args.no_binary, args.no_binary_package);
+            let dependency_mode = if args.no_deps {
+                DependencyMode::Direct
+            } else {
+                DependencyMode::Transitive
+            };
             commands::pip_install(
                 &requirements,
                 &constraints,
@@ -809,6 +819,7 @@ async fn run() -> Result<ExitStatus> {
                 &extras,
                 args.resolution,
                 args.prerelease,
+                dependency_mode,
                 index_urls,
                 &reinstall,
                 args.link_mode,

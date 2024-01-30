@@ -50,7 +50,7 @@ pub use crate::resolver::provider::ResolverProvider;
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::version_map::VersionMap;
-use crate::Options;
+use crate::{DependencyMode, Options};
 
 mod allowed_urls;
 mod index;
@@ -63,6 +63,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     constraints: Vec<Requirement>,
     overrides: Overrides,
     allowed_urls: AllowedUrls,
+    dependency_mode: DependencyMode,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
@@ -173,6 +174,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             visited: DashSet::default(),
             selector,
             allowed_urls,
+            dependency_mode: options.dependency_mode,
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -644,6 +646,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             }
 
             PubGrubPackage::Package(package_name, extra, url) => {
+                // If we're excluding transitive dependencies, short-circuit.
+                if self.dependency_mode.is_direct() {
+                    return Ok(Dependencies::Available(DependencyConstraints::default()));
+                }
+
                 // Wait for the metadata to be available.
                 let dist = match url {
                     Some(url) => PubGrubDistribution::from_url(package_name, url),

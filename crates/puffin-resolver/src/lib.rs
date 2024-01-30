@@ -1,3 +1,4 @@
+pub use dependency_mode::DependencyMode;
 pub use error::ResolveError;
 pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
@@ -10,6 +11,7 @@ pub use resolver::{
 };
 
 mod candidate_selector;
+mod dependency_mode;
 mod error;
 mod finder;
 mod manifest;

@@ -26,8 +26,8 @@ use puffin_installer::{
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
 use puffin_resolver::{
-    InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, ResolutionGraph,
-    ResolutionMode, Resolver,
+    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
+    ResolutionGraph, ResolutionMode, Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
@@ -46,6 +46,7 @@ pub(crate) async fn pip_install(
     extras: &ExtrasSpecification<'_>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
+    dependency_mode: DependencyMode,
     index_locations: IndexLocations,
     reinstall: &Reinstall,
     link_mode: LinkMode,
@@ -154,6 +155,7 @@ pub(crate) async fn pip_install(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .build();
 
