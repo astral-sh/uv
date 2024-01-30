@@ -2,9 +2,10 @@ use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 
 use std::hash::Hash;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
+use tokio::sync::Notify;
 use waitmap::{Ref, WaitMap};
 
 /// Run tasks only once and store the results in a parallel hash map.
@@ -17,9 +18,12 @@ pub struct OnceMap<K: Eq + Hash, V> {
     /// Computations that were started, including those that were finished.
     started: Mutex<FxHashSet<K>>,
     wait_map: WaitMap<K, V>,
+
+    data: Mutex<FxHashMap<K, V>>,
+    notifiers: Mutex<FxHashMap<K, Arc<Notify>>>,
 }
 
-impl<K: Eq + Hash, V> OnceMap<K, V> {
+impl<K: Eq + Hash, V: Clone> OnceMap<K, V> {
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
@@ -30,25 +34,38 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq + ToOwned<Owned = K>,
     {
-        let mut lock = self.started.lock().unwrap();
-        if lock.contains(key) {
-            return false;
+        let mut lock = self.notifiers.lock().unwrap();
+        if lock.contains_key(key) {
+            false
+        } else {
+            lock.insert(key.to_owned(), Arc::new(Notify::new()));
+            true
         }
-        lock.insert(key.to_owned())
     }
 
     /// Like [`OnceMap::register`], but takes ownership of the key.
     pub fn register_owned(&self, key: K) -> bool {
-        let mut lock = self.started.lock().unwrap();
-        if lock.contains(&key) {
-            return false;
+        let mut lock = self.notifiers.lock().unwrap();
+        if lock.contains_key(&key) {
+            false
+        } else {
+            lock.insert(key, Arc::new(Notify::new()));
+            true
         }
-        lock.insert(key)
     }
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        self.wait_map.insert(key, value);
+        // Remove the notifier from the map.
+        let mut notifiers = self.notifiers.lock().unwrap();
+        let notifier = notifiers.remove(&key).unwrap();
+
+        // Add the result to the map.
+        let mut lock = self.data.lock().unwrap();
+        lock.insert(key, value);
+
+        // Notify all waiters.
+        notifier.notify_waiters();
     }
 
     /// Wait for the result of a job that is running.
@@ -57,19 +74,31 @@ impl<K: Eq + Hash, V> OnceMap<K, V> {
     pub async fn wait<Q: ?Sized + Hash + Eq>(
         &self,
         key: &Q,
-    ) -> Result<Ref<'_, K, V, RandomState>, Error>
+    ) -> Result<V, Error>
     where
         K: Borrow<Q> + for<'a> From<&'a Q>,
     {
-        self.wait_map.wait(key).await.ok_or(Error::Canceled)
+        // Wait for the data to be available.
+        {
+            let lock = self.notifiers.lock().unwrap();
+            if let Some(notifier) = lock.get(key).cloned() {
+                drop(lock);
+                notifier.notified().await;
+            }
+        }
+
+        // Get the data.
+        let lock = self.data.lock().unwrap();
+        lock.get(key).cloned().ok_or(Error::Canceled)
     }
 
     /// Return the result of a previous job, if any.
-    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<Ref<'_, K, V, RandomState>>
+    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
     {
-        self.wait_map.get(key)
+        let lock = self.data.lock().unwrap();
+        lock.get(key).cloned()
     }
 
     /// Cancel all waiting tasks.
@@ -85,6 +114,9 @@ impl<K: Eq + Hash + Clone, V> Default for OnceMap<K, V> {
         Self {
             started: Mutex::new(FxHashSet::default()),
             wait_map: WaitMap::new(),
+            data: Mutex::default(),
+            notifiers: Mutex::default(),
+
         }
     }
 }

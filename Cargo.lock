@@ -1976,6 +1976,7 @@ version = "0.0.1"
 dependencies = [
  "rustc-hash",
  "thiserror",
+ "tokio",
  "waitmap",
 ]
 
