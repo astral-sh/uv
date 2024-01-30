@@ -54,6 +54,20 @@ impl TestContext {
     }
 }
 
+/// Run [`assert_cmd_snapshot!`] with our default filters.
+macro_rules! puffin_snapshot {
+    ($spawnable:expr, @$snapshot:literal) => {{
+        puffin_snapshot!(INSTA_FILTERS.to_vec(), $spawnable, @$snapshot);
+    }};
+    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+        insta::with_settings!({
+            filters => $filters
+        }, {
+            assert_cmd_snapshot!($spawnable, @$snapshot);
+        });
+    }};
+}
+
 /// Resolve a specific version of Django from a `requirements.in` file.
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -61,11 +75,9 @@ fn compile_requirements_in() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
-            .arg("requirements.in"), @r###"
+    puffin_snapshot!(context
+        .command()
+        .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -79,8 +91,7 @@ fn compile_requirements_in() -> Result<()> {
 
         ----- stderr -----
         Resolved 3 packages in [TIME]
-        "###);
-    });
+    "###);
 
     Ok(())
 }
@@ -90,10 +101,7 @@ fn missing_requirements_in() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
@@ -102,8 +110,7 @@ fn missing_requirements_in() -> Result<()> {
     ----- stderr -----
     error: failed to open file `requirements.in`
       Caused by: No such file or directory (os error 2)
-    "###);
-        }
+    "###
     );
 
     requirements_in.assert(predicates::path::missing());
@@ -117,10 +124,7 @@ fn missing_venv() -> Result<()> {
     let cache_dir = TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -135,8 +139,8 @@ fn missing_venv() -> Result<()> {
     ----- stderr -----
     error: failed to open file `requirements.in`
       Caused by: No such file or directory (os error 2)
-    "###);
-    });
+    "###
+    );
 
     venv.assert(predicates::path::missing());
 
@@ -160,10 +164,7 @@ dependencies = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml"), @r###"
         success: true
         exit_code: 0
@@ -178,8 +179,8 @@ dependencies = [
 
         ----- stderr -----
         Resolved 3 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -194,10 +195,7 @@ fn compile_constraints_txt() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -214,8 +212,8 @@ fn compile_constraints_txt() -> Result<()> {
 
         ----- stderr -----
         Resolved 3 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -231,10 +229,7 @@ fn compile_constraints_inline() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -244,8 +239,8 @@ fn compile_constraints_inline() -> Result<()> {
 
         ----- stderr -----
         Resolved 0 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -264,10 +259,7 @@ fn compile_constraints_markers() -> Result<()> {
     constraints_txt.write_str("sniffio==1.2.0;python_version<='3.7'")?;
     constraints_txt.write_str("sniffio==1.3.0;python_version>'3.7'")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -284,8 +276,8 @@ fn compile_constraints_markers() -> Result<()> {
 
         ----- stderr -----
         Resolved 3 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -308,10 +300,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("foo"), @r###"
@@ -328,8 +317,8 @@ optional-dependencies.foo = [
 
         ----- stderr -----
         Resolved 3 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -352,10 +341,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("FRiENDlY-...-_-BARd"), @r###"
@@ -372,8 +358,8 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
 
         ----- stderr -----
         Resolved 3 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -396,10 +382,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("bar"), @r###"
@@ -409,8 +392,8 @@ optional-dependencies.foo = [
 
         ----- stderr -----
         error: Requested extra not found: bar
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -433,10 +416,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("foo")
@@ -450,8 +430,8 @@ optional-dependencies.foo = [
 
         ----- stderr -----
         error: Requested extras not found: bar, foobar
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -463,10 +443,7 @@ fn compile_requirements_file_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--all-extras"),
             @r###"
@@ -476,8 +453,8 @@ fn compile_requirements_file_extra() -> Result<()> {
 
         ----- stderr -----
         error: Requesting extras requires a pyproject.toml input file.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -500,10 +477,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("invalid name!"), @r###"
@@ -515,8 +489,8 @@ optional-dependencies.foo = [
         error: invalid value 'invalid name!' for '--extra <EXTRA>': Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters
 
         For more information, try '--help'.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -528,10 +502,7 @@ fn compile_python_312() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.12"), @r###"
@@ -554,8 +525,8 @@ fn compile_python_312() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -578,10 +549,7 @@ fn compile_python_37() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.7"), @r###"
@@ -597,7 +565,6 @@ fn compile_python_37() -> Result<()> {
               And because you require black==23.10.1, we can conclude that the
               requirements are unsatisfiable.
         "###);
-    });
 
     Ok(())
 }
@@ -609,10 +576,7 @@ fn compile_python_invalid_version() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.7.x"), @r###"
@@ -624,8 +588,8 @@ fn compile_python_invalid_version() -> Result<()> {
         error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': after parsing 3.7, found ".x" after it, which is not part of a valid version
 
         For more information, try '--help'.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -637,10 +601,7 @@ fn compile_python_dev_version() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.7-dev"), @r###"
@@ -652,8 +613,8 @@ fn compile_python_dev_version() -> Result<()> {
         error: invalid value '3.7-dev' for '--python-version <PYTHON_VERSION>': Python version 3.7-dev is a development release
 
         For more information, try '--help'.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -667,10 +628,7 @@ fn compile_numpy_py38() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("numpy")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--no-build"), @r###"
         success: true
@@ -682,8 +640,8 @@ fn compile_numpy_py38() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -695,10 +653,7 @@ fn compile_wheel_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -723,8 +678,8 @@ fn compile_wheel_url_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -738,10 +693,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -766,8 +718,8 @@ fn compile_sdist_url_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -785,10 +737,7 @@ fn compile_git_https_dependency() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -814,7 +763,6 @@ fn compile_git_https_dependency() -> Result<()> {
         ----- stderr -----
         Resolved 7 packages in [TIME]
         "###);
-    });
 
     Ok(())
 }
@@ -827,10 +775,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@1.0.x")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -853,8 +798,8 @@ fn compile_git_branch_https_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -867,10 +812,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -895,8 +837,8 @@ fn compile_git_tag_https_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -911,10 +853,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
         "flask @ git+https://github.com/pallets/flask.git@d92b64aa275841b0c9aea3903aba72fbc4275d91",
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -937,8 +876,8 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -951,10 +890,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@d92b64a")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -977,8 +913,8 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -992,10 +928,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
     requirements_in
         .write_str("flask @ git+https://github.com/pallets/flask.git@refs/pull/5313/head")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1020,8 +953,8 @@ fn compile_git_refs_https_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1034,10 +967,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1048,8 +978,8 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1063,10 +993,7 @@ fn compile_git_concurrent_access() -> Result<()> {
     requirements_in
         .write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1078,8 +1005,8 @@ fn compile_git_concurrent_access() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1093,10 +1020,7 @@ fn compile_git_mismatched_name() -> Result<()> {
     requirements_in
         .write_str("flask @ git+https://github.com/pallets/flask.git@2.0.0\ndask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -1105,8 +1029,8 @@ fn compile_git_mismatched_name() -> Result<()> {
         ----- stderr -----
         error: Failed to download and build: dask @ git+https://github.com/pallets/flask.git@3.0.0
           Caused by: Package metadata name `flask` does not match given name `dask`
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1119,10 +1043,7 @@ fn mixed_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1147,8 +1068,8 @@ fn mixed_url_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1161,10 +1082,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1175,8 +1093,8 @@ fn conflicting_direct_url_dependency() -> Result<()> {
           ╰─▶ Because there is no version of werkzeug==3.0.0 and you require
               werkzeug==3.0.0, we can conclude that the requirements are
               unsatisfiable.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1189,10 +1107,7 @@ fn compatible_direct_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1203,8 +1118,8 @@ fn compatible_direct_url_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1216,10 +1131,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug @ https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1231,8 +1143,8 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
               package `werkzeug`:
               - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
               - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1246,10 +1158,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1261,8 +1170,8 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
               package `werkzeug`:
               - git+https://github.com/pallets/werkzeug.git@2.0.0
               - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1274,10 +1183,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1289,8 +1195,8 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
               is available, we can conclude that flask==3.0.0 cannot be used.
               And because you require flask==3.0.0, we can conclude that the
               requirements are unsatisfiable.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1304,10 +1210,7 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/14078476/transitive_url_dependency.zip")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -1315,8 +1218,8 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
 
         ----- stderr -----
         error: Package `werkzeug` attempted to resolve via URL: git+https://github.com/pallets/werkzeug@2.0.0. URL dependencies must be expressed as direct requirements or constraints. Consider adding `werkzeug @ git+https://github.com/pallets/werkzeug@2.0.0` to your dependencies or constraints file.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1333,10 +1236,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug@2.0.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -1351,8 +1251,8 @@ fn allowed_transitive_url_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1370,10 +1270,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -1388,8 +1285,8 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1415,10 +1312,7 @@ optional-dependencies.bar = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--all-extras"), @r###"
         success: true
@@ -1447,8 +1341,8 @@ optional-dependencies.bar = [
 
         ----- stderr -----
         Resolved 9 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1474,10 +1368,7 @@ optional-dependencies.bar = [
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml")
             .arg("--all-extras")
             .arg("--extra")
@@ -1493,8 +1384,8 @@ optional-dependencies.bar = [
         Usage: puffin pip compile --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> --all-extras <SRC_FILE>...
 
         For more information, try '--help'.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1514,10 +1405,7 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml"), @r###"
         success: false
         exit_code: 1
@@ -1527,8 +1415,8 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
           × No solution found when resolving dependencies:
           ╰─▶ my-project cannot be used because there are conflicting versions for
               `django`: `django==5.0b1` does not intersect with `django==5.0a1`
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1549,10 +1437,7 @@ dependencies = ["django==300.1.4"]
 "#,
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("pyproject.toml"), @r###"
         success: false
         exit_code: 1
@@ -1563,8 +1448,8 @@ dependencies = ["django==300.1.4"]
           ╰─▶ Because there is no version of django==300.1.4 and my-project
               depends on django==300.1.4, we can conclude that the requirements are
               unsatisfiable.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1576,10 +1461,7 @@ fn compile_exclude_newer() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -1600,15 +1482,12 @@ fn compile_exclude_newer() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        // Use a date as input instead.
-        // We interpret a date as including this day
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    // Use a date as input instead.
+    // We interpret a date as including this day
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -1627,14 +1506,11 @@ fn compile_exclude_newer() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-        });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        // Check the error message for invalid datetime
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    // Check the error message for invalid datetime
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -1652,8 +1528,8 @@ fn compile_exclude_newer() -> Result<()> {
         error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': Neither a valid date (trailing input) not a valid datetime (input contains invalid characters)
 
         For more information, try '--help'.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1679,10 +1555,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1708,16 +1581,12 @@ fn compile_wheel_path_dependency() -> Result<()> {
         ----- stderr -----
         Resolved 7 packages in [TIME]
         "###);
-    });
 
     // Run the same operation, but this time with a relative path.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file:flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1742,17 +1611,14 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     // Run the same operation, but this time with a relative path.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file://flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1777,17 +1643,14 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     // Run the same operation, but this time with a relative path.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ ./flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1812,8 +1675,8 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1839,10 +1702,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1868,7 +1728,6 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
         ----- stderr -----
         Resolved 7 packages in [TIME]
         "###);
-    });
 
     Ok(())
 }
@@ -1885,10 +1744,7 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -1897,7 +1753,6 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
         ----- stderr -----
         error: Distribution not found at: file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
         "###);
-    });
 
     Ok(())
 }
@@ -1909,10 +1764,7 @@ fn compile_yanked_version_direct() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("attrs==21.1.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1923,8 +1775,8 @@ fn compile_yanked_version_direct() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1936,10 +1788,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("attrs>20.3.0,<21.2.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1950,8 +1799,8 @@ fn compile_yanked_version_indirect() -> Result<()> {
           ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
               and you require attrs>20.3.0,<21.2.0, we can conclude that the
               requirements are unsatisfiable.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1967,10 +1816,7 @@ fn override_dependency() -> Result<()> {
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("werkzeug==2.3.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--override")
             .arg("overrides.txt"), @r###"
@@ -1997,8 +1843,8 @@ fn override_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2016,10 +1862,7 @@ fn override_multi_dependency() -> Result<()> {
         "tomli>=1.1.0; python_version >= '3.11'\ntomli<1.0.0; python_version < '3.11'",
     )?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--override")
             .arg("overrides.txt"), @r###"
@@ -2044,8 +1887,8 @@ fn override_multi_dependency() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2057,10 +1900,7 @@ fn missing_registry_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black[tensorboard]==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2082,8 +1922,8 @@ fn missing_registry_extra() -> Result<()> {
         ----- stderr -----
         Resolved 6 packages in [TIME]
         warning: The package `black==23.10.1` does not have an extra named `tensorboard`.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2095,10 +1935,7 @@ fn missing_url_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask[tensorboard] @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2124,8 +1961,8 @@ fn missing_url_extra() -> Result<()> {
         ----- stderr -----
         Resolved 7 packages in [TIME]
         warning: The package `flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl` does not have an extra named `tensorboard`.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2138,10 +1975,7 @@ fn preserve_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.PYTHONHOSTED.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2166,8 +2000,8 @@ fn preserve_url() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2186,10 +2020,7 @@ fn preserve_env_var() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file://${PROJECT_ROOT}/flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2214,8 +2045,8 @@ fn preserve_env_var() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2238,10 +2069,7 @@ fn compile_editable() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("compile")
             .arg(requirements_in.path())
@@ -2284,7 +2112,6 @@ fn compile_editable() -> Result<()> {
         Built 3 editables in [TIME]
         Resolved 12 packages in [TIME]
         "###);
-    });
 
     Ok(())
 }
@@ -2325,10 +2152,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
     ];
 
     let check = || {
-        insta::with_settings!({
-            filters => INSTA_FILTERS.to_vec()
-        }, {
-            assert_cmd_snapshot!(context.command()
+        puffin_snapshot!(context.command()
                 .arg("pip")
                 .arg("compile")
                 .arg(requirements_in.path())
@@ -2340,8 +2164,8 @@ fn cache_errors_are_non_fatal() -> Result<()> {
 
             ----- stderr -----
             Resolved 13 packages in [TIME]
-            "###);
-        });
+            "###
+        );
     };
 
     insta::allow_duplicates! {
@@ -2390,10 +2214,7 @@ fn compile_html() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("jinja2<=3.1.2")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -2414,8 +2235,8 @@ fn compile_html() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2427,10 +2248,7 @@ fn trailing_slash() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("jinja2")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://test.pypi.org/simple"), @r###"
@@ -2445,13 +2263,10 @@ fn trailing_slash() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://test.pypi.org/simple/"), @r###"
@@ -2466,8 +2281,8 @@ fn trailing_slash() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2479,10 +2294,7 @@ fn compile_legacy_sdist_pep_517() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2499,8 +2311,8 @@ fn compile_legacy_sdist_pep_517() -> Result<()> {
 
         ----- stderr -----
         Resolved 4 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2512,10 +2324,7 @@ fn compile_legacy_sdist_setuptools() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--legacy-setup-py"), @r###"
         success: true
@@ -2533,8 +2342,8 @@ fn compile_legacy_sdist_setuptools() -> Result<()> {
 
         ----- stderr -----
         Resolved 4 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2546,10 +2355,7 @@ fn generate_hashes() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
         .arg("--generate-hashes"), @r###"
         success: true
@@ -2647,8 +2453,8 @@ fn generate_hashes() -> Result<()> {
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2670,10 +2476,7 @@ fn find_links_directory() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in")
             .arg("--find-links")
             .arg(project_root.join("scripts/wheels/")), @r###"
@@ -2691,7 +2494,6 @@ fn find_links_directory() -> Result<()> {
         ----- stderr -----
         Resolved 4 packages in [TIME]
         "###);
-    });
 
     Ok(())
 }
@@ -2703,10 +2505,7 @@ fn find_links_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
@@ -2720,8 +2519,8 @@ fn find_links_url() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2734,10 +2533,7 @@ fn find_links_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-f https://download.pytorch.org/whl/torch_stable.html\ntqdm")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--emit-find-links"), @r###"
@@ -2752,8 +2548,8 @@ fn find_links_requirements_txt() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2781,10 +2577,7 @@ fn upgrade_none() -> Result<()> {
             # via black
     "})?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt"), @r###"
@@ -2794,8 +2587,8 @@ fn upgrade_none() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     // Read the output requirements, but skip the header.
     let resolution = fs::read_to_string(requirements_txt.path())?
@@ -2844,10 +2637,7 @@ fn upgrade_all() -> Result<()> {
             # via black
     "})?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
@@ -2858,8 +2648,8 @@ fn upgrade_all() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     // Read the output requirements, but skip the header.
     let resolution = fs::read_to_string(requirements_txt.path())?
@@ -2908,10 +2698,7 @@ fn upgrade_package() -> Result<()> {
             # via black
     "})?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
@@ -2923,8 +2710,8 @@ fn upgrade_package() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     // Read the output requirements, but skip the header.
     let resolution = fs::read_to_string(requirements_txt.path())?
@@ -2961,10 +2748,7 @@ fn missing_path_requirement() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -2973,7 +2757,6 @@ fn missing_path_requirement() -> Result<()> {
         ----- stderr -----
         error: Distribution not found at: file:///tmp/django-3.2.8.tar.gz
         "###);
-    });
 
     Ok(())
 }
@@ -2995,10 +2778,7 @@ fn missing_editable_requirement() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect::<Vec<_>>();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(filters, context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -3009,7 +2789,6 @@ fn missing_editable_requirement() -> Result<()> {
           Caused by: Failed to build editable: file://[TEMP_DIR]/django-3.2.8.tar.gz
           Caused by: Source distribution not found at: /[TEMP_DIR]/django-3.2.8.tar.gz
         "###);
-    });
 
     Ok(())
 }
@@ -3021,10 +2800,7 @@ fn missing_package_name() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -3035,8 +2811,8 @@ fn missing_package_name() -> Result<()> {
           Caused by: URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
         https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3048,10 +2824,7 @@ fn no_annotate() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--no-annotate"), @r###"
         success: true
@@ -3068,8 +2841,8 @@ fn no_annotate() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3081,10 +2854,7 @@ fn no_header() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--no-header"), @r###"
         success: true
@@ -3104,8 +2874,8 @@ fn no_header() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3117,10 +2887,7 @@ fn allow_unsafe() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--allow-unsafe"), @r###"
         success: true
@@ -3135,8 +2902,8 @@ fn allow_unsafe() -> Result<()> {
         ----- stderr -----
         warning: pip-compile's `--allow-unsafe` has no effect (Puffin can safely pin `pip` and other packages).
         Resolved 2 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3148,10 +2915,7 @@ fn resolver_legacy() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--resolver=legacy"), @r###"
         success: false
@@ -3160,8 +2924,8 @@ fn resolver_legacy() -> Result<()> {
 
         ----- stderr -----
         error: pip-compile's `--resolver=legacy` is unsupported (Puffin always backtracks).
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3173,10 +2937,7 @@ fn emit_index_urls() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("--extra-index-url")
@@ -3203,8 +2964,8 @@ fn emit_index_urls() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3216,10 +2977,7 @@ fn emit_find_links() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--emit-find-links")
             .arg("--find-links")
@@ -3245,8 +3003,8 @@ fn emit_find_links() -> Result<()> {
 
         ----- stderr -----
         Resolved 6 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3258,10 +3016,7 @@ fn no_index_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("--no-index\ntqdm")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -3269,8 +3024,8 @@ fn no_index_requirements_txt() -> Result<()> {
 
         ----- stderr -----
         error: tqdm isn't available locally, but making network requests to registries was banned.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3283,10 +3038,7 @@ fn index_url_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("--index-url https://google.com\ntqdm")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://pypi.org/simple"), @r###"
@@ -3299,8 +3051,8 @@ fn index_url_requirements_txt() -> Result<()> {
 
         ----- stderr -----
         Resolved 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3315,10 +3067,7 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     let constraints_in = context.temp_dir.child("constraints.in");
     constraints_in.write_str("--index-url https://wikipedia.org\nflask")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(context.command()
+    puffin_snapshot!(context.command()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.in"), @r###"
@@ -3328,8 +3077,8 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
 
         ----- stderr -----
         error: Multiple index URLs specified: `https://google.com/` vs.` https://wikipedia.org/
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
