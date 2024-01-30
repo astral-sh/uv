@@ -1,7 +1,6 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
@@ -86,7 +85,7 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
-                let requirement = Requirement::from_str(name)
+                let requirement = Requirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,

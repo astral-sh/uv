@@ -402,8 +402,8 @@ impl FromStr for Requirement {
 
 impl Requirement {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-    pub fn parse(input: &str, working_dir: Option<&Path>) -> Result<Self, Pep508Error> {
-        parse(&mut Cursor::new(input), working_dir)
+    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
+        parse(&mut Cursor::new(input), Some(working_dir.as_ref()))
     }
 }
 
