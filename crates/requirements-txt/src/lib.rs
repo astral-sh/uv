@@ -574,21 +574,19 @@ fn parse_requirement_and_hashes(
         }
     };
     let requirement =
-        Requirement::parse(&content[start..end], Some(working_dir)).map_err(|err| {
-            match err.message {
-                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                    RequirementsTxtParserError::Pep508 {
-                        source: err,
-                        start,
-                        end,
-                    }
+        Requirement::parse(&content[start..end], working_dir).map_err(|err| match err.message {
+            Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                RequirementsTxtParserError::Pep508 {
+                    source: err,
+                    start,
+                    end,
                 }
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    RequirementsTxtParserError::UnsupportedRequirement {
-                        source: err,
-                        start,
-                        end,
-                    }
+            }
+            Pep508ErrorSource::UnsupportedRequirement(_) => {
+                RequirementsTxtParserError::UnsupportedRequirement {
+                    source: err,
+                    start,
+                    end,
                 }
             }
         })?;
