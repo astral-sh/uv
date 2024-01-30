@@ -26,8 +26,8 @@ use puffin_installer::{
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_normalize::PackageName;
 use puffin_resolver::{
-    InMemoryIndex, Manifest, PreReleaseMode, ResolutionGraph, ResolutionMode, ResolutionOptions,
-    Resolver,
+    InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, ResolutionGraph,
+    ResolutionMode, Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
 use requirements_txt::EditableRequirement;
@@ -151,7 +151,11 @@ pub(crate) async fn pip_install(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
-    let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution_mode)
+        .prerelease_mode(prerelease_mode)
+        .exclude_newer(exclude_newer)
+        .build();
 
     let resolve_dispatch = BuildDispatch::new(
         &client,
@@ -379,7 +383,7 @@ async fn resolve(
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
-    options: ResolutionOptions,
+    options: Options,
     mut printer: Printer,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();

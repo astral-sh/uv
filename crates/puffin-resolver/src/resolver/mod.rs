@@ -50,7 +50,7 @@ pub use crate::resolver::provider::ResolverProvider;
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::version_map::VersionMap;
-use crate::ResolutionOptions;
+use crate::Options;
 
 mod allowed_urls;
 mod index;
@@ -83,7 +83,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         manifest: Manifest,
-        options: ResolutionOptions,
+        options: Options,
         markers: &'a MarkerEnvironment,
         interpreter: &'a Interpreter,
         tags: &'a Tags,
@@ -121,7 +121,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Initialize a new resolver using a user provided backend.
     pub fn new_custom_io(
         manifest: Manifest,
-        options: ResolutionOptions,
+        options: Options,
         markers: &'a MarkerEnvironment,
         python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,

@@ -16,7 +16,7 @@ use puffin_cache::Cache;
 use puffin_client::{FlatIndex, RegistryClient};
 use puffin_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_resolver::{InMemoryIndex, Manifest, ResolutionOptions, Resolver};
+use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -34,7 +34,7 @@ pub struct BuildDispatch<'a> {
     no_build: bool,
     no_binary: &'a NoBinary,
     source_build_context: SourceBuildContext,
-    options: ResolutionOptions,
+    options: Options,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -65,12 +65,12 @@ impl<'a> BuildDispatch<'a> {
             no_build,
             no_binary,
             source_build_context: SourceBuildContext::default(),
-            options: ResolutionOptions::default(),
+            options: Options::default(),
         }
     }
 
     #[must_use]
-    pub fn with_options(mut self, options: ResolutionOptions) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
         self
     }
