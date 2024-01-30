@@ -107,7 +107,7 @@ fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
     // Find the first python of the version we want in the list
     let stdout =
         String::from_utf8(output.stdout.clone()).map_err(|err| Error::PythonSubcommandOutput {
-            message: format!("Running `py --list-paths` stdout isn't UTF-8 encoded: {err}"),
+            message: format!("The stdout of `py --list-paths` isn't UTF-8 encoded: {err}"),
             stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         })?;
@@ -159,18 +159,12 @@ mod tests {
 
     #[test]
     fn no_such_python_version() {
-        assert_snapshot!(format_err(find_requested_python("3.1000")), @r###"
-        Couldn't find `3.1000` in PATH
-          Caused by: cannot find binary path
-        "###);
+        assert_snapshot!(format_err(find_requested_python("3.1000")), @"Couldn't find `3.1000` in PATH. Is this Python version installed?");
     }
 
     #[test]
     fn no_such_python_binary() {
-        assert_display_snapshot!(format_err(find_requested_python("python3.1000")), @r###"
-        Couldn't find `python3.1000` in PATH
-          Caused by: cannot find binary path
-        "###);
+        assert_display_snapshot!(format_err(find_requested_python("python3.1000")), @"Couldn't find `python3.1000` in PATH. Is this Python version installed?");
     }
 
     #[cfg(unix)]

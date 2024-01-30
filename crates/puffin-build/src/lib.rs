@@ -71,7 +71,7 @@ pub enum Error {
     RequirementsInstall(&'static str, #[source] anyhow::Error),
     #[error("Source distribution not found at: {0}")]
     NotFound(PathBuf),
-    #[error("Failed to create temporary virtual environment")]
+    #[error("Failed to create temporary virtualenv")]
     Gourgeist(#[from] gourgeist::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),

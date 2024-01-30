@@ -358,7 +358,7 @@ impl Diagnostic {
     pub fn message(&self) -> String {
         match self {
             Self::IncompletePackage { package, path } => format!(
-                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtual environment, or removing the package directory at: {}.", path.display(),
+                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.", path.display(),
             ),
             Self::IncompatiblePythonVersion {
                 package,
