@@ -1099,3 +1099,48 @@ fn install_executable_hardlink() -> Result<()> {
 
     Ok(())
 }
+
+/// Install a package from the command line into a virtual environment, ignoring its dependencies.
+#[test]
+fn no_deps() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let venv = create_venv_py312(&temp_dir, &cache_dir);
+
+    // Install Flask.
+    insta::with_settings!({
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("Flask")
+            .arg("--no-deps")
+            .arg("--strict")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Downloaded 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + flask==3.0.0
+        warning: The package `flask` requires `werkzeug >=3.0.0`, but it's not installed.
+        warning: The package `flask` requires `jinja2 >=3.1.2`, but it's not installed.
+        warning: The package `flask` requires `itsdangerous >=2.1.2`, but it's not installed.
+        warning: The package `flask` requires `click >=8.1.3`, but it's not installed.
+        warning: The package `flask` requires `blinker >=1.6.2`, but it's not installed.
+        "###);
+    });
+
+    assert_command(&venv, "import flask", &temp_dir).failure();
+
+    Ok(())
+}
