@@ -12,12 +12,9 @@ use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, venv_to_interpreter, BIN_NAME, EXCLUDE_NEWER, INSTA_FILTERS};
 
 mod common;
-
-// Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
     Command::new(venv_to_interpreter(venv))
@@ -1109,7 +1106,7 @@ fn install_executable_hardlink() -> Result<()> {
 fn no_deps() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install Flask.
     insta::with_settings!({

@@ -10,7 +10,7 @@ use url::Url;
 use common::{BIN_NAME, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::venv_to_interpreter;
+use crate::common::{create_venv, venv_to_interpreter};
 
 mod common;
 

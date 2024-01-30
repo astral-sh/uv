@@ -12,7 +12,7 @@ use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use url::Url;
 
-use common::{venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 

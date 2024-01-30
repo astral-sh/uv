@@ -14,50 +14,11 @@ use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use itertools::Itertools;
 use url::Url;
 
-use crate::common::create_venv;
-use common::{BIN_NAME, INSTA_FILTERS};
+use common::{TestContext, BIN_NAME, INSTA_FILTERS};
+
+use crate::common::EXCLUDE_NEWER;
 
 mod common;
-
-// Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
-
-struct TestContext {
-    temp_dir: TempDir,
-    cache_dir: TempDir,
-    venv: PathBuf,
-}
-
-impl TestContext {
-    fn new(python_version: &str) -> Self {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let cache_dir = TempDir::new().expect("");
-        let venv = create_venv(&temp_dir, &cache_dir, python_version);
-        Self {
-            temp_dir,
-            cache_dir,
-            venv,
-        }
-    }
-
-    /// Set shared defaults between tests:
-    /// * Set the current directory to a temporary directory (`temp_dir`).
-    /// * Set the cache dir to a different temporary directory (`cache_dir`).
-    /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
-    /// * Set the venv to a fresh `.venv` in `temp_dir`.
-    fn command(&self) -> Command {
-        let mut cmd = Command::new(get_cargo_bin(BIN_NAME));
-        cmd.arg("pip")
-            .arg("compile")
-            .arg("--cache-dir")
-            .arg(self.cache_dir.path())
-            .arg("--exclude-newer")
-            .arg(EXCLUDE_NEWER)
-            .env("VIRTUAL_ENV", self.venv.as_os_str())
-            .current_dir(self.temp_dir.path());
-        cmd
-    }
-}
 
 /// Run [`assert_cmd_snapshot!`] with our default filters.
 macro_rules! puffin_snapshot {
@@ -81,7 +42,7 @@ fn compile_requirements_in() -> Result<()> {
     requirements_in.write_str("django==5.0b1")?;
 
     puffin_snapshot!(context
-        .command()
+        .compile()
         .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -102,11 +63,11 @@ fn compile_requirements_in() -> Result<()> {
 }
 
 #[test]
-fn missing_requirements_in() -> Result<()> {
+fn missing_requirements_in() {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
@@ -119,8 +80,6 @@ fn missing_requirements_in() -> Result<()> {
     );
 
     requirements_in.assert(predicates::path::missing());
-
-    Ok(())
 }
 
 #[test]
@@ -169,7 +128,7 @@ dependencies = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml"), @r###"
         success: true
         exit_code: 0
@@ -200,7 +159,7 @@ fn compile_constraints_txt() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -234,7 +193,7 @@ fn compile_constraints_inline() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("sqlparse<0.4.4")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -264,7 +223,7 @@ fn compile_constraints_markers() -> Result<()> {
     constraints_txt.write_str("sniffio==1.2.0;python_version<='3.7'")?;
     constraints_txt.write_str("sniffio==1.3.0;python_version>'3.7'")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -305,7 +264,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("foo"), @r###"
@@ -346,7 +305,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("FRiENDlY-...-_-BARd"), @r###"
@@ -387,7 +346,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("bar"), @r###"
@@ -421,7 +380,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("foo")
@@ -448,7 +407,7 @@ fn compile_requirements_file_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("django==5.0b1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--all-extras"),
             @r###"
@@ -482,7 +441,7 @@ optional-dependencies.foo = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("invalid name!"), @r###"
@@ -507,7 +466,7 @@ fn compile_python_312() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.12"), @r###"
@@ -554,7 +513,7 @@ fn compile_python_37() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.7"), @r###"
@@ -581,7 +540,7 @@ fn compile_python_invalid_version() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.7.x"), @r###"
@@ -606,7 +565,7 @@ fn compile_python_dev_version() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--python-version")
             .arg("3.7-dev"), @r###"
@@ -633,7 +592,7 @@ fn compile_numpy_py38() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("numpy")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--no-build"), @r###"
         success: true
@@ -658,7 +617,7 @@ fn compile_wheel_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -698,7 +657,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -742,7 +701,7 @@ fn compile_git_https_dependency() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -780,7 +739,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@1.0.x")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -817,7 +776,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -858,7 +817,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
         "flask @ git+https://github.com/pallets/flask.git@d92b64aa275841b0c9aea3903aba72fbc4275d91",
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -895,7 +854,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git@d92b64a")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -933,7 +892,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
     requirements_in
         .write_str("flask @ git+https://github.com/pallets/flask.git@refs/pull/5313/head")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -972,7 +931,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -998,7 +957,7 @@ fn compile_git_concurrent_access() -> Result<()> {
     requirements_in
         .write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1025,7 +984,7 @@ fn compile_git_mismatched_name() -> Result<()> {
     requirements_in
         .write_str("flask @ git+https://github.com/pallets/flask.git@2.0.0\ndask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -1048,7 +1007,7 @@ fn mixed_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1087,7 +1046,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1112,7 +1071,7 @@ fn compatible_direct_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1136,7 +1095,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug @ https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1163,7 +1122,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1188,7 +1147,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1215,7 +1174,7 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("transitive_url_dependency @ https://github.com/astral-sh/ruff/files/14078476/transitive_url_dependency.zip")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -1241,7 +1200,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug@2.0.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -1275,7 +1234,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
@@ -1317,7 +1276,7 @@ optional-dependencies.bar = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--all-extras"), @r###"
         success: true
@@ -1373,7 +1332,7 @@ optional-dependencies.bar = [
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml")
             .arg("--all-extras")
             .arg("--extra")
@@ -1410,7 +1369,7 @@ dependencies = ["django==5.0b1", "django==5.0a1"]
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml"), @r###"
         success: false
         exit_code: 1
@@ -1442,7 +1401,7 @@ dependencies = ["django==300.1.4"]
 "#,
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("pyproject.toml"), @r###"
         success: false
         exit_code: 1
@@ -1560,7 +1519,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1591,7 +1550,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file:flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1623,7 +1582,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file://flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1655,7 +1614,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ ./flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1707,7 +1666,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1749,7 +1708,7 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -1769,7 +1728,7 @@ fn compile_yanked_version_direct() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("attrs==21.1.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1793,7 +1752,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("attrs>20.3.0,<21.2.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 1
@@ -1821,7 +1780,7 @@ fn override_dependency() -> Result<()> {
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("werkzeug==2.3.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--override")
             .arg("overrides.txt"), @r###"
@@ -1867,7 +1826,7 @@ fn override_multi_dependency() -> Result<()> {
         "tomli>=1.1.0; python_version >= '3.11'\ntomli<1.0.0; python_version < '3.11'",
     )?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--override")
             .arg("overrides.txt"), @r###"
@@ -1905,7 +1864,7 @@ fn missing_registry_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black[tensorboard]==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1940,7 +1899,7 @@ fn missing_url_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask[tensorboard] @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -1980,7 +1939,7 @@ fn preserve_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ https://files.PYTHONHOSTED.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2025,7 +1984,7 @@ fn preserve_env_var() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file://${PROJECT_ROOT}/flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2157,7 +2116,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
     ];
 
     let check = || {
-        puffin_snapshot!(context.command()
+        puffin_snapshot!(context.compile()
                 .arg("pip")
                 .arg("compile")
                 .arg(requirements_in.path())
@@ -2253,7 +2212,7 @@ fn trailing_slash() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("jinja2")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://test.pypi.org/simple"), @r###"
@@ -2271,7 +2230,7 @@ fn trailing_slash() -> Result<()> {
         "###
     );
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://test.pypi.org/simple/"), @r###"
@@ -2299,7 +2258,7 @@ fn compile_legacy_sdist_pep_517() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
@@ -2329,7 +2288,7 @@ fn compile_legacy_sdist_setuptools() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--legacy-setup-py"), @r###"
         success: true
@@ -2360,7 +2319,7 @@ fn generate_hashes() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask==3.0.0")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
         .arg("--generate-hashes"), @r###"
         success: true
@@ -2481,7 +2440,7 @@ fn find_links_directory() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in")
             .arg("--find-links")
             .arg(project_root.join("scripts/wheels/")), @r###"
@@ -2510,7 +2469,7 @@ fn find_links_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
@@ -2538,7 +2497,7 @@ fn find_links_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-f https://download.pytorch.org/whl/torch_stable.html\ntqdm")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--emit-find-links"), @r###"
@@ -2582,7 +2541,7 @@ fn upgrade_none() -> Result<()> {
             # via black
     "})?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt"), @r###"
@@ -2642,7 +2601,7 @@ fn upgrade_all() -> Result<()> {
             # via black
     "})?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
@@ -2703,7 +2662,7 @@ fn upgrade_package() -> Result<()> {
             # via black
     "})?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
@@ -2753,7 +2712,7 @@ fn missing_path_requirement() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -2783,7 +2742,7 @@ fn missing_editable_requirement() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect::<Vec<_>>();
 
-    puffin_snapshot!(filters, context.command()
+    puffin_snapshot!(filters, context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -2805,7 +2764,7 @@ fn missing_package_name() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -2829,7 +2788,7 @@ fn no_annotate() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--no-annotate"), @r###"
         success: true
@@ -2859,7 +2818,7 @@ fn no_header() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--no-header"), @r###"
         success: true
@@ -2892,7 +2851,7 @@ fn allow_unsafe() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--allow-unsafe"), @r###"
         success: true
@@ -2920,7 +2879,7 @@ fn resolver_legacy() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--resolver=legacy"), @r###"
         success: false
@@ -2942,7 +2901,7 @@ fn emit_index_urls() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("--extra-index-url")
@@ -2982,7 +2941,7 @@ fn emit_find_links() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--emit-find-links")
             .arg("--find-links")
@@ -3021,7 +2980,7 @@ fn no_index_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("--no-index\ntqdm")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
         success: false
         exit_code: 2
@@ -3043,7 +3002,7 @@ fn index_url_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("--index-url https://google.com\ntqdm")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://pypi.org/simple"), @r###"
@@ -3072,7 +3031,7 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     let constraints_in = context.temp_dir.child("constraints.in");
     constraints_in.write_str("--index-url https://wikipedia.org\nflask")?;
 
-    puffin_snapshot!(context.command()
+    puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--constraint")
             .arg("constraints.in"), @r###"
