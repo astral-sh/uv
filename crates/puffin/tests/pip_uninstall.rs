@@ -10,7 +10,7 @@ use url::Url;
 use common::{BIN_NAME, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::{create_venv_py312, venv_to_interpreter};
+use crate::common::venv_to_interpreter;
 
 mod common;
 
@@ -245,7 +245,7 @@ dependencies = ["flask==1.0.x"]
 fn uninstall() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -304,7 +304,7 @@ fn uninstall() -> Result<()> {
 fn missing_record() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -385,7 +385,7 @@ fn missing_record() -> Result<()> {
 fn uninstall_editable_by_name() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -453,7 +453,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 fn uninstall_editable_by_path() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -521,7 +521,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 fn uninstall_duplicate_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(

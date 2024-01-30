@@ -12,7 +12,7 @@ use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use url::Url;
 
-use common::{create_venv_py312, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 
 mod common;
 
@@ -98,7 +98,7 @@ fn missing_venv() -> Result<()> {
 fn install() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -143,7 +143,7 @@ fn install() -> Result<()> {
 fn install_copy() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -190,7 +190,7 @@ fn install_copy() -> Result<()> {
 fn install_hardlink() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -237,7 +237,7 @@ fn install_hardlink() -> Result<()> {
 fn install_many() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -278,7 +278,7 @@ fn install_many() -> Result<()> {
 fn noop() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -328,7 +328,7 @@ fn noop() -> Result<()> {
 fn link() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv1 = create_venv_py312(&temp_dir, &cache_dir);
+    let venv1 = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -392,7 +392,7 @@ fn link() -> Result<()> {
 fn add_remove() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -458,7 +458,7 @@ fn add_remove() -> Result<()> {
 fn install_sequential() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -515,7 +515,7 @@ fn install_sequential() -> Result<()> {
 fn upgrade() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -573,7 +573,7 @@ fn upgrade() -> Result<()> {
 fn install_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -616,7 +616,7 @@ fn install_url() -> Result<()> {
 fn install_git_commit() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -659,7 +659,7 @@ fn install_git_commit() -> Result<()> {
 fn install_git_tag() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -702,7 +702,7 @@ fn install_git_tag() -> Result<()> {
 fn install_git_subdirectories() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -747,7 +747,7 @@ fn install_git_subdirectories() -> Result<()> {
 fn install_sdist() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -789,7 +789,7 @@ fn install_sdist() -> Result<()> {
 fn install_sdist_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -832,7 +832,7 @@ fn install_sdist_url() -> Result<()> {
 fn install_url_then_install_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -884,7 +884,7 @@ fn install_url_then_install_url() -> Result<()> {
 fn install_url_then_install_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -940,7 +940,7 @@ fn install_url_then_install_version() -> Result<()> {
 fn install_version_then_install_url() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1053,7 +1053,7 @@ fn install_numpy_py38() -> Result<()> {
 fn install_no_binary() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1093,7 +1093,7 @@ fn install_no_binary() -> Result<()> {
 fn warn_on_yanked_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_in = temp_dir.child("requirements.txt");
     requirements_in.touch()?;
@@ -1134,7 +1134,7 @@ fn warn_on_yanked_version() -> Result<()> {
 fn install_local_wheel() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
@@ -1180,7 +1180,7 @@ fn install_local_wheel() -> Result<()> {
     check_command(&venv, "import tomli", &temp_dir);
 
     // Create a new virtual environment.
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
     insta::with_settings!({
@@ -1208,7 +1208,7 @@ fn install_local_wheel() -> Result<()> {
     check_command(&venv, "import tomli", &temp_dir);
 
     // Create a new virtual environment.
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // "Modify" the wheel.
     // The `filetime` crate works on Windows unlike the std.
@@ -1281,7 +1281,7 @@ fn install_local_wheel() -> Result<()> {
 fn mismatched_version() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
@@ -1332,7 +1332,7 @@ fn mismatched_version() -> Result<()> {
 fn mismatched_name() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
@@ -1383,7 +1383,7 @@ fn mismatched_name() -> Result<()> {
 fn install_local_source_distribution() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Download a source distribution.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
@@ -1444,7 +1444,7 @@ fn install_local_source_distribution() -> Result<()> {
 fn install_ujson() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1495,7 +1495,7 @@ fn install_ujson() -> Result<()> {
 fn install_build_system_no_backend() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1535,7 +1535,7 @@ fn install_build_system_no_backend() -> Result<()> {
 fn install_url_source_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1569,7 +1569,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1597,7 +1597,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1653,7 +1653,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 fn install_git_source_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1687,7 +1687,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1715,7 +1715,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1770,7 +1770,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 fn install_registry_source_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -1804,7 +1804,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1832,7 +1832,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1887,7 +1887,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 fn install_path_source_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Download a source distribution.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
@@ -1934,7 +1934,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => filters.clone()
@@ -1962,7 +1962,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => filters.clone()
@@ -2017,7 +2017,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 fn install_path_built_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
@@ -2064,7 +2064,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => filters.clone()
@@ -2092,7 +2092,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => filters.clone()
@@ -2147,7 +2147,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 fn install_url_built_dist_cached() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2181,7 +2181,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -2209,7 +2209,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -2264,7 +2264,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 fn duplicate_package_overlap() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2300,7 +2300,7 @@ fn duplicate_package_overlap() -> Result<()> {
 fn duplicate_package_disjoint() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2338,7 +2338,7 @@ fn duplicate_package_disjoint() -> Result<()> {
 fn reinstall() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2411,7 +2411,7 @@ fn reinstall() -> Result<()> {
 fn reinstall_package() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2484,7 +2484,7 @@ fn reinstall_package() -> Result<()> {
 fn reinstall_git() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2553,7 +2553,7 @@ fn reinstall_git() -> Result<()> {
 fn refresh() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2590,7 +2590,7 @@ fn refresh() -> Result<()> {
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -2629,7 +2629,7 @@ fn refresh() -> Result<()> {
 fn refresh_package() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -2666,7 +2666,7 @@ fn refresh_package() -> Result<()> {
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&parent, &cache_dir);
+    let venv = create_venv(&parent, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -2706,7 +2706,7 @@ fn refresh_package() -> Result<()> {
 fn sync_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -2866,7 +2866,7 @@ fn sync_editable() -> Result<()> {
 fn sync_editable_and_registry() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -3058,7 +3058,7 @@ fn incompatible_wheel() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let wheel_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let wheel = wheel_dir.child("foo-1.2.3-not-compatible-wheel.whl");
     wheel.touch()?;
@@ -3104,7 +3104,7 @@ fn incompatible_wheel() -> Result<()> {
 fn sync_legacy_sdist_pep_517() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
@@ -3140,7 +3140,7 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
 fn sync_legacy_sdist_setuptools() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_in = temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
@@ -3177,7 +3177,7 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
 fn find_links() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
