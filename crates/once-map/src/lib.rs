@@ -1,3 +1,7 @@
+mod cache;
+
+pub use crate::cache::CacheMap;
+
 use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 

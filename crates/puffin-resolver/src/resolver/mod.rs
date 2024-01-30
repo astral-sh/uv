@@ -217,7 +217,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 resolution.map_err(|err| {
                     // Ensure that any waiting tasks are cancelled prior to accessing any of the
                     // index entries.
-                    self.index.cancel_all();
+                    // self.index.cancel_all();
 
                     // Add version information to improve unsat error messages.
                     if let ResolveError::NoSolution(err) = err {
@@ -497,7 +497,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     // Otherwise, assume this is a source distribution.
                     let dist = PubGrubDistribution::from_url(package_name, url);
                     let entry = self.index.distributions.wait(&dist.package_id()).await?;
-                    let metadata = entry.value();
+                    let metadata = entry;
                     let version = &metadata.version;
                     if range.contains(version) {
                         Ok(Some(version.clone()))
@@ -515,7 +515,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .wait(package_name)
                     .instrument(info_span!("package_wait", %package_name))
                     .await?;
-                let version_map = entry.value();
+                let version_map = entry;
                 self.visited.insert(package_name.clone());
 
                 if let Some(extra) = extra {
@@ -527,7 +527,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a compatible version.
-                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                let Some(candidate) = self.selector.select(package_name, range, &version_map) else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
                     return Ok(None);
                 };
@@ -578,8 +578,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 {
                     let dist = candidate.resolve().dist.clone();
                     request_sink.unbounded_send(Request::Dist(dist))?;
-
-                    drop(entry);
                     tokio::task::yield_now().await;
                 }
 
@@ -663,7 +661,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // If the package is known to be incompatible, return the Python version as an
                 // incompatibility, and skip fetching the metadata.
                 if let Some(entry) = self.incompatibilities.get(&package_id) {
-                    let requires_python = entry.value();
+                    let requires_python = entry;
                     let version = requires_python
                         .iter()
                         .map(PubGrubSpecifier::try_from)
@@ -686,7 +684,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .wait(&package_id)
                     .instrument(info_span!("distributions_wait", %package_id))
                     .await?;
-                let metadata = entry.value();
+                let metadata = entry;
 
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
@@ -720,7 +718,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch(&self, request_stream: UnboundedReceiver<Request>) -> Result<(), ResolveError> {
         let mut response_stream = request_stream
-            .map(|request| self.process_request(request).boxed())
+            .map(|request| self.process_request(request))
             .buffer_unordered(50);
 
         while let Some(response) = response_stream.next().await {
@@ -815,60 +813,58 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
                 let entry = self.index.packages.wait(&package_name).await?;
-                let version_map = entry.value();
-                Ok(None)
-                //
-                // // Try to find a compatible version. If there aren't any compatible versions,
-                // // short-circuit and return `None`.
-                // let Some(candidate) = self.selector.select(&package_name, &range, version_map)
-                // else {
-                //     return Ok(None);
-                // };
-                //
-                // // If the version is incompatible, short-circuit.
-                // if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                //     self.incompatibilities
-                //         .insert(candidate.package_id(), requires_python.clone());
-                //     return Ok(None);
-                // }
-                //
-                // // Emit a request to fetch the metadata for this version.
-                // if self
-                //     .index
-                //     .distributions
-                //     .register_owned(candidate.package_id())
-                // {
-                //     let dist = candidate.resolve().dist.clone();
-                //     drop(entry);
-                //
-                //     let (metadata, precise) = self
-                //         .provider
-                //         .get_or_build_wheel_metadata(&dist)
-                //         .boxed()
-                //         .await
-                //         .map_err(|err| match dist.clone() {
-                //             Dist::Built(BuiltDist::Path(built_dist)) => {
-                //                 ResolveError::Read(Box::new(built_dist), err)
-                //             }
-                //             Dist::Source(SourceDist::Path(source_dist)) => {
-                //                 ResolveError::Build(Box::new(source_dist), err)
-                //             }
-                //             Dist::Built(built_dist) => {
-                //                 ResolveError::Fetch(Box::new(built_dist), err)
-                //             }
-                //             Dist::Source(source_dist) => {
-                //                 ResolveError::FetchAndBuild(Box::new(source_dist), err)
-                //             }
-                //         })?;
-                //
-                //     Ok(Some(Response::Dist {
-                //         dist,
-                //         metadata,
-                //         precise,
-                //     }))
-                // } else {
-                //     Ok(None)
-                // }
+                let version_map = entry;
+
+                // Try to find a compatible version. If there aren't any compatible versions,
+                // short-circuit and return `None`.
+                let Some(candidate) = self.selector.select(&package_name, &range, &version_map)
+                else {
+                    return Ok(None);
+                };
+
+                // If the version is incompatible, short-circuit.
+                if let Some(requires_python) = candidate.validate(&self.python_requirement) {
+                    self.incompatibilities
+                        .insert(candidate.package_id(), requires_python.clone());
+                    return Ok(None);
+                }
+
+                // Emit a request to fetch the metadata for this version.
+                if self
+                    .index
+                    .distributions
+                    .register_owned(candidate.package_id())
+                {
+                    let dist = candidate.resolve().dist.clone();
+
+                    let (metadata, precise) = self
+                        .provider
+                        .get_or_build_wheel_metadata(&dist)
+                        .boxed()
+                        .await
+                        .map_err(|err| match dist.clone() {
+                            Dist::Built(BuiltDist::Path(built_dist)) => {
+                                ResolveError::Read(Box::new(built_dist), err)
+                            }
+                            Dist::Source(SourceDist::Path(source_dist)) => {
+                                ResolveError::Build(Box::new(source_dist), err)
+                            }
+                            Dist::Built(built_dist) => {
+                                ResolveError::Fetch(Box::new(built_dist), err)
+                            }
+                            Dist::Source(source_dist) => {
+                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                            }
+                        })?;
+
+                    Ok(Some(Response::Dist {
+                        dist,
+                        metadata,
+                        precise,
+                    }))
+                } else {
+                    Ok(None)
+                }
             }
         }
     }

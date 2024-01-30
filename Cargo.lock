@@ -1974,8 +1974,10 @@ dependencies = [
 name = "once-map"
 version = "0.0.1"
 dependencies = [
+ "dashmap 5.5.3",
  "rustc-hash",
  "thiserror",
+ "tokio",
  "waitmap",
 ]
 

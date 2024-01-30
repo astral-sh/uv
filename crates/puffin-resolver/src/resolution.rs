@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
-use once_map::OnceMap;
+use once_map::{CacheMap, OnceMap};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::{ExtraName, PackageName};
@@ -42,8 +42,8 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, VersionMap>,
-        distributions: &OnceMap<PackageId, Metadata21>,
+        packages: &CacheMap<PackageName, VersionMap>,
+        distributions: &CacheMap<PackageId, Metadata21>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
         editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
@@ -69,7 +69,7 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index.
                     if let Some(entry) = packages.get(package_name) {
-                        let version_map = entry.value();
+                        let version_map = entry;
                         hashes.insert(package_name.clone(), {
                             let mut hashes = version_map.hashes(version);
                             hashes.sort_unstable();
@@ -95,7 +95,7 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index.
                     if let Some(entry) = packages.get(package_name) {
-                        let version_map = entry.value();
+                        let version_map = entry;
                         hashes.insert(package_name.clone(), {
                             let mut hashes = version_map.hashes(version);
                             hashes.sort_unstable();
@@ -113,7 +113,7 @@ impl ResolutionGraph {
                     let entry = distributions
                         .get(&dist.package_id())
                         .expect("Every package should have metadata");
-                    let metadata = entry.value();
+                    let metadata = entry;
 
                     if !metadata.provides_extras.contains(extra) {
                         let pinned_package = pins
@@ -133,7 +133,7 @@ impl ResolutionGraph {
                     let entry = distributions
                         .get(&dist.package_id())
                         .expect("Every package should have metadata");
-                    let metadata = entry.value();
+                    let metadata = entry;
 
                     if !metadata.provides_extras.contains(extra) {
                         let url = redirects.get(url).map_or_else(
