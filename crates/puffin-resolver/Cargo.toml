@@ -57,7 +57,6 @@ tokio = { workspace = true, features = ["macros"] }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
-waitmap = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]

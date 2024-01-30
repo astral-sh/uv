@@ -215,10 +215,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             }
             resolution = resolve_fut => {
                 resolution.map_err(|err| {
-                    // Ensure that any waiting tasks are cancelled prior to accessing any of the
-                    // index entries.
-                    // self.index.cancel_all();
-
                     // Add version information to improve unsat error messages.
                     if let ResolveError::NoSolution(err) = err {
                         ResolveError::NoSolution(
@@ -399,7 +395,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     priorities.add(package_name.clone());
                     request_sink.unbounded_send(Request::Package(package_name.clone()))?;
 
-                     // Yield after sending on a channel to allow the subscribers to continue.
+                    // Yield, to allow subscribers to continue.
                     tokio::task::yield_now().await;
                 }
             }
@@ -410,7 +406,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     priorities.add(dist.name().clone());
                     request_sink.unbounded_send(Request::Dist(dist))?;
 
-                     // Yield after sending on a channel to allow the subscribers to continue.
+                    // Yield, to allow subscribers to continue.
                     tokio::task::yield_now().await;
                 }
             }
@@ -496,8 +492,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 } else {
                     // Otherwise, assume this is a source distribution.
                     let dist = PubGrubDistribution::from_url(package_name, url);
-                    let entry = self.index.distributions.wait(&dist.package_id()).await?;
-                    let metadata = entry;
+                    let metadata = self.index.distributions.wait(&dist.package_id()).await?;
                     let version = &metadata.version;
                     if range.contains(version) {
                         Ok(Some(version.clone()))
@@ -509,13 +504,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
-                let entry = self
+                let version_map = self
                     .index
                     .packages
                     .wait(package_name)
                     .instrument(info_span!("package_wait", %package_name))
                     .await?;
-                let version_map = entry;
                 self.visited.insert(package_name.clone());
 
                 if let Some(extra) = extra {
@@ -527,7 +521,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a compatible version.
-                let Some(candidate) = self.selector.select(package_name, range, &version_map) else {
+                let Some(candidate) = self.selector.select(package_name, range, &version_map)
+                else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
                     return Ok(None);
                 };
@@ -578,6 +573,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 {
                     let dist = candidate.resolve().dist.clone();
                     request_sink.unbounded_send(Request::Dist(dist))?;
+
+                    // Yield, to allow subscribers to continue.
                     tokio::task::yield_now().await;
                 }
 
@@ -618,7 +615,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink).await?;
+                    self.visit_package(package, priorities, request_sink)
+                        .await?;
                 }
 
                 // Add a dependency on each editable.
@@ -678,13 +676,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Available(constraints));
                 }
 
-                let entry = self
+                let metadata = self
                     .index
                     .distributions
                     .wait(&package_id)
                     .instrument(info_span!("distributions_wait", %package_id))
                     .await?;
-                let metadata = entry;
 
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
@@ -699,7 +696,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink).await?;
+                    self.visit_package(package, priorities, request_sink)
+                        .await?;
                 }
 
                 // If a package has an extra, insert a constraint on the base package.
@@ -762,7 +760,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 None => {}
             }
 
-            // Yield after receiving on a channel to allow the subscribers to continue.
+            // Yield, to allow subscribers to continue.
             tokio::task::yield_now().await;
         }
 
@@ -812,8 +810,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
-                let entry = self.index.packages.wait(&package_name).await?;
-                let version_map = entry;
+                let version_map = self.index.packages.wait(&package_name).await?;
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.

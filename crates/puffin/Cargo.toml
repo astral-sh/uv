@@ -68,7 +68,6 @@ tracing-durations-export = { workspace = true, features = ["plot"], optional = t
 tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
-waitmap = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

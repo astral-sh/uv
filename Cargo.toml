@@ -104,7 +104,6 @@ unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.7.0", default-features = false }
-waitmap = { version = "1.1.0" }
 walkdir = { version = "2.4.0" }
 which = { version = "6.0.0" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

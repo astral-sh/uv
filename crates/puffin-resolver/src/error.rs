@@ -9,7 +9,7 @@ use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use url::Url;
 
 use distribution_types::{BuiltDist, PathBuiltDist, PathSourceDist, SourceDist};
-use once_map::{CacheMap, OnceMap};
+use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::Requirement;
 use puffin_normalize::PackageName;
@@ -169,7 +169,7 @@ impl NoSolutionError {
         mut self,
         python_requirement: &PythonRequirement,
         visited: &DashSet<PackageName>,
-        package_versions: &CacheMap<PackageName, VersionMap>,
+        package_versions: &OnceMap<PackageName, VersionMap>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
@@ -193,8 +193,7 @@ impl NoSolutionError {
                     // these packages, but it's non-deterministic, and omitting them ensures that
                     // we represent the state of the resolver at the time of failure.
                     if visited.contains(name) {
-                        if let Some(entry) = package_versions.get(name) {
-                            let version_map = entry;
+                        if let Some(version_map) = package_versions.get(name) {
                             available_versions.insert(
                                 package.clone(),
                                 version_map

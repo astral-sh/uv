@@ -13,8 +13,6 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-rustc-hash = { workspace = true }
-thiserror = { workspace = true }
-waitmap = { workspace = true }
-tokio = { workspace = true }
 dashmap = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
