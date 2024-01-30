@@ -112,3 +112,19 @@ Two approaches that are reasonably likely to work:
 Hopefully in the future as `#![no_std]` develops, this will get smoother.
 
 Also, sometimes it helps to fiddle with optimization levels.
+
+# Cross compiling from linux
+
+Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your
+package manager to install LLD and add the rustup targets:
+
+```shell
+sudo apt install llvm clang lld
+rustup target add x86_64-pc-windows-msvc
+rustup target add aarch64-pc-windows-msvc
+```
+
+```shell
+cargo +nightly xwin build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
+cargo +nightly xwin build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target aarch64-pc-windows-msvc
+```
