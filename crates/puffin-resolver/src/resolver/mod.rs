@@ -578,6 +578,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 {
                     let dist = candidate.resolve().dist.clone();
                     request_sink.unbounded_send(Request::Dist(dist))?;
+
+                    drop(entry);
+                    tokio::task::yield_now().await;
                 }
 
                 Ok(Some(version))
@@ -760,6 +763,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
                 None => {}
             }
+
+            // Yield after receiving on a channel to allow the subscribers to continue.
+            tokio::task::yield_now().await;
         }
 
         Ok::<(), ResolveError>(())
@@ -810,58 +816,59 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Wait for the package metadata to become available.
                 let entry = self.index.packages.wait(&package_name).await?;
                 let version_map = entry.value();
-
-                // Try to find a compatible version. If there aren't any compatible versions,
-                // short-circuit and return `None`.
-                let Some(candidate) = self.selector.select(&package_name, &range, version_map)
-                else {
-                    return Ok(None);
-                };
-
-                // If the version is incompatible, short-circuit.
-                if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.incompatibilities
-                        .insert(candidate.package_id(), requires_python.clone());
-                    return Ok(None);
-                }
-
-                // Emit a request to fetch the metadata for this version.
-                if self
-                    .index
-                    .distributions
-                    .register_owned(candidate.package_id())
-                {
-                    let dist = candidate.resolve().dist.clone();
-                    drop(entry);
-
-                    let (metadata, precise) = self
-                        .provider
-                        .get_or_build_wheel_metadata(&dist)
-                        .boxed()
-                        .await
-                        .map_err(|err| match dist.clone() {
-                            Dist::Built(BuiltDist::Path(built_dist)) => {
-                                ResolveError::Read(Box::new(built_dist), err)
-                            }
-                            Dist::Source(SourceDist::Path(source_dist)) => {
-                                ResolveError::Build(Box::new(source_dist), err)
-                            }
-                            Dist::Built(built_dist) => {
-                                ResolveError::Fetch(Box::new(built_dist), err)
-                            }
-                            Dist::Source(source_dist) => {
-                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
-                            }
-                        })?;
-
-                    Ok(Some(Response::Dist {
-                        dist,
-                        metadata,
-                        precise,
-                    }))
-                } else {
-                    Ok(None)
-                }
+                Ok(None)
+                //
+                // // Try to find a compatible version. If there aren't any compatible versions,
+                // // short-circuit and return `None`.
+                // let Some(candidate) = self.selector.select(&package_name, &range, version_map)
+                // else {
+                //     return Ok(None);
+                // };
+                //
+                // // If the version is incompatible, short-circuit.
+                // if let Some(requires_python) = candidate.validate(&self.python_requirement) {
+                //     self.incompatibilities
+                //         .insert(candidate.package_id(), requires_python.clone());
+                //     return Ok(None);
+                // }
+                //
+                // // Emit a request to fetch the metadata for this version.
+                // if self
+                //     .index
+                //     .distributions
+                //     .register_owned(candidate.package_id())
+                // {
+                //     let dist = candidate.resolve().dist.clone();
+                //     drop(entry);
+                //
+                //     let (metadata, precise) = self
+                //         .provider
+                //         .get_or_build_wheel_metadata(&dist)
+                //         .boxed()
+                //         .await
+                //         .map_err(|err| match dist.clone() {
+                //             Dist::Built(BuiltDist::Path(built_dist)) => {
+                //                 ResolveError::Read(Box::new(built_dist), err)
+                //             }
+                //             Dist::Source(SourceDist::Path(source_dist)) => {
+                //                 ResolveError::Build(Box::new(source_dist), err)
+                //             }
+                //             Dist::Built(built_dist) => {
+                //                 ResolveError::Fetch(Box::new(built_dist), err)
+                //             }
+                //             Dist::Source(source_dist) => {
+                //                 ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                //             }
+                //         })?;
+                //
+                //     Ok(Some(Response::Dist {
+                //         dist,
+                //         metadata,
+                //         precise,
+                //     }))
+                // } else {
+                //     Ok(None)
+                // }
             }
         }
     }
