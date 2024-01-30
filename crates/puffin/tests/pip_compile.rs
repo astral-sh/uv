@@ -40,6 +40,11 @@ impl TestContext {
         }
     }
 
+    /// Set shared defaults between tests:
+    /// * Set the current directory to a temporary directory (`temp_dir`).
+    /// * Set the cache dir to a different temporary directory (`cache_dir`).
+    /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
+    /// * Set the venv to a fresh `.venv` in `temp_dir`.
     fn command(&self) -> Command {
         let mut cmd = Command::new(get_cargo_bin(BIN_NAME));
         cmd.arg("pip")
