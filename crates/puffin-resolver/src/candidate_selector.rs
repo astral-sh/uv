@@ -11,7 +11,7 @@ use crate::prerelease_mode::PreReleaseStrategy;
 use crate::python_requirement::PythonRequirement;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::VersionMap;
-use crate::{Manifest, ResolutionOptions};
+use crate::{Manifest, Options};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CandidateSelector {
@@ -22,7 +22,7 @@ pub(crate) struct CandidateSelector {
 
 impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
-    pub(crate) fn for_resolution(manifest: &Manifest, options: ResolutionOptions) -> Self {
+    pub(crate) fn for_resolution(manifest: &Manifest, options: Options) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(
                 options.resolution_mode,

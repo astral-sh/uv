@@ -17,7 +17,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
-use puffin_resolver::{InMemoryIndex, Manifest, ResolutionOptions, Resolver};
+use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use puffin_traits::{InFlight, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
@@ -87,7 +87,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let tags = venv.interpreter().tags()?;
     let resolver = Resolver::new(
         Manifest::simple(args.requirements.clone()),
-        ResolutionOptions::default(),
+        Options::default(),
         venv.interpreter().markers(),
         venv.interpreter(),
         tags,

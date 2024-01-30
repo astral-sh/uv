@@ -27,8 +27,8 @@ use puffin_installer::{Downloader, NoBinary};
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{
-    DisplayResolutionGraph, InMemoryIndex, Manifest, PreReleaseMode, ResolutionMode,
-    ResolutionOptions, Resolver,
+    DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
+    ResolutionMode, Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
 use puffin_warnings::warn_user;
@@ -207,7 +207,12 @@ pub(crate) async fn pip_compile(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
-    let options = ResolutionOptions::new(resolution_mode, prerelease_mode, exclude_newer);
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution_mode)
+        .prerelease_mode(prerelease_mode)
+        .exclude_newer(exclude_newer)
+        .build();
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
