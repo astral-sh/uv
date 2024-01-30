@@ -20,7 +20,7 @@ license = "MIT OR Apache-2.0"
 anstream = { version = "0.6.5" }
 anyhow = { version = "1.0.79" }
 async-compression = { version = "0.4.6" }
-async_http_range_reader = { git = "https://github.com/baszalmstra/async_http_range_reader", rev = "8dab2c08ac864fec1df014465264f9a7c8eae905" }
+async_http_range_reader = { version = "0.5.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
 base64 = { version = "0.21.7" }
 cachedir = { version = "0.3.1" }
