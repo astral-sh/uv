@@ -1,19 +1,20 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::{fs, iter};
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta_cmd::_macro_support::insta;
-use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use insta_cmd::get_cargo_bin;
 use url::Url;
 
-use common::{create_venv, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, puffin_snapshot, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
+
+use crate::common::TestContext;
 
 mod common;
 
@@ -28,23 +29,28 @@ fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
         .success();
 }
 
-#[test]
-fn missing_requirements_txt() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let requirements_txt = temp_dir.child("requirements.txt");
+/// Create a `pip sync` command with options shared across scenarios.
+fn command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_cargo_bin(BIN_NAME));
+    command
+        .arg("pip")
+        .arg("sync")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+    command
+}
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .current_dir(&temp_dir), @r###"
+#[test]
+fn missing_requirements_txt() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -53,11 +59,8 @@ fn missing_requirements_txt() -> Result<()> {
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###);
-    });
 
     requirements_txt.assert(predicates::path::missing());
-
-    Ok(())
 }
 
 #[test]
@@ -66,18 +69,15 @@ fn missing_venv() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("sync")
+        .arg("requirements.txt")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -86,7 +86,6 @@ fn missing_venv() -> Result<()> {
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###);
-    });
 
     venv.assert(predicates::path::missing());
 
@@ -97,26 +96,15 @@ fn missing_venv() -> Result<()> {
 /// this using `clone` semantics.)
 #[test]
 fn install() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -126,15 +114,15 @@ fn install() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     // Removing the cache shouldn't invalidate the virtual environment.
-    fs::remove_dir_all(cache_dir.path())?;
+    fs::remove_dir_all(context.cache_dir.path())?;
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     Ok(())
 }
@@ -142,28 +130,17 @@ fn install() -> Result<()> {
 /// Install a package into a virtual environment using copy semantics.
 #[test]
 fn install_copy() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--link-mode")
-            .arg("copy")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("copy")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -173,15 +150,15 @@ fn install_copy() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     // Removing the cache shouldn't invalidate the virtual environment.
-    fs::remove_dir_all(cache_dir.path())?;
+    fs::remove_dir_all(context.cache_dir.path())?;
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     Ok(())
 }
@@ -189,28 +166,17 @@ fn install_copy() -> Result<()> {
 /// Install a package into a virtual environment using hardlink semantics.
 #[test]
 fn install_hardlink() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--link-mode")
-            .arg("hardlink")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -220,15 +186,15 @@ fn install_hardlink() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     // Removing the cache shouldn't invalidate the virtual environment.
-    fs::remove_dir_all(cache_dir.path())?;
+    fs::remove_dir_all(context.cache_dir.path())?;
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     Ok(())
 }
@@ -236,26 +202,15 @@ fn install_hardlink() -> Result<()> {
 /// Install multiple packages into a virtual environment.
 #[test]
 fn install_many() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -266,10 +221,12 @@ fn install_many() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe; import tomli", &cache_dir);
+    context
+        .assert_command("import markupsafe; import tomli")
+        .success();
 
     Ok(())
 }
@@ -277,48 +234,31 @@ fn install_many() -> Result<()> {
 /// Attempt to install an already-installed package into a virtual environment.
 #[test]
 fn noop() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Audited 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     Ok(())
 }
@@ -327,11 +267,10 @@ fn noop() -> Result<()> {
 /// virtual environment.
 #[test]
 fn link() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv1 = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
+    let venv1 = &context.venv;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
@@ -341,37 +280,34 @@ fn link() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .arg("--cache-dir")
-        .arg(cache_dir.path())
+        .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv1.as_os_str())
-        .current_dir(&temp_dir)
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
-    let venv2 = temp_dir.child(".venv2");
+    let venv2 = context.temp_dir.child(".venv2");
     Command::new(get_cargo_bin(BIN_NAME))
         .arg("venv")
         .arg(venv2.as_os_str())
         .arg("--cache-dir")
-        .arg(cache_dir.path())
+        .arg(context.cache_dir.path())
         .arg("--python")
         .arg("3.12")
-        .current_dir(&temp_dir)
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
     venv2.assert(predicates::path::is_dir());
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv2.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("sync")
+        .arg("requirements.txt")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv2.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -379,10 +315,10 @@ fn link() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv2, "import markupsafe", &temp_dir);
+    check_command(&venv2, "import markupsafe", &context.temp_dir);
 
     Ok(())
 }
@@ -391,42 +327,25 @@ fn link() -> Result<()> {
 /// different requirements file.
 #[test]
 fn add_remove() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -438,17 +357,11 @@ fn add_remove() -> Result<()> {
         Installed 1 package in [TIME]
          - markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
-
-    Command::new(venv_to_interpreter(&venv))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
+    context.assert_command("import tomli").success();
+    context.assert_command("import markupsafe").failure();
 
     Ok(())
 }
@@ -457,42 +370,25 @@ fn add_remove() -> Result<()> {
 /// virtual environment.
 #[test]
 fn install_sequential() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -502,10 +398,12 @@ fn install_sequential() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe; import tomli", &cache_dir);
+    context
+        .assert_command("import markupsafe; import tomli")
+        .success();
 
     Ok(())
 }
@@ -514,42 +412,25 @@ fn install_sequential() -> Result<()> {
 /// virtual environment.
 #[test]
 fn upgrade() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.0")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -561,10 +442,10 @@ fn upgrade() -> Result<()> {
         Installed 1 package in [TIME]
          - tomli==2.0.0
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -572,28 +453,15 @@ fn upgrade() -> Result<()> {
 /// Install a package into a virtual environment from a URL.
 #[test]
 fn install_url() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -603,10 +471,10 @@ fn install_url() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -615,28 +483,15 @@ fn install_url() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_commit() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -646,10 +501,10 @@ fn install_git_commit() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -658,28 +513,15 @@ fn install_git_commit() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_tag() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -689,10 +531,10 @@ fn install_git_tag() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@2.0.0)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -701,28 +543,15 @@ fn install_git_tag() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_subdirectories() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -733,12 +562,12 @@ fn install_git_subdirectories() -> Result<()> {
         Installed 2 packages in [TIME]
          + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
          + example-pkg-b==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import example_pkg", &temp_dir);
-    check_command(&venv, "import example_pkg.a", &temp_dir);
-    check_command(&venv, "import example_pkg.b", &temp_dir);
+    context.assert_command("import example_pkg").success();
+    context.assert_command("import example_pkg.a").success();
+    context.assert_command("import example_pkg.b").success();
 
     Ok(())
 }
@@ -746,28 +575,15 @@ fn install_git_subdirectories() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("Werkzeug==0.9.6")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -777,10 +593,10 @@ fn install_sdist() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==0.9.6
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -788,28 +604,15 @@ fn install_sdist() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist_url() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("Werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -819,10 +622,10 @@ fn install_sdist_url() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==0.9.6 (from https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -831,50 +634,31 @@ fn install_sdist_url() -> Result<()> {
 /// should be a no-op.
 #[test]
 fn install_url_then_install_url() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Audited 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -883,54 +667,35 @@ fn install_url_then_install_url() -> Result<()> {
 /// URL-based version, but doesn't right now.
 #[test]
 fn install_url_then_install_version() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Audited 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -939,44 +704,25 @@ fn install_url_then_install_version() -> Result<()> {
 /// should remove the registry-based version.
 #[test]
 fn install_version_then_install_url() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("pip")
-        .arg("sync")
+    command(&context)
         .arg("requirements.txt")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => vec![
-            (r"(\d|\.)+(ms|s)", "[TIME]"),
-        ]
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -988,10 +734,10 @@ fn install_version_then_install_url() -> Result<()> {
         Installed 1 package in [TIME]
          - werkzeug==2.0.0
          + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -1000,38 +746,15 @@ fn install_version_then_install_url() -> Result<()> {
 /// incompatible sdist <https://github.com/astral-sh/puffin/issues/388>
 #[test]
 fn install_numpy_py38() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
+    let context = TestContext::new("3.8");
 
-    Command::new(get_cargo_bin(BIN_NAME))
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--python")
-        .arg("3.8")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(&temp_dir)
-        .assert()
-        .success();
-    venv.assert(predicates::path::is_dir());
-
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("numpy")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1041,10 +764,10 @@ fn install_numpy_py38() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + numpy==1.24.4
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import numpy", &temp_dir);
+    context.assert_command("import numpy").success();
 
     Ok(())
 }
@@ -1052,27 +775,16 @@ fn install_numpy_py38() -> Result<()> {
 /// Install a package without using pre-built wheels.
 #[test]
 fn install_no_binary() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--no-binary")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-binary")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1082,38 +794,27 @@ fn install_no_binary() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
+    context.assert_command("import markupsafe").success();
 
     Ok(())
 }
 
 #[test]
 fn warn_on_yanked_version() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_in = temp_dir.child("requirements.txt");
+    let requirements_in = context.temp_dir.child("requirements.txt");
     requirements_in.touch()?;
 
     // This version is yanked.
     requirements_in.write_str("colorama==0.4.2")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1124,8 +825,8 @@ fn warn_on_yanked_version() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + colorama==0.4.2
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1133,39 +834,29 @@ fn warn_on_yanked_version() -> Result<()> {
 /// Resolve a local wheel.
 #[test]
 fn install_local_wheel() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
-    let archive = temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    let mut archive_file = std::fs::File::create(&archive)?;
+    let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
+    let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "tomli @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1175,27 +866,19 @@ fn install_local_wheel() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import tomli").success();
 
     // Create a new virtual environment.
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
     // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1203,31 +886,23 @@ fn install_local_wheel() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import tomli").success();
 
     // Create a new virtual environment.
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
     // "Modify" the wheel.
     // The `filetime` crate works on Windows unlike the std.
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall. The wheel should be "downloaded" again.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1237,27 +912,18 @@ fn install_local_wheel() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import tomli").success();
 
     // "Modify" the wheel.
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall into the same virtual environment. The wheel should be reinstalled.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1269,10 +935,10 @@ fn install_local_wheel() -> Result<()> {
         Installed 1 package in [TIME]
          - tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -1280,39 +946,29 @@ fn install_local_wheel() -> Result<()> {
 /// Install a wheel whose actual version doesn't match the version encoded in the filename.
 #[test]
 fn mismatched_version() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
-    let archive = temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    let mut archive_file = std::fs::File::create(&archive)?;
+    let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
+    let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "tomli @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
@@ -1322,8 +978,8 @@ fn mismatched_version() -> Result<()> {
         Downloaded 1 package in [TIME]
         error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
           Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1331,39 +987,29 @@ fn mismatched_version() -> Result<()> {
 /// Install a wheel whose actual name doesn't match the name encoded in the filename.
 #[test]
 fn mismatched_name() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
-    let archive = temp_dir.child("foo-2.0.1-py3-none-any.whl");
-    let mut archive_file = std::fs::File::create(&archive)?;
+    let archive = context.temp_dir.child("foo-2.0.1-py3-none-any.whl");
+    let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "tomli @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
@@ -1373,8 +1019,8 @@ fn mismatched_name() -> Result<()> {
         Downloaded 1 package in [TIME]
         error: Failed to install: foo-2.0.1-py3-none-any.whl (foo==2.0.1 (from file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl))
           Caused by: Wheel package name does not match filename: tomli != foo
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -1382,39 +1028,29 @@ fn mismatched_name() -> Result<()> {
 /// Install a local source distribution.
 #[test]
 fn install_local_source_distribution() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     // Download a source distribution.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
-    let archive = temp_dir.child("wheel-0.42.0.tar.gz");
-    let mut archive_file = std::fs::File::create(&archive)?;
+    let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
+    let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "wheel @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1424,10 +1060,10 @@ fn install_local_source_distribution() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import wheel", &temp_dir);
+    context.assert_command("import wheel").success();
 
     Ok(())
 }
@@ -1443,26 +1079,15 @@ fn install_local_source_distribution() -> Result<()> {
 /// default build backend.
 #[test]
 fn install_ujson() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1472,10 +1097,10 @@ fn install_ujson() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + ujson==5.7.0 (from https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import ujson", &temp_dir);
+    context.assert_command("import ujson").success();
 
     Ok(())
 }
@@ -1494,26 +1119,15 @@ fn install_ujson() -> Result<()> {
 /// The example is based `DTLSSocket==0.1.16`
 #[test]
 fn install_build_system_no_backend() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1523,10 +1137,12 @@ fn install_build_system_no_backend() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + build-system-no-backend==0.1.0 (from https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import build_system_no_backend", &temp_dir);
+    context
+        .assert_command("import build_system_no_backend")
+        .success();
 
     Ok(())
 }
@@ -1534,26 +1150,15 @@ fn install_build_system_no_backend() -> Result<()> {
 /// Check that we show the right messages on cached, direct URL source distribution installs.
 #[test]
 fn install_url_source_dist_cached() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1563,27 +1168,19 @@ fn install_url_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    context.assert_command("import tqdm").success();
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1591,46 +1188,35 @@ fn install_url_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    context.assert_command("import tqdm").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("clean")
-            .arg("tqdm")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("clean")
+        .arg("tqdm")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Removed 126 files for tqdm ([SIZE])
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1640,10 +1226,10 @@ fn install_url_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    context.assert_command("import tqdm").success();
 
     Ok(())
 }
@@ -1652,26 +1238,15 @@ fn install_url_source_dist_cached() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_source_dist_cached() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1681,27 +1256,19 @@ fn install_git_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1709,46 +1276,35 @@ fn install_git_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    check_command(&venv, "import werkzeug", &context.temp_dir);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("clean")
-            .arg("werkzeug")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("clean")
+        .arg("werkzeug")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Removed 3 files for werkzeug ([SIZE])
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1758,10 +1314,10 @@ fn install_git_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -1769,26 +1325,15 @@ fn install_git_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, registry source distribution installs.
 #[test]
 fn install_registry_source_dist_cached() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("future==0.18.3")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1798,27 +1343,19 @@ fn install_registry_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + future==0.18.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import future", &temp_dir);
+    context.assert_command("import future").success();
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1826,46 +1363,35 @@ fn install_registry_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + future==0.18.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import future", &temp_dir);
+    context.assert_command("import future").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("clean")
-            .arg("future")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("clean")
+        .arg("future")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Removed 616 files for future ([SIZE])
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1875,10 +1401,10 @@ fn install_registry_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + future==0.18.3
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import future", &temp_dir);
+    context.assert_command("import future").success();
 
     Ok(())
 }
@@ -1886,39 +1412,29 @@ fn install_registry_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, local source distribution installs.
 #[test]
 fn install_path_source_dist_cached() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     // Download a source distribution.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
-    let archive = temp_dir.child("wheel-0.42.0.tar.gz");
-    let mut archive_file = std::fs::File::create(&archive)?;
+    let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
+    let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "wheel @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1928,27 +1444,19 @@ fn install_path_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import wheel", &temp_dir);
+    context.assert_command("import wheel").success();
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1956,46 +1464,35 @@ fn install_path_source_dist_cached() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import wheel", &temp_dir);
+    context.assert_command("import wheel").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("clean")
-            .arg("wheel")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("clean")
+        .arg("wheel")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Removed 4 files for wheel ([SIZE])
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2005,10 +1502,10 @@ fn install_path_source_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import wheel", &temp_dir);
+    context.assert_command("import wheel").success();
 
     Ok(())
 }
@@ -2016,39 +1513,29 @@ fn install_path_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, local source distribution installs.
 #[test]
 fn install_path_built_dist_cached() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     // Download a wheel.
     let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
-    let archive = temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    let mut archive_file = std::fs::File::create(&archive)?;
+    let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
+    let mut archive_file = fs_err::File::create(archive.path())?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "tomli @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2058,27 +1545,19 @@ fn install_path_built_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import tomli").success();
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2086,46 +1565,35 @@ fn install_path_built_dist_cached() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
     check_command(&venv, "import tomli", &parent);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("clean")
-            .arg("tomli")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("clean")
+        .arg("tomli")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Removed 1 file for tomli ([SIZE])
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2135,10 +1603,10 @@ fn install_path_built_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tomli", &temp_dir);
+    check_command(&venv, "import tomli", &context.temp_dir);
 
     Ok(())
 }
@@ -2146,26 +1614,15 @@ fn install_path_built_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, direct URL built distribution installs.
 #[test]
 fn install_url_built_dist_cached() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2175,27 +1632,19 @@ fn install_url_built_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    context.assert_command("import tqdm").success();
 
     // Re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2203,46 +1652,35 @@ fn install_url_built_dist_cached() -> Result<()> {
         ----- stderr -----
         Installed 1 package in [TIME]
          + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    check_command(&venv, "import tqdm", &context.temp_dir);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("clean")
-            .arg("tqdm")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("clean")
+        .arg("tqdm")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Removed 2 files for tqdm ([SIZE])
-        "###);
-    });
+        "###
+    );
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2252,10 +1690,10 @@ fn install_url_built_dist_cached() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import tqdm", &temp_dir);
+    check_command(&venv, "import tqdm", &context.temp_dir);
 
     Ok(())
 }
@@ -2263,26 +1701,15 @@ fn install_url_built_dist_cached() -> Result<()> {
 /// Verify that fail with an appropriate error when a package is repeated.
 #[test]
 fn duplicate_package_overlap() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
@@ -2290,8 +1717,8 @@ fn duplicate_package_overlap() -> Result<()> {
         ----- stderr -----
         error: Failed to determine installation plan
           Caused by: Detected duplicate package in requirements: markupsafe
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2299,26 +1726,15 @@ fn duplicate_package_overlap() -> Result<()> {
 /// Verify that allow duplicate packages when they are disjoint.
 #[test]
 fn duplicate_package_disjoint() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2 ; python_version < '3.6'")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2328,8 +1744,8 @@ fn duplicate_package_disjoint() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + markupsafe==2.1.3
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -2337,26 +1753,15 @@ fn duplicate_package_disjoint() -> Result<()> {
 /// Verify that we can force reinstall of packages.
 #[test]
 fn reinstall() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2367,26 +1772,17 @@ fn reinstall() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     // Re-run the installation with `--reinstall`.
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--reinstall")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2398,11 +1794,11 @@ fn reinstall() -> Result<()> {
          + markupsafe==2.1.3
          - tomli==2.0.1
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -2410,26 +1806,15 @@ fn reinstall() -> Result<()> {
 /// Verify that we can force reinstall of selective packages.
 #[test]
 fn reinstall_package() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2440,27 +1825,18 @@ fn reinstall_package() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     // Re-run the installation with `--reinstall`.
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--reinstall-package")
-            .arg("tomli")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall-package")
+        .arg("tomli")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2470,11 +1846,11 @@ fn reinstall_package() -> Result<()> {
         Installed 1 package in [TIME]
          - tomli==2.0.1
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -2483,26 +1859,15 @@ fn reinstall_package() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn reinstall_git() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2512,26 +1877,17 @@ fn reinstall_git() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     // Re-run the installation with `--reinstall`.
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--reinstall-package")
-            .arg("WerkZeug")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall-package")
+        .arg("WerkZeug")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2541,10 +1897,10 @@ fn reinstall_git() -> Result<()> {
         Installed 1 package in [TIME]
          - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
          + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import werkzeug", &temp_dir);
+    context.assert_command("import werkzeug").success();
 
     Ok(())
 }
@@ -2552,26 +1908,15 @@ fn reinstall_git() -> Result<()> {
 /// Verify that we can force refresh of cached data.
 #[test]
 fn refresh() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2582,30 +1927,22 @@ fn refresh() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--refresh")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--refresh")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2616,11 +1953,11 @@ fn refresh() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    check_command(&venv, "import markupsafe", &context.temp_dir);
+    check_command(&venv, "import tomli", &context.temp_dir);
 
     Ok(())
 }
@@ -2628,26 +1965,15 @@ fn refresh() -> Result<()> {
 /// Verify that we can force refresh of selective packages.
 #[test]
 fn refresh_package() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2658,31 +1984,23 @@ fn refresh_package() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
     let parent = assert_fs::TempDir::new()?;
-    let venv = create_venv(&parent, &cache_dir, "3.12");
+    let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--refresh-package")
-            .arg("tomli")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--refresh-package")
+        .arg("tomli")
+        .arg("--strict")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2693,11 +2011,11 @@ fn refresh_package() -> Result<()> {
         Installed 2 packages in [TIME]
          + markupsafe==2.1.3
          + tomli==2.0.1
-        "###);
-    });
+        "###
+    );
 
-    check_command(&venv, "import markupsafe", &temp_dir);
-    check_command(&venv, "import tomli", &temp_dir);
+    context.assert_command("import markupsafe").success();
+    context.assert_command("import tomli").success();
 
     Ok(())
 }
@@ -2705,9 +2023,7 @@ fn refresh_package() -> Result<()> {
 #[test]
 #[cfg(feature = "maturin")]
 fn sync_editable() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -2719,7 +2035,7 @@ fn sync_editable() -> Result<()> {
             .unwrap(),
     );
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
         boltons==23.1.1
         -e ../../scripts/editable-installs/maturin_editable
@@ -2745,18 +2061,15 @@ fn sync_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable packages.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("sync")
+        .arg(requirements_txt.path())
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2770,24 +2083,21 @@ fn sync_editable() -> Result<()> {
          + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable)
          + numpy==1.26.2
          + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###);
-    });
+        "###
+    );
 
     // Reinstall the editable packages.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--reinstall-package")
-            .arg("poetry-editable")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("sync")
+        .arg(requirements_txt.path())
+        .arg("--reinstall-package")
+        .arg("poetry-editable")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2798,8 +2108,8 @@ fn sync_editable() -> Result<()> {
         Installed 1 package in [TIME]
          - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
          + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###);
-    });
+        "###
+    );
 
     // Make sure we have the right base case.
     let python_source_file =
@@ -2811,13 +2121,13 @@ fn sync_editable() -> Result<()> {
    "};
     fs_err::write(python_source_file, python_version_1)?;
 
-    let command = indoc::indoc! {r#"
+    let check_installed = indoc::indoc! {r#"
         from maturin_editable import sum_as_string, version
 
         assert version == 1, version
         assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
    "#};
-    check_command(&venv, command, &temp_dir);
+    context.assert_command(check_installed).success();
 
     // Edit the sources.
     let python_version_2 = indoc::indoc! {r"
@@ -2827,47 +2137,42 @@ fn sync_editable() -> Result<()> {
    "};
     fs_err::write(python_source_file, python_version_2)?;
 
-    let command = indoc::indoc! {r#"
+    let check_installed = indoc::indoc! {r#"
         from maturin_editable import sum_as_string, version
         from pathlib import Path
 
         assert version == 2, version
         assert sum_as_string(1, 2) == "3", sum_as_string(1, 2)
    "#};
-    check_command(&venv, command, &temp_dir);
+    context.assert_command(check_installed).success();
 
     // Don't create a git diff.
     fs_err::write(python_source_file, python_version_1)?;
 
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("sync")
+        .arg(requirements_txt.path())
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Audited 4 packages in [TIME]
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
 
 #[test]
 fn sync_editable_and_registry() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -2880,7 +2185,7 @@ fn sync_editable_and_registry() -> Result<()> {
     );
 
     // Install the registry-based version of Black.
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
         black==24.1.0
         "
@@ -2895,18 +2200,15 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(requirements_txt.path())
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2921,12 +2223,12 @@ fn sync_editable_and_registry() -> Result<()> {
         warning: The package `black` requires `packaging >=22.0`, but it's not installed.
         warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
         warning: The package `black` requires `platformdirs >=2`, but it's not installed.
-        "###);
-    });
+        "###
+    );
 
     // Install the editable version of Black. This should remove the registry-based version.
     // Use the `file:` syntax for extra coverage.
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
         -e file:../../scripts/editable-installs/black_editable
         "
@@ -2941,18 +2243,15 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(requirements_txt.path())
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -2963,12 +2262,12 @@ fn sync_editable_and_registry() -> Result<()> {
         Installed 1 package in [TIME]
          - black==24.1.0
          + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
-        "###);
-    });
+        "###
+    );
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
         black
         "
@@ -2983,29 +2282,26 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(requirements_txt.path())
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Audited 1 package in [TIME]
-        "###);
-    });
+        "###
+    );
 
     // Re-install Black at a specific version. This should replace the editable version.
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
         black==23.10.0
         "
@@ -3020,18 +2316,15 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("sync")
-            .arg(requirements_txt.path())
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(requirements_txt.path())
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -3048,23 +2341,21 @@ fn sync_editable_and_registry() -> Result<()> {
         warning: The package `black` requires `packaging >=22.0`, but it's not installed.
         warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
         warning: The package `black` requires `platformdirs >=2`, but it's not installed.
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
 
 #[test]
 fn incompatible_wheel() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
+    let context = TestContext::new("3.12");
     let wheel_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let wheel = wheel_dir.child("foo-1.2.3-not-compatible-wheel.whl");
     wheel.touch()?;
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "foo @ {}",
         Url::from_file_path(wheel.path()).unwrap()
@@ -3077,22 +2368,14 @@ fn incompatible_wheel() -> Result<()> {
             .normalized_display()
             .to_string(),
     );
-    let filters: Vec<_> = iter::once((wheel_dir.as_str(), "[TEMP_DIR]"))
+    let filters: Vec<_> = [(wheel_dir.as_str(), "[TEMP_DIR]")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--strict")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
@@ -3100,8 +2383,8 @@ fn incompatible_wheel() -> Result<()> {
         ----- stderr -----
         error: Failed to determine installation plan
           Caused by: A path dependency is incompatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3109,24 +2392,13 @@ fn incompatible_wheel() -> Result<()> {
 /// Install a project without a `pyproject.toml`, using the PEP 517 build backend (default).
 #[test]
 fn sync_legacy_sdist_pep_517() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_in = temp_dir.child("requirements.in");
+    let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.in")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -3136,8 +2408,8 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3145,25 +2417,14 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
 /// Install a project without a `pyproject.toml`, using `setuptools` directly.
 #[test]
 fn sync_legacy_sdist_setuptools() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_in = temp_dir.child("requirements.in");
+    let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.in")
-            .arg("--legacy-setup-py")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--legacy-setup-py"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -3173,8 +2434,8 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
         Downloaded 1 package in [TIME]
         Installed 1 package in [TIME]
          + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }
@@ -3182,11 +2443,9 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
 /// Sync using `--find-links` with a local directory.
 #[test]
 fn find_links() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
         markupsafe==2.1.3
         numpy==1.26.3
@@ -3196,23 +2455,15 @@ fn find_links() -> Result<()> {
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
     let project_root_string = regex::escape(&project_root.normalized_display().to_string());
-    let filters: Vec<_> = iter::once((project_root_string.as_str(), "[PROJECT_ROOT]"))
+    let filters: Vec<_> = [(project_root_string.as_str(), "[PROJECT_ROOT]")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("sync")
-            .arg("requirements.txt")
-            .arg("--find-links")
-            .arg(project_root.join("scripts/wheels/"))
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
+    puffin_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--find-links")
+        .arg(project_root.join("scripts/wheels/")), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -3225,8 +2476,8 @@ fn find_links() -> Result<()> {
          + numpy==1.26.3
          + tqdm==1000.0.0
          + werkzeug==3.0.1 (from https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl)
-        "###);
-    });
+        "###
+    );
 
     Ok(())
 }

@@ -9,7 +9,6 @@ use assert_fs::prelude::*;
 use assert_fs::TempDir;
 use indoc::indoc;
 use insta::assert_snapshot;
-use insta_cmd::_macro_support::insta;
 use insta_cmd::get_cargo_bin;
 use itertools::Itertools;
 use url::Url;
