@@ -574,6 +574,197 @@ class Poetry(Suite):
         )
 
 
+class Pdm(Suite):
+    def __init__(self, path: str | None = None) -> None:
+        self.name = path or "pdm"
+        self.path = path or "pdm"
+
+    def setup(self, requirements_file: str, *, cwd: str) -> None:
+        """Initialize a PDM project from a requirements file."""
+        import tomli
+        import tomli_w
+        from packaging.requirements import Requirement
+
+        # Parse all dependencies from the requirements file.
+        with open(requirements_file) as fp:
+            requirements = [
+                Requirement(line)
+                for line in fp
+                if not line.lstrip().startswith("#") and len(line.strip()) > 0
+            ]
+
+        # Create a PDM project.
+        subprocess.check_call(
+            [self.path, "init", "--non-interactive", "--python", "3.10"],
+            cwd=cwd,
+        )
+
+        # Parse the pyproject.toml.
+        with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
+            pyproject = tomli.load(fp)
+
+        # Add the dependencies to the pyproject.toml.
+        pyproject["project"]["dependencies"] = [
+            str(requirement) for requirement in requirements
+        ]
+
+        with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
+            tomli_w.dump(pyproject, fp)
+
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        cache_dir = os.path.join(cwd, "cache", "pdm")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=f"rm -rf {cache_dir} && rm -rf {pdm_lock} && {self.path} config cache_dir {cache_dir}",
+            command=[
+                self.path,
+                "lock",
+                "--project",
+                cwd,
+            ],
+        )
+
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        cache_dir = os.path.join(cwd, "cache", "pdm")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=f"rm -rf {pdm_lock} && {self.path} config cache_dir {cache_dir}",
+            command=[
+                self.path,
+                "lock",
+                "--project",
+                cwd,
+            ],
+        )
+
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
+        import tomli
+        import tomli_w
+
+        self.setup(requirements_file, cwd=cwd)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+
+        # Run a resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+
+        # Add a dependency to the requirements file.
+        with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
+            pyproject = tomli.load(fp)
+
+        # Add the dependencies to the pyproject.toml.
+        pyproject["project"]["dependencies"] += [INCREMENTAL_REQUIREMENT]
+
+        with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
+            tomli_w.dump(pyproject, fp)
+
+        # Store the baseline lock file.
+        baseline = os.path.join(cwd, "baseline.lock")
+        shutil.copyfile(pdm_lock, baseline)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        cache_dir = os.path.join(cwd, "cache", "pdm")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
+            prepare=f"rm -f {pdm_lock} && cp {baseline} {pdm_lock} && {self.path} config cache_dir {cache_dir}",
+            command=[
+                self.path,
+                "lock",
+                "--update-reuse",
+                "--project",
+                cwd,
+            ],
+        )
+
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+
+        # Run a resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+
+        venv_dir = os.path.join(cwd, ".venv")
+        cache_dir = os.path.join(cwd, "cache", "pdm")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=(
+                f"rm -rf {cache_dir} && "
+                f"{self.path} config cache_dir {cache_dir} && "
+                f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+            ),
+            command=[
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "sync",
+                "--project",
+                cwd,
+            ],
+        )
+
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+
+        # Run a resolution, to ensure that the lock file exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+
+        venv_dir = os.path.join(cwd, ".venv")
+        cache_dir = os.path.join(cwd, "cache", "pdm")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=(
+                f"{self.path} config cache_dir {cache_dir} && "
+                f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+            ),
+            command=[
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "sync",
+                "--project",
+                cwd,
+            ],
+        )
+
+
 class Puffin(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a Puffin benchmark."""
@@ -727,9 +918,7 @@ def main():
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Print verbose output."
     )
-    parser.add_argument(
-        "--json", action="store_true", help="Export results to JSON."
-    )
+    parser.add_argument("--json", action="store_true", help="Export results to JSON.")
     parser.add_argument(
         "--warmup",
         type=int,
@@ -766,6 +955,11 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--pdm",
+        help="Whether to benchmark PDM (requires PDM to be installed).",
+        action="store_true",
+    )
+    parser.add_argument(
         "--puffin",
         help="Whether to benchmark Puffin (assumes a Puffin binary exists at `./target/release/puffin`).",
         action="store_true",
@@ -786,6 +980,12 @@ def main():
         "--poetry-path",
         type=str,
         help="Path(s) to the Poetry binary to benchmark.",
+        action="append",
+    )
+    parser.add_argument(
+        "--pdm-path",
+        type=str,
+        help="Path(s) to the PDM binary to benchmark.",
         action="append",
     )
     parser.add_argument(
@@ -819,6 +1019,8 @@ def main():
         suites.append(PipCompile())
     if args.poetry:
         suites.append(Poetry())
+    if args.pdm:
+        suites.append(Pdm())
     if args.puffin:
         suites.append(Puffin())
     for path in args.pip_sync_path or []:
@@ -827,6 +1029,8 @@ def main():
         suites.append(PipCompile(path=path))
     for path in args.poetry_path or []:
         suites.append(Poetry(path=path))
+    for path in args.pdm_path or []:
+        suites.append(Pdm(path=path))
     for path in args.puffin_path or []:
         suites.append(Puffin(path=path))
 
