@@ -23,13 +23,15 @@ pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
     // but we assume we're running over a single benchmark here.)
     for result in &mut results.results {
         if result.command.starts_with("puffin") {
-            result.command = "puffin".into();
+            result.command = "Puffin".into();
         } else if result.command.starts_with("pip-compile") {
             result.command = "pip-compile".into();
         } else if result.command.starts_with("pip-sync") {
             result.command = "pip-sync".into();
         } else if result.command.starts_with("poetry") {
-            result.command = "poetry".into();
+            result.command = "Poetry".into();
+        } else if result.command.starts_with("pdm") {
+            result.command = "PDM".into();
         } else {
             return Err(anyhow!("unknown command: {}", result.command));
         }
