@@ -72,6 +72,33 @@ jobs:
           source .env
           cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
+  macos:
+    runs-on:
+      labels: macos-14
+    name: "cargo test | macos"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install bootstrap dependencies"
+        run: |
+          brew install coreutils
+      - name: "Install required Python versions"
+        run: |
+          scripts/bootstrap/install.sh
+      - name: "Install Rust toolchain"
+        run: rustup show
+      - uses: rui314/setup-mold@v1
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Tests"
+        run: |
+          source .env
+          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+
   # TODO(konstin): Merge with the cargo-test job once the tests pass
   windows:
     runs-on: windows-latest-large
