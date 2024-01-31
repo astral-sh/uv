@@ -10,29 +10,15 @@ use assert_fs::TempDir;
 use indoc::indoc;
 use insta::assert_snapshot;
 use insta_cmd::_macro_support::insta;
-use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use insta_cmd::get_cargo_bin;
 use itertools::Itertools;
 use url::Url;
 
-use common::{TestContext, BIN_NAME, INSTA_FILTERS};
+use common::{puffin_snapshot, TestContext, BIN_NAME, INSTA_FILTERS};
 
 use crate::common::EXCLUDE_NEWER;
 
 mod common;
-
-/// Run [`assert_cmd_snapshot!`] with our default filters.
-macro_rules! puffin_snapshot {
-    ($spawnable:expr, @$snapshot:literal) => {{
-        puffin_snapshot!(INSTA_FILTERS.to_vec(), $spawnable, @$snapshot);
-    }};
-    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
-        insta::with_settings!({
-            filters => $filters
-        }, {
-            assert_cmd_snapshot!($spawnable, @$snapshot);
-        });
-    }};
-}
 
 /// Resolve a specific version of Django from a `requirements.in` file.
 #[test]
