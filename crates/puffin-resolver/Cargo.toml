@@ -67,5 +67,6 @@ once_cell = { version = "1.19.0" }
 insta = { version = "1.34.0" }
 
 [features]
+default = ["pypi"]
 # Introduces a dependency on PyPI.
 pypi = []

@@ -70,7 +70,7 @@ jobs:
       - name: "Tests"
         run: |
           source .env
-          cargo nextest run --all --all-features --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
   # TODO(konstin): Merge with the cargo-test job once the tests pass
   windows:
