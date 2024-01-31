@@ -360,6 +360,8 @@ class Poetry(Suite):
                 "3.12",
             ],
             cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         # Parse the pyproject.toml.
@@ -597,6 +599,8 @@ class Pdm(Suite):
         subprocess.check_call(
             [self.path, "init", "--non-interactive", "--python", "3.12"],
             cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         # Parse the pyproject.toml.
