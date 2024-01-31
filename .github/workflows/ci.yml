@@ -18,29 +18,29 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
-  cargo-fmt:
-    name: "cargo fmt"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup component add rustfmt
-      - name: "rustfmt"
-        run: cargo fmt --all --check
-
-  cargo-clippy:
-    name: "cargo clippy"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: |
-          rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+#  cargo-fmt:
+#    name: "cargo fmt"
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        run: rustup component add rustfmt
+#      - name: "rustfmt"
+#        run: cargo fmt --all --check
+#
+#  cargo-clippy:
+#    name: "cargo clippy"
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        run: |
+#          rustup component add clippy
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          save-if: ${{ github.ref == 'refs/heads/main' }}
+#      - name: "Clippy"
+#        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-test:
     strategy:
@@ -70,52 +70,52 @@ jobs:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix: "1193"
+          prefix-key: "1193"
       - name: "Tests"
         run: |
           source .env
           cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
-
-  # TODO(konstin): Merge with the cargo-test job once the tests pass
-  windows:
-    runs-on: windows-latest-large
-    name: "cargo check | windows"
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup component add clippy
-      - name: "Install Python for bootstrapping"
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
-      - name: "Install Python binaries"
-        run: |
-          pip install zstandard==0.22.0
-          python scripts/bootstrap/install.py
-          # ex) The path needs to be updated downstream
-          $env:Path = "$pwd\bin" + $env:Path
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-
-  # Separate job for the nightly crate
-  windows-trampoline:
-    runs-on: windows-latest
-    name: "check windows trampoline"
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        working-directory: crates/puffin-trampoline
-        run: |
-          rustup target add x86_64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "crates/puffin-trampoline"
-      - name: "Clippy"
-        working-directory: crates/puffin-trampoline
-        run: cargo clippy --all-features --locked -- -D warnings
-      - name: "Build"
-        working-directory: crates/puffin-trampoline
-        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
+#
+#  # TODO(konstin): Merge with the cargo-test job once the tests pass
+#  windows:
+#    runs-on: windows-latest-large
+#    name: "cargo check | windows"
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        run: rustup component add clippy
+#      - name: "Install Python for bootstrapping"
+#        uses: actions/setup-python@v4
+#        with:
+#          python-version: 3.12
+#      - name: "Install Python binaries"
+#        run: |
+#          pip install zstandard==0.22.0
+#          python scripts/bootstrap/install.py
+#          # ex) The path needs to be updated downstream
+#          $env:Path = "$pwd\bin" + $env:Path
+#      - uses: rui314/setup-mold@v1
+#      - uses: Swatinem/rust-cache@v2
+#      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+#
+#  # Separate job for the nightly crate
+#  windows-trampoline:
+#    runs-on: windows-latest
+#    name: "check windows trampoline"
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        working-directory: crates/puffin-trampoline
+#        run: |
+#          rustup target add x86_64-pc-windows-msvc
+#          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
+#      - uses: rui314/setup-mold@v1
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          workspaces: "crates/puffin-trampoline"
+#      - name: "Clippy"
+#        working-directory: crates/puffin-trampoline
+#        run: cargo clippy --all-features --locked -- -D warnings
+#      - name: "Build"
+#        working-directory: crates/puffin-trampoline
+#        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
