@@ -101,7 +101,7 @@ Puffin's `requirements.txt` files may not be portable across platforms and Pytho
 ### Python discovery
 
 Puffin itself does not depend on Python, but it does need to locate a Python environment to (1)
-install dependencies into the environment, and (2) build source distributions.
+install dependencies into the environment and (2) build source distributions.
 
 When running `pip sync` or `pip install`, Puffin will search for a virtual environment in the
 following order:
@@ -119,7 +119,22 @@ Python interpreter in the following order:
 - An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
 - An activated Conda environment based on the `CONDA_PREFIX` environment variable.
 - A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
-- The Python interpreter available as `python3` on the system path (preferring, e.g., `python3.7` if `--python-version=3.7` is specified).
+- The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
+
+If a `--python-version` is provided to `pip compile` (e.g., `--python-version=3.7`), Puffin will
+search for a Python interpreter matching that version in the following order:
+
+- An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
+- An activated Conda environment based on the `CONDA_PREFIX` environment variable.
+- A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
+- The Python interpreter available as, e.g., `python3.7` on macOS and Linux. On Windows, Puffin
+  will use the same mechanism as `py --list-paths` to discover all available Python interpreters,
+  and will select the first interpreter matching the requested version.
+- The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
+
+Since Puffin has no dependency on Python, it can even install into virtual environments other than
+its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause Puffin to install into
+`/path/to/venv`, no matter where Puffin is installed.
 
 ### Dependency caching
 
