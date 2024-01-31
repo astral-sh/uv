@@ -1,7 +1,17 @@
 /*!
 Defines some helpers for use with `rkyv`.
 
-Principally, we define our own implementation of the `Serializer` trait.
+# Owned archived type
+
+Typical usage patterns with rkyv involve using an `&Archived<T>`, where values
+of that type are cast from a `&[u8]`. The owned archive type in this module
+effectively provides a way to use `Archive<T>` without needing to worry about
+the lifetime of the buffer it's attached to. This works by making the owned
+archive type own the buffer itself.
+
+# Custom serializer
+
+This module provides our own implementation of the `Serializer` trait.
 This involves a fair bit of boiler plate, but it was largely copied from
 `CompositeSerializer`. (Indeed, our serializer wraps a `CompositeSerializer`.)
 
@@ -17,15 +27,156 @@ fail.
 use std::convert::Infallible;
 
 use rkyv::{
+    de::deserializers::SharedDeserializeMap,
     ser::serializers::{
-        AlignedSerializer, AllocScratch, AllocScratchError, AllocSerializer, CompositeSerializer,
+        AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer,
         CompositeSerializerError, FallbackScratch, HeapScratch, SharedSerializeMap,
         SharedSerializeMapError,
     },
     util::AlignedVec,
-    Archive, ArchiveUnsized, Fallible,
+    validation::validators::DefaultValidator,
+    Archive, ArchiveUnsized, CheckBytes, Deserialize, Fallible, Serialize,
 };
 
+use crate::{Error, ErrorKind};
+
+/// An owned archived type.
+///
+/// This type is effectively an owned version of `Archived<A>`. Normally, when
+/// one gets an archived type from a buffer, the archive type is bound to the
+/// lifetime of the buffer. This effectively provides a home for that buffer so
+/// that one can pass around an archived type as if it were owned.
+///
+/// Constructing the type requires validating the bytes are a valid
+/// representation of an `Archived<A>`, but subsequent accesses (via deref) are
+/// free.
+///
+/// Note that this type makes a number of assumptions about the specific
+/// serializer, deserializer and validator used. This type could be made
+/// more generic, but it's not clear we need that in puffin. By making our
+/// choices concrete here, we make use of this type much simpler to understand.
+/// Unfortunately, AG couldn't find a way of making the trait bounds simpler,
+/// so if `OwnedVec` is being used in trait implementations, the traits bounds
+/// will likely need to be copied from here.
+#[derive(Debug)]
+pub struct OwnedArchive<A> {
+    raw: rkyv::util::AlignedVec,
+    archive: std::marker::PhantomData<A>,
+}
+
+impl<A> OwnedArchive<A>
+where
+    A: Archive + Serialize<Serializer<4096>>,
+    A::Archived: (for<'a> CheckBytes<DefaultValidator<'a>>) + Deserialize<A, SharedDeserializeMap>,
+{
+    /// Create a new owned archived value from the raw aligned bytes of the
+    /// serialized representation of an `A`.
+    ///
+    /// # Errors
+    ///
+    /// If the bytes fail validation (e.g., contains unaligned pointers or
+    /// strings aren't valid UTF-8), then this returns an error.
+    pub fn new(raw: rkyv::util::AlignedVec) -> Result<OwnedArchive<A>, Error> {
+        // We convert the error to a simple string because... the error type
+        // does not implement Send. And I don't think we really need to keep
+        // the error type around anyway.
+        let _ = rkyv::validation::validators::check_archived_root::<A>(&raw)
+            .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
+        Ok(OwnedArchive {
+            raw,
+            archive: std::marker::PhantomData,
+        })
+    }
+
+    /// Like `OwnedArchive::new`, but reads the value from the given reader.
+    ///
+    /// Note that this consumes the entirety of the given reader.
+    ///
+    /// # Errors
+    ///
+    /// If the bytes fail validation (e.g., contains unaligned pointers or
+    /// strings aren't valid UTF-8), then this returns an error.
+    pub fn from_reader<R: std::io::Read>(mut rdr: R) -> Result<OwnedArchive<A>, Error> {
+        let mut buf = rkyv::util::AlignedVec::with_capacity(1024);
+        buf.extend_from_reader(&mut rdr).map_err(ErrorKind::Io)?;
+        OwnedArchive::new(buf)
+    }
+
+    /// Creates an owned archive value from the unarchived value.
+    ///
+    /// # Errors
+    ///
+    /// This can fail if creating an archive for the given type fails.
+    /// Currently, this, at minimum, includes cases where an `A` contains a
+    /// `PathBuf` that is not valid UTF-8.
+    pub fn from_unarchived(unarchived: &A) -> Result<OwnedArchive<A>, Error> {
+        use rkyv::ser::Serializer;
+
+        let mut serializer = crate::rkyvutil::Serializer::<4096>::default();
+        serializer
+            .serialize_value(unarchived)
+            .map_err(ErrorKind::ArchiveWrite)?;
+        let raw = serializer.into_serializer().into_inner();
+        Ok(OwnedArchive {
+            raw,
+            archive: std::marker::PhantomData,
+        })
+    }
+
+    /// Write the underlying bytes of this archived value to the given writer.
+    ///
+    /// Note that because this type has a `Deref` impl, this method requires
+    /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
+    /// `OwnedValue::write(&o, wtr)`.
+    ///
+    /// # Errors
+    ///
+    /// Any failures from writing are returned to the caller.
+    pub fn write<W: std::io::Write>(this: &OwnedArchive<A>, mut wtr: W) -> Result<(), Error> {
+        Ok(wtr.write_all(&this.raw).map_err(ErrorKind::Io)?)
+    }
+
+    /// Returns the raw underlying bytes of this owned archive value.
+    ///
+    /// They are guaranteed to be a valid serialization of `Archived<A>`.
+    ///
+    /// Note that because this type has a `Deref` impl, this method requires
+    /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
+    /// `OwnedValue::as_bytes(&o)`.
+    pub fn as_bytes(this: &OwnedArchive<A>) -> &[u8] {
+        &this.raw
+    }
+
+    /// Deserialize this owned archived value into the original
+    /// `SimpleMetadata`.
+    ///
+    /// Note that because this type has a `Deref` impl, this method requires
+    /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
+    /// `OwnedValue::deserialize(&o)`.
+    pub fn deserialize(this: &OwnedArchive<A>) -> A {
+        (**this)
+            .deserialize(&mut SharedDeserializeMap::new())
+            .expect("valid archive must deserialize correctly")
+    }
+}
+
+impl<A> std::ops::Deref for OwnedArchive<A>
+where
+    A: Archive + Serialize<Serializer<4096>>,
+    A::Archived: (for<'a> CheckBytes<DefaultValidator<'a>>) + Deserialize<A, SharedDeserializeMap>,
+{
+    type Target = A::Archived;
+
+    fn deref(&self) -> &A::Archived {
+        // SAFETY: We've validated that our underlying buffer is a valid
+        // archive for SimpleMetadata in the constructor, so we can skip
+        // validation here. Since we don't mutate the buffer, this conversion
+        // is guaranteed to be correct.
+        unsafe { rkyv::archived_root::<A>(&self.raw) }
+    }
+}
+
+#[derive(Default)]
 pub struct Serializer<const N: usize> {
     composite: CompositeSerializer<
         AlignedSerializer<AlignedVec>,
@@ -35,12 +186,7 @@ pub struct Serializer<const N: usize> {
 }
 
 impl<const N: usize> Serializer<N> {
-    pub fn new() -> Serializer<N> {
-        let composite = AllocSerializer::<N>::default();
-        Serializer { composite }
-    }
-
-    pub fn into_serializer(self) -> AlignedSerializer<AlignedVec> {
+    fn into_serializer(self) -> AlignedSerializer<AlignedVec> {
         self.composite.into_serializer()
     }
 }
