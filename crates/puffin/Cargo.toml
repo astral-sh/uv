@@ -89,7 +89,7 @@ regex = { version = "1.10.3" }
 reqwest = { version = "0.11.23", features = ["blocking", "rustls"], default-features = false }
 
 [features]
-default = ["flate2/zlib-ng"]
+default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin"]
 # Introduces a dependency on a local Python installation.
 python = []
 # Introduces a dependency on PyPI.
