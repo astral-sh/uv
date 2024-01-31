@@ -31,7 +31,7 @@ Benchmarking dependency resolution (e.g., `puffin pip compile`) with a cold cach
 equivalent to running `puffin pip compile` on a new machine or in CI (assuming that the package
 manager cache is not shared across runs).
 
-![](https://github.com/astral-sh/ruff/assets/1309177/aab99181-e54e-4bdb-9ce6-15b018ef8466)
+![](https://github.com/astral-sh/ruff/assets/1309177/a6075ebc-bb8f-46db-a3b4-14ee5f713565)
 
 ## Warm Installation
 
@@ -39,7 +39,7 @@ Benchmarking package installation (e.g., `puffin pip sync`) with a warm cache. T
 to removing and recreating a virtual environment, and then populating it with dependencies that
 you've installed previously on the same machine.
 
-![](https://github.com/astral-sh/ruff/assets/1309177/aab99181-e54e-4bdb-9ce6-15b018ef8466)
+![](https://github.com/astral-sh/ruff/assets/1309177/6ceea7aa-4813-4ea8-8c95-b8013d702cf4)
 
 ## Cold Installation
 
@@ -47,7 +47,7 @@ Benchmarking package installation (e.g., `puffin pip sync`) with a cold cache. T
 to running `puffin pip sync` on a new machine or in CI (assuming that the package manager cache is
 not shared across runs).
 
-![](https://github.com/astral-sh/ruff/assets/1309177/aab99181-e54e-4bdb-9ce6-15b018ef8466)
+![](https://github.com/astral-sh/ruff/assets/1309177/c960d6fd-ec34-467e-9aa2-d4e6713abed0)
 
 ## Reproduction
 
@@ -55,14 +55,28 @@ All benchmarks were generated using the `scripts/bench/__main__.py` script, whic
 [`hyperfine`](https://github.com/sharkdp/hyperfine) to facilitate benchmarking Puffin
 against a variety of other tools.
 
-For example, to benchmark Puffin's warm resolution against pip-compile:
+For example, to benchmark Puffin's resolution against pip-compile and Poetry:
 
 ```shell
 python -m scripts.bench \
     --puffin \
+    --poetry \
     --pip-compile \
     --benchmark resolve-warm \
-    scripts/requirements/black.in
+    scripts/requirements/trio.in \
+    --json
+```
+
+To benchmark Puffin's installation against pip-sync and Poetry:
+
+```shell
+python -m scripts.bench \
+    --puffin \
+    --poetry \
+    --pip-sync \
+    --benchmark resolve-warm \
+    scripts/requirements/compiled/trio.txt \
+    --json
 ```
 
 The benchmark script itself has a several requirements:
@@ -74,7 +88,10 @@ The benchmark script itself has a several requirements:
 After running the benchmark script, you can generate the corresponding graph via:
 
 ```shell
-cargo run -p puffin-dev render-benchmarks results.json --title "Warm Resolution"
+cargo run -p puffin-dev render-benchmarks resolve-warm.json --title "Warm Resolution"
+cargo run -p puffin-dev render-benchmarks resolve-cold.json --title "Cold Resolution"
+cargo run -p puffin-dev render-benchmarks install-warm.json --title "Warm Installation"
+cargo run -p puffin-dev render-benchmarks install-cold.json --title "Cold Installation"
 ```
 
 ## Acknowledgements
