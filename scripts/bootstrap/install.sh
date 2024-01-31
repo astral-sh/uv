@@ -80,7 +80,10 @@ link_executables() {
 }
 
 # Read requested versions into an array
-readarray -t versions < "$versions_file"
+versions=()
+while IFS= read -r version; do
+    versions+=("$version")
+done < "$versions_file"
 
 # Install each version
 for version in "${versions[@]}"; do
@@ -94,7 +97,6 @@ for version in "${versions[@]}"; do
         echo "Updated executables for python$version"
         continue
     fi
-
 
     url=$(jq --arg key "$key" '.[$key] | .url' -r < "$versions_metadata")
 
