@@ -6,6 +6,19 @@ use console::{style, Key, Term};
 /// This is a slimmed-down version of [`dialoguer::Confirm`], with the post-confirmation report
 /// enabled.
 pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool> {
+    ctrlc::set_handler(move || {
+        let term = Term::stderr();
+        term.show_cursor().ok();
+        term.flush().ok();
+
+        #[allow(clippy::exit, clippy::cast_possible_wrap)]
+        std::process::exit(if cfg!(windows) {
+            0xC000_013A_u32 as i32
+        } else {
+            130
+        });
+    })?;
+
     let prompt = format!(
         "{} {} {} {} {}",
         style("?".to_string()).for_stderr().yellow(),
