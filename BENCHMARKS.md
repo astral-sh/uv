@@ -7,31 +7,17 @@ All benchmarks were computed on macOS, and come with a few important caveats:
   capabilities. (For example, Puffin uses reflinking on macOS, and hardlinking on Linux.)
 - Benchmark performance may vary dramatically depending on the set of packages being installed.
   For example, a resolution that requires building a single intensive source distribution may appear
-  very similar across tools, since the bottleneck is tool-agnostic. This document benchmarks against
-  Trio's dependencies, as a representative example of a realistic real-world project.
-- Unlike Poetry, Puffin and pip-tools do not generate multi-platform lockfiles. As such, Poetry is
-  (by design) doing significantly more work than the other tools in the benchmarks. Poetry is
-  included for completeness, as many projects may not _need_ a multi-platform lockfile. However,
-  it's critical to understand that benchmarking resolution against Poetry is an unfair comparison.
-  (Benchmarking installation, however, _is_ a fair comparison.)
+  very similar across tools, since the bottleneck is tool-agnostic.
+- Unlike Poetry, both Puffin and pip-tools do _not_ generate multi-platform lockfiles. As such,
+  Poetry is (by design) doing significantly more work than other tools in the resolution benchmarks.
+  Poetry is included for completeness, as many projects may not _need_ a multi-platform lockfile.
+  However, it's critical to understand that benchmarking Puffin's resolution time against Poetry is
+  an unfair comparison. (Benchmarking installation, however, _is_ a fair comparison.)
+
+This document benchmarks against Trio's `docs-requirements.in`, as a representative example of a
+real-world project.
 
 In each case, a smaller bar (i.e., lower) is better.
-
-## Warm Resolution
-
-Benchmarking dependency resolution (e.g., `puffin pip compile`) with a warm cache, but no existing
-lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
-from a `requirements.in` file.
-
-![](https://github.com/astral-sh/ruff/assets/1309177/aab99181-e54e-4bdb-9ce6-15b018ef8466)
-
-## Cold Resolution
-
-Benchmarking dependency resolution (e.g., `puffin pip compile`) with a cold cache. This is
-equivalent to running `puffin pip compile` on a new machine or in CI (assuming that the package
-manager cache is not shared across runs).
-
-![](https://github.com/astral-sh/ruff/assets/1309177/a6075ebc-bb8f-46db-a3b4-14ee5f713565)
 
 ## Warm Installation
 
@@ -49,13 +35,35 @@ not shared across runs).
 
 ![](https://github.com/astral-sh/ruff/assets/1309177/c960d6fd-ec34-467e-9aa2-d4e6713abed0)
 
+## Warm Resolution
+
+Benchmarking dependency resolution (e.g., `puffin pip compile`) with a warm cache, but no existing
+lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
+from a `requirements.in` file.
+
+![](https://github.com/astral-sh/ruff/assets/1309177/aab99181-e54e-4bdb-9ce6-15b018ef8466)
+
+## Cold Resolution
+
+Benchmarking dependency resolution (e.g., `puffin pip compile`) with a cold cache. This is
+equivalent to running `puffin pip compile` on a new machine or in CI (assuming that the package
+manager cache is not shared across runs).
+
+![](https://github.com/astral-sh/ruff/assets/1309177/a6075ebc-bb8f-46db-a3b4-14ee5f713565)
+
 ## Reproduction
 
 All benchmarks were generated using the `scripts/bench/__main__.py` script, which wraps
 [`hyperfine`](https://github.com/sharkdp/hyperfine) to facilitate benchmarking Puffin
 against a variety of other tools.
 
-For example, to benchmark Puffin's resolution against pip-compile and Poetry:
+The benchmark script itself has a several requirements:
+
+- A local Puffin release build (`cargo build --release`).
+- A virtual environment with the script's own dependencies installed (`puffin venv && puffin pip sync scripts/bench/requirements.txt`).
+- The [`hyperfine`](https://github.com/sharkdp/hyperfine) command-line tool installed on your system.
+
+To benchmark Puffin's resolution against pip-compile and Poetry:
 
 ```shell
 python -m scripts.bench \
@@ -78,12 +86,6 @@ python -m scripts.bench \
     scripts/requirements/compiled/trio.txt \
     --json
 ```
-
-The benchmark script itself has a several requirements:
-
-- A local Puffin release build (`cargo build --release`).
-- A virtual environment with the script's own dependencies installed (see: `scripts/bench/requirements.txt`).
-- The [`hyperfine`](https://github.com/sharkdp/hyperfine) command-line tool installed on your system.
 
 After running the benchmark script, you can generate the corresponding graph via:
 

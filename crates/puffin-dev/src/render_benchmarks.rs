@@ -16,7 +16,7 @@ pub(crate) struct RenderBenchmarksArgs {
     title: Option<String>,
 }
 
-pub(crate) async fn render_benchmarks(args: RenderBenchmarksArgs) -> Result<()> {
+pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
     let mut results: BenchmarkResults = serde_json::from_slice(&std::fs::read(&args.path)?)?;
 
     // Replace the command with a shorter name. (The command typically includes the benchmark name,
@@ -69,7 +69,7 @@ fn plot_benchmark(heading: &str, results: &BenchmarkResults) -> Result<String> {
 
 /// Render an SVG to a PNG file.
 fn render_to_png(data: &str, path: &Path, fontdb: &fontdb::Database) -> Result<()> {
-    let mut tree = resvg::usvg::Tree::from_str(data, &Default::default())?;
+    let mut tree = resvg::usvg::Tree::from_str(data, &resvg::usvg::Options::default())?;
     tree.convert_text(fontdb);
     let fit_to = resvg::usvg::FitTo::Width(1600);
     let size = fit_to

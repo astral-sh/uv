@@ -89,7 +89,7 @@ async fn run() -> Result<()> {
             resolve_cli::resolve_cli(args).await?;
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
-        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(args).await?,
+        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }
     Ok(())
 }
