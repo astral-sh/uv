@@ -1,6 +1,7 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+use assert_cmd::assert::{Assert, OutputAssertExt};
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
@@ -68,6 +69,17 @@ impl TestContext {
             .current_dir(self.temp_dir.path());
         cmd
     }
+
+    /// Run the given python code and check whether it succeeds.
+    pub fn assert_command(&self, command: &str) -> Assert {
+        std::process::Command::new(venv_to_interpreter(&self.venv))
+            // https://github.com/python/cpython/issues/75953
+            .arg("-B")
+            .arg("-c")
+            .arg(command)
+            .current_dir(&self.temp_dir)
+            .assert()
+    }
 }
 
 pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
@@ -106,7 +118,7 @@ macro_rules! puffin_snapshot {
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         ::insta::with_settings!({
-            filters => $filters
+            filters => $filters.to_vec()
         }, {
             ::insta_cmd::assert_cmd_snapshot!($spawnable, @$snapshot);
         });
