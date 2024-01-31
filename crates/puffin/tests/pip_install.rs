@@ -12,12 +12,9 @@ use indoc::indoc;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
-use common::{create_venv_py312, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, venv_to_interpreter, BIN_NAME, EXCLUDE_NEWER, INSTA_FILTERS};
 
 mod common;
-
-// Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
     Command::new(venv_to_interpreter(venv))
@@ -66,7 +63,7 @@ fn missing_requirements_txt() -> Result<()> {
 fn no_solution() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip")
@@ -101,7 +98,7 @@ fn no_solution() -> Result<()> {
 fn install_package() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install Flask.
     insta::with_settings!({
@@ -146,7 +143,7 @@ fn install_package() -> Result<()> {
 fn install_requirements_txt() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install Flask.
     let requirements_txt = temp_dir.child("requirements.txt");
@@ -225,7 +222,7 @@ fn install_requirements_txt() -> Result<()> {
 fn respect_installed() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install Flask.
     let requirements_txt = temp_dir.child("requirements.txt");
@@ -374,7 +371,7 @@ fn respect_installed() -> Result<()> {
 fn allow_incompatibilities() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install Flask, which relies on `Werkzeug>=3.0.0`.
     let requirements_txt = temp_dir.child("requirements.txt");
@@ -461,7 +458,7 @@ fn allow_incompatibilities() -> Result<()> {
 fn install_editable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -576,7 +573,7 @@ fn install_editable() -> Result<()> {
 fn install_editable_and_registry() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -716,7 +713,7 @@ fn install_editable_and_registry() -> Result<()> {
 fn reinstall_build_system() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install devpi.
     let requirements_txt = temp_dir.child("requirements.txt");
@@ -769,7 +766,7 @@ fn reinstall_build_system() -> Result<()> {
 fn install_no_binary() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -814,7 +811,7 @@ fn install_no_binary() -> Result<()> {
 fn install_no_binary_subset() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -862,7 +859,7 @@ fn install_no_binary_subset() -> Result<()> {
 fn reinstall_no_binary() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // The first installation should use a pre-built wheel
     insta::with_settings!({
@@ -968,7 +965,7 @@ fn reinstall_no_binary() -> Result<()> {
 fn install_executable() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1014,7 +1011,7 @@ fn install_executable() -> Result<()> {
 fn install_executable_copy() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1062,7 +1059,7 @@ fn install_executable_copy() -> Result<()> {
 fn install_executable_hardlink() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     insta::with_settings!({
         filters => INSTA_FILTERS.to_vec()
@@ -1109,7 +1106,7 @@ fn install_executable_hardlink() -> Result<()> {
 fn no_deps() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv_py312(&temp_dir, &cache_dir);
+    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
 
     // Install Flask.
     insta::with_settings!({
