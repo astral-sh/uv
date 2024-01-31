@@ -7,20 +7,21 @@ use std::sync::Arc;
 
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
-use tracing::debug;
 
-use puffin_fs::{directories, force_remove_all};
+use puffin_fs::directories;
 use puffin_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
+use crate::removal::{rm_rf, Removal};
 pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
 mod by_timestamp;
 mod cli;
+mod removal;
 mod timestamp;
 mod wheel;
 
@@ -243,11 +244,16 @@ impl Cache {
         fs::canonicalize(root)
     }
 
+    /// Clear the cache, removing all entries.
+    pub fn clear(&self) -> Result<Removal, io::Error> {
+        rm_rf(&self.root)
+    }
+
     /// Remove a package from the cache.
     ///
     /// Returns the number of entries removed from the cache.
-    pub fn clean(&self, name: &PackageName) -> Result<usize, io::Error> {
-        let mut count = 0;
+    pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
+        let mut summary = Removal::default();
         for bucket in [
             CacheBucket::Wheels,
             CacheBucket::BuiltWheels,
@@ -255,9 +261,9 @@ impl Cache {
             CacheBucket::Interpreter,
             CacheBucket::Simple,
         ] {
-            count += bucket.clean(self, name)?;
+            summary += bucket.remove(self, name)?;
         }
-        Ok(count)
+        Ok(summary)
     }
 }
 
@@ -511,75 +517,52 @@ impl CacheBucket {
     /// Remove a package from the cache bucket.
     ///
     /// Returns the number of entries removed from the cache.
-    fn clean(self, cache: &Cache, name: &PackageName) -> Result<usize, io::Error> {
-        fn remove(path: impl AsRef<Path>) -> Result<bool, io::Error> {
-            Ok(if force_remove_all(path.as_ref())? {
-                debug!("Removed cache entry: {}", path.as_ref().display());
-                true
-            } else {
-                false
-            })
-        }
-
-        let mut count = 0;
+    fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
+        let mut summary = Removal::default();
         match self {
             CacheBucket::Wheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                if remove(root.join(name.to_string()))? {
-                    count += 1;
-                }
+                summary += rm_rf(root.join(name.to_string()))?;
 
                 // For alternate indices, we expect a directory for every index, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
-                    if remove(directory.join(name.to_string()))? {
-                        count += 1;
-                    }
+                    summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root) {
-                    if remove(directory.join(name.to_string()))? {
-                        count += 1;
-                    }
+                    summary += rm_rf(directory.join(name.to_string()))?;
                 }
             }
             CacheBucket::BuiltWheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                if remove(root.join(name.to_string()))? {
-                    count += 1;
-                }
+                summary += rm_rf(root.join(name.to_string()))?;
 
                 // For alternate indices, we expect a directory for every index, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
-                    if remove(directory.join(name.to_string()))? {
-                        count += 1;
-                    }
+                    summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
                 // For direct URLs, we expect a directory for every index, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root) {
-                    if remove(directory.join(name.to_string()))? {
-                        count += 1;
-                    }
+                    summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
                 // For local dependencies, we expect a directory for every path, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
                 for directory in directories(root) {
-                    if remove(directory.join(name.to_string()))? {
-                        count += 1;
-                    }
+                    summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
                 // For Git dependencies, we expect a directory for every repository, followed by a
@@ -587,35 +570,27 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Git);
                 for directory in directories(root) {
                     for directory in directories(directory) {
-                        if remove(directory.join(name.to_string()))? {
-                            count += 1;
-                        }
+                        summary += rm_rf(directory.join(name.to_string()))?;
                     }
                 }
             }
             CacheBucket::Simple => {
                 // For `pypi` wheels, we expect a MsgPack file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                if remove(root.join(format!("{name}.msgpack")))? {
-                    count += 1;
-                }
+                summary += rm_rf(root.join(format!("{name}.msgpack")))?;
 
                 // For alternate indices, we expect a directory for every index, followed by a
                 // MsgPack file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root) {
-                    if remove(directory.join(format!("{name}.msgpack")))? {
-                        count += 1;
-                    }
+                    summary += rm_rf(directory.join(format!("{name}.msgpack")))?;
                 }
             }
             CacheBucket::FlatIndex => {
                 // We can't know if the flat index includes a package, so we just remove the entire
                 // cache entry.
                 let root = cache.bucket(self);
-                if remove(root)? {
-                    count += 1;
-                }
+                summary += rm_rf(root)?;
             }
             CacheBucket::Git => {
                 // Nothing to do.
@@ -627,7 +602,7 @@ impl CacheBucket {
                 // Nothing to do.
             }
         }
-        Ok(count)
+        Ok(summary)
     }
 }
 

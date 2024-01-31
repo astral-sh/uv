@@ -2441,6 +2441,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "url",
+ "walkdir",
 ]
 
 [[package]]

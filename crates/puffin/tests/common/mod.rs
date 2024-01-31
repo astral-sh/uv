@@ -12,8 +12,12 @@ pub(crate) const BIN_NAME: &str = "puffin";
 
 pub(crate) const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir .*", "--cache-dir [CACHE_DIR]"),
+    // Operation times
     (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    // Puffin versions
     (r"v\d+\.\d+\.\d+", "v[VERSION]"),
+    // File sizes
+    (r"(\d+\.)?\d+([KM]i)?B", "[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"puffin.exe", "puffin"),
