@@ -1614,7 +1614,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 1 entry for package: tqdm
+        Removed 126 files for tqdm ([SIZE])
         "###);
     });
 
@@ -1732,7 +1732,7 @@ fn install_git_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 1 entry for package: werkzeug
+        Removed 3 files for werkzeug ([SIZE])
         "###);
     });
 
@@ -1849,7 +1849,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 2 entries for package: future
+        Removed 616 files for future ([SIZE])
         "###);
     });
 
@@ -1979,7 +1979,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 1 entry for package: wheel
+        Removed 4 files for wheel ([SIZE])
         "###);
     });
 
@@ -2109,7 +2109,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 1 entry for package: tomli
+        Removed 1 file for tomli ([SIZE])
         "###);
     });
 
@@ -2226,7 +2226,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Cleared 1 entry for package: tqdm
+        Removed 2 files for tqdm ([SIZE])
         "###);
     });
 
