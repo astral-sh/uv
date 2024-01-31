@@ -10,8 +10,7 @@ use std::process::Command;
 
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
-use insta_cmd::_macro_support::insta;
-use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use insta_cmd::get_cargo_bin;
 
 use common::{venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
 
