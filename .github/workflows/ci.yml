@@ -41,21 +41,50 @@ jobs:
 #          save-if: ${{ github.ref == 'refs/heads/main' }}
 #      - name: "Clippy"
 #        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+#
+#  cargo-test:
+#    strategy:
+#      matrix:
+#        os: [ubuntu-latest]
+#    runs-on:
+#      # We use the large GitHub actions runners for faster testing
+#      # For Ubuntu and Windows, this requires Organization-level configuration
+#      # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+#      labels: ${{ matrix.os }}-large
+#    name: "cargo test | ${{ matrix.os }}"
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install bootstrap dependencies"
+#        if: matrix.os == 'macos-latest'
+#        run: |
+#          brew install coreutils
+#      - name: "Install required Python versions"
+#        run: |
+#          scripts/bootstrap/install.sh
+#      - name: "Install Rust toolchain"
+#        run: rustup show
+#      - uses: rui314/setup-mold@v1
+#      - name: "Install cargo nextest"
+#        uses: taiki-e/install-action@v2
+#        with:
+#          tool: cargo-nextest
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          prefix-key: "1193"
+#      - name: "Tests"
+#        run: |
+#          source .env
+#          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
-  cargo-test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  macos:
+    # For cost efficiency, run macOS tests on main, but not on PR.
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on:
-      # We use the large GitHub actions runners for faster testing
-      # For Ubuntu and Windows, this requires Organization-level configuration
-      # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
-      labels: ${{ matrix.os }}-large
-    name: "cargo test | ${{ matrix.os }}"
+      labels: macos-latest-large
+    name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
       - name: "Install bootstrap dependencies"
-        if: matrix.os == 'macos-latest'
         run: |
           brew install coreutils
       - name: "Install required Python versions"
@@ -70,12 +99,12 @@ jobs:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "1193"
+          prefix-key: "11193"
       - name: "Tests"
         run: |
           source .env
           cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
-#
+
 #  # TODO(konstin): Merge with the cargo-test job once the tests pass
 #  windows:
 #    runs-on: windows-latest-large
