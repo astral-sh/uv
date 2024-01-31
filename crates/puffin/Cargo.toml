@@ -88,7 +88,7 @@ regex = { version = "1.10.3" }
 reqwest = { version = "0.11.23", features = ["blocking", "rustls"], default-features = false }
 
 [features]
-default = ["flate2-zlib-ng"]
+default = ["flate2/zlib-ng"]
 # Introduces a dependency on a local Python installation.
 python = []
 # Introduces a dependency on PyPI.
@@ -97,7 +97,3 @@ pypi = []
 git = []
 # Introduces a dependency on Maturin.
 maturin = []
-# Adds the `libz-ng` feature to flate2.
-flate2-zlib-ng = ["flate2/zlib-ng"]
-# Adds the `rust_backend` feature to flate2.
-flate2-rust_backend = ["flate2/rust_backend"]
