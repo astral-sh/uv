@@ -4,7 +4,7 @@ This script assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and `hyperfi
 installed, and that a Puffin release builds exists at `./target/release/puffin`
 (relative to the repository root).
 
-This script assumes that Python 3.10 is installed.
+This script assumes that Python 3.12 is installed.
 
 To set up the required environment, run:
 
@@ -300,7 +300,7 @@ class PipSync(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
+            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.12 {venv_dir}",
             command=[
                 self.path,
                 os.path.abspath(requirements_file),
@@ -317,7 +317,7 @@ class PipSync(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-            prepare=f"virtualenv --clear -p 3.10 {venv_dir}",
+            prepare=f"virtualenv --clear -p 3.12 {venv_dir}",
             command=[
                 self.path,
                 os.path.abspath(requirements_file),
@@ -357,7 +357,7 @@ class Poetry(Suite):
                 "bench",
                 "--no-interaction",
                 "--python",
-                ">=3.10",
+                "3.12",
             ],
             cwd=cwd,
         )
@@ -518,7 +518,7 @@ class Poetry(Suite):
                 f"rm -rf {config_dir} && "
                 f"rm -rf {cache_dir} && "
                 f"rm -rf {data_dir} &&"
-                f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
             ),
             command=[
                 f"POETRY_CONFIG_DIR={config_dir}",
@@ -558,7 +558,7 @@ class Poetry(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-            prepare=f"virtualenv --clear -p 3.10 {venv_dir}",
+            prepare=f"virtualenv --clear -p 3.12 {venv_dir}",
             command=[
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
@@ -595,7 +595,7 @@ class Pdm(Suite):
 
         # Create a PDM project.
         subprocess.check_call(
-            [self.path, "init", "--non-interactive", "--python", "3.10"],
+            [self.path, "init", "--non-interactive", "--python", "3.12"],
             cwd=cwd,
         )
 
@@ -635,7 +635,7 @@ class Pdm(Suite):
         cache_dir = os.path.join(cwd, "cache", "pdm")
 
         return Command(
-            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
             prepare=f"rm -rf {pdm_lock} && {self.path} config cache_dir {cache_dir}",
             command=[
                 self.path,
@@ -719,7 +719,7 @@ class Pdm(Suite):
             prepare=(
                 f"rm -rf {cache_dir} && "
                 f"{self.path} config cache_dir {cache_dir} && "
-                f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
             ),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
@@ -750,10 +750,10 @@ class Pdm(Suite):
         cache_dir = os.path.join(cwd, "cache", "pdm")
 
         return Command(
-            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=(
                 f"{self.path} config cache_dir {cache_dir} && "
-                f"virtualenv --clear -p 3.10 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
             ),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
@@ -871,7 +871,7 @@ class Puffin(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.10 {venv_dir}",
+            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.12 {venv_dir}",
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
@@ -889,7 +889,7 @@ class Puffin(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-            prepare=f"virtualenv --clear -p 3.10 {venv_dir}",
+            prepare=f"virtualenv --clear -p 3.12 {venv_dir}",
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,

@@ -1,6 +1,7 @@
 # Benchmarks
 
-All benchmarks were computed on macOS, and come with a few important caveats:
+All benchmarks were computed on macOS using Python 3.12 (for non-Puffin tools), and come with a few
+important caveats:
 
 - Benchmark performance may vary dramatically across different operating systems and filesystems.
   In particular, Puffin uses different installation strategies based on the underlying filesystem's
@@ -25,7 +26,7 @@ Benchmarking package installation (e.g., `puffin pip sync`) with a warm cache. T
 to removing and recreating a virtual environment, and then populating it with dependencies that
 you've installed previously on the same machine.
 
-![](https://github.com/astral-sh/ruff/assets/1309177/6ceea7aa-4813-4ea8-8c95-b8013d702cf4)
+![install-warm](https://github.com/astral-sh/ruff/assets/1309177/b6cb8d48-52e0-45c2-ae15-0a3f69ec3263)
 
 ## Cold Installation
 
@@ -33,7 +34,7 @@ Benchmarking package installation (e.g., `puffin pip sync`) with a cold cache. T
 to running `puffin pip sync` on a new machine or in CI (assuming that the package manager cache is
 not shared across runs).
 
-![](https://github.com/astral-sh/ruff/assets/1309177/c960d6fd-ec34-467e-9aa2-d4e6713abed0)
+![install-cold](https://github.com/astral-sh/ruff/assets/1309177/ed86c193-582f-4163-b369-f12ec3905c3c)
 
 ## Warm Resolution
 
@@ -41,7 +42,7 @@ Benchmarking dependency resolution (e.g., `puffin pip compile`) with a warm cach
 lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
 from a `requirements.in` file.
 
-![](https://github.com/astral-sh/ruff/assets/1309177/aab99181-e54e-4bdb-9ce6-15b018ef8466)
+![resolve-warm](https://github.com/astral-sh/ruff/assets/1309177/a4ca9d23-1148-4103-abe7-a35fa488409d)
 
 ## Cold Resolution
 
@@ -49,7 +50,7 @@ Benchmarking dependency resolution (e.g., `puffin pip compile`) with a cold cach
 equivalent to running `puffin pip compile` on a new machine or in CI (assuming that the package
 manager cache is not shared across runs).
 
-![](https://github.com/astral-sh/ruff/assets/1309177/a6075ebc-bb8f-46db-a3b4-14ee5f713565)
+![resolve-cold](https://github.com/astral-sh/ruff/assets/1309177/556ac7aa-0a6a-4f94-b0d9-90b25461de7b)
 
 ## Reproduction
 
