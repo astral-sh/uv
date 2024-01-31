@@ -976,10 +976,11 @@ fn install_executable() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("pylint==3.0.3")
-
+            .arg("pylint==3.0.0")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
@@ -990,12 +991,12 @@ fn install_executable() -> Result<()> {
         Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
-         + astroid==3.0.2
-         + dill==0.3.8
-         + isort==5.13.2
+         + astroid==3.0.1
+         + dill==0.3.7
+         + isort==5.12.0
          + mccabe==0.7.0
-         + platformdirs==4.1.0
-         + pylint==3.0.3
+         + platformdirs==4.0.0
+         + pylint==3.0.0
          + tomlkit==0.12.3
         "###);
     });
@@ -1016,19 +1017,20 @@ fn install_executable_copy() -> Result<()> {
     let venv = create_venv_py312(&temp_dir, &cache_dir);
 
     insta::with_settings!({
-            filters => INSTA_FILTERS.to_vec()
-        }, {
-            assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-                .arg("pip")
-                .arg("install")
-                .arg("pylint==3.0.3")
-    .arg("--link-mode")
-                .arg("copy")
-
-                .arg("--cache-dir")
-                .arg(cache_dir.path())
-                .env("VIRTUAL_ENV", venv.as_os_str())
-                .current_dir(&temp_dir), @r###"
+        filters => INSTA_FILTERS.to_vec()
+    }, {
+        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+            .arg("pip")
+            .arg("install")
+            .arg("pylint==3.0.0")
+            .arg("--link-mode")
+            .arg("copy")
+            .arg("--cache-dir")
+            .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", venv.as_os_str())
+            .current_dir(&temp_dir), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1037,15 +1039,15 @@ fn install_executable_copy() -> Result<()> {
         Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
-         + astroid==3.0.2
-         + dill==0.3.8
-         + isort==5.13.2
+         + astroid==3.0.1
+         + dill==0.3.7
+         + isort==5.12.0
          + mccabe==0.7.0
-         + platformdirs==4.1.0
-         + pylint==3.0.3
+         + platformdirs==4.0.0
+         + pylint==3.0.0
          + tomlkit==0.12.3
         "###);
-        });
+    });
 
     // Verify that `pylint` is executable.
     let executable = venv.join("bin/pylint");
@@ -1068,11 +1070,13 @@ fn install_executable_hardlink() -> Result<()> {
         assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
             .arg("pip")
             .arg("install")
-            .arg("pylint==3.0.3")
+            .arg("pylint==3.0.0")
             .arg("--link-mode")
             .arg("hardlink")
             .arg("--cache-dir")
             .arg(cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", venv.as_os_str())
             .current_dir(&temp_dir), @r###"
         success: true
@@ -1083,12 +1087,12 @@ fn install_executable_hardlink() -> Result<()> {
         Resolved 7 packages in [TIME]
         Downloaded 7 packages in [TIME]
         Installed 7 packages in [TIME]
-         + astroid==3.0.2
-         + dill==0.3.8
-         + isort==5.13.2
+         + astroid==3.0.1
+         + dill==0.3.7
+         + isort==5.12.0
          + mccabe==0.7.0
-         + platformdirs==4.1.0
-         + pylint==3.0.3
+         + platformdirs==4.0.0
+         + pylint==3.0.0
          + tomlkit==0.12.3
         "###);
     });
