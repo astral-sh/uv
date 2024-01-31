@@ -46,7 +46,12 @@ indicatif = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
+poloto = { workspace = true }
+resvg = { workspace = true }
 rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tagu = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

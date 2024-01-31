@@ -75,6 +75,10 @@ class Hyperfine(typing.NamedTuple):
         """Run the benchmark using `hyperfine`."""
         args = ["hyperfine"]
 
+        # Export to JSON.
+        args.append("--export-json")
+        args.append("results.json")
+
         # Preamble: benchmark-wide setup.
         if self.verbose:
             args.append("--show-output")
