@@ -22,6 +22,7 @@ use resolve_many::ResolveManyArgs;
 
 use crate::build::{build, BuildArgs};
 use crate::install_many::InstallManyArgs;
+use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
 
@@ -43,6 +44,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod build;
 mod install_many;
+mod render_benchmarks;
 mod resolve_cli;
 mod resolve_many;
 mod wheel_metadata;
@@ -66,6 +68,7 @@ enum Cli {
     /// Resolve requirements passed on the CLI
     Resolve(ResolveCliArgs),
     WheelMetadata(WheelMetadataArgs),
+    RenderBenchmarks(RenderBenchmarksArgs),
 }
 
 #[instrument] // Anchor span to check for overhead
@@ -86,6 +89,7 @@ async fn run() -> Result<()> {
             resolve_cli::resolve_cli(args).await?;
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
+        Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }
     Ok(())
 }

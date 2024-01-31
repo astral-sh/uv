@@ -59,6 +59,9 @@ class Command(typing.NamedTuple):
 
 
 class Hyperfine(typing.NamedTuple):
+    benchmark: Benchmark
+    """The benchmark to run."""
+
     commands: list[Command]
     """The commands to benchmark."""
 
@@ -71,9 +74,17 @@ class Hyperfine(typing.NamedTuple):
     verbose: bool
     """Whether to print verbose output."""
 
+    json: bool
+    """Whether to export results to JSON."""
+
     def run(self) -> None:
         """Run the benchmark using `hyperfine`."""
         args = ["hyperfine"]
+
+        # Export to JSON.
+        if self.json:
+            args.append("--export-json")
+            args.append(f"{self.benchmark.value}.json")
 
         # Preamble: benchmark-wide setup.
         if self.verbose:
@@ -717,6 +728,9 @@ def main():
         "--verbose", "-v", action="store_true", help="Print verbose output."
     )
     parser.add_argument(
+        "--json", action="store_true", help="Export results to JSON."
+    )
+    parser.add_argument(
         "--warmup",
         type=int,
         help="The number of warmup runs to perform.",
@@ -789,6 +803,7 @@ def main():
     )
 
     verbose = args.verbose
+    json = args.json
     warmup = args.warmup
     min_runs = args.min_runs
 
@@ -858,10 +873,12 @@ def main():
 
             if commands:
                 hyperfine = Hyperfine(
+                    benchmark=benchmark,
                     commands=commands,
                     warmup=warmup,
                     min_runs=min_runs,
                     verbose=verbose,
+                    json=json,
                 )
                 hyperfine.run()
 

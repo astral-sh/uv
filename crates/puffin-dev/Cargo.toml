@@ -36,6 +36,8 @@ puffin-resolver = { path = "../puffin-resolver" }
 pypi-types = { path = "../pypi-types" }
 puffin-traits = { path = "../puffin-traits" }
 
+# Any dependencies that are exclusively used in `puffin-dev` should be listed as non-workspace
+# dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
@@ -46,7 +48,12 @@ indicatif = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
+poloto = { version = "19.1.2" }
+resvg = { version = "0.29.0" }
 rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tagu = { version = "0.1.6" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
