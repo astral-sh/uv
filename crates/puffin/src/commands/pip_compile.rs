@@ -353,7 +353,14 @@ pub(crate) async fn pip_compile(
         writeln!(
             writer,
             "{}",
-            format!("#    puffin {}", env::args().skip(1).join(" ")).green()
+            format!(
+                "#    puffin {}",
+                env::args_os()
+                    .skip(1)
+                    .map(|arg| arg.normalized_display().to_string())
+                    .join(" ")
+            )
+            .green()
         )?;
     }
 

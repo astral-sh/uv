@@ -1,8 +1,8 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::{fs, iter};
 
 use anyhow::{bail, Context, Result};
 use assert_fs::prelude::*;
@@ -15,6 +15,7 @@ use itertools::Itertools;
 use url::Url;
 
 use common::{puffin_snapshot, TestContext, BIN_NAME, INSTA_FILTERS};
+use puffin_fs::NormalizedDisplay;
 
 use crate::common::EXCLUDE_NEWER;
 
@@ -683,7 +684,8 @@ fn compile_git_https_dependency() -> Result<()> {
     requirements_in.write_str("flask @ git+https://github.com/pallets/flask.git")?;
 
     // In addition to the standard filters, remove the `main` commit, which will change frequently.
-    let filters: Vec<_> = iter::once((r"@(\d|\w){40}", "@[COMMIT]"))
+    let filters: Vec<_> = [(r"@(\d|\w){40}", "@[COMMIT]")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -1501,7 +1503,8 @@ fn compile_wheel_path_dependency() -> Result<()> {
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -1648,7 +1651,8 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
     ))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -1690,7 +1694,8 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
     requirements_in.write_str("flask @ file:///path/to/flask-3.0.0-py3-none-any.whl")?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = iter::once((r"file://.*/", "file://[TEMP_DIR]/"))
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -2014,8 +2019,9 @@ fn compile_editable() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_in.display().to_string());
-    let filters: Vec<_> = iter::once((filter_path.as_str(), "requirements.in"))
+    let filter_path = regex::escape(&requirements_in.normalized_display().to_string());
+    let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -2125,7 +2131,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
         for file in &cache_files {
             let file = context.cache_dir.join(file);
             if !file.is_file() {
-                bail!("Missing cache file {}", file.display());
+                bail!("Missing cache file {}", file.normalized_display());
             }
             fs_err::write(file, "I borken you cache")?;
         }
@@ -2140,7 +2146,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
             for file in cache_files {
                 let file = context.cache_dir.join(file);
                 if !file.is_file() {
-                    bail!("Missing cache file {}", file.display());
+                    bail!("Missing cache file {}", file.normalized_display());
                 }
 
                 fs_err::OpenOptions::new()
@@ -2421,10 +2427,18 @@ fn find_links_directory() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = regex::escape(&project_root.display().to_string());
-    let filters: Vec<_> = iter::once((project_root_string.as_str(), "[PROJECT_ROOT]"))
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let project_root_string = regex::escape(&project_root.normalized_display().to_string());
+    let filters: Vec<_> = [
+        (project_root_string.as_str(), "[PROJECT_ROOT]"),
+        // Unify trailing (back)slash between Windows and Unix.
+        (
+            "[PROJECT_ROOT]/scripts/wheels/",
+            "[PROJECT_ROOT]/scripts/wheels",
+        ),
+    ]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
 
     puffin_snapshot!(filters, context.compile()
             .arg("requirements.in")
@@ -2691,9 +2705,13 @@ fn upgrade_package() -> Result<()> {
 fn missing_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("django @ file:///tmp/django-3.2.8.tar.gz")?;
+    requirements_in.write_str(if cfg!(windows) {
+        "django @ file://C:/tmp/django-3.2.8.tar.gz"
+    } else {
+        "django @ file:///tmp/django-3.2.8.tar.gz"
+    })?;
 
-    let filters: Vec<_> = [(r"/[A-Z]:/", "/")]
+    let filters: Vec<_> = [(r"/C:/", "/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();

@@ -269,6 +269,7 @@ impl From<IndexLocations> for IndexUrls {
 }
 
 #[cfg(test)]
+#[cfg(unix)]
 mod test {
     use super::*;
 
