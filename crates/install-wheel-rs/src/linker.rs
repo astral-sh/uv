@@ -5,14 +5,14 @@ use std::path::Path;
 use std::str::FromStr;
 
 use configparser::ini::Ini;
-use distribution_filename::WheelFilename;
 use fs_err as fs;
 use fs_err::File;
-use pep440_rs::Version;
-use puffin_normalize::PackageName;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
+use distribution_filename::WheelFilename;
+use pep440_rs::Version;
+use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
 use crate::install_location::InstallLocation;
@@ -29,7 +29,7 @@ use crate::{read_record_file, Error, Script};
 /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
-#[instrument(skip_all, fields(wheel = %wheel.as_ref().display()))]
+#[instrument(skip_all, fields(wheel = % wheel.as_ref().display()))]
 pub fn install_wheel(
     location: &InstallLocation<impl AsRef<Path>>,
     wheel: impl AsRef<Path>,
@@ -164,7 +164,7 @@ fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
         let file_type = entry.file_type().ok()?;
         if file_type.is_dir() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "dist-info") {
+            if path.extension().is_some_and(|ext| ext == "dist-info") {
                 Some(path)
             } else {
                 None
@@ -292,14 +292,15 @@ fn clone_wheel_files(
             .as_ref()
             .join(from.strip_prefix(&wheel).unwrap());
 
-        clone_recursive(&from, &to)?;
+        clone_recursive(site_packages.as_ref(), &from, &to)?;
         count += 1;
     }
 
     Ok(count)
 }
 
-fn clone_recursive(from: &Path, to: &Path) -> Result<(), Error> {
+/// Recursively clone the contents of `from` into `to`.
+fn clone_recursive(site_packages: &Path, from: &Path, to: &Path) -> Result<(), Error> {
     // Attempt to copy the file or directory
     debug!("Cloning {} to {}", from.display(), to.display());
     let reflink = reflink_copy::reflink(from, to);
@@ -314,12 +315,14 @@ fn clone_recursive(from: &Path, to: &Path) -> Result<(), Error> {
                 let entry = entry?;
                 let child_from = entry.path();
                 let child_to = to.join(child_from.strip_prefix(from).unwrap());
-                clone_recursive(child_from.as_path(), child_to.as_path())?;
+                clone_recursive(site_packages, child_from.as_path(), child_to.as_path())?;
             }
         } else {
-            // If file already exists, remove it and overwrite.
-            fs::remove_file(to)?;
-            reflink_copy::reflink(from, to)?;
+            // If file already exists, overwrite it.
+            let tempdir = tempdir_in(site_packages)?;
+            let tempfile = tempdir.path().join(from.file_name().unwrap());
+            reflink_copy::reflink(from, &tempfile)?;
+            fs::rename(&tempfile, to)?;
         }
     } else {
         // Other errors should be tracked
