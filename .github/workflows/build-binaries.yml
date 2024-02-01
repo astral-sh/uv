@@ -61,7 +61,7 @@ jobs:
           path: dist
 
   macos-x86_64:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,11 +77,6 @@ jobs:
         with:
           target: x86_64
           args: --release --locked --out dist
-      - name: "Test wheel - x86_64"
-        run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
-          ${{ env.MODULE_NAME }} --help
-          python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -106,7 +101,7 @@ jobs:
             *.sha256
 
   macos-universal:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
