@@ -9,14 +9,13 @@ use assert_fs::prelude::*;
 use assert_fs::TempDir;
 use indoc::indoc;
 use insta::assert_snapshot;
-use insta_cmd::get_cargo_bin;
 use itertools::Itertools;
 use url::Url;
 
-use common::{puffin_snapshot, TestContext, BIN_NAME, INSTA_FILTERS};
+use common::{puffin_snapshot, TestContext, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::EXCLUDE_NEWER;
+use crate::common::{get_bin, EXCLUDE_NEWER};
 
 mod common;
 
@@ -74,7 +73,7 @@ fn missing_venv() -> Result<()> {
     let cache_dir = TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -1412,7 +1411,7 @@ fn compile_exclude_newer() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -1438,7 +1437,7 @@ fn compile_exclude_newer() -> Result<()> {
 
     // Use a date as input instead.
     // We interpret a date as including this day
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -1461,7 +1460,7 @@ fn compile_exclude_newer() -> Result<()> {
     );
 
     // Check the error message for invalid datetime
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")
@@ -2024,7 +2023,7 @@ fn compile_editable() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("compile")
             .arg(requirements_in.path())
@@ -2169,7 +2168,7 @@ fn compile_html() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("jinja2<=3.1.2")?;
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
             .arg("pip")
             .arg("compile")
             .arg("requirements.in")

@@ -10,13 +10,13 @@ use std::process::Command;
 
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
-use insta_cmd::get_cargo_bin;
 
-use common::{venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{venv_to_interpreter, INSTA_FILTERS};
 
-use crate::common::{puffin_snapshot, TestContext};
+use crate::common::{get_bin, puffin_snapshot, TestContext};
 
 mod common;
+
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
     Command::new(venv_to_interpreter(venv))
@@ -42,7 +42,7 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 
 /// Create a `pip install` command with options shared across all scenarios.
 fn command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("install")

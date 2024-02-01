@@ -8,13 +8,12 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta_cmd::get_cargo_bin;
 use url::Url;
 
-use common::{create_venv, puffin_snapshot, venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+use common::{create_venv, puffin_snapshot, venv_to_interpreter, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::TestContext;
+use crate::common::{get_bin, TestContext};
 
 mod common;
 
@@ -32,7 +31,7 @@ fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
 
 /// Create a `pip sync` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("sync")
@@ -70,7 +69,7 @@ fn missing_venv() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg("requirements.txt")
@@ -275,7 +274,7 @@ fn link() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    Command::new(get_cargo_bin(BIN_NAME))
+    Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg("requirements.txt")
@@ -288,7 +287,7 @@ fn link() -> Result<()> {
         .success();
 
     let venv2 = context.temp_dir.child(".venv2");
-    Command::new(get_cargo_bin(BIN_NAME))
+    Command::new(get_bin())
         .arg("venv")
         .arg(venv2.as_os_str())
         .arg("--cache-dir")
@@ -300,7 +299,7 @@ fn link() -> Result<()> {
         .success();
     venv2.assert(predicates::path::is_dir());
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg("requirements.txt")
@@ -1198,7 +1197,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("tqdm")
         .arg("--cache-dir")
@@ -1286,7 +1285,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("werkzeug")
         .arg("--cache-dir")
@@ -1373,7 +1372,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("future")
         .arg("--cache-dir")
@@ -1474,7 +1473,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("wheel")
         .arg("--cache-dir")
@@ -1575,7 +1574,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("tomli")
         .arg("--cache-dir")
@@ -1662,7 +1661,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("tqdm")
         .arg("--cache-dir")
@@ -2062,7 +2061,7 @@ fn sync_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable packages.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg(requirements_txt.path())
@@ -2088,7 +2087,7 @@ fn sync_editable() -> Result<()> {
     );
 
     // Reinstall the editable packages.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg(requirements_txt.path())
@@ -2150,7 +2149,7 @@ fn sync_editable() -> Result<()> {
     // Don't create a git diff.
     fs_err::write(python_source_file, python_version_1)?;
 
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg(requirements_txt.path())
@@ -2201,7 +2200,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2244,7 +2243,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2283,7 +2282,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2317,7 +2316,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())

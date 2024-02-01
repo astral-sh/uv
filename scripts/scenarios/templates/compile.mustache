@@ -14,9 +14,9 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
-use insta_cmd::get_cargo_bin;
 
-use common::{puffin_snapshot, TestContext, BIN_NAME, INSTA_FILTERS};
+use crate::common::get_bin;
+use common::{puffin_snapshot, TestContext, INSTA_FILTERS};
 use puffin_interpreter::find_requested_python;
 
 mod common;
@@ -42,7 +42,7 @@ pub(crate) fn create_bin_with_executables(
 fn command(context: &TestContext, python_versions: &[&str]) -> Command {
     let bin = create_bin_with_executables(&context.temp_dir, python_versions)
         .expect("Failed to create bin dir");
-    let mut command = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("compile")
