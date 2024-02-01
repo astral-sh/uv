@@ -7,6 +7,8 @@ use assert_fs::prelude::*;
 use insta_cmd::_macro_support::insta;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 
+use puffin_fs::NormalizedDisplay;
+
 use common::BIN_NAME;
 
 mod common;
@@ -17,7 +19,7 @@ fn create_venv() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    let filter_venv = regex::escape(&venv.display().to_string());
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
@@ -53,7 +55,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    let filter_venv = regex::escape(&venv.display().to_string());
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
@@ -88,7 +90,7 @@ fn seed() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    let filter_venv = regex::escape(&venv.display().to_string());
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
@@ -163,7 +165,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    let filter_venv = regex::escape(&venv.display().to_string());
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"Using Python 3\.\d+\.\d+ interpreter at .+", "Using Python [VERSION] interpreter at [PATH]"),
@@ -198,7 +200,7 @@ fn create_venv_python_patch() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    let filter_venv = regex::escape(&venv.display().to_string());
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
     insta::with_settings!({
         filters => vec![
             (r"interpreter at .+", "interpreter at [PATH]"),
