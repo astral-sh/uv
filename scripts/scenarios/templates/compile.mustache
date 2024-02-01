@@ -9,14 +9,15 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
+use predicates::prelude::predicate;
 
-use crate::common::get_bin;
-use common::{puffin_snapshot, TestContext, INSTA_FILTERS};
+use common::{get_bin, puffin_snapshot, TestContext, INSTA_FILTERS};
 use puffin_interpreter::find_requested_python;
 
 mod common;
@@ -92,7 +93,7 @@ fn {{module_name}}() -> Result<()> {
     {{#expected.explanation_lines}}
     // {{.}}
     {{/expected.explanation_lines}}
-    puffin_snapshot!(filters, command(&context, python_versions)
+    let output = puffin_snapshot!(filters, command(&context, python_versions)
         {{#environment.prereleases}}
         .arg("--prerelease=allow")
         {{/environment.prereleases}}
@@ -101,6 +102,19 @@ fn {{module_name}}() -> Result<()> {
         {{/resolver_options.python}}, @r###"<snapshot>
     "###
     );
+
+    output
+        .assert()
+    {{#expected.satisfiable}}
+        .success()
+        {{#expected.packages}}
+            .stdout(predicate::str::contains("{{name}}=={{version}}"))
+        {{/expected.packages}}
+    {{/expected.satisfiable}}
+    {{^expected.satisfiable}}
+        .failure()
+    {{/expected.satisfiable}}
+    ;
 
     Ok(())
 }
