@@ -652,9 +652,7 @@ pub(crate) fn move_folder_recorded(
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
-    if !dest_dir.is_dir() {
-        fs::create_dir_all(dest_dir)?;
-    }
+    fs::create_dir_all(dest_dir)?;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src = entry.path();
@@ -667,10 +665,8 @@ pub(crate) fn move_folder_recorded(
             .strip_prefix(site_packages)
             .expect("Prefix must no change");
         let target = dest_dir.join(relative_to_data);
-        if src.is_dir() {
-            if !target.is_dir() {
-                fs::create_dir(target)?;
-            }
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&target)?;
         } else {
             fs::rename(src, &target)?;
             let entry = record
@@ -679,8 +675,8 @@ pub(crate) fn move_folder_recorded(
                 .ok_or_else(|| {
                     Error::RecordFile(format!(
                         "Could not find entry for {} ({})",
-                        relative_to_site_packages.display(),
-                        src.display()
+                        relative_to_site_packages.normalized_display(),
+                        src.normalized_display()
                     ))
                 })?;
             entry.path = relative_to(&target, site_packages)?.display().to_string();
