@@ -15,8 +15,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    DirectArchiveUrl, DirectGitUrl, Dist, FileLocation, GitSourceDist, Identifier, LocalEditable,
-    Name, PathSourceDist, RemoteSource, SourceDist,
+    DirectArchiveUrl, DirectGitUrl, Dist, FileLocation, GitSourceDist, LocalEditable, Name,
+    PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::read_dist_info;
 use pep508_rs::VerbatimUrl;
@@ -203,13 +203,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     }
                 };
 
-                // For registry source distributions, shard by package, then by SHA.
-                // Ex) `pypi/requests/a673187abc19fe6c`
+                // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&registry_source_dist.index)
                         .remote_wheel_dir(registry_source_dist.filename.name.as_ref())
-                        .join(&registry_source_dist.file.distribution_id().as_str()[..16]),
+                        .join(registry_source_dist.filename.version.to_string()),
                 );
 
                 self.url_metadata(
