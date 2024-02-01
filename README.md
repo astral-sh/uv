@@ -7,7 +7,7 @@ Puffin is backed by [Astral](https://astral.sh), the creators of [Ruff](https://
 ## Highlights
 
 - ⚡️ 10-100x faster than `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
-- 💾 Disk-space efficient, with a global cache for dependency duplication and Copy-on-Write
+- 💾 Disk-space efficient, with a global cache for dependency deduplication and Copy-on-Write
   installation on supported platforms.
 - 🐍 Installable via `pip`, `pipx`, `brew` etc. Puffin is a single static binary that can be
   installed without Rust or even a Python environment.
