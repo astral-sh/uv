@@ -97,3 +97,22 @@ pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> Pat
     venv.assert(predicates::path::is_dir());
     venv.to_path_buf()
 }
+
+/// Run [`assert_cmd_snapshot!`] with our default filters.
+#[allow(unused_macros)]
+macro_rules! puffin_snapshot {
+    ($spawnable:expr, @$snapshot:literal) => {{
+        puffin_snapshot!(INSTA_FILTERS.to_vec(), $spawnable, @$snapshot);
+    }};
+    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+        ::insta::with_settings!({
+            filters => $filters
+        }, {
+            ::insta_cmd::assert_cmd_snapshot!($spawnable, @$snapshot);
+        });
+    }};
+}
+
+/// <https://stackoverflow.com/a/31749071/3549270>
+#[allow(unused_imports)]
+pub(crate) use puffin_snapshot;

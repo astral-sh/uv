@@ -8,13 +8,13 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::Result;
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
-use insta_cmd::_macro_support::insta;
-use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use insta_cmd::get_cargo_bin;
 
-use common::{create_venv, BIN_NAME, INSTA_FILTERS, venv_to_interpreter};
+use common::{venv_to_interpreter, BIN_NAME, INSTA_FILTERS};
+
+use crate::common::{puffin_snapshot, TestContext};
 
 mod common;
 
@@ -39,6 +39,23 @@ fn assert_installed(venv: &Path, package: &'static str, version: &'static str, t
 fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
     assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
 }
+
+/// Create a `pip install` command with options shared across all scenarios.
+fn command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_cargo_bin(BIN_NAME));
+    command
+        .arg("pip")
+        .arg("install")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("PUFFIN_NO_WRAP", "1")
+        .current_dir(&context.temp_dir);
+    command
+}
+
 {{#scenarios}}
 
 /// {{name}}
@@ -54,10 +71,8 @@ fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
 {{/tree}}
 /// ```
 #[test]
-fn {{module_name}}() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "{{environment.python}}");
+fn {{module_name}}() {
+    let context = TestContext::new("{{environment.python}}");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
@@ -66,27 +81,14 @@ fn {{module_name}}() -> Result<()> {
     {{/packages}}
     filters.push((r"-{{version}}", ""));
 
-    insta::with_settings!({
-        filters => filters
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("install")
-            {{#root.requires}}
-            .arg("{{requirement}}")
-            {{/root.requires}}
-            {{#environment.prereleases}}
-            .arg("--prerelease=allow")
-            {{/environment.prereleases}}
-            .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .env("PUFFIN_NO_WRAP", "1")
-            .current_dir(&temp_dir), @r###"<snapshot>
-        "###);
-    });
+    puffin_snapshot!(filters, command(&context)
+        {{#environment.prereleases}}
+        .arg("--prerelease=allow")
+        {{/environment.prereleases}}
+        {{#root.requires}}
+        .arg("{{requirement}}")
+        {{/root.requires}}, @r###"<snapshot>
+    "###);
 
     {{#expected.explanation_lines}}
     // {{.}}
@@ -94,19 +96,17 @@ fn {{module_name}}() -> Result<()> {
     {{#expected.satisfiable}}
     {{#expected.packages}}
     assert_installed(
-        &venv,
+        &context.venv,
         "{{module_name}}",
         "{{version}}",
-        &temp_dir
+        &context.temp_dir
     );
     {{/expected.packages}}
     {{/expected.satisfiable}}
     {{^expected.satisfiable}}
     {{#root.requires}}
-    assert_not_installed(&venv, "{{module_name}}", &temp_dir);
+    assert_not_installed(&context.venv, "{{module_name}}", &context.temp_dir);
     {{/root.requires}}
     {{/expected.satisfiable}}
-
-    Ok(())
 }
 {{/scenarios}}
