@@ -4,13 +4,13 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use insta_cmd::get_cargo_bin;
 use url::Url;
 
-use common::{BIN_NAME, INSTA_FILTERS};
+use common::{puffin_snapshot, BIN_NAME, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::{create_venv, venv_to_interpreter};
+use crate::common::{venv_to_interpreter, TestContext};
 
 mod common;
 
@@ -18,13 +18,10 @@ mod common;
 fn no_arguments() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
         .arg("uninstall")
-            .current_dir(&temp_dir), @r###"
+        .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -36,8 +33,8 @@ fn no_arguments() -> Result<()> {
     Usage: puffin pip uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
     For more information, try '--help'.
-    "###);
-    });
+    "###
+    );
 
     Ok(())
 }
@@ -46,7 +43,7 @@ fn no_arguments() -> Result<()> {
 fn invalid_requirement() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip")
         .arg("uninstall")
         .arg("flask==1.0.x")
@@ -69,15 +66,12 @@ fn invalid_requirement() -> Result<()> {
 fn missing_requirements_txt() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
         .arg("uninstall")
-            .arg("-r")
-            .arg("requirements.txt")
-            .current_dir(&temp_dir), @r###"
+        .arg("-r")
+        .arg("requirements.txt")
+        .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -85,8 +79,8 @@ fn missing_requirements_txt() -> Result<()> {
     ----- stderr -----
     error: failed to open file `requirements.txt`
       Caused by: No such file or directory (os error 2)
-    "###);
-    });
+    "###
+    );
 
     Ok(())
 }
@@ -98,7 +92,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("flask==1.0.x")?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -122,15 +116,12 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 fn missing_pyproject_toml() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
         .arg("uninstall")
-            .arg("-r")
-            .arg("pyproject.toml")
-            .current_dir(&temp_dir), @r###"
+        .arg("-r")
+        .arg("pyproject.toml")
+        .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -138,8 +129,8 @@ fn missing_pyproject_toml() -> Result<()> {
     ----- stderr -----
     error: failed to open file `pyproject.toml`
       Caused by: No such file or directory (os error 2)
-    "###);
-    });
+    "###
+    );
 
     Ok(())
 }
@@ -151,7 +142,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     pyproject_toml.touch()?;
     pyproject_toml.write_str("123 - 456")?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -181,7 +172,7 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     pyproject_toml.touch()?;
     pyproject_toml.write_str("[project]")?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -216,7 +207,7 @@ dependencies = ["flask==1.0.x"]
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -243,11 +234,9 @@ dependencies = ["flask==1.0.x"]
 
 #[test]
 fn uninstall() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
@@ -256,44 +245,41 @@ fn uninstall() -> Result<()> {
         .arg("sync")
         .arg("requirements.txt")
         .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import markupsafe")
-        .current_dir(&temp_dir)
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
-    insta::with_settings!({
-        filters => INSTA_FILTERS.to_vec()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("uninstall")
-            .arg("MarkupSafe")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("uninstall")
+        .arg("MarkupSafe")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 1 package in [TIME]
-         - markupsafe==2.1.3
-        "###);
-    });
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - markupsafe==2.1.3
+    "###
+    );
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import markupsafe")
-        .current_dir(&temp_dir)
+        .current_dir(&context.temp_dir)
         .assert()
         .failure();
 
@@ -302,11 +288,9 @@ fn uninstall() -> Result<()> {
 
 #[test]
 fn missing_record() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
@@ -315,27 +299,31 @@ fn missing_record() -> Result<()> {
         .arg("sync")
         .arg("requirements.txt")
         .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir)
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import markupsafe")
-        .current_dir(&temp_dir)
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
     // Delete the RECORD file.
     let dist_info = fs_err::canonicalize(if cfg!(unix) {
-        venv.join("lib")
+        context
+            .venv
+            .join("lib")
             .join("python3.12")
             .join("site-packages")
             .join("MarkupSafe-2.1.3.dist-info")
     } else if cfg!(windows) {
-        venv.join("Lib")
+        context
+            .venv
+            .join("Lib")
             .join("site-packages")
             .join("MarkupSafe-2.1.3.dist-info")
     } else {
@@ -355,27 +343,21 @@ fn missing_record() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    insta::with_settings!(
-        {
-            filters => filters,
-        },
-        {
-            assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("uninstall")
-            .arg("MarkupSafe")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            .current_dir(&temp_dir), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("uninstall")
+        .arg("MarkupSafe")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: Cannot uninstall package; RECORD file not found at: [DIST_INFO]/RECORD
-        "###);
-        }
+    ----- stderr -----
+    error: Cannot uninstall package; RECORD file not found at: [DIST_INFO]/RECORD
+    "###
     );
 
     Ok(())
@@ -383,9 +365,7 @@ fn missing_record() -> Result<()> {
 
 #[test]
 fn uninstall_editable_by_name() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -398,7 +378,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
@@ -407,40 +387,36 @@ fn uninstall_editable_by_name() -> Result<()> {
         .arg("sync")
         .arg(requirements_txt.path())
         .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
         .success();
 
     // Uninstall the editable by name.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("uninstall")
-            .arg("poetry-editable")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str())
-            , @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("uninstall")
+        .arg("poetry-editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###);
-    });
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
+    );
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -451,9 +427,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
 #[test]
 fn uninstall_editable_by_path() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -466,7 +440,7 @@ fn uninstall_editable_by_path() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
@@ -475,40 +449,37 @@ fn uninstall_editable_by_path() -> Result<()> {
         .arg("sync")
         .arg(requirements_txt.path())
         .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
         .success();
 
     // Uninstall the editable by path.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("uninstall")
-            .arg("-e")
-            .arg("../../scripts/editable-installs/poetry_editable")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("uninstall")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###);
-    });
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
+    );
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
@@ -519,9 +490,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 
 #[test]
 fn uninstall_duplicate_editable() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = create_venv(&temp_dir, &cache_dir, "3.12");
+    let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
@@ -534,7 +503,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
@@ -543,41 +512,38 @@ fn uninstall_duplicate_editable() -> Result<()> {
         .arg("sync")
         .arg(requirements_txt.path())
         .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
         .success();
 
     // Uninstall the editable by both path and name.
-    insta::with_settings!({
-        filters => filters.clone()
-    }, {
-        assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
-            .arg("pip")
-            .arg("uninstall")
-            .arg("poetry-editable")
-            .arg("-e")
-            .arg("../../scripts/editable-installs/poetry_editable")
-            .arg("--cache-dir")
-            .arg(cache_dir.path())
-            .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+        .arg("pip")
+        .arg("uninstall")
+        .arg("poetry-editable")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###);
-    });
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
+    );
 
-    Command::new(venv_to_interpreter(&venv))
+    Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
         .assert()
