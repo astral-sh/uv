@@ -74,3 +74,20 @@ docker run --rm -it -v $(pwd):/app puffin-builder /app/target/x86_64-unknown-lin
 
 We recommend using this container if you don't trust the dependency tree of the package(s) you are trying to resolve or install. 
 
+
+## Profiling
+
+Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to Puffin, too.
+
+### Analysing concurrency
+
+You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where Puffin is CPU-bound. Example usage, with `puffin` and `puffin-dev` respectively:
+
+```bash
+RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in
+```
+
+```bash
+RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --bin puffin-dev --profile profiling -- resolve jupyter
+```
+
