@@ -47,15 +47,27 @@ use crate::resolver::allowed_urls::AllowedUrls;
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::provider::DefaultResolverProvider;
 pub use crate::resolver::provider::ResolverProvider;
+pub(crate) use crate::resolver::provider::VersionsResponse;
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
-use crate::version_map::VersionMap;
 use crate::{DependencyMode, Options};
 
 mod allowed_urls;
 mod index;
 mod provider;
 mod reporter;
+
+/// Incompatibility for a single version of a package
+pub(crate) enum PackageVersionIncompatibility {
+    /// Package is incompatible due to the `Requires-Python` version specifiers for that package.
+    RequiresPython(VersionSpecifiers),
+}
+
+/// Incompatibility for all versions of a package
+pub(crate) enum PackageIncompatibility {
+    NoIndex,
+    NotFound,
+}
 
 pub struct Resolver<'a, Provider: ResolverProvider> {
     project: Option<PackageName>,
@@ -68,8 +80,10 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
-    /// A map from [`PackageId`] to the `Requires-Python` version specifiers for that package.
-    incompatibilities: DashMap<PackageId, VersionSpecifiers>,
+    /// A map from [`PackageId`] to an incompatibility for that package
+    incompatibilities: DashMap<PackageId, PackageVersionIncompatibility>,
+    /// A map from [`PackageName`] to an incompatibility for that package
+    unavailable: DashMap<PackageName, PackageIncompatibility>,
     /// The set of all registry-based packages visited during resolution.
     visited: DashSet<PackageName>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
@@ -171,6 +185,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         Self {
             index,
             incompatibilities: DashMap::default(),
+            unavailable: DashMap::default(),
             visited: DashSet::default(),
             selector,
             allowed_urls,
@@ -510,7 +525,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             PubGrubPackage::Package(package_name, extra, None) => {
                 // Wait for the metadata to be available.
-                let version_map = self
+                let versions_response = self
                     .index
                     .packages
                     .wait(package_name)
@@ -518,6 +533,23 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .await
                     .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
+
+                let version_map = match *versions_response {
+                    VersionsResponse::Found(ref version_map) => version_map,
+                    // Short-circuit if we do not find any versions for the package
+                    VersionsResponse::NoIndex => {
+                        self.unavailable
+                            .insert(package_name.clone(), PackageIncompatibility::NoIndex);
+
+                        return Ok(None);
+                    }
+                    VersionsResponse::NotFound => {
+                        self.unavailable
+                            .insert(package_name.clone(), PackageIncompatibility::NotFound);
+
+                        return Ok(None);
+                    }
+                };
 
                 if let Some(extra) = extra {
                     debug!(
@@ -536,8 +568,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.incompatibilities
-                        .insert(candidate.package_id(), requires_python.clone());
+                    self.incompatibilities.insert(
+                        candidate.package_id(),
+                        PackageVersionIncompatibility::RequiresPython(requires_python.clone()),
+                    );
                     return Ok(Some(candidate.version().clone()));
                 }
 
@@ -655,17 +689,27 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Available(DependencyConstraints::default()));
                 }
 
-                // Wait for the metadata to be available.
+                // Determine the distribution to lookup
                 let dist = match url {
                     Some(url) => PubGrubDistribution::from_url(package_name, url),
                     None => PubGrubDistribution::from_registry(package_name, version),
                 };
                 let package_id = dist.package_id();
 
+                // If the package does not exist in the registry, we cannot fetch its dependencies
+                if let Some(_) = self.unavailable.get(&package_name) {
+                    // TODO(zanieb): Real error message here
+                    return Ok(Dependencies::Unavailable(
+                        "The package does not exist".to_string(),
+                    ));
+                }
+
                 // If the package is known to be incompatible, return the Python version as an
                 // incompatibility, and skip fetching the metadata.
                 if let Some(entry) = self.incompatibilities.get(&package_id) {
-                    let requires_python = entry;
+                    // TODO(zanieb): Handle additional variants here
+                    let PackageVersionIncompatibility::RequiresPython(requires_python) =
+                        entry.value();
                     let version = requires_python
                         .iter()
                         .map(PubGrubSpecifier::try_from)
@@ -682,6 +726,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Available(constraints));
                 }
 
+                // Wait for the metadata to be available.
                 let metadata = self
                     .index
                     .distributions
@@ -779,13 +824,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         match request {
             // Fetch package metadata from the registry.
             Request::Package(package_name) => {
-                let version_map = self
+                let package_versions = self
                     .provider
-                    .get_version_map(&package_name)
+                    .get_package_versions(&package_name)
                     .boxed()
                     .await
                     .map_err(ResolveError::Client)?;
-                Ok(Some(Response::Package(package_name, version_map)))
+
+                Ok(Some(Response::Package(package_name, package_versions)))
             }
 
             // Fetch distribution metadata from the distribution database.
@@ -817,12 +863,29 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
                 // Wait for the package metadata to become available.
-                let version_map = self
+                let versions_response = self
                     .index
                     .packages
                     .wait(&package_name)
                     .await
                     .ok_or(ResolveError::Unregistered)?;
+
+                let version_map = match *versions_response {
+                    VersionsResponse::Found(ref version_map) => version_map,
+                    // Short-circuit if we did not find any versions for the package
+                    VersionsResponse::NoIndex => {
+                        self.unavailable
+                            .insert(package_name.clone(), PackageIncompatibility::NoIndex);
+
+                        return Ok(None);
+                    }
+                    VersionsResponse::NotFound => {
+                        self.unavailable
+                            .insert(package_name.clone(), PackageIncompatibility::NotFound);
+
+                        return Ok(None);
+                    }
+                };
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.
@@ -833,8 +896,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.incompatibilities
-                        .insert(candidate.package_id(), requires_python.clone());
+                    self.incompatibilities.insert(
+                        candidate.package_id(),
+                        PackageVersionIncompatibility::RequiresPython(requires_python.clone()),
+                    );
                     return Ok(None);
                 }
 
@@ -928,7 +993,7 @@ impl Display for Request {
 #[allow(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, VersionMap),
+    Package(PackageName, VersionsResponse),
     /// The returned metadata for a distribution.
     Dist {
         dist: Dist,

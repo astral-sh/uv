@@ -17,7 +17,7 @@ use puffin_normalize::PackageName;
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::version_map::VersionMap;
+use crate::resolver::VersionsResponse;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -168,7 +168,7 @@ impl NoSolutionError {
         mut self,
         python_requirement: &PythonRequirement,
         visited: &DashSet<PackageName>,
-        package_versions: &OnceMap<PackageName, VersionMap>,
+        package_versions: &OnceMap<PackageName, VersionsResponse>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {
@@ -192,14 +192,16 @@ impl NoSolutionError {
                     // these packages, but it's non-deterministic, and omitting them ensures that
                     // we represent the state of the resolver at the time of failure.
                     if visited.contains(name) {
-                        if let Some(version_map) = package_versions.get(name) {
-                            available_versions.insert(
-                                package.clone(),
-                                version_map
-                                    .iter()
-                                    .map(|(version, _)| version.clone())
-                                    .collect(),
-                            );
+                        if let Some(response) = package_versions.get(name) {
+                            if let VersionsResponse::Found(ref version_map) = *response {
+                                available_versions.insert(
+                                    package.clone(),
+                                    version_map
+                                        .iter()
+                                        .map(|(version, _)| version.clone())
+                                        .collect(),
+                                );
+                            }
                         }
                     }
                 }

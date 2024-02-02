@@ -79,11 +79,12 @@ fn requires_package_does_not_exist() {
         .arg("a-3cb60d4c")
         , @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Package `a` was not found in the registry.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of a and you require a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_3cb60d4c", &context.temp_dir);
@@ -237,11 +238,13 @@ fn transitive_requires_package_does_not_exist() {
         .arg("a-22a72022")
         , @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Package `b` was not found in the registry.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of b and albatross==1.0.0 depends on b, we can conclude that albatross==1.0.0 cannot be used.
+          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_22a72022", &context.temp_dir);

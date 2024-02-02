@@ -8,6 +8,7 @@ use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
+
 use rustc_hash::FxHashMap;
 use url::Url;
 
@@ -20,7 +21,8 @@ use pypi_types::{Hashes, Metadata21};
 
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
-use crate::version_map::VersionMap;
+use crate::resolver::VersionsResponse;
+
 use crate::ResolveError;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
@@ -42,7 +44,7 @@ impl ResolutionGraph {
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
-        packages: &OnceMap<PackageName, VersionMap>,
+        packages: &OnceMap<PackageName, VersionsResponse>,
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
@@ -68,12 +70,14 @@ impl ResolutionGraph {
                         .clone();
 
                     // Add its hashes to the index.
-                    if let Some(version_map) = packages.get(package_name) {
-                        hashes.insert(package_name.clone(), {
-                            let mut hashes = version_map.hashes(version);
-                            hashes.sort_unstable();
-                            hashes
-                        });
+                    if let Some(versions_response) = packages.get(package_name) {
+                        if let VersionsResponse::Found(ref version_map) = *versions_response {
+                            hashes.insert(package_name.clone(), {
+                                let mut hashes = version_map.hashes(version);
+                                hashes.sort_unstable();
+                                hashes
+                            });
+                        }
                     }
 
                     // Add the distribution to the graph.
@@ -93,12 +97,14 @@ impl ResolutionGraph {
                     };
 
                     // Add its hashes to the index.
-                    if let Some(version_map) = packages.get(package_name) {
-                        hashes.insert(package_name.clone(), {
-                            let mut hashes = version_map.hashes(version);
-                            hashes.sort_unstable();
-                            hashes
-                        });
+                    if let Some(versions_response) = packages.get(package_name) {
+                        if let VersionsResponse::Found(ref version_map) = *versions_response {
+                            hashes.insert(package_name.clone(), {
+                                let mut hashes = version_map.hashes(version);
+                                hashes.sort_unstable();
+                                hashes
+                            });
+                        }
                     }
 
                     // Add the distribution to the graph.
