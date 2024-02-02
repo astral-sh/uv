@@ -141,16 +141,16 @@ pub fn run_and_format(command: &mut std::process::Command) -> (String, Output) {
 #[allow(unused_macros)]
 macro_rules! puffin_snapshot {
     ($spawnable:expr, @$snapshot:literal) => {{
-        puffin_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot);
+        puffin_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot)
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+        let (snapshot, output) = $crate::common::run_and_format($spawnable);
         ::insta::with_settings!({
             filters => $filters.to_vec()
         }, {
-            let (snapshot, output) = $crate::common::run_and_format($spawnable);
             ::insta::assert_snapshot!(snapshot, @$snapshot);
-            output
         });
+        output
     }};
 }
 
