@@ -5,9 +5,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use dashmap::{DashMap, DashSet};
-use futures::channel::mpsc::{
-    UnboundedReceiver as MpscUnboundedReceiver, UnboundedSender as MpscUnboundedSender,
-};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
@@ -16,6 +13,7 @@ use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::select;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
 
@@ -204,7 +202,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     pub async fn resolve(self) -> Result<ResolutionGraph, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
-        let (request_sink, request_stream) = futures::channel::mpsc::unbounded();
+        // Channel size is set to the same size as the task buffer for simplicity.
+        let (request_sink, request_stream) = tokio::sync::mpsc::channel(50);
 
         // Run the fetcher.
         let requests_fut = self.fetch(request_stream).fuse();
@@ -215,7 +214,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let resolution = select! {
             result = requests_fut => {
                 result?;
-                return Err(ResolveError::StreamTermination);
+                return Err(ResolveError::ChannelClosed);
             }
             resolution = resolve_fut => {
                 resolution.map_err(|err| {
@@ -243,7 +242,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     #[instrument(skip_all)]
     async fn solve(
         &self,
-        request_sink: &MpscUnboundedSender<Request>,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
 
@@ -267,7 +266,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             state.unit_propagation(next)?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-            Self::pre_visit(state.partial_solution.prioritized_packages(), request_sink)?;
+            Self::pre_visit(state.partial_solution.prioritized_packages(), request_sink).await?;
 
             // Choose a package version.
             let Some(highest_priority_pkg) =
@@ -388,7 +387,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         &self,
         package: &PubGrubPackage,
         priorities: &mut PubGrubPriorities,
-        request_sink: &MpscUnboundedSender<Request>,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {}
@@ -397,7 +396,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(package_name.clone()) {
                     priorities.add(package_name.clone());
-                    request_sink.unbounded_send(Request::Package(package_name.clone()))?;
+                    request_sink
+                        .send(Request::Package(package_name.clone()))
+                        .await?;
 
                     // Yield to allow subscribers to continue, as the channel is sync.
                     tokio::task::yield_now().await;
@@ -408,7 +409,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let dist = Dist::from_url(package_name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.package_id()) {
                     priorities.add(dist.name().clone());
-                    request_sink.unbounded_send(Request::Dist(dist))?;
+                    request_sink.send(Request::Dist(dist)).await?;
 
                     // Yield to allow subscribers to continue, as the channel is sync.
                     tokio::task::yield_now().await;
@@ -422,9 +423,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
     /// metadata for all of the packages in parallel.
-    fn pre_visit<'data>(
+    async fn pre_visit<'data>(
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
-        request_sink: &MpscUnboundedSender<Request>,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
@@ -432,7 +433,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             let PubGrubPackage::Package(package_name, _extra, None) = package else {
                 continue;
             };
-            request_sink.unbounded_send(Request::Prefetch(package_name.clone(), range.clone()))?;
+            request_sink
+                .send(Request::Prefetch(package_name.clone(), range.clone()))
+                .await?;
         }
         Ok(())
     }
@@ -445,7 +448,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
-        request_sink: &MpscUnboundedSender<Request>,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<Option<Version>, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
@@ -580,7 +583,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
                     let dist = candidate.resolve().dist.clone();
-                    request_sink.unbounded_send(Request::Dist(dist))?;
+                    request_sink.send(Request::Dist(dist)).await?;
 
                     // Yield to allow subscribers to continue, as the channel is sync.
                     tokio::task::yield_now().await;
@@ -598,7 +601,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         package: &PubGrubPackage,
         version: &Version,
         priorities: &mut PubGrubPriorities,
-        request_sink: &MpscUnboundedSender<Request>,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {
@@ -731,9 +734,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch(
         &self,
-        request_stream: MpscUnboundedReceiver<Request>,
+        request_stream: tokio::sync::mpsc::Receiver<Request>,
     ) -> Result<(), ResolveError> {
-        let mut response_stream = request_stream
+        let mut response_stream = ReceiverStream::new(request_stream)
             .map(|request| self.process_request(request).boxed())
             .buffer_unordered(50);
 
@@ -910,7 +913,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 /// Fetch the metadata for an item
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-enum Request {
+pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName),
     /// A request to fetch the metadata for a built or source distribution.
