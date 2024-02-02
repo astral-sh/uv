@@ -7,15 +7,16 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta_cmd::get_cargo_bin;
 
-use common::{puffin_snapshot, TestContext, BIN_NAME, EXCLUDE_NEWER, INSTA_FILTERS};
+use common::{puffin_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+
+use crate::common::get_bin;
 
 mod common;
 
 /// Create a `pip install` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_cargo_bin(BIN_NAME));
+    let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("install")
@@ -343,7 +344,7 @@ fn install_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable package.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -370,7 +371,7 @@ fn install_editable() -> Result<()> {
     );
 
     // Install it again (no-op).
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -392,7 +393,7 @@ fn install_editable() -> Result<()> {
     );
 
     // Add another, non-editable dependency.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -447,7 +448,7 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Install the registry-based version of Black.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black")
@@ -476,7 +477,7 @@ fn install_editable_and_registry() -> Result<()> {
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -503,7 +504,7 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black")
@@ -524,7 +525,7 @@ fn install_editable_and_registry() -> Result<()> {
     );
 
     // Re-install Black at a specific version. This should replace the editable version.
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black==23.10.0")

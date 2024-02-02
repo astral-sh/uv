@@ -1,16 +1,15 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
-use assert_cmd::assert::{Assert, OutputAssertExt};
+use std::env;
 use std::path::{Path, PathBuf};
+use std::process::Output;
 
+use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use assert_fs::TempDir;
-use insta_cmd::get_cargo_bin;
-
-pub const BIN_NAME: &str = "puffin";
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
@@ -58,7 +57,7 @@ impl TestContext {
     /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
     /// * Set the venv to a fresh `.venv` in `temp_dir`.
     pub fn compile(&self) -> std::process::Command {
-        let mut cmd = std::process::Command::new(get_cargo_bin(BIN_NAME));
+        let mut cmd = std::process::Command::new(get_bin());
         cmd.arg("pip")
             .arg("compile")
             .arg("--cache-dir")
@@ -97,7 +96,7 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 /// Python version. Expected format for `python` is "python<version>".
 pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> PathBuf {
     let venv = temp_dir.child(".venv");
-    Command::new(get_cargo_bin(BIN_NAME))
+    Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--cache-dir")
@@ -111,6 +110,33 @@ pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> Pat
     venv.to_path_buf()
 }
 
+/// Returns the puffin binary that cargo built before launching the tests.
+///
+/// <https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates>
+pub fn get_bin() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_puffin"))
+}
+
+/// Execute the command and format its output status, stdout and stderr into a snapshot string.
+///
+/// This function is derived from `insta_cmd`s `spawn_with_info`.
+pub fn run_and_format(command: &mut std::process::Command) -> (String, Output) {
+    let program = command.get_program().to_string_lossy().to_string();
+    let output = command
+        .output()
+        .unwrap_or_else(|_| panic!("Failed to spawn {program}"));
+
+    let snapshot = format!(
+        "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+        output.status.success(),
+        output.status.code().unwrap_or(!0),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    (snapshot, output)
+}
+
 /// Run [`assert_cmd_snapshot!`], with default filters or with custom filters.
 #[allow(unused_macros)]
 macro_rules! puffin_snapshot {
@@ -121,7 +147,9 @@ macro_rules! puffin_snapshot {
         ::insta::with_settings!({
             filters => $filters.to_vec()
         }, {
-            ::insta_cmd::assert_cmd_snapshot!($spawnable, @$snapshot);
+            let (snapshot, output) = $crate::common::run_and_format($spawnable);
+            ::insta::assert_snapshot!(snapshot, @$snapshot);
+            output
         });
     }};
 }

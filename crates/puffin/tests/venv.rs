@@ -4,12 +4,10 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-use insta_cmd::get_cargo_bin;
 
-use common::BIN_NAME;
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::puffin_snapshot;
+use crate::common::{get_bin, puffin_snapshot};
 
 mod common;
 
@@ -27,7 +25,7 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -64,7 +62,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg("--python")
         .arg("3.12")
@@ -100,7 +98,7 @@ fn seed() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--seed")
@@ -141,7 +139,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -177,7 +175,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -210,7 +208,7 @@ fn create_venv_python_patch() -> Result<()> {
         (r"interpreter at .+", "interpreter at [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")

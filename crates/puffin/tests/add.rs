@@ -2,10 +2,8 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-use insta_cmd::get_cargo_bin;
 
-use crate::common::puffin_snapshot;
-use common::BIN_NAME;
+use crate::common::{get_bin, puffin_snapshot};
 
 mod common;
 
@@ -14,7 +12,7 @@ fn missing_pyproject_toml() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let pyproject_toml = temp_dir.child("pyproject.toml");
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("add")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -40,7 +38,7 @@ fn missing_project_table() -> Result<()> {
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("add")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -73,7 +71,7 @@ name = "project"
 "#,
     )?;
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("add")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -110,7 +108,7 @@ dependencies = [
 "#,
     )?;
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("add")
         .arg("flask==2.0.0")
         .current_dir(&temp_dir), @r###"
@@ -145,7 +143,7 @@ dependencies = ["flask==1.0.0"]
 "#,
     )?;
 
-    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_bin())
         .arg("add")
         .arg("requests")
         .current_dir(&temp_dir), @r###"
