@@ -73,6 +73,7 @@ impl TestContext {
     /// Run the given python code and check whether it succeeds.
     pub fn assert_command(&self, command: &str) -> Assert {
         std::process::Command::new(venv_to_interpreter(&self.venv))
+            // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
             // https://github.com/python/cpython/issues/75953
             .arg("-B")
             .arg("-c")

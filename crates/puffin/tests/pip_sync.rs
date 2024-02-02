@@ -20,6 +20,7 @@ mod common;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
     Command::new(venv_to_interpreter(venv))
+        // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
         // https://github.com/python/cpython/issues/75953
         .arg("-B")
         .arg("-c")
