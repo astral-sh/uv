@@ -399,9 +399,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     request_sink
                         .send(Request::Package(package_name.clone()))
                         .await?;
-
-                    // Yield to allow subscribers to continue, as the channel is sync.
-                    tokio::task::yield_now().await;
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
@@ -410,14 +407,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if self.index.distributions.register(dist.package_id()) {
                     priorities.add(dist.name().clone());
                     request_sink.send(Request::Dist(dist)).await?;
-
-                    // Yield to allow subscribers to continue, as the channel is sync.
-                    tokio::task::yield_now().await;
                 }
             }
         }
-        // Yield after sending on a channel to allow the subscribers to continue
-        tokio::task::yield_now().await;
         Ok(())
     }
 
@@ -584,9 +576,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if self.index.distributions.register(candidate.package_id()) {
                     let dist = candidate.resolve().dist.clone();
                     request_sink.send(Request::Dist(dist)).await?;
-
-                    // Yield to allow subscribers to continue, as the channel is sync.
-                    tokio::task::yield_now().await;
                 }
 
                 Ok(Some(version))
@@ -780,9 +769,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
                 None => {}
             }
-
-            // Yield to allow subscribers to continue, as the channel is sync.
-            tokio::task::yield_now().await;
         }
 
         Ok::<(), ResolveError>(())
