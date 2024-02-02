@@ -90,6 +90,7 @@ target-lexicon = { version = "0.12.13" }
 tempfile = { version = "3.9.0" }
 textwrap = { version = "0.15.2" }
 thiserror = { version = "1.0.56" }
+tokio-stream = { version = "0.1.14" }
 tl = { version = "0.7.7" }
 tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
 tokio-tar = { version = "0.3.1" }

@@ -24,14 +24,11 @@ pub enum ResolveError {
     #[error("Failed to find a version of {0} that satisfies the requirement")]
     NotFound(Requirement),
 
-    #[error("The request stream terminated unexpectedly")]
-    StreamTermination,
-
     #[error(transparent)]
     Client(#[from] puffin_client::Error),
 
-    #[error(transparent)]
-    TrySend(#[from] futures::channel::mpsc::SendError),
+    #[error("The channel is closed, was there a panic?")]
+    ChannelClosed,
 
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
@@ -88,9 +85,11 @@ pub enum ResolveError {
     Failure(String),
 }
 
-impl<T> From<futures::channel::mpsc::TrySendError<T>> for ResolveError {
-    fn from(value: futures::channel::mpsc::TrySendError<T>) -> Self {
-        value.into_send_error().into()
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
+    /// Drop the value we want to send to not leak the private type we're sending.
+    /// The tokio error only says "channel closed", so we don't lose information.
+    fn from(_value: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Self::ChannelClosed
     }
 }
 
