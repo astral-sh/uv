@@ -82,16 +82,18 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 } else {
                     let complement = set.complement();
                     let segments = complement.iter().collect::<Vec<_>>().len();
+                    // Simple case, there's a single range to report
                     if segments == 1 {
                         format!(
                             "only {} is available",
                             PackageRange::compatibility(package, &complement)
                         )
+                    // Complex case, there are multiple ranges
                     } else {
                         format!(
-                            "there are no versions of {} that satisfy {}",
+                            "only the following versions of {} {}",
                             package,
-                            PackageRange::compatibility(package, &set)
+                            PackageRange::available(package, &complement)
                         )
                     }
                 }
@@ -485,6 +487,7 @@ impl PackageTerm<'_> {
 enum PackageRangeKind {
     Dependency,
     Compatibility,
+    Available,
 }
 
 /// A [`Range`] and [`PubGrubPackage`] combination for display.
@@ -520,6 +523,7 @@ impl std::fmt::Display for PackageRange<'_> {
                 match self.kind {
                     PackageRangeKind::Dependency => write!(f, "one of:")?,
                     PackageRangeKind::Compatibility => write!(f, "any of:")?,
+                    PackageRangeKind::Available => write!(f, "are available:")?,
                 }
             }
             for segment in &segments {
@@ -531,6 +535,7 @@ impl std::fmt::Display for PackageRange<'_> {
                     (Bound::Unbounded, Bound::Unbounded) => match self.kind {
                         PackageRangeKind::Dependency => write!(f, "{package}")?,
                         PackageRangeKind::Compatibility => write!(f, "all versions of {package}")?,
+                        PackageRangeKind::Available => write!(f, "{package}")?,
                     },
                     (Bound::Unbounded, Bound::Included(v)) => write!(f, "{package}<={v}")?,
                     (Bound::Unbounded, Bound::Excluded(v)) => write!(f, "{package}<{v}")?,
@@ -576,6 +581,13 @@ impl PackageRange<'_> {
         }
     }
 
+    fn available<'a>(package: &'a PubGrubPackage, range: &'a Range<Version>) -> PackageRange<'a> {
+        PackageRange {
+            package,
+            range,
+            kind: PackageRangeKind::Available,
+        }
+    }
     fn depends_on<'a>(
         &'a self,
         package: &'a PubGrubPackage,
