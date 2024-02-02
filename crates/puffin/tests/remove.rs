@@ -2,9 +2,11 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+use insta_cmd::get_cargo_bin;
 
 use common::BIN_NAME;
+
+use crate::common::puffin_snapshot;
 
 mod common;
 
@@ -13,7 +15,7 @@ fn missing_pyproject_toml() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let pyproject_toml = temp_dir.child("pyproject.toml");
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -39,7 +41,7 @@ fn missing_project_table() -> Result<()> {
     let pyproject_toml = temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -70,7 +72,7 @@ name = "project"
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -108,7 +110,7 @@ dependencies = [
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("requests")
         .current_dir(&temp_dir), @r###"
@@ -150,7 +152,7 @@ dependencies = [
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("flask")
         .current_dir(&temp_dir), @r###"
@@ -187,7 +189,7 @@ dependencies = [
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("requests")
         .current_dir(&temp_dir), @r###"
@@ -223,7 +225,7 @@ dependencies = [
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("Flask")
         .current_dir(&temp_dir), @r###"
@@ -258,7 +260,7 @@ dependencies = ["flask==1.0.0", "requests"]
 "#,
     )?;
 
-    assert_cmd_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
+    puffin_snapshot!(Command::new(get_cargo_bin(BIN_NAME))
         .arg("remove")
         .arg("requests")
         .current_dir(&temp_dir), @r###"

@@ -111,11 +111,11 @@ pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> Pat
     venv.to_path_buf()
 }
 
-/// Run [`assert_cmd_snapshot!`] with our default filters.
+/// Run [`assert_cmd_snapshot!`], with default filters or with custom filters.
 #[allow(unused_macros)]
 macro_rules! puffin_snapshot {
     ($spawnable:expr, @$snapshot:literal) => {{
-        puffin_snapshot!(INSTA_FILTERS.to_vec(), $spawnable, @$snapshot);
+        puffin_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot);
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         ::insta::with_settings!({
