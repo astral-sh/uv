@@ -1743,16 +1743,18 @@ fn compile_yanked_version_indirect() -> Result<()> {
 
     puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-          × No solution found when resolving dependencies:
-          ╰─▶ Because there are no versions of attrs that satisfy attrs>20.3.0,<21.2.0
-              and you require attrs>20.3.0,<21.2.0, we can conclude that the
-              requirements are unsatisfiable.
-        "###
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of attrs are available:
+              attrs<=20.3.0
+              attrs>=21.2.0
+          and you require attrs>20.3.0,<21.2.0, we can conclude that the
+          requirements are unsatisfiable.
+    "###
     );
 
     Ok(())

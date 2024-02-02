@@ -375,10 +375,9 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
                  warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
                    ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
-                       And because there are no versions of albatross that satisfy any of:
-                           albatross<1.0.0
-                           albatross>1.0.0,<2.0.0
-                           albatross>2.0.0
+                       And because only the following versions of albatross are available:
+                           albatross==1.0.0
+                           albatross==2.0.0
                        we can conclude that albatross<2.0.0 cannot be used. (1)
 
                        Because the requested Python version (3.11) does not satisfy Python>=3.12 and albatross==2.0.0 depends on Python>=3.12, we can conclude that albatross==2.0.0 cannot be used.
