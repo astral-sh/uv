@@ -1,5 +1,13 @@
 # Puffin
 
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![image](https://img.shields.io/pypi/v/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
+[![image](https://img.shields.io/pypi/l/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
+[![image](https://img.shields.io/pypi/pyversions/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
+[![Actions status](https://github.com/astral-sh/puffin/workflows/CI/badge.svg)](https://github.com/astral-sh/puffin/actions)
+
+[**Discord**](https://discord.gg/c9MhzV8aU5)
+
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in replacement for `pip` and `pip-compile`.
 
 Puffin is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
@@ -294,6 +302,8 @@ tested or developed against, and so stability may vary in practice.
 
 Beyond the Tier 1 and Tier 2 platforms, Puffin is known to build on i686 Windows, and known _not_
 to build on aarch64 Windows, but does not consider either platform to be supported at this time.
+
+Puffin supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
 
 ## Acknowledgements
 

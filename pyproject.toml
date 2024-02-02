@@ -6,9 +6,17 @@ build-backend = "maturin"
 name = "puffin-alpha"
 version = "0.0.3"
 authors = [{ name = "Puffin" }]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 keywords = []
-classifiers = []
+classifiers = [
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3 :: Only",
+]
 readme = "README.md"
 
 [project.urls]
