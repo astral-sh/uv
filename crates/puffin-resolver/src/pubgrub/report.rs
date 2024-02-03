@@ -76,16 +76,13 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 }
                 let set = self.simplify_set(set, package);
 
-                // Check for a reason, which must always be because the entire package is unavailable at this point
+                // Check for a reason, which should always be because the entire package is unavailable
                 if let Some(reason) = reason {
                     if set.as_ref() == &Range::full() {
                         return format!("{package} {reason}");
+                    } else {
+                        return format!("{package}{set} {reason}");
                     }
-                    // In production, we will fall through to the message without the reason
-                    debug_assert!(
-                        false,
-                        "Reasons should only be attached to packages that are unavailable for the full range"
-                    );
                 }
 
                 if set.as_ref() == &Range::full() {
