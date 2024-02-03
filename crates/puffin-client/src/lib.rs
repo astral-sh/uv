@@ -7,11 +7,11 @@ pub use registry_client::{
 };
 pub use rkyvutil::OwnedArchive;
 
-mod cache_headers;
 mod cached_client;
 mod error;
 mod flat_index;
 mod html;
+mod httpcache;
 mod registry_client;
 mod remote_metadata;
 mod rkyvutil;
