@@ -1379,13 +1379,13 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 616 files for future ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 614 files for future ([SIZE])
+    "###
     );
 
     puffin_snapshot!(command(&context)
