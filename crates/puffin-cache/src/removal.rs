@@ -39,6 +39,7 @@ impl Removal {
             if let Ok(meta) = meta {
                 self.total_bytes += meta.len();
             }
+            eprintln!("removed: {}", path.display());
             self.num_files += 1;
             remove_file(path)?;
 

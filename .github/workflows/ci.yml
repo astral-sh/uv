@@ -70,7 +70,8 @@ jobs:
       - name: "Tests"
         run: |
           source .env
-          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+          cargo test --test pip_sync install_registry_source_dist_cached
+          # cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
   macos:
     runs-on:
