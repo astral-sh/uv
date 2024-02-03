@@ -329,7 +329,32 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         .term_intersection_for_package(&next)
                         .expect("a package was chosen but we don't have a term.");
 
-                    let inc = Incompatibility::no_versions(next.clone(), term_intersection.clone());
+                    let reason = {
+                        if let PubGrubPackage::Package(ref package_name, _, _) = next {
+                            // Check if the decision was due to an unavailable incompatibility
+                            if let Some(entry) = self.unavailable.get(package_name) {
+                                match *entry {
+                                    PackageIncompatibility::NoIndex => Some(
+                                        "is not available locally and remote indexes are disabled",
+                                    ),
+                                    PackageIncompatibility::NotFound => {
+                                        Some("was not found in the package registry")
+                                    }
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+
+                    let inc = Incompatibility::no_versions(
+                        next.clone(),
+                        term_intersection.clone(),
+                        reason.map(|reason| reason.to_string()),
+                    );
+
                     state.add_incompatibility(inc);
                     continue;
                 }
