@@ -227,7 +227,8 @@ struct PipCompileArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
-    /// Ignore the package index, instead relying on local archives and caches.
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
@@ -342,8 +343,8 @@ struct PipSyncArgs {
     #[clap(long)]
     find_links: Vec<FlatIndexLocation>,
 
-    /// Ignore the registry index (e.g., PyPI), instead relying on local caches and `--find-links`
-    /// directories and URLs.
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
@@ -481,7 +482,8 @@ struct PipInstallArgs {
     #[clap(long)]
     find_links: Vec<FlatIndexLocation>,
 
-    /// Ignore the package index, instead relying on local archives and caches.
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
@@ -596,7 +598,8 @@ struct VenvArgs {
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,
 
-    /// Ignore the package index, instead relying on local archives and caches.
+    /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
+    /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 }
