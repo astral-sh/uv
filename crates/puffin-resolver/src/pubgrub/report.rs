@@ -78,11 +78,12 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
 
                 // Check for a reason, which should always be because the entire package is unavailable
                 if let Some(reason) = reason {
-                    if set.as_ref() == &Range::full() {
-                        return format!("{package} {reason}");
+                    let formatted = if set.as_ref() == &Range::full() {
+                        format!("{package} {reason}")
                     } else {
-                        return format!("{package}{set} {reason}");
-                    }
+                        format!("{package}{set} {reason}")
+                    };
+                    return formatted;
                 }
 
                 if set.as_ref() == &Range::full() {
