@@ -594,6 +594,29 @@ fn reinstall_build_system() -> Result<()> {
     Ok(())
 }
 
+/// Install a package without using the remote index and no local packages cached
+#[test]
+fn install_no_index() {
+    let context = TestContext::new("3.12");
+
+    puffin_snapshot!(command(&context)
+        .arg("Flask")
+        .arg("--no-index"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask is not available locally and remote indexes are disabled
+          and you require flask, we can conclude that the requirements are
+          unsatisfiable.
+    "###
+    );
+
+    context.assert_command("import flask").failure();
+}
+
 /// Install a package without using pre-built wheels.
 #[test]
 fn install_no_binary() {
