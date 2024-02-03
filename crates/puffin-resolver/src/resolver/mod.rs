@@ -355,7 +355,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     let inc = Incompatibility::no_versions(
                         next.clone(),
                         term_intersection.clone(),
-                        reason.map(|reason| reason.to_string()),
+                        reason.map(ToString::to_string),
                     );
 
                     state.add_incompatibility(inc);
@@ -588,8 +588,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a compatible version.
-                let Some(candidate) = self.selector.select(package_name, range, &version_map)
-                else {
+                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
                     // Short circuit: we couldn't find _any_ compatible versions for a package.
                     return Ok(None);
                 };
@@ -725,10 +724,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let package_id = dist.package_id();
 
                 // If the package does not exist in the registry, we cannot fetch its dependencies
-                if let Some(_) = self.unavailable.get(&package_name) {
-                    // TODO(zanieb): Real error message here
+                if self.unavailable.get(package_name).is_some() {
+                    debug_assert!(
+                        false,
+                        "Dependencies were requested for a package that is not available"
+                    );
                     return Ok(Dependencies::Unavailable(
-                        "The package does not exist".to_string(),
+                        "The package is unavailable".to_string(),
                     ));
                 }
 
@@ -916,7 +918,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.
-                let Some(candidate) = self.selector.select(&package_name, &range, &version_map)
+                let Some(candidate) = self.selector.select(&package_name, &range, version_map)
                 else {
                     return Ok(None);
                 };

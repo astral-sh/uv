@@ -2986,13 +2986,16 @@ fn no_index_requirements_txt() -> Result<()> {
 
     puffin_snapshot!(context.compile()
             .arg("requirements.in"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-        error: tqdm isn't available locally, but making network requests to registries was banned.
-        "###
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because tqdm is not available locally and remote indexes are disabled
+          and you require tqdm, we can conclude that the requirements are
+          unsatisfiable.
+    "###
     );
 
     Ok(())

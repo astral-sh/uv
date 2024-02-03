@@ -80,11 +80,12 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                 if let Some(reason) = reason {
                     if set.as_ref() == &Range::full() {
                         return format!("{package} {reason}");
-                    } else {
-                        // In production, we will fall through to the message without the reason
-                        // instead of panicking
-                        debug_assert!(false, "Reasons should only be attached to packages that are entirely unavailable")
                     }
+                    // In production, we will fall through to the message without the reason
+                    debug_assert!(
+                        false,
+                        "Reasons should only be attached to packages that are unavailable for the full range"
+                    );
                 }
 
                 if set.as_ref() == &Range::full() {
