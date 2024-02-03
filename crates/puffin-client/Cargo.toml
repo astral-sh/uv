@@ -23,7 +23,6 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
-http-cache-semantics = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }

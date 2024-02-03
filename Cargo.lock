@@ -1362,32 +1362,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-cache-semantics"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aec9f678bca3f4a15194b980f20ed9bfe0dd38e8d298c65c559a93dfbd6380a"
-dependencies = [
- "http",
- "http-serde",
- "serde",
- "time",
-]
-
-[[package]]
 name = "http-content-range"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f0d1a8ef218a86416107794b34cc446958d9203556c312bb41eab4c924c1d2e"
-
-[[package]]
-name = "http-serde"
-version = "1.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f560b665ad9f1572cfcaf034f7fb84338a7ce945216d64a90fd81f046a3caee"
-dependencies = [
- "http",
- "serde",
-]
 
 [[package]]
 name = "httparse"
@@ -2584,7 +2562,6 @@ dependencies = [
  "futures",
  "html-escape",
  "http",
- "http-cache-semantics",
  "insta",
  "install-wheel-rs",
  "pep440_rs",
@@ -2868,7 +2845,6 @@ dependencies = [
  "fs-err",
  "futures",
  "gourgeist",
- "http-cache-semantics",
  "indexmap 2.2.2",
  "insta",
  "install-wheel-rs",

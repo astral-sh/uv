@@ -1,20 +1,19 @@
 use std::future::Future;
-use std::time::SystemTime;
 
 use futures::FutureExt;
-use http::request::Parts;
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use reqwest::{Request, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
-use url::Url;
 
 use puffin_cache::{CacheEntry, Freshness};
 use puffin_fs::write_atomic;
 
-use crate::{cache_headers::CacheHeaders, Error, ErrorKind};
+use crate::{
+    httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
+    Error, ErrorKind,
+};
 
 /// Either a cached client error or a (user specified) error from the callback
 #[derive(Debug)]
@@ -44,31 +43,25 @@ impl<E: Into<Error>> From<CachedClientError<E>> for Error {
     }
 }
 
-#[derive(Debug)]
-enum CachedResponse<Payload: Serialize> {
-    /// The cached response is fresh without an HTTP request (e.g. immutable)
-    FreshCache(Payload),
-    /// The cached response is fresh after an HTTP request (e.g. 304 not modified)
-    NotModified(DataWithCachePolicy<Payload>),
-    /// There was no prior cached response or the cache was outdated
-    ///
-    /// The cache policy is `None` if it isn't storable
-    ModifiedOrNew(Response, Option<Box<CachePolicy>>),
+#[derive(Debug, Clone, Copy)]
+pub enum CacheControl {
+    /// Respect the `cache-control` header from the response.
+    None,
+    /// Apply `max-age=0, must-revalidate` to the request.
+    MustRevalidate,
 }
 
-/// Serialize the actual payload together with its caching information.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct DataWithCachePolicy<Payload: Serialize> {
-    pub data: Payload,
-    /// Whether the response should be considered immutable.
-    immutable: bool,
-    /// The [`CachePolicy`] is used to determine if the response is fresh or stale.
-    /// The policy is large (448 bytes at time of writing), so we reduce the stack size by
-    /// boxing it.
-    cache_policy: Box<CachePolicy>,
+impl From<Freshness> for CacheControl {
+    fn from(value: Freshness) -> Self {
+        match value {
+            Freshness::Fresh => CacheControl::None,
+            Freshness::Stale => CacheControl::MustRevalidate,
+            Freshness::Missing => CacheControl::None,
+        }
+    }
 }
 
-/// Custom caching layer over [`reqwest::Client`] using `http-cache-semantics`.
+/// Custom caching layer over [`reqwest::Client`].
 ///
 /// The implementation takes inspiration from the `http-cache` crate, but adds support for running
 /// an async callback on the response before caching. We use this to e.g. store a
@@ -119,14 +112,18 @@ impl CachedClient {
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
-        let cached = Self::read_cache(cache_entry).await;
-
-        let cached_response = self.send_cached(req, cache_control, cached).boxed().await?;
-
-        let write_cache = info_span!("write_cache", file = %cache_entry.path().display());
+        let cached_response = match Self::read_cache(cache_entry).await {
+            Some(cached) => self.send_cached(req, cache_control, cached).boxed().await?,
+            None => {
+                debug!("No cache entry for: {}", req.url());
+                self.fresh_request(req).await?
+            }
+        };
         match cached_response {
             CachedResponse::FreshCache(data) => Ok(data),
             CachedResponse::NotModified(data_with_cache_policy) => {
+                let refresh_cache =
+                    info_span!("refresh_cache", file = %cache_entry.path().display());
                 async {
                     let data =
                         rmp_serde::to_vec(&data_with_cache_policy).map_err(ErrorKind::Encode)?;
@@ -135,39 +132,32 @@ impl CachedClient {
                         .map_err(ErrorKind::CacheWrite)?;
                     Ok(data_with_cache_policy.data)
                 }
-                .instrument(write_cache)
+                .instrument(refresh_cache)
                 .await
             }
             CachedResponse::ModifiedOrNew(res, cache_policy) => {
-                let headers = CacheHeaders::from_response(res.headers().get_all("cache-control"));
-                let immutable = headers.is_immutable();
-
+                let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
                 let data = response_callback(res)
                     .boxed()
                     .await
                     .map_err(|err| CachedClientError::Callback(err))?;
-                if let Some(cache_policy) = cache_policy {
-                    let data_with_cache_policy = DataWithCachePolicy {
-                        data,
-                        immutable,
-                        cache_policy,
-                    };
-                    async {
-                        fs_err::tokio::create_dir_all(cache_entry.dir())
-                            .await
-                            .map_err(ErrorKind::CacheWrite)?;
-                        let data = rmp_serde::to_vec(&data_with_cache_policy)
-                            .map_err(ErrorKind::Encode)?;
-                        write_atomic(cache_entry.path(), data)
-                            .await
-                            .map_err(ErrorKind::CacheWrite)?;
-                        Ok(data_with_cache_policy.data)
-                    }
-                    .instrument(write_cache)
-                    .await
-                } else {
-                    Ok(data)
+                let Some(cache_policy) = cache_policy else {
+                    return Ok(data);
+                };
+                let data_with_cache_policy = DataWithCachePolicy { data, cache_policy };
+                async {
+                    fs_err::tokio::create_dir_all(cache_entry.dir())
+                        .await
+                        .map_err(ErrorKind::CacheWrite)?;
+                    let data =
+                        rmp_serde::to_vec(&data_with_cache_policy).map_err(ErrorKind::Encode)?;
+                    write_atomic(cache_entry.path(), data)
+                        .await
+                        .map_err(ErrorKind::CacheWrite)?;
+                    Ok(data_with_cache_policy.data)
                 }
+                .instrument(new_cache)
+                .await
             }
         }
     }
@@ -176,130 +166,112 @@ impl CachedClient {
         cache_entry: &CacheEntry,
     ) -> Option<DataWithCachePolicy<Payload>> {
         let read_span = info_span!("read_cache", file = %cache_entry.path().display());
-        let read_result = fs_err::tokio::read(cache_entry.path())
+        let cached = fs_err::tokio::read(cache_entry.path())
             .instrument(read_span)
-            .await;
-
-        if let Ok(cached) = read_result {
-            let parse_span = info_span!(
-                "parse_cache",
-                path = %cache_entry.path().display()
-            );
-            let parse_result = tokio::task::spawn_blocking(move || {
-                parse_span
-                    .in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached))
-            })
             .await
-            .expect("Tokio executor failed, was there a panic?");
-            match parse_result {
-                Ok(data) => Some(data),
-                Err(err) => {
-                    warn!(
-                        "Broken cache entry at {}, removing: {err}",
-                        cache_entry.path().display()
-                    );
-                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
-                    None
-                }
+            .ok()?;
+
+        let parse_span = info_span!(
+            "parse_cache",
+            path = %cache_entry.path().display()
+        );
+        let parse_result = tokio::task::spawn_blocking(move || {
+            parse_span.in_scope(|| rmp_serde::from_slice::<DataWithCachePolicy<Payload>>(&cached))
+        })
+        .await
+        .expect("Tokio executor failed, was there a panic?");
+        match parse_result {
+            Ok(data) => Some(data),
+            Err(err) => {
+                warn!(
+                    "Broken cache entry at {}, removing: {err}",
+                    cache_entry.path().display()
+                );
+                let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                None
             }
-        } else {
-            None
         }
     }
 
-    /// `http-cache-semantics` to `reqwest` wrapper
+    /// Send a request given that we have a (possibly) stale cached response.
+    ///
+    /// If the cached response is valid but stale, then this will attempt a
+    /// revalidation request.
     async fn send_cached<T: Serialize + DeserializeOwned>(
         &self,
         mut req: Request,
         cache_control: CacheControl,
-        cached: Option<DataWithCachePolicy<T>>,
+        cached: DataWithCachePolicy<T>,
     ) -> Result<CachedResponse<T>, Error> {
-        let url = req.url().clone();
-        let cached_response = if let Some(cached) = cached {
-            // Avoid sending revalidation requests for immutable responses.
-            if cached.immutable && !cached.cache_policy.is_stale(SystemTime::now()) {
-                debug!("Found immutable response for: {url}");
-                return Ok(CachedResponse::FreshCache(cached.data));
+        // Apply the cache control header, if necessary.
+        match cache_control {
+            CacheControl::None => {}
+            CacheControl::MustRevalidate => {
+                req.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("no-cache"),
+                );
             }
-
-            // Apply the cache control header, if necessary.
-            match cache_control {
-                CacheControl::None => {}
-                CacheControl::MustRevalidate => {
-                    req.headers_mut().insert(
-                        http::header::CACHE_CONTROL,
-                        http::HeaderValue::from_static("max-age=0, must-revalidate"),
-                    );
-                }
-            }
-
-            match cached
-                .cache_policy
-                .before_request(&RequestLikeReqwest(&req), SystemTime::now())
-            {
-                BeforeRequest::Fresh(_) => {
-                    debug!("Found fresh response for: {url}");
+        }
+        Ok(
+            match cached.cache_policy.to_archived().before_request(&mut req) {
+                BeforeRequest::Fresh => {
+                    debug!("Found fresh response for: {}", req.url());
                     CachedResponse::FreshCache(cached.data)
                 }
-                BeforeRequest::Stale { request, matches } => {
-                    self.send_cached_handle_stale(req, url, cached, &request, matches)
+                BeforeRequest::Stale(new_cache_policy_builder) => {
+                    debug!("Found stale response for: {}", req.url());
+                    self.send_cached_handle_stale(req, cached, new_cache_policy_builder)
                         .await?
                 }
-            }
-        } else {
-            debug!("No cache entry for: {url}");
-            self.fresh_request(req).await?
-        };
-        Ok(cached_response)
+                BeforeRequest::NoMatch => {
+                    // This shouldn't happen; if it does, we'll override the cache.
+                    warn!(
+                        "Cached request doesn't match current request for: {}",
+                        req.url()
+                    );
+                    self.fresh_request(req).await?
+                }
+            },
+        )
     }
 
     async fn send_cached_handle_stale<T: Serialize + DeserializeOwned>(
         &self,
-        mut req: Request,
-        url: Url,
+        req: Request,
         cached: DataWithCachePolicy<T>,
-        request: &Parts,
-        matches: bool,
+        new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse<T>, Error> {
-        if !matches {
-            // This shouldn't happen; if it does, we'll override the cache.
-            warn!("Cached request doesn't match current request for: {url}");
-            return self.fresh_request(req).await;
-        }
-
+        let url = req.url().clone();
         debug!("Sending revalidation request for: {url}");
-        for header in &request.headers {
-            req.headers_mut().insert(header.0.clone(), header.1.clone());
-        }
         let res = self
             .0
-            .execute(req.try_clone().expect("streaming requests not supported"))
+            .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
             .map_err(ErrorKind::RequestMiddlewareError)?
             .error_for_status()
             .map_err(ErrorKind::RequestError)?;
-        let after_response = cached.cache_policy.after_response(
-            &RequestLikeReqwest(&req),
-            &ResponseLikeReqwest(&res),
-            SystemTime::now(),
-        );
-        match after_response {
-            AfterResponse::NotModified(new_policy, _parts) => {
+        match cached
+            .cache_policy
+            .to_archived()
+            .after_response(new_cache_policy_builder, &res)
+        {
+            AfterResponse::NotModified(new_policy) => {
                 debug!("Found not-modified response for: {url}");
-                let headers = CacheHeaders::from_response(res.headers().get_all("cache-control"));
-                let immutable = headers.is_immutable();
                 Ok(CachedResponse::NotModified(DataWithCachePolicy {
                     data: cached.data,
-                    immutable,
                     cache_policy: Box::new(new_policy),
                 }))
             }
-            AfterResponse::Modified(new_policy, _parts) => {
+            AfterResponse::Modified(new_policy) => {
                 debug!("Found modified response for: {url}");
                 Ok(CachedResponse::ModifiedOrNew(
                     res,
-                    new_policy.is_storable().then(|| Box::new(new_policy)),
+                    new_policy
+                        .to_archived()
+                        .is_storable()
+                        .then(|| Box::new(new_policy)),
                 ))
             }
         }
@@ -307,78 +279,44 @@ impl CachedClient {
 
     #[instrument(skip_all, fields(url = req.url().as_str()))]
     async fn fresh_request<T: Serialize>(&self, req: Request) -> Result<CachedResponse<T>, Error> {
-        trace!("{} {}", req.method(), req.url());
+        trace!("Sending fresh {} request for {}", req.method(), req.url());
+        let cache_policy_builder = CachePolicyBuilder::new(&req);
         let res = self
             .0
-            .execute(req.try_clone().expect("streaming requests not supported"))
+            .execute(req)
             .await
             .map_err(ErrorKind::RequestMiddlewareError)?
             .error_for_status()
             .map_err(ErrorKind::RequestError)?;
-        let cache_policy = CachePolicy::new(&RequestLikeReqwest(&req), &ResponseLikeReqwest(&res));
+        let cache_policy = cache_policy_builder.build(&res);
         Ok(CachedResponse::ModifiedOrNew(
             res,
-            cache_policy.is_storable().then(|| Box::new(cache_policy)),
+            cache_policy
+                .to_archived()
+                .is_storable()
+                .then(|| Box::new(cache_policy)),
         ))
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum CacheControl {
-    /// Respect the `cache-control` header from the response.
-    None,
-    /// Apply `max-age=0, must-revalidate` to the request.
-    MustRevalidate,
-}
-
-impl From<Freshness> for CacheControl {
-    fn from(value: Freshness) -> Self {
-        match value {
-            Freshness::Fresh => CacheControl::None,
-            Freshness::Stale => CacheControl::MustRevalidate,
-            Freshness::Missing => CacheControl::None,
-        }
-    }
-}
-
 #[derive(Debug)]
-struct RequestLikeReqwest<'a>(&'a Request);
-
-impl<'a> http_cache_semantics::RequestLike for RequestLikeReqwest<'a> {
-    fn uri(&self) -> http::uri::Uri {
-        // This converts from a url::Url (as returned by reqwest::Request::url)
-        // to a http::uri::Uri. The conversion requires parsing, but this is
-        // only called ~once per HTTP request. We can afford it.
-        self.0
-            .url()
-            .as_str()
-            .parse()
-            .expect("reqwest::Request::url always returns a valid URL")
-    }
-    fn is_same_uri(&self, other: &http::uri::Uri) -> bool {
-        // At time of writing, I saw no way to cheaply compare a http::uri::Uri
-        // with a url::Url. We can at least avoid parsing anything, and
-        // Url::as_str() is free. In practice though, this routine is called
-        // ~once per HTTP request. We can afford it. (And it looks like
-        // http::uri::Uri's PartialEq<str> implementation has been tuned.)
-        self.0.url().as_str() == *other
-    }
-    fn method(&self) -> &http::method::Method {
-        self.0.method()
-    }
-    fn headers(&self) -> &http::header::HeaderMap {
-        self.0.headers()
-    }
+enum CachedResponse<Payload: Serialize> {
+    /// The cached response is fresh without an HTTP request (e.g. age < max-age).
+    FreshCache(Payload),
+    /// The cached response is fresh after an HTTP request (e.g. 304 not modified)
+    NotModified(DataWithCachePolicy<Payload>),
+    /// There was no prior cached response or the cache was outdated
+    ///
+    /// The cache policy is `None` if it isn't storable
+    ModifiedOrNew(Response, Option<Box<CachePolicy>>),
 }
 
-#[derive(Debug)]
-struct ResponseLikeReqwest<'a>(&'a Response);
-
-impl<'a> http_cache_semantics::ResponseLike for ResponseLikeReqwest<'a> {
-    fn status(&self) -> http::status::StatusCode {
-        self.0.status()
-    }
-    fn headers(&self) -> &http::header::HeaderMap {
-        self.0.headers()
-    }
+/// Serialize the actual payload together with its caching information.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DataWithCachePolicy<Payload: Serialize> {
+    pub data: Payload,
+    /// The [`CachePolicy`] is used to determine if the response is fresh or stale.
+    /// The policy is large (448 bytes at time of writing), so we reduce the stack size by
+    /// boxing it.
+    cache_policy: Box<CachePolicy>,
 }
