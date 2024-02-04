@@ -47,6 +47,11 @@ impl CandidateSelector {
     pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
         &self.prerelease_strategy
     }
+
+    #[inline]
+    pub(crate) fn packages(&self) -> impl Iterator<Item = &PackageName> + '_ {
+        self.preferences.packages()
+    }
 }
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
@@ -54,8 +59,14 @@ impl CandidateSelector {
 struct Preferences(FxHashMap<PackageName, Version>);
 
 impl Preferences {
+    #[inline]
     fn get(&self, package_name: &PackageName) -> Option<&Version> {
         self.0.get(package_name)
+    }
+
+    #[inline]
+    fn packages(&self) -> impl Iterator<Item = &PackageName> + '_ {
+        self.0.keys()
     }
 }
 

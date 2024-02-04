@@ -261,6 +261,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             self.python_requirement.target()
         );
 
+        // If we have a "lockfile", pre-fetch any direct or transitive dependencies.
+        self.prefetch(request_sink).await?;
+
         loop {
             // Run unit propagation.
             state.unit_propagation(next)?;
@@ -381,12 +384,26 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         }
     }
 
+    /// Prioritize a package. Used to ensure that we choose packages in breadth-first order.
+    fn prioritize_package(package: &PubGrubPackage, priorities: &mut PubGrubPriorities) {
+        match package {
+            PubGrubPackage::Root(_) => {}
+            PubGrubPackage::Python(PubGrubPython::Installed) => {}
+            PubGrubPackage::Python(PubGrubPython::Target) => {}
+            PubGrubPackage::Package(package_name, _, None) => {
+                priorities.add(package_name.clone());
+            }
+            PubGrubPackage::Package(package_name, _, Some(_)) => {
+                priorities.add(package_name.clone());
+            }
+        }
+    }
+
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
     async fn visit_package(
         &self,
         package: &PubGrubPackage,
-        priorities: &mut PubGrubPriorities,
         request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
@@ -395,7 +412,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(package_name.clone()) {
-                    priorities.add(package_name.clone());
                     request_sink
                         .send(Request::Package(package_name.clone()))
                         .await?;
@@ -405,9 +421,24 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(package_name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.package_id()) {
-                    priorities.add(dist.name().clone());
                     request_sink.send(Request::Dist(dist)).await?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Emit requests to prefetch any known dependencies.
+    async fn prefetch(
+        &self,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
+    ) -> Result<(), ResolveError> {
+        for package_name in self.selector.packages() {
+            if self.index.packages.register(package_name.clone()) {
+                // Emit a request to fetch the metadata for this package.
+                request_sink
+                    .send(Request::Package(package_name.clone()))
+                    .await?;
             }
         }
         Ok(())
@@ -616,8 +647,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding direct dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)
-                        .await?;
+                    Self::prioritize_package(package, priorities);
+                    self.visit_package(package, request_sink).await?;
                 }
 
                 // Add a dependency on each editable.
@@ -703,8 +734,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Adding transitive dependency: {package}{version}");
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)
-                        .await?;
+                    Self::prioritize_package(package, priorities);
+                    self.visit_package(package, request_sink).await?;
                 }
 
                 // If a package has an extra, insert a constraint on the base package.

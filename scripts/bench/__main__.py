@@ -839,7 +839,6 @@ class Puffin(Suite):
                 "--output-file",
                 baseline,
             ],
-            cwd=cwd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
