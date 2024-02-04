@@ -340,11 +340,10 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of albatross that satisfy any of:
-              albatross<1.0.0
-              albatross>1.0.0,<2.0.0
-              albatross>2.0.0,<3.0.0
-              albatross>3.0.0
+      ╰─▶ Because only the following versions of albatross are available:
+              albatross==1.0.0
+              albatross==2.0.0
+              albatross==3.0.0
           and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
           And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that any of:
               albatross<2.0.0
@@ -441,15 +440,14 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of crow that satisfy any of:
-              crow<1.0.0
-              crow>1.0.0,<2.0.0
-              crow>2.0.0
+      ╰─▶ Because only the following versions of crow are available:
+              crow==1.0.0
+              crow==2.0.0
           and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
 
-          Because there are no versions of albatross that satisfy any of:
-              albatross<1.0.0
-              albatross>1.0.0,<2.0.0
+          Because only the following versions of albatross are available:
+              albatross==1.0.0
+              albatross>=2.0.0
           and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
           And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
           And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible. (2)
@@ -556,15 +554,14 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of crow that satisfy any of:
-              crow<1.0.0
-              crow>1.0.0,<2.0.0
-              crow>2.0.0
+      ╰─▶ Because only the following versions of crow are available:
+              crow==1.0.0
+              crow==2.0.0
           and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
 
-          Because there are no versions of albatross that satisfy any of:
-              albatross<1.0.0
-              albatross>1.0.0,<2.0.0
+          Because only the following versions of albatross are available:
+              albatross==1.0.0
+              albatross>=2.0.0
           and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
           And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
           And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible. (2)
@@ -1938,10 +1935,11 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of crow that satisfy any of:
-              crow>1.0.0,<2.0.0a5
-              crow>2.0.0a7,<2.0.0b1
-              crow>2.0.0b1,<2.0.0b5
+      ╰─▶ Because only the following versions of crow are available:
+              crow<=1.0.0
+              crow>=2.0.0a5,<=2.0.0a7
+              crow==2.0.0b1
+              crow>=2.0.0b5
           and albatross==1.0.0 depends on one of:
               crow>1.0.0,<2.0.0a5
               crow>2.0.0a7,<2.0.0b1
@@ -2282,10 +2280,10 @@ fn requires_python_version_greater_than_current_excluded() {
               Python>=3.12
            are incompatible.
           And because the current Python version (3.9.18) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 are incompatible.
-          And because albatross==2.0.0 depends on Python>=3.10 and there are no versions of albatross that satisfy any of:
-              albatross>2.0.0,<3.0.0
-              albatross>3.0.0,<4.0.0
-              albatross>4.0.0
+          And because albatross==2.0.0 depends on Python>=3.10 and only the following versions of albatross are available:
+              albatross<=2.0.0
+              albatross==3.0.0
+              albatross==4.0.0
           we can conclude that albatross>=2.0.0,<3.0.0 cannot be used. (1)
 
           Because the current Python version (3.9.18) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.18) does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.

@@ -90,4 +90,3 @@ RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo r
 ```bash
 RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --bin puffin-dev --profile profiling -- resolve jupyter
 ```
-
