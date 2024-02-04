@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use configparser::ini::Ini;
 use fs_err as fs;
-use fs_err::File;
+use fs_err::{DirEntry, File};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
@@ -286,13 +286,7 @@ fn clone_wheel_files(
     // subdirectory unless the subdirectory exists already in which case we'll need to recursively
     // merge its contents with the existing directory.
     for entry in fs::read_dir(wheel.as_ref())? {
-        let entry = entry?;
-        let from = entry.path();
-        let to = site_packages
-            .as_ref()
-            .join(from.strip_prefix(&wheel).unwrap());
-
-        clone_recursive(site_packages.as_ref(), &from, &to)?;
+        clone_recursive(site_packages.as_ref(), wheel.as_ref(), &entry?)?;
         count += 1;
     }
 
@@ -300,22 +294,24 @@ fn clone_wheel_files(
 }
 
 /// Recursively clone the contents of `from` into `to`.
-fn clone_recursive(site_packages: &Path, from: &Path, to: &Path) -> Result<(), Error> {
-    // Attempt to copy the file or directory
+fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Result<(), Error> {
+    // Determine the existing and destination paths.
+    let from = entry.path();
+    let to = site_packages.join(from.strip_prefix(wheel).unwrap());
+
     debug!("Cloning {} to {}", from.display(), to.display());
-    let reflink = reflink_copy::reflink(from, to);
+
+    // Attempt to copy the file or directory
+    let reflink = reflink_copy::reflink(&from, &to);
 
     if reflink
         .as_ref()
         .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
     {
         // If copying fails and the directory exists already, it must be merged recursively.
-        if from.is_dir() {
+        if entry.file_type()?.is_dir() {
             for entry in fs::read_dir(from)? {
-                let entry = entry?;
-                let child_from = entry.path();
-                let child_to = to.join(child_from.strip_prefix(from).unwrap());
-                clone_recursive(site_packages, child_from.as_path(), child_to.as_path())?;
+                clone_recursive(site_packages, wheel, &entry?)?;
             }
         } else {
             // If file already exists, overwrite it.
@@ -327,8 +323,8 @@ fn clone_recursive(site_packages: &Path, from: &Path, to: &Path) -> Result<(), E
     } else {
         // Other errors should be tracked
         reflink.map_err(|err| Error::Reflink {
-            from: from.to_path_buf(),
-            to: to.to_path_buf(),
+            from: from.clone(),
+            to: to.clone(),
             err,
         })?;
     }
