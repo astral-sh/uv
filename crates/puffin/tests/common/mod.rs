@@ -1,7 +1,7 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
-use std::env;
+use std::env::consts::EXE_SUFFIX;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
@@ -92,9 +92,59 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
     }
 }
 
+/// If bootstrapped python build standalone pythons exists in `<project root>/bin`,
+/// return the paths to the directories containing the python binaries (i.e. as paths that
+/// `which::which_in` can use).
+///
+/// Use `scripts/bootstrap/install.py` to bootstrap.
+///
+/// Python versions are sorted from newest to oldest.
+pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
+    // Current dir is `<project root>/crates/puffin`.
+    let bootstrapped_pythons = std::env::current_dir()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("bin")
+        .join("versions");
+    let Ok(bootstrapped_pythons) = fs_err::read_dir(bootstrapped_pythons) else {
+        return None;
+    };
+
+    let mut bootstrapped_pythons: Vec<PathBuf> = bootstrapped_pythons
+        .map(Result::unwrap)
+        .filter(|entry| entry.metadata().unwrap().is_dir())
+        .map(|entry| {
+            if cfg!(unix) {
+                entry.path().join("install").join("bin")
+            } else if cfg!(windows) {
+                entry.path().join("install")
+            } else {
+                unimplemented!("Only Windows and Unix are supported")
+            }
+        })
+        .collect();
+    bootstrapped_pythons.sort();
+    // Prefer the most recent patch version.
+    bootstrapped_pythons.reverse();
+    Some(bootstrapped_pythons)
+}
+
 /// Create a virtual environment named `.venv` in a temporary directory with the given
 /// Python version. Expected format for `python` is "python<version>".
 pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> PathBuf {
+    let python = if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
+        bootstrapped_pythons
+            .into_iter()
+            // Good enough since we control the directory
+            .find(|path| path.to_str().unwrap().contains(&format!("@{python}")))
+            .expect("Missing python bootstrap version")
+            .join(format!("python{EXE_SUFFIX}"))
+    } else {
+        PathBuf::from(python)
+    };
     let venv = temp_dir.child(".venv");
     Command::new(get_bin())
         .arg("venv")

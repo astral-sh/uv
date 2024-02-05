@@ -220,18 +220,9 @@ impl Interpreter {
     pub fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
         requested: R,
     ) -> Result<PathBuf, Error> {
-        if let Some(isolated) = std::env::var_os("PUFFIN_PYTHON_PATH") {
-            if let Ok(cwd) = std::env::current_dir() {
-                which::which_in(requested, Some(isolated), cwd)
-                    .map_err(|err| Error::from_which_error(requested.into(), err))
-            } else {
-                which::which_in_global(requested, Some(isolated))
-                    .map_err(|err| Error::from_which_error(requested.into(), err))
-                    .and_then(|mut paths| paths.next().ok_or(Error::PythonNotFound))
-            }
-        } else {
-            which::which(requested).map_err(|err| Error::from_which_error(requested.into(), err))
-        }
+        let cwd = std::env::current_dir()?;
+        which::which_in(requested, std::env::var_os("PUFFIN_PYTHON_PATH"), cwd)
+            .map_err(|err| Error::from_which_error(requested.into(), err))
     }
 
     /// Returns the path to the Python virtual environment.
