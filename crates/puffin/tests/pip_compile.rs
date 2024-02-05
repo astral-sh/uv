@@ -2992,9 +2992,8 @@ fn no_index_requirements_txt() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm is not available locally and remote indexes are disabled
-          and you require tqdm, we can conclude that the requirements are
-          unsatisfiable.
+      ╰─▶ Because tqdm was not found in the provided links and you require tqdm,
+          we can conclude that the requirements are unsatisfiable.
     "###
     );
 

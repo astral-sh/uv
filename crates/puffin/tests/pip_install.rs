@@ -608,9 +608,8 @@ fn install_no_index() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask is not available locally and remote indexes are disabled
-          and you require flask, we can conclude that the requirements are
-          unsatisfiable.
+      ╰─▶ Because flask was not found in the provided links and you require flask,
+          we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -632,9 +631,8 @@ fn install_no_index_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 is not available locally and remote indexes
-          are disabled and you require flask==3.0.0, we can conclude that the
-          requirements are unsatisfiable.
+      ╰─▶ Because flask==3.0.0 was not found in the provided links and you require
+          flask==3.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
