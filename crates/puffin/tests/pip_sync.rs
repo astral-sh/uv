@@ -920,7 +920,7 @@ fn warn_on_yanked_version() -> Result<()> {
     // This version is yanked.
     requirements_in.write_str("colorama==0.4.2")?;
 
-    puffin_snapshot!(INSTA_FILTERS, command(&context)
+    puffin_snapshot!(INSTA_FILTERS, windows_filters=false, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
         success: true
