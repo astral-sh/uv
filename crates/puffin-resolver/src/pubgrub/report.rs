@@ -35,7 +35,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
             External::NotRoot(package, version) => {
                 format!("we are solving dependencies of {package} {version}")
             }
-            External::NoVersions(package, set) => {
+            External::NoVersions(package, set, reason) => {
                 if matches!(package, PubGrubPackage::Python(_)) {
                     if let Some(python) = self.python_requirement {
                         if python.target() == python.installed() {
@@ -75,6 +75,17 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     );
                 }
                 let set = self.simplify_set(set, package);
+
+                // Check for a reason
+                if let Some(reason) = reason {
+                    let formatted = if set.as_ref() == &Range::full() {
+                        format!("{package} {reason}")
+                    } else {
+                        format!("{package}{set} {reason}")
+                    };
+                    return formatted;
+                }
+
                 if set.as_ref() == &Range::full() {
                     format!("there are no versions of {package}")
                 } else if set.as_singleton().is_some() {
@@ -353,7 +364,7 @@ impl PubGrubReportFormatter<'_> {
         let mut hints = IndexSet::default();
         match derivation_tree {
             DerivationTree::External(external) => match external {
-                External::NoVersions(package, set) => {
+                External::NoVersions(package, set, _) => {
                     if set.bounds().any(Version::any_prerelease) {
                         // A pre-release marker appeared in the version requirements.
                         if !allowed_prerelease(package, selector) {

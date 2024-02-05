@@ -42,6 +42,19 @@ fn command(context: &TestContext) -> Command {
     command
 }
 
+/// Create a `pip uninstall` command with options shared across scenarios.
+fn uninstall_command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("uninstall")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+    command
+}
+
 #[test]
 fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
@@ -798,6 +811,83 @@ fn install_no_binary() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
+/// Attempt to install a package without using a remote index.
+#[test]
+fn install_no_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: markupsafe isn't available locally, but making network requests to registries was banned.
+    "###
+    );
+
+    context.assert_command("import markupsafe").failure();
+
+    Ok(())
+}
+
+/// Attempt to install a package without using a remote index
+/// after a previous successful installation.
+#[test]
+fn install_no_index_cached() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
+    );
+
+    context.assert_command("import markupsafe").success();
+
+    uninstall_command(&context)
+        .arg("markupsafe")
+        .assert()
+        .success();
+
+    puffin_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: markupsafe isn't available locally, but making network requests to registries was banned.
+    "###
+    );
+
+    context.assert_command("import markupsafe").failure();
 
     Ok(())
 }

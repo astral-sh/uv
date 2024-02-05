@@ -18,6 +18,10 @@ impl Error {
         *self.kind
     }
 
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
+    }
+
     pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
     }

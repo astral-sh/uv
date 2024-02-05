@@ -594,6 +594,51 @@ fn reinstall_build_system() -> Result<()> {
     Ok(())
 }
 
+/// Install a package without using the remote index
+#[test]
+fn install_no_index() {
+    let context = TestContext::new("3.12");
+
+    puffin_snapshot!(command(&context)
+        .arg("Flask")
+        .arg("--no-index"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask was not found in the provided links and you require flask,
+          we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    context.assert_command("import flask").failure();
+}
+
+/// Install a package without using the remote index
+/// Covers a case where the user requests a version which should be included in the error
+#[test]
+fn install_no_index_version() {
+    let context = TestContext::new("3.12");
+
+    puffin_snapshot!(command(&context)
+        .arg("Flask==3.0.0")
+        .arg("--no-index"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.0 was not found in the provided links and you require
+          flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    context.assert_command("import flask").failure();
+}
+
 /// Install a package without using pre-built wheels.
 #[test]
 fn install_no_binary() {

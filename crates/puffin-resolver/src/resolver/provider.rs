@@ -18,15 +18,26 @@ use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
-type VersionMapResponse = Result<VersionMap, puffin_client::Error>;
-type WheelMetadataResponse = Result<(Metadata21, Option<Url>), puffin_distribution::Error>;
+type PackageVersionsResult = Result<VersionsResponse, puffin_client::Error>;
+type WheelMetadataResult = Result<(Metadata21, Option<Url>), puffin_distribution::Error>;
+
+/// The response when requesting versions for a package
+#[derive(Debug)]
+pub enum VersionsResponse {
+    /// The package was found in the registry with the included versions
+    Found(VersionMap),
+    /// The package was not found in the registry
+    NotFound,
+    /// The package was not found in the local registry
+    NoIndex,
+}
 
 pub trait ResolverProvider: Send + Sync {
     /// Get the version map for a package.
-    fn get_version_map<'io>(
+    fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> impl Future<Output = VersionMapResponse> + Send + 'io;
+    ) -> impl Future<Output = PackageVersionsResult> + Send + 'io;
 
     /// Get the metadata for a distribution.
     ///
@@ -36,7 +47,7 @@ pub trait ResolverProvider: Send + Sync {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
-    ) -> impl Future<Output = WheelMetadataResponse> + Send + 'io;
+    ) -> impl Future<Output = WheelMetadataResult> + Send + 'io;
 
     /// Set the [`puffin_distribution::Reporter`] to use for this installer.
     #[must_use]
@@ -104,7 +115,10 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     for DefaultResolverProvider<'a, Context>
 {
     /// Make a simple api request for the package and convert the result to a [`VersionMap`].
-    async fn get_version_map<'io>(&'io self, package_name: &'io PackageName) -> VersionMapResponse {
+    async fn get_package_versions<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+    ) -> PackageVersionsResult {
         let result = self.client.simple(package_name).await;
 
         // If the simple api request was successful, perform on the slow conversion to `VersionMap` on the tokio
@@ -114,7 +128,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 let self_send = self.inner.clone();
                 let package_name_owned = package_name.clone();
                 Ok(tokio::task::spawn_blocking(move || {
-                    VersionMap::from_metadata(
+                    VersionsResponse::Found(VersionMap::from_metadata(
                         metadata,
                         &package_name_owned,
                         &index,
@@ -124,18 +138,24 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                         self_send.exclude_newer.as_ref(),
                         self_send.flat_index.get(&package_name_owned).cloned(),
                         &self_send.no_binary,
-                    )
+                    ))
                 })
                 .await
                 .expect("Tokio executor failed, was there a panic?"))
             }
             Err(err) => match err.into_kind() {
-                kind @ (puffin_client::ErrorKind::PackageNotFound(_)
-                | puffin_client::ErrorKind::NoIndex(_)) => {
+                puffin_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionMap::from(flat_index))
+                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
                     } else {
-                        Err(kind.into())
+                        Ok(VersionsResponse::NotFound)
+                    }
+                }
+                puffin_client::ErrorKind::NoIndex(_) => {
+                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
+                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                    } else {
+                        Ok(VersionsResponse::NoIndex)
                     }
                 }
                 kind => Err(kind.into()),
@@ -143,7 +163,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         }
     }
 
-    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResponse {
+    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
         self.fetcher.get_or_build_wheel_metadata(dist).await
     }
 
