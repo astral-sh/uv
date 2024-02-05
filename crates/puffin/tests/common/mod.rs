@@ -141,7 +141,13 @@ pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> Pat
             // Good enough since we control the directory
             .find(|path| path.to_str().unwrap().contains(&format!("@{python}")))
             .expect("Missing python bootstrap version")
-            .join(format!("python{EXE_SUFFIX}"))
+            .join(if cfg!(unix) {
+                "python3"
+            } else if cfg!(windows) {
+                "python.exe"
+            } else {
+                unimplemented!("Only Windows and Unix are supported")
+            })
     } else {
         PathBuf::from(python)
     };
