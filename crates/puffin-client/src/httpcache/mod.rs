@@ -150,16 +150,7 @@ mod control;
 /// At time of writing, we don't expose any way of modifying these since I
 /// suspect we won't ever need to. We split them out into their own type so
 /// that they can be shared between `CachePolicyBuilder` and `CachePolicy`.
-#[derive(
-    Clone,
-    Debug,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::CheckBytes,
-    rkyv::Deserialize,
-    rkyv::Serialize,
-)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::CheckBytes, rkyv::Deserialize, rkyv::Serialize)]
 // Since `CacheConfig` is so simple, we can use itself as the archived type.
 // But note that this will fall apart if even something like an Option<u8> is
 // added.
@@ -253,9 +244,7 @@ impl CachePolicyBuilder {
 /// This does not provide a complete set of HTTP cache semantics. Notably
 /// absent from this (among other things that Puffin probably doesn't care
 /// about it) are proxy cache semantics.
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct CachePolicy {
@@ -995,9 +984,7 @@ pub enum AfterResponse {
     Modified(CachePolicy),
 }
 
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct Request {
@@ -1018,9 +1005,7 @@ impl<'a> From<&'a reqwest::Request> for Request {
     }
 }
 
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct RequestHeaders {
@@ -1045,9 +1030,7 @@ impl<'a> From<&'a http::HeaderMap> for RequestHeaders {
 /// We don't both representing methods of requests whose responses we won't
 /// cache. Instead, we treat them as "unrecognized" and consider the responses
 /// not-storable.
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 #[repr(u8)]
@@ -1069,9 +1052,7 @@ impl<'a> From<&'a http::Method> for Method {
     }
 }
 
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct Response {
@@ -1122,9 +1103,7 @@ impl<'a> From<&'a reqwest::Response> for Response {
     }
 }
 
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct ResponseHeaders {
@@ -1195,9 +1174,7 @@ impl<'a> From<&'a http::HeaderMap> for ResponseHeaders {
     }
 }
 
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct ETag {
@@ -1255,9 +1232,7 @@ impl ETag {
 ///
 /// [RFC 9110 S12.5.5]: https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5
 /// [RFC 9111 S4.1]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.1
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct Vary {
@@ -1339,9 +1314,7 @@ impl ArchivedVary {
 /// cached response cannot be used.
 ///
 /// [RFC 9111 S4.1]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.1
-#[derive(
-    Debug, serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 struct VaryField {
