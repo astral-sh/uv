@@ -30,6 +30,7 @@ use puffin_resolver::{
     ResolutionGraph, ResolutionMode, Resolver,
 };
 use puffin_traits::{InFlight, SetupPyStrategy};
+use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -524,6 +525,33 @@ async fn install(
                 .expect("Resolution should contain all packages")
         })
         .collect::<Vec<_>>();
+
+    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
+    // have been yanked, we currently don't show this message on the second run anymore
+    for dist in &remote {
+        let Some(file) = dist.file() else {
+            continue;
+        };
+        match &file.yanked {
+            None | Some(Yanked::Bool(false)) => {}
+            Some(Yanked::Bool(true)) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+            Some(Yanked::Reason(reason)) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked (reason: \"{reason}\").",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+        }
+    }
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
