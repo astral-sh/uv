@@ -31,6 +31,7 @@ pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
+futures = { workspace = true }
 itertools = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

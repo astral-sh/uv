@@ -2646,6 +2646,7 @@ dependencies = [
  "anyhow",
  "distribution-types",
  "fs-err",
+ "futures",
  "gourgeist",
  "itertools 0.12.1",
  "pep508_rs",

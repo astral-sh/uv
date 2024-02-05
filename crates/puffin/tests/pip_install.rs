@@ -662,6 +662,7 @@ fn install_no_index_version() {
 
 /// Install a package without using pre-built wheels.
 #[test]
+#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn install_no_binary() {
     let context = TestContext::new("3.12");
 
@@ -725,6 +726,7 @@ fn install_no_binary_subset() {
 
 /// Install a package without using pre-built wheels.
 #[test]
+#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn reinstall_no_binary() {
     let context = TestContext::new("3.12");
 

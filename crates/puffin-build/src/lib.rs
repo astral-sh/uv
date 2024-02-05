@@ -316,57 +316,58 @@ impl SourceBuild {
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
 
         // Check if we have a PEP 517 build backend.
-        let pep517_backend = match fs::read_to_string(source_tree.join("pyproject.toml")) {
-            Ok(toml) => {
-                let pyproject_toml: PyProjectToml =
-                    toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
-                if let Some(build_system) = pyproject_toml.build_system {
-                    Some(Pep517Backend {
-                        // If `build-backend` is missing, inject the legacy setuptools backend, but
-                        // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
-                        // says that in this case we "should revert to the legacy behaviour of running
-                        // `setup.py` (either directly, or by implicitly invoking the
-                        // `setuptools.build_meta:__legacy__` backend)", we found that in practice, only
-                        // the legacy setuptools backend is allowed. See also:
-                        // https://github.com/pypa/build/blob/de5b44b0c28c598524832dff685a98d5a5148c44/src/build/__init__.py#L114-L118
-                        backend: build_system
-                            .build_backend
-                            .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
-                        backend_path: build_system.backend_path,
-                        requirements: build_system.requires,
-                    })
-                } else {
-                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
-                    // a PEP 517 build using the default backend, to match `pip` and `build`.
-                    Some(default_backend.clone())
-                }
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                // We require either a `pyproject.toml` or a `setup.py` file at the top level.
-                if !source_tree.join("setup.py").is_file() {
-                    return Err(Error::InvalidSourceDist(
-                        "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
-                            .to_string(),
-                    ));
-                }
-
-                // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
-                // the default backend, to match `build`. `pip` uses `setup.py` directly in this
-                // case (which we allow via `SetupPyStrategy::Setuptools`), but plans to make PEP
-                // 517 builds the default in the future.
-                // See: https://github.com/pypa/pip/issues/9175.
-                match setup_py {
-                    SetupPyStrategy::Pep517 => Some(default_backend.clone()),
-                    SetupPyStrategy::Setuptools => None,
-                }
-            }
-            Err(err) => return Err(err.into()),
-        };
+        let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)?;
 
         let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter.clone())?;
 
         // Setup the build environment.
-        let resolved_requirements = if let Some(pep517_backend) = pep517_backend.as_ref() {
+        let resolved_requirements = Self::get_resolved_requirements(
+            build_context,
+            source_build_context,
+            &default_backend,
+            pep517_backend.as_ref(),
+        )
+        .await?;
+
+        build_context
+            .install(&resolved_requirements, &venv)
+            .await
+            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
+
+        // If we're using the default backend configuration, skip `get_requires_for_build_*`, since
+        // we already installed the requirements above.
+        if let Some(pep517_backend) = &pep517_backend {
+            if pep517_backend != &default_backend {
+                create_pep517_build_environment(
+                    &source_tree,
+                    &venv,
+                    pep517_backend,
+                    build_context,
+                    &package_id,
+                    build_kind,
+                )
+                .await?;
+            }
+        }
+
+        Ok(Self {
+            temp_dir,
+            source_tree,
+            pep517_backend,
+            venv,
+            build_kind,
+            metadata_directory: None,
+            package_id,
+        })
+    }
+
+    async fn get_resolved_requirements(
+        build_context: &impl BuildContext,
+        source_build_context: SourceBuildContext,
+        default_backend: &Pep517Backend,
+        pep517_backend: Option<&Pep517Backend>,
+    ) -> Result<Resolution, Error> {
+        Ok(if let Some(pep517_backend) = pep517_backend {
             if pep517_backend.requirements == default_backend.requirements {
                 let mut resolution = source_build_context.setup_py_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
@@ -402,38 +403,60 @@ impl SourceBuild {
                 *resolution = Some(resolved_requirements.clone());
                 resolved_requirements
             }
-        };
-
-        build_context
-            .install(&resolved_requirements, &venv)
-            .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
-
-        // If we're using the default backend configuration, skip `get_requires_for_build_*`, since
-        // we already installed the requirements above.
-        if let Some(pep517_backend) = &pep517_backend {
-            if pep517_backend != &default_backend {
-                create_pep517_build_environment(
-                    &source_tree,
-                    &venv,
-                    pep517_backend,
-                    build_context,
-                    &package_id,
-                    build_kind,
-                )
-                .await?;
-            }
-        }
-
-        Ok(Self {
-            temp_dir,
-            source_tree,
-            pep517_backend,
-            venv,
-            build_kind,
-            metadata_directory: None,
-            package_id,
         })
+    }
+
+    fn get_pep517_backend(
+        setup_py: SetupPyStrategy,
+        source_tree: &PathBuf,
+        default_backend: &Pep517Backend,
+    ) -> Result<Option<Pep517Backend>, Error> {
+        match fs::read_to_string(source_tree.join("pyproject.toml")) {
+            Ok(toml) => {
+                let pyproject_toml: PyProjectToml =
+                    toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
+                if let Some(build_system) = pyproject_toml.build_system {
+                    Ok(Some(Pep517Backend {
+                        // If `build-backend` is missing, inject the legacy setuptools backend, but
+                        // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
+                        // says that in this case we "should revert to the legacy behaviour of running
+                        // `setup.py` (either directly, or by implicitly invoking the
+                        // `setuptools.build_meta:__legacy__` backend)", we found that in practice, only
+                        // the legacy setuptools backend is allowed. See also:
+                        // https://github.com/pypa/build/blob/de5b44b0c28c598524832dff685a98d5a5148c44/src/build/__init__.py#L114-L118
+                        backend: build_system
+                            .build_backend
+                            .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
+                        backend_path: build_system.backend_path,
+                        requirements: build_system.requires,
+                    }))
+                } else {
+                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
+                    // a PEP 517 build using the default backend, to match `pip` and `build`.
+                    Ok(Some(default_backend.clone()))
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                // We require either a `pyproject.toml` or a `setup.py` file at the top level.
+                if !source_tree.join("setup.py").is_file() {
+                    return Err(Error::InvalidSourceDist(
+                        "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
+                            .to_string(),
+                    ));
+                }
+
+                // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
+                // the default backend, to match `build`. `pip` uses `setup.py` directly in this
+                // case (which we allow via `SetupPyStrategy::Setuptools`), but plans to make PEP
+                // 517 builds the default in the future.
+                // See: https://github.com/pypa/pip/issues/9175.
+                match setup_py {
+                    SetupPyStrategy::Pep517 => Ok(Some(default_backend.clone())),
+                    SetupPyStrategy::Setuptools => Ok(None),
+                }
+            }
+            Err(err) => return Err(err.into()),
+        }
     }
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
