@@ -1,7 +1,6 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
-use std::env::consts::EXE_SUFFIX;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
