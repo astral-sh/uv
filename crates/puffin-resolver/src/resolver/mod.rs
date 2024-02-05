@@ -20,8 +20,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId,
-    RemoteSource, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, RemoteSource,
+    SourceDist, VersionOrUrl,
 };
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -247,6 +247,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             .with_selector(self.selector.clone())
                             .with_python_requirement(&self.python_requirement)
                             .with_index_locations(self.provider.index_locations())
+                            .with_unavailable_packages(&self.unavailable_packages)
                         )
                     } else {
                         err

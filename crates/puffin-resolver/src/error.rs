@@ -2,10 +2,11 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::fmt::Formatter;
 
-use dashmap::DashSet;
+use dashmap::{DashMap, DashSet};
 use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{BuiltDist, IndexLocations, PathBuiltDist, PathSourceDist, SourceDist};
@@ -17,7 +18,7 @@ use puffin_normalize::PackageName;
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::VersionsResponse;
+use crate::resolver::{UnavailablePackage, VersionsResponse};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -115,6 +116,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
                     selector: None,
                     python_requirement: None,
                     index_locations: None,
+                    unavailable_packages: FxHashMap::default(),
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
@@ -135,6 +137,7 @@ pub struct NoSolutionError {
     selector: Option<CandidateSelector>,
     python_requirement: Option<PythonRequirement>,
     index_locations: Option<IndexLocations>,
+    unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
 }
 
 impl std::error::Error for NoSolutionError {}
@@ -151,7 +154,12 @@ impl std::fmt::Display for NoSolutionError {
         write!(f, "{report}")?;
 
         // Include any additional hints.
-        for hint in formatter.hints(&self.derivation_tree, &self.selector, &self.index_locations) {
+        for hint in formatter.hints(
+            &self.derivation_tree,
+            &self.selector,
+            &self.index_locations,
+            &self.unavailable_packages,
+        ) {
             write!(f, "\n\n{hint}")?;
         }
 
@@ -222,6 +230,25 @@ impl NoSolutionError {
     #[must_use]
     pub(crate) fn with_index_locations(mut self, index_locations: &IndexLocations) -> Self {
         self.index_locations = Some(index_locations.clone());
+        self
+    }
+
+    /// Update the unavailable packages attached to the error.
+    #[must_use]
+    pub(crate) fn with_unavailable_packages(
+        mut self,
+        unavailable_packages: &DashMap<PackageName, UnavailablePackage>,
+    ) -> Self {
+        let mut new = FxHashMap::default();
+        for package in self.derivation_tree.packages() {
+            if let PubGrubPackage::Package(name, ..) = package {
+                if let Some(entry) = unavailable_packages.get(name) {
+                    let reason = entry.value();
+                    new.insert(name.clone(), reason.clone());
+                }
+            }
+        }
+        self.unavailable_packages = new;
         self
     }
 
