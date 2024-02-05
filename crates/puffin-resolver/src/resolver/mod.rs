@@ -69,7 +69,7 @@ pub(crate) enum UnavailableVersion {
 /// The package is unavailable and cannot be used
 #[derive(Debug, Clone)]
 pub(crate) enum UnavailablePackage {
-    /// The `--no-index` flag was passed and the package is not available locally
+    /// Index loopups were disabled (i.e. `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`)
     NoIndex,
     /// The package was not found in the registry
     NotFound,
@@ -344,7 +344,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                 .get(package_name)
                                 .map(|entry| match *entry {
                                     UnavailablePackage::NoIndex => {
-                                        "was not found in the provided links"
+                                        "was not found in the provided listings"
                                     }
                                     UnavailablePackage::NotFound => {
                                         "was not found in the package registry"

@@ -371,7 +371,7 @@ impl PubGrubReportFormatter<'_> {
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::NoVersions(package, set, _) => {
-                    // If we have a selector, check for no versions due to pre-release options
+                    // Check for no versions due to pre-release options
                     if let Some(selector) = selector {
                         if set.bounds().any(Version::any_prerelease) {
                             // A pre-release marker appeared in the version requirements.
@@ -400,7 +400,7 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
 
-                    // If we have an index, check for no versions due to a lack of find links
+                    // Check for no versions due to no `--find-links` flat index
                     if let Some(index_locations) = index_locations {
                         let no_find_links =
                             index_locations.flat_index().peekable().peek().is_none();
@@ -410,9 +410,7 @@ impl PubGrubReportFormatter<'_> {
                                 unavailable_packages.get(name)
                             {
                                 if no_find_links {
-                                    hints.insert(PubGrubHint::NoIndexNoFindLinks {
-                                        package: package.clone(),
-                                    });
+                                    hints.insert(PubGrubHint::NoIndex);
                                 }
                             }
                         }
@@ -459,9 +457,9 @@ pub(crate) enum PubGrubHint {
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         range: Range<Version>,
     },
-    /// A requirement was unavailable due to lookups in the index being disabled and no extra
+    /// Requirements were unavailable due to lookups in the index being disabled and no extra
     /// index was provided via `--find-links`
-    NoIndexNoFindLinks { package: PubGrubPackage },
+    NoIndex,
 }
 
 impl std::fmt::Display for PubGrubHint {
@@ -487,13 +485,12 @@ impl std::fmt::Display for PubGrubHint {
                     PackageRange::compatibility(package, range).bold()
                 )
             }
-            PubGrubHint::NoIndexNoFindLinks { package } => {
+            PubGrubHint::NoIndex => {
                 write!(
                     f,
-                    "{}{} {} was requested with index lookups disabled, but no additional package listings were provided (try: `--find-links <uri>`)",
+                    "{}{} Packages were unavailable because index lookups were disabled and no additional package listings were provided (try: `--find-links <uri>`)",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
                 )
             }
         }
