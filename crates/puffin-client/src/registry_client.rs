@@ -27,6 +27,7 @@ use pypi_types::{Metadata21, SimpleJson};
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
@@ -122,7 +123,7 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, SimpleMetadata), Error> {
+    ) -> Result<(IndexUrl, OwnedArchive<SimpleMetadata>), Error> {
         if self.index_urls.no_index() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
@@ -152,7 +153,7 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
-    ) -> Result<Result<SimpleMetadata, CachedClientError<Error>>, Error> {
+    ) -> Result<Result<OwnedArchive<SimpleMetadata>, CachedClientError<Error>>, Error> {
         // Format the URL for PyPI.
         let mut url: Url = index.clone().into();
         url.path_segments_mut()
@@ -168,7 +169,7 @@ impl RegistryClient {
                 IndexUrl::Pypi => "pypi".to_string(),
                 IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
             }),
-            format!("{package_name}.msgpack"),
+            format!("{package_name}.rkyv"),
         );
         let cache_control = CacheControl::from(
             self.cache
@@ -201,14 +202,14 @@ impl RegistryClient {
                     ))
                 })?;
 
-                match media_type {
+                let unarchived = match media_type {
                     MediaType::Json => {
                         let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
                         let metadata =
                             SimpleMetadata::from_files(data.files, package_name, url.as_str());
-                        Ok(metadata)
+                        metadata
                     }
                     MediaType::Html => {
                         let text = response.text().await.map_err(ErrorKind::RequestError)?;
@@ -216,16 +217,17 @@ impl RegistryClient {
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
                         let metadata =
                             SimpleMetadata::from_files(files, package_name, base.as_url().as_str());
-                        Ok(metadata)
+                        metadata
                     }
-                }
+                };
+                OwnedArchive::from_unarchived(&unarchived)
             }
             .boxed()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         let result = self
             .client
-            .get_cached_with_callback(
+            .get_cacheable(
                 simple_request,
                 &cache_entry,
                 cache_control,
@@ -339,7 +341,7 @@ impl RegistryClient {
                 .map_err(ErrorKind::RequestError)?;
             Ok(self
                 .client
-                .get_cached_with_callback(req, &cache_entry, cache_control, response_callback)
+                .get_serde(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
@@ -399,7 +401,7 @@ impl RegistryClient {
             .map_err(ErrorKind::RequestError)?;
         let result = self
             .client
-            .get_cached_with_callback(
+            .get_serde(
                 req,
                 &cache_entry,
                 cache_control,

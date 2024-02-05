@@ -12,7 +12,7 @@ use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_client::{
-    FlatDistributions, FlatIndex, RegistryClient, SimpleMetadata, SimpleMetadatum,
+    FlatDistributions, FlatIndex, OwnedArchive, RegistryClient, SimpleMetadata, SimpleMetadatum,
 };
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
@@ -67,7 +67,8 @@ impl<'a> DistFinder<'a> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
-                let (index, metadata) = self.client.simple(&requirement.name).await?;
+                let (index, raw_metadata) = self.client.simple(&requirement.name).await?;
+                let metadata = OwnedArchive::deserialize(&raw_metadata);
 
                 // Pick a version that satisfies the requirement.
                 let Some(dist) = self.select(requirement, metadata, &index, flat_index) else {
