@@ -59,13 +59,15 @@ mod reporter;
 
 /// The package version is unavailable and cannot be used
 /// Unlike [`PackageUnavailable`] this applies to a single version of the package
-pub(crate) enum VersionUnavailable {
+#[derive(Debug, Clone)]
+pub(crate) enum UnavailableVersion {
     /// Version is incompatible due to the `Requires-Python` version specifiers for that package.
     RequiresPython(VersionSpecifiers),
 }
 
 /// The package is unavailable and cannot be used
-pub(crate) enum PackageUnavailable {
+#[derive(Debug, Clone)]
+pub(crate) enum UnavailablePackage {
     /// The `--no-index` flag was passed and the package is not available locally
     NoIndex,
     /// The package was not found in the registry
@@ -83,10 +85,10 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
-    /// A map from [`PackageId`] to an incompatibility for that package
-    incompatibilities: DashMap<PackageId, VersionUnavailable>,
-    /// A map from [`PackageName`] to an incompatibility for that package
-    unavailable: DashMap<PackageName, PackageUnavailable>,
+    /// Incompatibilities for specific package versions
+    unavailable_versions: DashMap<PackageId, UnavailableVersion>,
+    /// Incompatibilities for packages that are entirely unavailable
+    unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// The set of all registry-based packages visited during resolution.
     visited: DashSet<PackageName>,
     editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
@@ -187,8 +189,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
         Self {
             index,
-            incompatibilities: DashMap::default(),
-            unavailable: DashMap::default(),
+            unavailable_versions: DashMap::default(),
+            unavailable_packages: DashMap::default(),
             visited: DashSet::default(),
             selector,
             allowed_urls,
@@ -334,19 +336,17 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                     let reason = {
                         if let PubGrubPackage::Package(ref package_name, _, _) = next {
-                            // Check if the decision was due to an unavailable incompatibility
-                            if let Some(entry) = self.unavailable.get(package_name) {
-                                match *entry {
-                                    PackageUnavailable::NoIndex => Some(
-                                        "is not available locally and remote indexes are disabled",
-                                    ),
-                                    PackageUnavailable::NotFound => {
-                                        Some("was not found in the package registry")
+                            // Check if the decision was due to the package being unavailable
+                            self.unavailable_packages
+                                .get(package_name)
+                                .map(|entry| match *entry {
+                                    UnavailablePackage::NoIndex => {
+                                        "is not available locally and remote indexes are disabled"
                                     }
-                                }
-                            } else {
-                                None
-                            }
+                                    UnavailablePackage::NotFound => {
+                                        "was not found in the package registry"
+                                    }
+                                })
                         } else {
                             None
                         }
@@ -566,14 +566,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     VersionsResponse::Found(ref version_map) => version_map,
                     // Short-circuit if we do not find any versions for the package
                     VersionsResponse::NoIndex => {
-                        self.unavailable
-                            .insert(package_name.clone(), PackageUnavailable::NoIndex);
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
                         return Ok(None);
                     }
                     VersionsResponse::NotFound => {
-                        self.unavailable
-                            .insert(package_name.clone(), PackageUnavailable::NotFound);
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::NotFound);
 
                         return Ok(None);
                     }
@@ -595,9 +595,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.incompatibilities.insert(
+                    self.unavailable_versions.insert(
                         candidate.package_id(),
-                        VersionUnavailable::RequiresPython(requires_python.clone()),
+                        UnavailableVersion::RequiresPython(requires_python.clone()),
                     );
                     return Ok(Some(candidate.version().clone()));
                 }
@@ -724,7 +724,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let package_id = dist.package_id();
 
                 // If the package does not exist in the registry, we cannot fetch its dependencies
-                if self.unavailable.get(package_name).is_some() {
+                if self.unavailable_packages.get(package_name).is_some() {
                     debug_assert!(
                         false,
                         "Dependencies were requested for a package that is not available"
@@ -736,9 +736,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the package is known to be incompatible, return the Python version as an
                 // incompatibility, and skip fetching the metadata.
-                if let Some(entry) = self.incompatibilities.get(&package_id) {
+                if let Some(entry) = self.unavailable_versions.get(&package_id) {
                     // TODO(zanieb): Handle additional variants here
-                    let VersionUnavailable::RequiresPython(requires_python) = entry.value();
+                    let UnavailableVersion::RequiresPython(requires_python) = entry.value();
                     let version = requires_python
                         .iter()
                         .map(PubGrubSpecifier::try_from)
@@ -903,14 +903,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     VersionsResponse::Found(ref version_map) => version_map,
                     // Short-circuit if we did not find any versions for the package
                     VersionsResponse::NoIndex => {
-                        self.unavailable
-                            .insert(package_name.clone(), PackageUnavailable::NoIndex);
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
                         return Ok(None);
                     }
                     VersionsResponse::NotFound => {
-                        self.unavailable
-                            .insert(package_name.clone(), PackageUnavailable::NotFound);
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::NotFound);
 
                         return Ok(None);
                     }
@@ -925,9 +925,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the version is incompatible, short-circuit.
                 if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.incompatibilities.insert(
+                    self.unavailable_versions.insert(
                         candidate.package_id(),
-                        VersionUnavailable::RequiresPython(requires_python.clone()),
+                        UnavailableVersion::RequiresPython(requires_python.clone()),
                     );
                     return Ok(None);
                 }
