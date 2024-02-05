@@ -936,6 +936,7 @@ mod test {
     use fs_err as fs;
     use indoc::indoc;
     use itertools::Itertools;
+    use puffin_fs::NormalizedDisplay;
     use tempfile::tempdir;
     use test_case::test_case;
 
@@ -1014,14 +1015,18 @@ mod test {
             .chain()
             // The last error is operating-system specific.
             .take(2)
-            .map(|err| err.to_string().replace('\\', "/"))
             .join("\n");
 
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let missing_txt = regex::escape(&missing_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (missing_txt.as_str(), "<MISSING_TXT>"),
+            (r"\\", "/"),
+        ];
         insta::with_settings!({
-            filters => vec![
-                (requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>"),
-                (missing_txt.path().to_str().unwrap(), "<MISSING_TXT>"),
-            ],
+            filters => filters,
         }, {
             insta::assert_display_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
@@ -1041,13 +1046,16 @@ mod test {
         "})?;
 
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
-        let errors = anyhow::Error::new(error)
-            .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
-            .join("\n");
+        let errors = anyhow::Error::new(error).chain().join("\n");
 
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => filters
         }, {
             insta::assert_display_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
@@ -1069,13 +1077,16 @@ mod test {
         "})?;
 
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
-        let errors = anyhow::Error::new(error)
-            .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
-            .join("\n");
+        let errors = anyhow::Error::new(error).chain().join("\n");
 
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => filters
         }, {
             insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
         });
@@ -1092,13 +1103,13 @@ mod test {
         "})?;
 
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
-        let errors = anyhow::Error::new(error)
-            .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
-            .join("\n");
+        let errors = anyhow::Error::new(error).chain().join("\n");
 
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => filters
         }, {
             insta::assert_display_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
@@ -1120,13 +1131,16 @@ mod test {
         "})?;
 
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
-        let errors = anyhow::Error::new(error)
-            .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
-            .join("\n");
+        let errors = anyhow::Error::new(error).chain().join("\n");
 
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => filters
         }, {
             insta::assert_display_snapshot!(errors, @r###"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
@@ -1151,13 +1165,16 @@ mod test {
         "})?;
 
         let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
-        let errors = anyhow::Error::new(error)
-            .chain()
-            .map(|err| err.to_string().replace('\\', "/"))
-            .join("\n");
+        let errors = anyhow::Error::new(error).chain().join("\n");
 
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
         insta::with_settings!({
-            filters => vec![(requirements_txt.path().to_str().unwrap(), "<REQUIREMENTS_TXT>")]
+            filters => filters
         }, {
             insta::assert_display_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
         });

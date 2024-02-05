@@ -1,5 +1,6 @@
 //! Create a bare virtualenv without any packages install
 
+use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
 
@@ -87,15 +88,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
 
     // Different names for the python interpreter
     fs::create_dir(&bin_dir)?;
-    let venv_python = {
-        if cfg!(unix) {
-            bin_dir.join("python")
-        } else if cfg!(windows) {
-            bin_dir.join("python.exe")
-        } else {
-            unimplemented!("Only Windows and Unix are supported")
-        }
-    };
+    let venv_python = bin_dir.join(format!("python{EXE_SUFFIX}"));
     // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
     #[cfg(unix)]
     {

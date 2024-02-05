@@ -1,12 +1,12 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::iter;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use url::Url;
 
 use common::{puffin_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
 
@@ -217,7 +217,17 @@ fn respect_installed() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Flask==2.3.3")?;
 
-    puffin_snapshot!(command(&context)
+    let filters = if cfg!(windows) {
+        // Remove the colorama count on windows
+        INSTA_FILTERS
+            .iter()
+            .copied()
+            .chain([("Resolved 8 packages", "Resolved 7 packages")])
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters, command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -239,7 +249,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
-    puffin_snapshot!(command(&context)
+    puffin_snapshot!(filters, command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--reinstall-package")
@@ -331,15 +341,13 @@ fn install_editable() -> Result<()> {
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
-        current_dir
-            .join("..")
-            .join("..")
-            .canonicalize()?
-            .to_str()
-            .unwrap(),
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
     );
 
-    let filters = iter::once((workspace_dir.as_str(), "[WORKSPACE_DIR]"))
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect::<Vec<_>>();
 
@@ -435,15 +443,13 @@ fn install_editable_and_registry() -> Result<()> {
 
     let current_dir = std::env::current_dir()?;
     let workspace_dir = regex::escape(
-        current_dir
-            .join("..")
-            .join("..")
-            .canonicalize()?
-            .to_str()
-            .unwrap(),
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
     );
 
-    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "[WORKSPACE_DIR]"))
+    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -524,8 +530,16 @@ fn install_editable_and_registry() -> Result<()> {
         "###
     );
 
+    let filters2: Vec<_> = filters
+        .into_iter()
+        .chain([
+            // Remove colorama
+            ("Resolved 7 packages", "Resolved 6 packages"),
+        ])
+        .collect();
+
     // Re-install Black at a specific version. This should replace the editable version.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    puffin_snapshot!(filters2, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black==23.10.0")
@@ -753,7 +767,10 @@ fn install_executable() {
     );
 
     // Verify that `pylint` is executable.
-    let executable = context.venv.join("bin/pylint");
+    let executable = context
+        .venv
+        .join(if cfg!(windows) { "Scripts" } else { "bin" })
+        .join(format!("pylint{}", std::env::consts::EXE_SUFFIX));
     Command::new(executable).arg("--version").assert().success();
 }
 
@@ -786,7 +803,10 @@ fn install_executable_copy() {
     );
 
     // Verify that `pylint` is executable.
-    let executable = context.venv.join("bin/pylint");
+    let executable = context
+        .venv
+        .join(if cfg!(windows) { "Scripts" } else { "bin" })
+        .join(format!("pylint{}", std::env::consts::EXE_SUFFIX));
     Command::new(executable).arg("--version").assert().success();
 }
 
@@ -819,7 +839,10 @@ fn install_executable_hardlink() {
     );
 
     // Verify that `pylint` is executable.
-    let executable = context.venv.join("bin/pylint");
+    let executable = context
+        .venv
+        .join(if cfg!(windows) { "Scripts" } else { "bin" })
+        .join(format!("pylint{}", std::env::consts::EXE_SUFFIX));
     Command::new(executable).arg("--version").assert().success();
 }
 
