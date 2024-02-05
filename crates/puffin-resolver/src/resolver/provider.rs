@@ -6,7 +6,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use url::Url;
 
-use distribution_types::Dist;
+use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 use puffin_client::{FlatIndex, RegistryClient};
 use puffin_distribution::DistributionDatabase;
@@ -48,6 +48,8 @@ pub trait ResolverProvider: Send + Sync {
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + Send + 'io;
+
+    fn index_locations(&self) -> &IndexLocations;
 
     /// Set the [`puffin_distribution::Reporter`] to use for this installer.
     #[must_use]
@@ -114,6 +116,10 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
 impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     for DefaultResolverProvider<'a, Context>
 {
+    fn index_locations(&self) -> &IndexLocations {
+        self.fetcher.index_locations()
+    }
+
     /// Make a simple api request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

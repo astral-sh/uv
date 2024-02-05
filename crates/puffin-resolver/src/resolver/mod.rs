@@ -12,6 +12,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use rustc_hash::{FxHashMap, FxHashSet};
+
 use tokio::select;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, Instrument};
@@ -19,8 +20,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, RemoteSource,
-    SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId,
+    RemoteSource, SourceDist, VersionOrUrl,
 };
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -245,6 +246,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             .with_available_versions(&self.python_requirement, &self.visited, &self.index.packages)
                             .with_selector(self.selector.clone())
                             .with_python_requirement(&self.python_requirement)
+                            .with_index_locations(self.provider.index_locations())
                         )
                     } else {
                         err

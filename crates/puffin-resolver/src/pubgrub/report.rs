@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::ops::Bound;
 
 use derivative::Derivative;
+use distribution_types::IndexLocations;
 use indexmap::{IndexMap, IndexSet};
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
@@ -336,28 +337,36 @@ impl PubGrubReportFormatter<'_> {
     pub(crate) fn hints(
         &self,
         derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>>,
-        selector: &CandidateSelector,
+        selector: &Option<CandidateSelector>,
+        index_locations: &Option<IndexLocations>,
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
-        fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
-            match selector.prerelease_strategy() {
-                PreReleaseStrategy::Disallow => false,
-                PreReleaseStrategy::Allow => true,
-                PreReleaseStrategy::IfNecessary => false,
-                PreReleaseStrategy::Explicit(packages) => {
-                    if let PubGrubPackage::Package(package, ..) = package {
-                        packages.contains(package)
-                    } else {
-                        false
+        fn allowed_prerelease(
+            package: &PubGrubPackage,
+            selector: &Option<CandidateSelector>,
+        ) -> bool {
+            if let Some(selector) = selector {
+                match selector.prerelease_strategy() {
+                    PreReleaseStrategy::Disallow => false,
+                    PreReleaseStrategy::Allow => true,
+                    PreReleaseStrategy::IfNecessary => false,
+                    PreReleaseStrategy::Explicit(packages) => {
+                        if let PubGrubPackage::Package(package, ..) = package {
+                            packages.contains(package)
+                        } else {
+                            false
+                        }
+                    }
+                    PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
+                        if let PubGrubPackage::Package(package, ..) = package {
+                            packages.contains(package)
+                        } else {
+                            false
+                        }
                     }
                 }
-                PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                    if let PubGrubPackage::Package(package, ..) = package {
-                        packages.contains(package)
-                    } else {
-                        false
-                    }
-                }
+            } else {
+                false
             }
         }
 
@@ -396,8 +405,8 @@ impl PubGrubReportFormatter<'_> {
                 External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {
-                hints.extend(self.hints(&derived.cause1, selector));
-                hints.extend(self.hints(&derived.cause2, selector));
+                hints.extend(self.hints(&derived.cause1, selector, index_locations));
+                hints.extend(self.hints(&derived.cause2, selector, index_locations));
             }
         }
         hints

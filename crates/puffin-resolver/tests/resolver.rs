@@ -10,7 +10,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
-use distribution_types::Resolution;
+use distribution_types::{IndexLocations, Resolution};
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
@@ -33,6 +33,17 @@ static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
 struct DummyContext {
     cache: Cache,
     interpreter: Interpreter,
+    index_locations: IndexLocations,
+}
+
+impl DummyContext {
+    fn new(cache: Cache, interpreter: Interpreter) -> Self {
+        Self {
+            cache,
+            interpreter,
+            index_locations: IndexLocations::default(),
+        }
+    }
 }
 
 impl BuildContext for DummyContext {
@@ -60,6 +71,10 @@ impl BuildContext for DummyContext {
 
     fn setup_py_strategy(&self) -> SetupPyStrategy {
         SetupPyStrategy::default()
+    }
+
+    fn index_locations(&self) -> &IndexLocations {
+        &self.index_locations
     }
 
     async fn resolve<'a>(&'a self, _requirements: &'a [Requirement]) -> Result<Resolution> {
@@ -114,10 +129,7 @@ async fn resolve(
         PathBuf::from("/dev/null"),
         PathBuf::from("/dev/null"),
     );
-    let build_context = DummyContext {
-        cache: Cache::temp()?,
-        interpreter: interpreter.clone(),
-    };
+    let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let resolver = Resolver::new(
         manifest,
         options,

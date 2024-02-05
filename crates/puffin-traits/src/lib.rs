@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{CachedDist, DistributionId, Resolution};
+use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution};
 use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
@@ -71,6 +71,9 @@ pub trait BuildContext: Sync {
 
     /// Whether using pre-built wheels is disabled.
     fn no_binary(&self) -> &NoBinary;
+
+    /// The index locations being searched.
+    fn index_locations(&self) -> &IndexLocations;
 
     /// The strategy to use when building source distributions that lack a `pyproject.toml`.
     fn setup_py_strategy(&self) -> SetupPyStrategy;
