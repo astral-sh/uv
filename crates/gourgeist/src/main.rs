@@ -48,17 +48,11 @@ fn main() -> ExitCode {
     let result = run();
     info!("Took {}ms", start.elapsed().as_millis());
     if let Err(err) = result {
-        #[allow(clippy::print_stderr)]
-        {
-            eprintln!("💥 virtualenv creator failed");
-        }
+        eprintln!("💥 virtualenv creator failed");
 
         let mut last_error: Option<&(dyn Error + 'static)> = Some(&err);
         while let Some(err) = last_error {
-            #[allow(clippy::print_stderr)]
-            {
-                eprintln!("  Caused by: {err}");
-            }
+            eprintln!("  Caused by: {err}");
             last_error = err.source();
         }
         ExitCode::FAILURE

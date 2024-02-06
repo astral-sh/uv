@@ -218,12 +218,9 @@ pub(crate) async fn pip_install(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(Error::Resolve(puffin_resolver::ResolveError::NoSolution(err))) => {
-            #[allow(clippy::print_stderr)]
-            {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
-                eprint!("{report:?}");
-            }
+            let report = miette::Report::msg(format!("{err}"))
+                .context("No solution found when resolving dependencies:");
+            eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),

@@ -298,12 +298,9 @@ pub(crate) async fn pip_compile(
 
     let resolution = match resolver.resolve().await {
         Err(puffin_resolver::ResolveError::NoSolution(err)) => {
-            #[allow(clippy::print_stderr)]
-            {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
-                eprint!("{report:?}");
-            }
+            let report = miette::Report::msg(format!("{err}"))
+                .context("No solution found when resolving dependencies:");
+            eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }
         result => result,

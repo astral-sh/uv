@@ -2,6 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
+use anstream::eprint;
 use anyhow::Result;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
@@ -35,10 +36,7 @@ pub(crate) async fn venv(
     match venv_impl(path, python_request, index_locations, seed, cache, printer).await {
         Ok(status) => Ok(status),
         Err(err) => {
-            #[allow(clippy::print_stderr)]
-            {
-                eprint!("{err:?}");
-            }
+            eprint!("{err:?}");
             Ok(ExitStatus::Failure)
         }
     }

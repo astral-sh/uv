@@ -948,13 +948,10 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => code.into(),
         Err(err) => {
-            #[allow(clippy::print_stderr)]
-            {
-                let mut causes = err.chain();
-                eprintln!("{}: {}", "error".red().bold(), causes.next().unwrap());
-                for err in causes {
-                    eprintln!("  {}: {}", "Caused by".red().bold(), err);
-                }
+            let mut causes = err.chain();
+            eprintln!("{}: {}", "error".red().bold(), causes.next().unwrap());
+            for err in causes {
+                eprintln!("  {}: {}", "Caused by".red().bold(), err);
             }
             ExitStatus::Error.into()
         }
