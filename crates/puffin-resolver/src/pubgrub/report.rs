@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::ops::Bound;
 
 use derivative::Derivative;
+use distribution_types::IndexLocations;
 use indexmap::{IndexMap, IndexSet};
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
@@ -11,10 +12,13 @@ use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
+use puffin_normalize::PackageName;
+use rustc_hash::FxHashMap;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::python_requirement::PythonRequirement;
+use crate::resolver::UnavailablePackage;
 
 use super::PubGrubPackage;
 
@@ -336,7 +340,9 @@ impl PubGrubReportFormatter<'_> {
     pub(crate) fn hints(
         &self,
         derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>>,
-        selector: &CandidateSelector,
+        selector: &Option<CandidateSelector>,
+        index_locations: &Option<IndexLocations>,
+        unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
@@ -365,29 +371,48 @@ impl PubGrubReportFormatter<'_> {
         match derivation_tree {
             DerivationTree::External(external) => match external {
                 External::NoVersions(package, set, _) => {
-                    if set.bounds().any(Version::any_prerelease) {
-                        // A pre-release marker appeared in the version requirements.
-                        if !allowed_prerelease(package, selector) {
-                            hints.insert(PubGrubHint::PreReleaseRequested {
-                                package: package.clone(),
-                                range: self.simplify_set(set, package).into_owned(),
-                            });
+                    // Check for no versions due to pre-release options
+                    if let Some(selector) = selector {
+                        if set.bounds().any(Version::any_prerelease) {
+                            // A pre-release marker appeared in the version requirements.
+                            if !allowed_prerelease(package, selector) {
+                                hints.insert(PubGrubHint::PreReleaseRequested {
+                                    package: package.clone(),
+                                    range: self.simplify_set(set, package).into_owned(),
+                                });
+                            }
+                        } else if let Some(version) =
+                            self.available_versions.get(package).and_then(|versions| {
+                                versions
+                                    .iter()
+                                    .rev()
+                                    .filter(|version| version.any_prerelease())
+                                    .find(|version| set.contains(version))
+                            })
+                        {
+                            // There are pre-release versions available for the package.
+                            if !allowed_prerelease(package, selector) {
+                                hints.insert(PubGrubHint::PreReleaseAvailable {
+                                    package: package.clone(),
+                                    version: version.clone(),
+                                });
+                            }
                         }
-                    } else if let Some(version) =
-                        self.available_versions.get(package).and_then(|versions| {
-                            versions
-                                .iter()
-                                .rev()
-                                .filter(|version| version.any_prerelease())
-                                .find(|version| set.contains(version))
-                        })
-                    {
-                        // There are pre-release versions available for the package.
-                        if !allowed_prerelease(package, selector) {
-                            hints.insert(PubGrubHint::PreReleaseAvailable {
-                                package: package.clone(),
-                                version: version.clone(),
-                            });
+                    }
+
+                    // Check for no versions due to no `--find-links` flat index
+                    if let Some(index_locations) = index_locations {
+                        let no_find_links =
+                            index_locations.flat_index().peekable().peek().is_none();
+
+                        if let PubGrubPackage::Package(name, ..) = package {
+                            if let Some(UnavailablePackage::NoIndex) =
+                                unavailable_packages.get(name)
+                            {
+                                if no_find_links {
+                                    hints.insert(PubGrubHint::NoIndex);
+                                }
+                            }
                         }
                     }
                 }
@@ -396,8 +421,18 @@ impl PubGrubReportFormatter<'_> {
                 External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {
-                hints.extend(self.hints(&derived.cause1, selector));
-                hints.extend(self.hints(&derived.cause2, selector));
+                hints.extend(self.hints(
+                    &derived.cause1,
+                    selector,
+                    index_locations,
+                    unavailable_packages,
+                ));
+                hints.extend(self.hints(
+                    &derived.cause2,
+                    selector,
+                    index_locations,
+                    unavailable_packages,
+                ));
             }
         }
         hints
@@ -422,6 +457,9 @@ pub(crate) enum PubGrubHint {
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         range: Range<Version>,
     },
+    /// Requirements were unavailable due to lookups in the index being disabled and no extra
+    /// index was provided via `--find-links`
+    NoIndex,
 }
 
 impl std::fmt::Display for PubGrubHint {
@@ -445,6 +483,14 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.bold(),
                     PackageRange::compatibility(package, range).bold()
+                )
+            }
+            PubGrubHint::NoIndex => {
+                write!(
+                    f,
+                    "{}{} Packages were unavailable because index lookups were disabled and no additional package listings were provided (try: `--find-links <uri>`)",
+                    "hint".bold().cyan(),
+                    ":".bold(),
                 )
             }
         }

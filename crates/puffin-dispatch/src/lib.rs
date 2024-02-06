@@ -103,6 +103,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.setup_py
     }
 
+    fn index_locations(&self) -> &IndexLocations {
+        self.index_locations
+    }
+
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;

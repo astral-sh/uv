@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
-use anstream::AutoStream;
+use anstream::{eprint, AutoStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;

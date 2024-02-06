@@ -9,7 +9,7 @@ use tracing::{info_span, instrument, Instrument};
 use url::Url;
 
 use distribution_types::{
-    BuiltDist, DirectGitUrl, Dist, FileLocation, LocalEditable, Name, SourceDist,
+    BuiltDist, DirectGitUrl, Dist, FileLocation, IndexLocations, LocalEditable, Name, SourceDist,
 };
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
@@ -422,5 +422,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
         // Re-encode as a URL.
         Ok(Some(Url::from(DirectGitUrl { url, subdirectory })))
+    }
+
+    pub fn index_locations(&self) -> &IndexLocations {
+        self.build_context.index_locations()
     }
 }

@@ -12,6 +12,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use pubgrub::type_aliases::DependencyConstraints;
 use rustc_hash::{FxHashMap, FxHashSet};
+
 use tokio::select;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, Instrument};
@@ -68,7 +69,7 @@ pub(crate) enum UnavailableVersion {
 /// The package is unavailable and cannot be used
 #[derive(Debug, Clone)]
 pub(crate) enum UnavailablePackage {
-    /// The `--no-index` flag was passed and the package is not available locally
+    /// Index loopups were disabled (i.e. `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`)
     NoIndex,
     /// The package was not found in the registry
     NotFound,
@@ -245,6 +246,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             .with_available_versions(&self.python_requirement, &self.visited, &self.index.packages)
                             .with_selector(self.selector.clone())
                             .with_python_requirement(&self.python_requirement)
+                            .with_index_locations(self.provider.index_locations())
+                            .with_unavailable_packages(&self.unavailable_packages)
                         )
                     } else {
                         err
@@ -341,7 +344,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                 .get(package_name)
                                 .map(|entry| match *entry {
                                     UnavailablePackage::NoIndex => {
-                                        "was not found in the provided links"
+                                        "was not found in the provided listings"
                                     }
                                     UnavailablePackage::NotFound => {
                                         "was not found in the package registry"
