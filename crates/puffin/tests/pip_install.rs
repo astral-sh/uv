@@ -608,8 +608,11 @@ fn install_no_index() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the provided links and you require flask,
-          we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided listings and you require
+          flask, we can conclude that the requirements are unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled and
+          no additional package listings were provided (try: `--find-links <uri>`)
     "###
     );
 
@@ -631,8 +634,12 @@ fn install_no_index_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 was not found in the provided links and you require
-          flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask==3.0.0 was not found in the provided listings and
+          you require flask==3.0.0, we can conclude that the requirements are
+          unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled and
+          no additional package listings were provided (try: `--find-links <uri>`)
     "###
     );
 
