@@ -9,6 +9,7 @@ use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use assert_fs::TempDir;
+use regex::Regex;
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
@@ -175,13 +176,17 @@ pub fn get_bin() -> PathBuf {
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
-pub fn run_and_format(command: &mut std::process::Command) -> (String, Output) {
+pub fn run_and_format<'a>(
+    command: &mut std::process::Command,
+    filters: impl AsRef<[(&'a str, &'a str)]>,
+    windows_filters: bool,
+) -> (String, Output) {
     let program = command.get_program().to_string_lossy().to_string();
     let output = command
         .output()
         .unwrap_or_else(|_| panic!("Failed to spawn {program}"));
 
-    let snapshot = format!(
+    let mut snapshot = format!(
         "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
         output.status.success(),
         output.status.code().unwrap_or(!0),
@@ -189,22 +194,61 @@ pub fn run_and_format(command: &mut std::process::Command) -> (String, Output) {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    for (matcher, replacement) in filters.as_ref() {
+        // TODO(konstin): Cache regex compilation
+        let re = Regex::new(matcher).expect("Do you need to regex::escape your filter?");
+        if re.is_match(&snapshot) {
+            snapshot = re.replace_all(&snapshot, *replacement).to_string();
+        }
+    }
+
+    if cfg!(windows) && windows_filters {
+        // The optional leading +/- is for install logs, the optional next line is for lock files
+        let windows_only_deps = [
+            ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
+            ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
+        ];
+        let mut removed_packages = 0;
+        for windows_only_dep in windows_only_deps {
+            // TODO(konstin): Cache regex compilation
+            let re = Regex::new(windows_only_dep).unwrap();
+            if re.is_match(&snapshot) {
+                snapshot = re.replace(&snapshot, "").to_string();
+                removed_packages += 1;
+            }
+        }
+        if removed_packages > 0 {
+            for i in 1..20 {
+                snapshot = snapshot.replace(
+                    &format!("{} packages", i + removed_packages),
+                    &format!("{} package{}", i, if i > 1 { "s" } else { "" }),
+                );
+            }
+        }
+    }
+
     (snapshot, output)
 }
 
 /// Run [`assert_cmd_snapshot!`], with default filters or with custom filters.
+///
+/// By default, the filters will search for the generally windows-only deps colorama and tzdata,
+/// filter them out and decrease the package counts by one for each match.
 #[allow(unused_macros)]
 macro_rules! puffin_snapshot {
     ($spawnable:expr, @$snapshot:literal) => {{
         puffin_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot)
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
-        let (snapshot, output) = $crate::common::run_and_format($spawnable);
-        ::insta::with_settings!({
-            filters => $filters.to_vec()
-        }, {
-            ::insta::assert_snapshot!(snapshot, @$snapshot);
-        });
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, true);
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        output
+    }};
+    ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
+        // Take a reference for backwards compatibility with the vec-expecting insta filters.
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, false);
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
 }
