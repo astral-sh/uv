@@ -6,6 +6,7 @@ use std::str::FromStr;
 use anstream::eprintln;
 use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
+use clap::error::{ContextKind, ContextValue};
 use clap::{Args, Parser, Subcommand};
 use owo_colors::OwoColorize;
 use tracing::instrument;
@@ -614,7 +615,48 @@ struct RemoveArgs {
 
 #[instrument] // Anchor span to check for overhead
 async fn run() -> Result<ExitStatus> {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(mut err) => {
+            if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
+            {
+                match subcommand.as_str() {
+                    "compile" | "lock" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("puffin pip compile".to_string()),
+                        );
+                    }
+                    "sync" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("puffin pip sync".to_string()),
+                        );
+                    }
+                    "install" | "add" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("puffin pip install".to_string()),
+                        );
+                    }
+                    "uninstall" | "remove" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("puffin pip uninstall".to_string()),
+                        );
+                    }
+                    "freeze" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("puffin pip freeze".to_string()),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            err.exit()
+        }
+    };
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]

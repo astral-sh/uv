@@ -56,6 +56,24 @@ fn uninstall_command(context: &TestContext) -> Command {
 }
 
 #[test]
+fn missing_pip() {
+    puffin_snapshot!(Command::new(get_bin()).arg("sync"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unrecognized subcommand 'sync'
+
+      tip: a similar subcommand exists: 'puffin pip sync'
+
+    Usage: puffin [OPTIONS] <COMMAND>
+
+    For more information, try '--help'.
+    "###);
+}
+
+#[test]
 fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
 
