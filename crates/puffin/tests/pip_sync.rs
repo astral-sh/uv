@@ -805,6 +805,7 @@ fn install_numpy_py38() -> Result<()> {
 
 /// Install a package without using pre-built wheels.
 #[test]
+#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn install_no_binary() -> Result<()> {
     let context = TestContext::new("3.12");
 

@@ -119,7 +119,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                             path: path.clone(),
                             editable: false,
                         };
-                        return self.path(source_dist, &path_source_dist).await;
+                        return self.path(source_dist, &path_source_dist).boxed().await;
                     }
                 };
 
@@ -141,8 +141,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .boxed()
                 .await?
             }
-            SourceDist::Git(git_source_dist) => self.git(source_dist, git_source_dist).await?,
-            SourceDist::Path(path_source_dist) => self.path(source_dist, path_source_dist).await?,
+            SourceDist::Git(git_source_dist) => {
+                self.git(source_dist, git_source_dist).boxed().await?
+            }
+            SourceDist::Path(path_source_dist) => {
+                self.path(source_dist, path_source_dist).boxed().await?
+            }
         };
 
         Ok(built_wheel_metadata)
@@ -268,6 +272,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 Ok(manifest)
             }
+            .boxed()
             .instrument(info_span!("download", source_dist = %source_dist))
         };
         let req = self.cached_client.uncached().get(url.clone()).build()?;
@@ -361,6 +366,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 Ok(manifest)
             }
+            .boxed()
             .instrument(info_span!("download", source_dist = %source_dist))
         };
         let req = self.cached_client.uncached().get(url.clone()).build()?;

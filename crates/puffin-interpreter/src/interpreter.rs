@@ -24,7 +24,7 @@ use crate::{Error, PythonVersion};
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     pub(crate) platform: PythonPlatform,
-    pub(crate) markers: MarkerEnvironment,
+    pub(crate) markers: Box<MarkerEnvironment>,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
     pub(crate) stdlib: PathBuf,
@@ -50,7 +50,7 @@ impl Interpreter {
 
         Ok(Self {
             platform: PythonPlatform(platform.to_owned()),
-            markers: info.markers,
+            markers: Box::new(info.markers),
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
             stdlib: info.stdlib,
@@ -70,7 +70,7 @@ impl Interpreter {
     ) -> Self {
         Self {
             platform: PythonPlatform(platform),
-            markers,
+            markers: Box::new(markers),
             base_exec_prefix,
             base_prefix,
             stdlib,

@@ -10,6 +10,7 @@ use itertools::Itertools;
 use tracing::{debug, instrument};
 
 use distribution_types::{IndexLocations, Name, Resolution};
+use futures::FutureExt;
 use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
 use puffin_cache::Cache;
@@ -240,30 +241,29 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
-    fn setup_build<'data>(
+    async fn setup_build<'data>(
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         package_id: &'data str,
         build_kind: BuildKind,
-    ) -> impl Future<Output = Result<SourceBuild>> + Send + 'data {
-        async move {
-            if self.no_build {
-                bail!("Building source distributions is disabled");
-            }
-
-            let builder = SourceBuild::setup(
-                source,
-                subdirectory,
-                self.interpreter,
-                self,
-                self.source_build_context.clone(),
-                package_id.to_string(),
-                self.setup_py,
-                build_kind,
-            )
-            .await?;
-            Ok(builder)
+    ) -> Result<SourceBuild> {
+        if self.no_build {
+            bail!("Building source distributions is disabled");
         }
+
+        let builder = SourceBuild::setup(
+            source,
+            subdirectory,
+            self.interpreter,
+            self,
+            self.source_build_context.clone(),
+            package_id.to_string(),
+            self.setup_py,
+            build_kind,
+        )
+        .boxed()
+        .await?;
+        Ok(builder)
     }
 }
