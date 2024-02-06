@@ -316,7 +316,8 @@ impl SourceBuild {
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
 
         // Check if we have a PEP 517 build backend.
-        let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)?;
+        let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
+            .map_err(|err| *err)?;
 
         let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter.clone())?;
 
@@ -408,9 +409,9 @@ impl SourceBuild {
 
     fn get_pep517_backend(
         setup_py: SetupPyStrategy,
-        source_tree: &PathBuf,
+        source_tree: &Path,
         default_backend: &Pep517Backend,
-    ) -> Result<Option<Pep517Backend>, Error> {
+    ) -> Result<Option<Pep517Backend>, Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
                 let pyproject_toml: PyProjectToml =
@@ -439,10 +440,10 @@ impl SourceBuild {
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
                 if !source_tree.join("setup.py").is_file() {
-                    return Err(Error::InvalidSourceDist(
+                    return Err(Box::new(Error::InvalidSourceDist(
                         "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
                             .to_string(),
-                    ));
+                    )));
                 }
 
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
@@ -455,7 +456,7 @@ impl SourceBuild {
                     SetupPyStrategy::Setuptools => Ok(None),
                 }
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => Err(Box::new(err.into())),
         }
     }
 
