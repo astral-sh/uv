@@ -34,7 +34,6 @@ puffin-normalize = { path = "../puffin-normalize" }
 puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
 puffin-traits = { path = "../puffin-traits" }
 puffin-warnings = { path = "../puffin-warnings" }
-puffin-workspace = { path = "../puffin-workspace" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 
