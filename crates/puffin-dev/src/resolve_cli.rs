@@ -121,7 +121,6 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
 
     let requirements = Resolution::from(resolution_graph).requirements();
 
-    #[allow(clippy::print_stderr)]
     match args.format {
         ResolveCliFormat::Compact => {
             println!("{}", requirements.iter().map(ToString::to_string).join(" "));

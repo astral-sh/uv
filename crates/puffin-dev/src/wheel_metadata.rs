@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anstream::println;
 use anyhow::Result;
 use clap::Parser;
 

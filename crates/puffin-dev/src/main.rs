@@ -1,12 +1,10 @@
-#![allow(clippy::print_stdout, clippy::print_stderr)]
-
 use std::env;
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use anstream::eprintln;
+use anstream::{eprintln, println};
 use anyhow::Result;
 use clap::Parser;
 use owo_colors::OwoColorize;

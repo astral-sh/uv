@@ -1,5 +1,6 @@
 use std::fmt::Write;
 
+use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -33,10 +34,7 @@ pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Resul
         .iter()
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()))
     {
-        #[allow(clippy::print_stdout)]
-        {
-            println!("{dist}");
-        }
+        println!("{dist}");
     }
 
     // Validate that the environment is consistent.
