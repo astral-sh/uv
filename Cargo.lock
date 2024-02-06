@@ -2475,7 +2475,6 @@ dependencies = [
  "puffin-resolver",
  "puffin-traits",
  "puffin-warnings",
- "puffin-workspace",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -2903,20 +2902,6 @@ dependencies = [
  "once_cell",
  "owo-colors 4.0.0",
  "rustc-hash",
-]
-
-[[package]]
-name = "puffin-workspace"
-version = "0.0.1"
-dependencies = [
- "fs-err",
- "pep440_rs",
- "pep508_rs",
- "puffin-normalize",
- "pyproject-toml",
- "serde",
- "thiserror",
- "toml_edit",
 ]
 
 [[package]]

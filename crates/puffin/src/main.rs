@@ -110,12 +110,6 @@ enum Commands {
     Venv(VenvArgs),
     /// Clear the cache.
     Clean(CleanArgs),
-    /// Add a dependency to the workspace.
-    #[clap(hide = true)]
-    Add(AddArgs),
-    /// Remove a dependency from the workspace.
-    #[clap(hide = true)]
-    Remove(RemoveArgs),
 }
 
 #[derive(Args)]
@@ -878,8 +872,6 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Add(args) => commands::add(&args.name, printer),
-        Commands::Remove(args) => commands::remove(&args.name, printer),
     }
 }
 

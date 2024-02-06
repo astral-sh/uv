@@ -1,7 +1,6 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
-pub(crate) use add::add;
 pub(crate) use clean::clean;
 use distribution_types::InstalledMetadata;
 pub(crate) use freeze::freeze;
@@ -9,17 +8,14 @@ pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Upgrade};
 pub(crate) use pip_install::pip_install;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
-pub(crate) use remove::remove;
 pub(crate) use venv::venv;
 
-mod add;
 mod clean;
 mod freeze;
 mod pip_compile;
 mod pip_install;
 mod pip_sync;
 mod pip_uninstall;
-mod remove;
 mod reporters;
 mod venv;
 

@@ -95,7 +95,6 @@ tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
 tokio-tar = { version = "0.3.1" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.8" }
-toml_edit = { version = "0.21.0" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
 tracing-indicatif = { version = "0.3.6" }
