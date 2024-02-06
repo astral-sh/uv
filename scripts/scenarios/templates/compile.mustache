@@ -6,7 +6,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
 use std::env;
-use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
@@ -14,43 +13,11 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink as symlink_file;
-#[cfg(windows)]
-use fs_err::os::windows::fs::symlink_file;
 use predicates::prelude::predicate;
 
-use common::{bootstrapped_pythons, get_bin, puffin_snapshot, TestContext, INSTA_FILTERS};
-use puffin_interpreter::find_requested_python;
+use common::{create_bin_with_executables, get_bin, puffin_snapshot, TestContext, INSTA_FILTERS};
 
 mod common;
-
-/// Create a directory with the requested Python binaries available.
-pub(crate) fn create_bin_with_executables(
-    temp_dir: &assert_fs::TempDir,
-    python_versions: &[&str],
-) -> Result<PathBuf> {
-    if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        let selected_pythons = bootstrapped_pythons.into_iter().filter(|path| {
-            python_versions.iter().any(|python_version| {
-                // Good enough since we control the directory
-                path.to_str()
-                    .unwrap()
-                    .contains(&format!("@{python_version}"))
-            })
-        });
-        return Ok(env::join_paths(selected_pythons)?.into());
-    }
-
-    let bin = temp_dir.child("bin");
-    fs_err::create_dir(&bin)?;
-    for request in python_versions {
-        let executable = find_requested_python(request)?;
-        let name = executable
-            .file_name()
-            .expect("Discovered executable must have a filename");
-        symlink_file(&executable, bin.child(name))?;
-    }
-    Ok(bin.canonicalize()?)
-}
 
 /// Provision python binaries and return a `pip compile` command with options shared across all scenarios.
 fn command(context: &TestContext, python_versions: &[&str]) -> Command {

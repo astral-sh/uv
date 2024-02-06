@@ -1,6 +1,8 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+use std::borrow::BorrowMut;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
@@ -9,7 +11,13 @@ use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use assert_fs::TempDir;
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use fs_err::os::windows::fs::symlink_file;
 use regex::Regex;
+
+use puffin_interpreter::find_requested_python;
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
@@ -173,16 +181,50 @@ pub fn get_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_puffin"))
 }
 
+/// Create a directory with the requested Python binaries available.
+pub fn create_bin_with_executables(
+    temp_dir: &assert_fs::TempDir,
+    python_versions: &[&str],
+) -> anyhow::Result<PathBuf> {
+    if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
+        let selected_pythons = bootstrapped_pythons.into_iter().filter(|path| {
+            python_versions.iter().any(|python_version| {
+                // Good enough since we control the directory
+                path.to_str()
+                    .unwrap()
+                    .contains(&format!("@{python_version}"))
+            })
+        });
+        return Ok(env::join_paths(selected_pythons)?.into());
+    }
+
+    let bin = temp_dir.child("bin");
+    fs_err::create_dir(&bin)?;
+    for request in python_versions {
+        let executable = find_requested_python(request)?;
+        let name = executable
+            .file_name()
+            .expect("Discovered executable must have a filename");
+        symlink_file(&executable, bin.child(name))?;
+    }
+    Ok(bin.canonicalize()?)
+}
+
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
 pub fn run_and_format<'a>(
-    command: &mut std::process::Command,
+    mut command: impl BorrowMut<std::process::Command>,
     filters: impl AsRef<[(&'a str, &'a str)]>,
     windows_filters: bool,
 ) -> (String, Output) {
-    let program = command.get_program().to_string_lossy().to_string();
+    let program = command
+        .borrow_mut()
+        .get_program()
+        .to_string_lossy()
+        .to_string();
     let output = command
+        .borrow_mut()
         .output()
         .unwrap_or_else(|_| panic!("Failed to spawn {program}"));
 

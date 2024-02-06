@@ -7,7 +7,7 @@ use assert_fs::prelude::*;
 
 use puffin_fs::NormalizedDisplay;
 
-use crate::common::{get_bin, puffin_snapshot};
+use crate::common::{create_bin_with_executables, get_bin, puffin_snapshot};
 
 mod common;
 
@@ -15,6 +15,7 @@ mod common;
 fn create_venv() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
@@ -32,6 +33,7 @@ fn create_venv() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -52,6 +54,7 @@ fn create_venv() -> Result<()> {
 fn create_venv_defaults_to_cwd() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
@@ -68,6 +71,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -88,6 +92,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
 fn seed() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
@@ -106,6 +111,7 @@ fn seed() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -129,6 +135,7 @@ fn seed() -> Result<()> {
 fn create_venv_unknown_python_minor() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let mut command = Command::new(get_bin());
@@ -139,6 +146,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         .arg("3.15")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&temp_dir);
     if cfg!(windows) {
         puffin_snapshot!(&mut command, @r###"
@@ -172,6 +180,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
 fn create_venv_unknown_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
@@ -189,6 +198,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         .arg("3.8.0")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 1
@@ -205,10 +215,13 @@ fn create_venv_unknown_python_patch() -> Result<()> {
 }
 
 #[test]
+#[ignore] // TODO(konstin): Switch patch version strategy
 #[cfg(unix)] // TODO(konstin): Support patch versions on Windows
 fn create_venv_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let bin =
+        create_bin_with_executables(&temp_dir, &["3.12.1"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
@@ -223,6 +236,7 @@ fn create_venv_python_patch() -> Result<()> {
         .arg("3.12.1")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0

@@ -664,14 +664,17 @@ fn install_no_index_version() {
 
 /// Install a package without using pre-built wheels.
 #[test]
-#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn install_no_binary() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
-        .arg("Flask")
-        .arg("--no-binary")
-        .arg("--strict"), @r###"
+    let mut command = command(&context);
+    command.arg("Flask").arg("--no-binary").arg("--strict");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+    puffin_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -728,14 +731,18 @@ fn install_no_binary_subset() {
 
 /// Install a package without using pre-built wheels.
 #[test]
-#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn reinstall_no_binary() {
     let context = TestContext::new("3.12");
 
     // The first installation should use a pre-built wheel
-    puffin_snapshot!(command(&context)
-        .arg("Flask")
-        .arg("--strict"), @r###"
+    let mut command = command(&context);
+    command.arg("Flask").arg("--strict");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+    puffin_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -757,10 +764,15 @@ fn reinstall_no_binary() {
     context.assert_command("import flask").success();
 
     // Running installation again with `--no-binary` should be a no-op
-    puffin_snapshot!(command(&context)
-        .arg("Flask")
-        .arg("--no-binary")
-        .arg("--strict"), @r###"
+    // The first installation should use a pre-built wheel
+    let mut command = crate::command(&context);
+    command.arg("Flask").arg("--no-binary").arg("--strict");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+    puffin_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -773,12 +785,29 @@ fn reinstall_no_binary() {
     context.assert_command("import flask").success();
 
     // With `--reinstall`, `--no-binary` should have an affect
-    puffin_snapshot!(command(&context)
+    let filters = if cfg!(windows) {
+        // Remove the colorama count on windows
+        INSTA_FILTERS
+            .iter()
+            .copied()
+            .chain([("Resolved 8 packages", "Resolved 7 packages")])
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    let mut command = crate::command(&context);
+    command
         .arg("Flask")
         .arg("--no-binary")
         .arg("--reinstall-package")
         .arg("Flask")
-        .arg("--strict"), @r###"
+        .arg("--strict");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+    puffin_snapshot!(filters, command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----

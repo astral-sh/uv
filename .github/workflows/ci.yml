@@ -30,12 +30,14 @@ jobs:
 
   cargo-clippy:
     name: "cargo clippy"
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
-        run: |
-          rustup component add clippy
+        run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -45,21 +47,32 @@ jobs:
   cargo-test:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        include:
+          # We use the large GitHub actions runners for faster testing
+          # For Ubuntu and Windows, this requires Organization-level configuration
+          # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+          - { os: "ubuntu", runner: "ubuntu-latest-large" }
+          - { os: "windows", runner: "windows-latest-large" }
+          - { os: "macos", runner: "macos-14" }
     runs-on:
-      # We use the large GitHub actions runners for faster testing
-      # For Ubuntu and Windows, this requires Organization-level configuration
-      # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
-      labels: ${{ matrix.os }}-large
+      labels: ${{ matrix.runner }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+      - if: ${{ matrix.os == 'macos' }}
+        name: "Install bootstrap dependencies"
+        run: brew install coreutils
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: "Install pipx"
+        run: pip install pipx
       - name: "Install required Python versions"
-        run: |
-          scripts/bootstrap/install.sh
+        run: pipx run scripts/bootstrap/install.py
       - name: "Install Rust toolchain"
         run: rustup show
-      - uses: rui314/setup-mold@v1
+      - if: ${{ matrix.os != 'windows' }}
+        uses: rui314/setup-mold@v1
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
@@ -67,59 +80,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Tests"
-        run: |
-          source .env
-          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
-
-  macos:
-    runs-on:
-      labels: macos-14
-    name: "cargo test | macos"
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install bootstrap dependencies"
-        run: |
-          brew install coreutils
-      - name: "Install required Python versions"
-        run: |
-          scripts/bootstrap/install.sh
-      - name: "Install Rust toolchain"
-        run: rustup show
-      - uses: rui314/setup-mold@v1
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Tests"
-        run: |
-          source .env
-          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
-
-  # TODO(konstin): Merge with the cargo-test job once the tests pass
-  windows:
-    runs-on: windows-latest-large
-    name: "cargo check | windows"
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup component add clippy
-      - name: "Install Python for bootstrapping"
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
-      - name: "Install Python binaries"
-        run: |
-          pip install zstandard==0.22.0
-          python scripts/bootstrap/install.py
-          # ex) The path needs to be updated downstream
-          $env:Path = "$pwd\bin" + $env:Path
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: "Cargo Test"
+        run: cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
 
   # Separate job for the nightly crate
   windows-trampoline:

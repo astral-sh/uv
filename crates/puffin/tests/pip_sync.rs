@@ -10,7 +10,9 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use url::Url;
 
-use common::{create_venv, puffin_snapshot, venv_to_interpreter, INSTA_FILTERS};
+use common::{
+    create_bin_with_executables, create_venv, puffin_snapshot, venv_to_interpreter, INSTA_FILTERS,
+};
 use puffin_fs::NormalizedDisplay;
 
 use crate::common::{get_bin, TestContext};
@@ -318,6 +320,8 @@ fn link() -> Result<()> {
         .success();
 
     let venv2 = context.temp_dir.child(".venv2");
+    let bin = create_bin_with_executables(&context.temp_dir, &["3.12"])
+        .expect("Failed to create bin dir");
     Command::new(get_bin())
         .arg("venv")
         .arg(venv2.as_os_str())
@@ -325,6 +329,7 @@ fn link() -> Result<()> {
         .arg(context.cache_dir.path())
         .arg("--python")
         .arg("3.12")
+        .env("PUFFIN_PYTHON_PATH", bin)
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -805,7 +810,6 @@ fn install_numpy_py38() -> Result<()> {
 
 /// Install a package without using pre-built wheels.
 #[test]
-#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn install_no_binary() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -813,10 +817,17 @@ fn install_no_binary() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    puffin_snapshot!(command(&context)
+    let mut command = command(&context);
+    command
         .arg("requirements.txt")
         .arg("--no-binary")
-        .arg("--strict"), @r###"
+        .arg("--strict");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+    puffin_snapshot!(command, @r###"
         success: true
         exit_code: 0
         ----- stdout -----

@@ -38,20 +38,30 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
             let formatted = PathBuf::from(format!("python{request}"));
             Interpreter::find_executable(&formatted)
         } else if cfg!(windows) {
-            if let Some(python_overwrite) = env::var_os("PUFFIN_PYTHON_PATH") {
-                for path in env::split_paths(&python_overwrite) {
-                    if path
-                        .as_os_str()
-                        .to_str()
-                        // Good enough since we control the bootstrap directory
-                        .is_some_and(|path| path.contains(&format!("@{request}")))
-                    {
-                        return Ok(path);
-                    }
-                }
-            }
-
             if let [major, minor] = versions.as_slice() {
+                if let Some(python_overwrite) = env::var_os("PUFFIN_PYTHON_PATH") {
+                    let executable_dir = env::split_paths(&python_overwrite).find(|path| {
+                        path.as_os_str()
+                            .to_str()
+                            // Good enough since we control the bootstrap directory
+                            .is_some_and(|path| path.contains(&format!("@{request}")))
+                    });
+                    return if let Some(path) = executable_dir {
+                        Ok(path.join(if cfg!(unix) {
+                            "python3"
+                        } else if cfg!(windows) {
+                            "python.exe"
+                        } else {
+                            unimplemented!("Only Windows and Unix are supported")
+                        }))
+                    } else {
+                        Err(Error::NoSuchPython {
+                            major: *major,
+                            minor: *minor,
+                        })
+                    };
+                }
+
                 find_python_windows(*major, *minor)?.ok_or(Error::NoSuchPython {
                     major: *major,
                     minor: *minor,
@@ -148,6 +158,24 @@ fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
 }
 
 pub(crate) fn find_python_windows(major: u8, minor: u8) -> Result<Option<PathBuf>, Error> {
+    if let Some(python_overwrite) = env::var_os("PUFFIN_PYTHON_PATH") {
+        let executable_dir = env::split_paths(&python_overwrite).find(|path| {
+            path.as_os_str()
+                .to_str()
+                // Good enough since we control the bootstrap directory
+                .is_some_and(|path| path.contains(&format!("@{major}.{minor}")))
+        });
+        return Ok(executable_dir.map(|path| {
+            path.join(if cfg!(unix) {
+                "python3"
+            } else if cfg!(windows) {
+                "python.exe"
+            } else {
+                unimplemented!("Only Windows and Unix are supported")
+            })
+        }));
+    }
+
     Ok(installed_pythons_windows()?
         .into_iter()
         .find(|(major_, minor_, _path)| *major_ == major && *minor_ == minor)
@@ -170,23 +198,20 @@ mod tests {
             .join("\n  Caused by: ")
     }
 
-    #[cfg(unix)]
     #[test]
-    fn python312() {
-        assert_eq!(
-            find_requested_python("3.12").unwrap(),
-            find_requested_python("python3.12").unwrap()
+    fn no_such_python_version() {
+        assert_snapshot!(
+            format_err(find_requested_python("3.1000")),
+            @"Couldn't find `3.1000` in PATH. Is this Python version installed?"
         );
     }
 
     #[test]
-    fn no_such_python_version() {
-        assert_snapshot!(format_err(find_requested_python("3.1000")), @"Couldn't find `3.1000` in PATH. Is this Python version installed?");
-    }
-
-    #[test]
     fn no_such_python_binary() {
-        assert_display_snapshot!(format_err(find_requested_python("python3.1000")), @"Couldn't find `python3.1000` in PATH. Is this Python version installed?");
+        assert_display_snapshot!(
+            format_err(find_requested_python("python3.1000")),
+            @"Couldn't find `python3.1000` in PATH. Is this Python version installed?"
+        );
     }
 
     #[cfg(unix)]
