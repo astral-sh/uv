@@ -1,3 +1,4 @@
+use std::env::consts::EXE_SUFFIX;
 use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
@@ -11,12 +12,8 @@ pub(crate) struct PythonPlatform(pub(crate) Platform);
 impl PythonPlatform {
     /// Returns the path to the `python` executable inside a virtual environment.
     pub(crate) fn venv_python(&self, venv_root: impl AsRef<Path>) -> PathBuf {
-        let python = if matches!(self.0.os(), Os::Windows) {
-            "python.exe"
-        } else {
-            "python"
-        };
-        self.venv_bin_dir(venv_root).join(python)
+        self.venv_bin_dir(venv_root)
+            .join(format!("python{EXE_SUFFIX}"))
     }
 
     /// Returns the directory in which the binaries are stored inside a virtual environment.

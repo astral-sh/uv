@@ -183,7 +183,7 @@ mod tests {
         insta::with_settings!({
             filters => vec![
                 // The exact message is host language dependent
-                ("Caused by: .* (os error 3)", "Caused by: The system cannot find the path specified. (os error 3)")
+                (r"Caused by: .* \(os error 3\)", "Caused by: The system cannot find the path specified. (os error 3)")
             ]
         }, {
             assert_display_snapshot!(

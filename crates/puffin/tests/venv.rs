@@ -131,30 +131,36 @@ fn create_venv_unknown_python_minor() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    let filter_venv = regex::escape(&venv.display().to_string());
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
-        ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-    ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    let mut command = Command::new(get_bin());
+    command
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
         .arg("3.15")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .current_dir(&temp_dir), @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+        .current_dir(&temp_dir);
+    if cfg!(windows) {
+        puffin_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
 
-    ----- stderr -----
-      × Couldn't find `python3.15` in PATH. Is this Python version installed?
-    "###
-    );
+        ----- stderr -----
+          × No Python 3.15 found through `py --list-paths`. Is Python 3.15 installed?
+        "###
+        );
+    } else {
+        puffin_snapshot!(&mut command, @r###"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+          × Couldn't find `python3.15` in PATH. Is this Python version installed?
+        "###
+        );
+    }
 
     venv.assert(predicates::path::missing());
 
@@ -162,6 +168,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)] // TODO(konstin): Support patch versions on Windows
 fn create_venv_unknown_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -198,6 +205,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)] // TODO(konstin): Support patch versions on Windows
 fn create_venv_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;

@@ -1,13 +1,11 @@
-use std::iter;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use url::Url;
-
 use common::{puffin_snapshot, INSTA_FILTERS};
 use puffin_fs::NormalizedDisplay;
+use url::Url;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
@@ -335,10 +333,11 @@ fn missing_record() -> Result<()> {
         "RECORD file not found at: {}",
         dist_info.normalized_display()
     ));
-    let filters: Vec<_> = iter::once((
+    let filters: Vec<_> = [(
         dist_info_str.as_str(),
         "RECORD file not found at: [DIST_INFO]",
-    ))
+    )]
+    .into_iter()
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
@@ -373,7 +372,8 @@ fn uninstall_editable_by_name() -> Result<()> {
             .as_str(),
     );
 
-    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "file://[WORKSPACE_DIR]/"))
+    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -435,7 +435,8 @@ fn uninstall_editable_by_path() -> Result<()> {
             .as_str(),
     );
 
-    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "file://[WORKSPACE_DIR]/"))
+    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
@@ -498,7 +499,8 @@ fn uninstall_duplicate_editable() -> Result<()> {
             .as_str(),
     );
 
-    let filters: Vec<_> = iter::once((workspace_dir.as_str(), "file://[WORKSPACE_DIR]/"))
+    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 

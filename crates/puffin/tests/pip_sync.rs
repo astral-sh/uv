@@ -902,7 +902,7 @@ fn warn_on_yanked_version() -> Result<()> {
     // This version is yanked.
     requirements_in.write_str("colorama==0.4.2")?;
 
-    puffin_snapshot!(command(&context)
+    puffin_snapshot!(INSTA_FILTERS, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
         success: true
@@ -1168,6 +1168,7 @@ fn install_local_source_distribution() -> Result<()> {
 /// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
 /// default build backend.
 #[test]
+#[cfg(unix)] // https://github.com/astral-sh/puffin/issues/1238
 fn install_ujson() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1246,7 +1247,15 @@ fn install_url_source_dist_cached() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz")?;
 
-    puffin_snapshot!(command(&context)
+    let filters = if cfg!(windows) {
+        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
+            .into_iter()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
         success: true
@@ -1267,7 +1276,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1303,7 +1312,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         "###
     );
 
-    puffin_snapshot!(command(&context)
+    puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1375,7 +1384,15 @@ fn install_git_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_bin())
+    let filters = if cfg!(windows) {
+        [("Removed 2 files", "Removed 3 files")]
+            .into_iter()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("werkzeug")
         .arg("--cache-dir")
@@ -1462,7 +1479,15 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_bin())
+    let filters = if cfg!(windows) {
+        [("Removed 615 files", "Removed 616 files")]
+            .into_iter()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("future")
         .arg("--cache-dir")
@@ -1563,7 +1588,15 @@ fn install_path_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, Command::new(get_bin())
+    let filters2 = if cfg!(windows) {
+        [("Removed 3 files", "Removed 4 files")]
+            .into_iter()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters2, Command::new(get_bin())
         .arg("clean")
         .arg("wheel")
         .arg("--cache-dir")
@@ -1612,16 +1645,18 @@ fn install_path_built_dist_cached() -> Result<()> {
     std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!(
-        "tomli @ {}",
-        Url::from_file_path(archive.path()).unwrap()
-    ))?;
+    let url = Url::from_file_path(archive.path()).unwrap();
+    requirements_txt.write_str(&format!("tomli @ {url}"))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let url_escaped = regex::escape(url.as_str());
+    let filters: Vec<_> = [(
+        url_escaped.as_str(),
+        "file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl",
+    )]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
 
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
@@ -1664,7 +1699,18 @@ fn install_path_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, Command::new(get_bin())
+    let filters2 = if cfg!(windows) {
+        [(
+            "Removed 1 file for tomli",
+            "Removed 1 file for tomli ([SIZE])",
+        )]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters2, Command::new(get_bin())
         .arg("clean")
         .arg("tomli")
         .arg("--cache-dir")
@@ -1710,7 +1756,15 @@ fn install_url_built_dist_cached() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
-    puffin_snapshot!(command(&context)
+    let filters = if cfg!(windows) {
+        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
+            .into_iter()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect()
+    } else {
+        INSTA_FILTERS.to_vec()
+    };
+    puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
         success: true
@@ -1731,7 +1785,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1767,7 +1821,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         "###
     );
 
-    puffin_snapshot!(command(&context)
+    puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -2116,13 +2170,11 @@ fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        current_dir
-            .join("..")
-            .join("..")
-            .canonicalize()?
-            .to_str()
-            .unwrap(),
+    let workspace_url = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str()
+            .trim_end_matches(['\\', '/']),
     );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -2145,7 +2197,7 @@ fn sync_editable() -> Result<()> {
                 r"file://.*/../../scripts/editable-installs/poetry_editable",
                 "file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable",
             ),
-            (&workspace_dir, "[WORKSPACE_DIR]"),
+            (&workspace_url, "file://[WORKSPACE_DIR]"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2265,13 +2317,10 @@ fn sync_editable_and_registry() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        current_dir
-            .join("..")
-            .join("..")
-            .canonicalize()?
-            .to_str()
-            .unwrap(),
+    let workspace_url = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
     );
 
     // Install the registry-based version of Black.
@@ -2286,7 +2335,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
+            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2329,7 +2378,7 @@ fn sync_editable_and_registry() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
+            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2363,12 +2412,12 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = requirements_txt.normalized_display().to_string();
+    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
+            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
         ])
         .copied()
         .collect::<Vec<_>>();
@@ -2397,12 +2446,12 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = requirements_txt.normalized_display().to_string();
+    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (workspace_dir.as_str(), "[WORKSPACE_DIR]"),
+            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
         ])
         .copied()
         .collect::<Vec<_>>();

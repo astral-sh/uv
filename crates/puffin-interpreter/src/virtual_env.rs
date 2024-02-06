@@ -1,4 +1,5 @@
 use std::env;
+use std::env::consts::EXE_SUFFIX;
 use std::path::{Path, PathBuf};
 
 use tracing::debug;
@@ -45,13 +46,7 @@ impl Virtualenv {
 
     /// Returns the location of the python interpreter
     pub fn python_executable(&self) -> PathBuf {
-        if cfg!(unix) {
-            self.bin_dir().join("python")
-        } else if cfg!(windows) {
-            self.bin_dir().join("python.exe")
-        } else {
-            unimplemented!("Only Windows and Unix are supported")
-        }
+        self.bin_dir().join(format!("python{EXE_SUFFIX}"))
     }
 
     pub fn root(&self) -> &Path {
