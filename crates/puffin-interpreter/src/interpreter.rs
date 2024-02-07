@@ -16,9 +16,8 @@ use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
-use crate::python_query::find_python_windows;
 use crate::virtual_env::detect_virtual_env;
-use crate::{Error, PythonVersion};
+use crate::{find_requested_python, Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -158,54 +157,40 @@ impl Interpreter {
             }
         };
 
-        let platform = PythonPlatform::from(platform.to_owned());
-        if let Some(venv) = detect_virtual_env(&platform)? {
-            let executable = platform.venv_python(venv);
-            let interpreter = Self::query(&executable, &platform.0, cache)?;
+        // Check if the venv Python matches.
+        let python_platform = PythonPlatform::from(platform.to_owned());
+        if let Some(venv) = detect_virtual_env(&python_platform)? {
+            let executable = python_platform.venv_python(venv);
+            let interpreter = Self::query(&executable, &python_platform.0, cache)?;
 
             if version_matches(&interpreter) {
                 return Ok(Some(interpreter));
             }
         };
 
-        if cfg!(unix) {
-            if let Some(python_version) = python_version {
-                let requested = format!(
-                    "python{}.{}",
-                    python_version.major(),
-                    python_version.minor()
-                );
-
-                if let Ok(executable) = Interpreter::find_executable(&requested) {
-                    debug!("Resolved {requested} to {}", executable.display());
-                    let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
-                    if version_matches(&interpreter) {
-                        return Ok(Some(interpreter));
-                    }
+        // Look for the requested version with platform specific search.
+        if let Some(python_version) = python_version {
+            if let Some(interpreter) =
+                find_requested_python(&python_version.string, platform, cache)?
+            {
+                if version_matches(&interpreter) {
+                    return Ok(Some(interpreter));
                 }
             }
+        }
 
-            if let Ok(executable) = Interpreter::find_executable("python3") {
+        // Trying to find an explicit interpreter failed, maybe the default Python in PATH matches?
+        if cfg!(unix) {
+            if let Some(executable) = Interpreter::find_executable("python3")? {
                 debug!("Resolved python3 to {}", executable.display());
-                let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+                let interpreter = Interpreter::query(&executable, &python_platform.0, cache)?;
                 if version_matches(&interpreter) {
                     return Ok(Some(interpreter));
                 }
             }
         } else if cfg!(windows) {
-            if let Some(python_version) = python_version {
-                if let Some(path) =
-                    find_python_windows(python_version.major(), python_version.minor())?
-                {
-                    let interpreter = Interpreter::query(&path, &platform.0, cache)?;
-                    if version_matches(&interpreter) {
-                        return Ok(Some(interpreter));
-                    }
-                }
-            }
-
-            if let Ok(executable) = Interpreter::find_executable("python.exe") {
-                let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+            if let Some(executable) = Interpreter::find_executable("python.exe")? {
+                let interpreter = Interpreter::query(&executable, &python_platform.0, cache)?;
                 if version_matches(&interpreter) {
                     return Ok(Some(interpreter));
                 }
@@ -217,20 +202,22 @@ impl Interpreter {
         Ok(None)
     }
 
+    /// Find the Python interpreter in `PATH`, respecting `PUFFIN_PYTHON_PATH`.
+    ///
+    /// Returns `Ok(None)` if not found.
     pub fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
         requested: R,
-    ) -> Result<PathBuf, Error> {
-        if let Some(isolated) = std::env::var_os("PUFFIN_TEST_PYTHON_PATH") {
-            if let Ok(cwd) = std::env::current_dir() {
-                which::which_in(requested, Some(isolated), cwd)
-                    .map_err(|err| Error::from_which_error(requested.into(), err))
-            } else {
-                which::which_in_global(requested, Some(isolated))
-                    .map_err(|err| Error::from_which_error(requested.into(), err))
-                    .and_then(|mut paths| paths.next().ok_or(Error::PythonNotFound))
-            }
+    ) -> Result<Option<PathBuf>, Error> {
+        let result = if let Some(isolated) = std::env::var_os("PUFFIN_TEST_PYTHON_PATH") {
+            which::which_in(requested, Some(isolated), std::env::current_dir()?)
         } else {
-            which::which(requested).map_err(|err| Error::from_which_error(requested.into(), err))
+            which::which(requested)
+        };
+
+        match result {
+            Err(which::Error::CannotFindBinaryPath) => Ok(None),
+            Err(err) => Err(Error::from_which_error(requested.into(), err)),
+            Ok(path) => Ok(Some(path)),
         }
     }
 
@@ -274,6 +261,12 @@ impl Interpreter {
     pub fn python_minor(&self) -> u8 {
         let minor = self.markers.python_full_version.version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
+    }
+
+    /// Return the patch version of this Python version.
+    pub fn python_patch(&self) -> u8 {
+        let minor = self.markers.python_full_version.version.release()[2];
+        u8::try_from(minor).expect("invalid patch version")
     }
 
     /// Returns the Python version as a simple tuple.

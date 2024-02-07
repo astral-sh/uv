@@ -2,7 +2,10 @@ use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 
+use pep440_rs::Version;
 use thiserror::Error;
+
+use puffin_fs::NormalizedDisplay;
 
 pub use crate::cfg::Configuration;
 pub use crate::interpreter::Interpreter;
@@ -40,14 +43,12 @@ pub enum Error {
     },
     #[error("Failed to run `py --list-paths` to find Python installations. Is Python installed?")]
     PyList(#[source] io::Error),
-    #[error("No Python {major}.{minor} found through `py --list-paths`. Is Python {major}.{minor} installed?")]
-    NoSuchPython { major: u8, minor: u8 },
+    #[error("No Python {0} found through `py --list-paths`. Is Python {0} installed?")]
+    NoSuchPython(String),
     #[error("Neither `python` nor `python3` are in `PATH`. Is Python installed?")]
     NoPythonInstalledUnix,
     #[error("Could not find `python.exe` in PATH and `py --list-paths` did not list any Python versions. Is Python installed?")]
     NoPythonInstalledWindows,
-    #[error("Patch versions cannot be requested on Windows")]
-    PatchVersionRequestedWindows,
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     PythonSubcommandOutput {
         message: String,
@@ -62,6 +63,8 @@ pub enum Error {
     WhichError(OsString, #[source] which::Error),
     #[error("Couldn't find `{}` in PATH. Is this Python version installed?", _0.to_string_lossy())]
     NotInPath(OsString),
+    #[error("Interpreter at `{}` has the wrong patch version. Expected: {}, actual: {}", _0.normalized_display(), _1, _2)]
+    WrongPatchVersion(PathBuf, String, Version),
 }
 
 impl Error {
