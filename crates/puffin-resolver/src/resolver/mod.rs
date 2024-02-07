@@ -344,7 +344,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                 .get(package_name)
                                 .map(|entry| match *entry {
                                     UnavailablePackage::NoIndex => {
-                                        "was not found in the provided listings"
+                                        "was not found in the provided package locations"
                                     }
                                     UnavailablePackage::NotFound => {
                                         "was not found in the package registry"

@@ -488,7 +488,7 @@ impl std::fmt::Display for PubGrubHint {
             PubGrubHint::NoIndex => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because index lookups were disabled and no additional package listings were provided (try: `--find-links <uri>`)",
+                    "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)",
                     "hint".bold().cyan(),
                     ":".bold(),
                 )
