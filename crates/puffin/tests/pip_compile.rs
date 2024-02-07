@@ -3062,11 +3062,12 @@ fn no_index_requirements_txt() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the provided listings and you require
-          tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the provided package locations and you
+          require tqdm, we can conclude that the requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and
-          no additional package listings were provided (try: `--find-links <uri>`)
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
     "###
     );
 
