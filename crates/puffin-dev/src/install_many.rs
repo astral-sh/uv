@@ -135,7 +135,9 @@ async fn install_chunk(
         info!("Failed to find {} wheel(s)", failures.len());
     }
     let wheels_and_source_dist = resolution.len();
-    let resolution = if !build_dispatch.no_build().is_none() {
+    let resolution = if build_dispatch.no_build().is_none() {
+        resolution
+    } else {
         let only_wheels: FxHashMap<_, _> = resolution
             .into_iter()
             .filter(|(_, dist)| match dist {
@@ -148,9 +150,8 @@ async fn install_chunk(
             wheels_and_source_dist - only_wheels.len()
         );
         only_wheels
-    } else {
-        resolution
     };
+
     let dists = Resolution::new(resolution)
         .into_distributions()
         .collect::<Vec<_>>();
