@@ -297,7 +297,7 @@ mod tests {
         .ok_or(Error::NoSuchPython(request.to_string()));
         assert_display_snapshot!(
             format_err(result),
-            @"No Python python3.1000 In `PATH`. Is Python 3.1000 installed?"
+            @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
         );
     }
 
