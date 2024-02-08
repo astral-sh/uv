@@ -12,7 +12,6 @@ pub use crate::interpreter::Interpreter;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
 pub use crate::virtual_env::Virtualenv;
-use crate::Error::WhichError;
 
 mod cfg;
 mod interpreter;
@@ -43,7 +42,11 @@ pub enum Error {
     },
     #[error("Failed to run `py --list-paths` to find Python installations. Is Python installed?")]
     PyList(#[source] io::Error),
+    #[cfg(windows)]
     #[error("No Python {0} found through `py --list-paths`. Is Python {0} installed?")]
+    NoSuchPython(String),
+    #[cfg(unix)]
+    #[error("No Python {0} In `PATH`. Is Python {0} installed?")]
     NoSuchPython(String),
     #[error("Neither `python` nor `python3` are in `PATH`. Is Python installed?")]
     NoPythonInstalledUnix,
@@ -61,17 +64,6 @@ pub enum Error {
     Cfg(#[from] cfg::Error),
     #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
     WhichError(OsString, #[source] which::Error),
-    #[error("Couldn't find `{}` in PATH. Is this Python version installed?", _0.to_string_lossy())]
-    NotInPath(OsString),
     #[error("Interpreter at `{}` has the wrong patch version. Expected: {}, actual: {}", _0.normalized_display(), _1, _2)]
-    WrongPatchVersion(PathBuf, String, Version),
-}
-
-impl Error {
-    pub(crate) fn from_which_error(requested: OsString, source: which::Error) -> Self {
-        match source {
-            which::Error::CannotFindBinaryPath => Self::NotInPath(requested),
-            _ => WhichError(requested, source),
-        }
-    }
+    PatchVersionMismatch(PathBuf, String, Version),
 }

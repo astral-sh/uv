@@ -53,7 +53,7 @@ pub fn find_requested_python(
                 };
                 let interpreter = Interpreter::query(&executable, platform, cache)?;
                 if interpreter.python_patch() != *requested_patch {
-                    return Err(Error::WrongPatchVersion(
+                    return Err(Error::PatchVersionMismatch(
                         executable,
                         request.to_string(),
                         interpreter.python_version().clone(),
@@ -112,7 +112,7 @@ pub fn find_requested_python(
                     };
                     let interpreter = Interpreter::query(&executable, platform, cache)?;
                     if interpreter.python_patch() != *requested_patch {
-                        return Err(Error::WrongPatchVersion(
+                        return Err(Error::PatchVersionMismatch(
                             executable,
                             request.to_string(),
                             interpreter.python_version().clone(),
@@ -251,7 +251,9 @@ pub(crate) fn find_python_windows(major: u8, minor: u8) -> Result<Option<PathBuf
 mod tests {
     use std::fmt::Debug;
 
-    use insta::{assert_display_snapshot, assert_snapshot};
+    use insta::assert_display_snapshot;
+    #[cfg(unix)]
+    use insta::assert_snapshot;
     use itertools::Itertools;
     use platform_host::Platform;
     use puffin_cache::Cache;

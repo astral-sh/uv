@@ -165,7 +165,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × Couldn't find `python3.15` in PATH. Is this Python version installed?
+          × No Python 3.15 In `PATH`. Is Python 3.15 installed?
         "###
         );
     }
@@ -205,7 +205,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Couldn't find `python3.8.0` in PATH. Is this Python version installed?
+      × No Python 3.8.0 In `PATH`. Is Python 3.8.0 installed?
     "###
     );
 

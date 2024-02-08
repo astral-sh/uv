@@ -168,7 +168,8 @@ impl Interpreter {
             }
         };
 
-        // Look for the requested version with platform specific search.
+        // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
+        // Unix and `py --list-paths` on Windows.
         if let Some(python_version) = python_version {
             if let Some(interpreter) =
                 find_requested_python(&python_version.string, platform, cache)?
@@ -179,7 +180,8 @@ impl Interpreter {
             }
         }
 
-        // Trying to find an explicit interpreter failed, maybe the default Python in PATH matches?
+        // Python discovery failed to find the requested version, maybe the default Python in PATH
+        // matches?
         if cfg!(unix) {
             if let Some(executable) = Interpreter::find_executable("python3")? {
                 debug!("Resolved python3 to {}", executable.display());
@@ -216,7 +218,7 @@ impl Interpreter {
 
         match result {
             Err(which::Error::CannotFindBinaryPath) => Ok(None),
-            Err(err) => Err(Error::from_which_error(requested.into(), err)),
+            Err(err) => Err(Error::WhichError(requested.into(), err)),
             Ok(path) => Ok(Some(path)),
         }
     }
