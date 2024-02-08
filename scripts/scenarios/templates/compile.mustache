@@ -11,8 +11,6 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-#[cfg(unix)]
-use fs_err::os::unix::fs::symlink as symlink_file;
 use predicates::prelude::predicate;
 
 use common::{create_bin_with_executables, get_bin, puffin_snapshot, TestContext, INSTA_FILTERS};
