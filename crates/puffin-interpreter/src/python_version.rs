@@ -1,11 +1,20 @@
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
+use std::ops::Deref;
 use std::str::FromStr;
 
 use crate::Interpreter;
 
 #[derive(Debug, Clone)]
 pub struct PythonVersion(StringVersion);
+
+impl Deref for PythonVersion {
+    type Target = StringVersion;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl FromStr for PythonVersion {
     type Err = String;

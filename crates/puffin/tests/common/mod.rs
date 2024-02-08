@@ -10,11 +10,12 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
-use assert_fs::TempDir;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
+use platform_host::Platform;
+use puffin_cache::Cache;
 use regex::Regex;
 
 use puffin_interpreter::find_requested_python;
@@ -42,15 +43,15 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 
 #[derive(Debug)]
 pub struct TestContext {
-    pub temp_dir: TempDir,
-    pub cache_dir: TempDir,
+    pub temp_dir: assert_fs::TempDir,
+    pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
 }
 
 impl TestContext {
     pub fn new(python_version: &str) -> Self {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let cache_dir = TempDir::new().expect("Failed to create temp dir");
+        let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
+        let cache_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
         Self {
             temp_dir,
@@ -142,7 +143,11 @@ pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
 
 /// Create a virtual environment named `.venv` in a temporary directory with the given
 /// Python version. Expected format for `python` is "python<version>".
-pub fn create_venv(temp_dir: &TempDir, cache_dir: &TempDir, python: &str) -> PathBuf {
+pub fn create_venv(
+    temp_dir: &assert_fs::TempDir,
+    cache_dir: &assert_fs::TempDir,
+    python: &str,
+) -> PathBuf {
     let python = if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
         bootstrapped_pythons
             .into_iter()
@@ -200,12 +205,18 @@ pub fn create_bin_with_executables(
 
     let bin = temp_dir.child("bin");
     fs_err::create_dir(&bin)?;
-    for request in python_versions {
-        let executable = find_requested_python(request)?;
-        let name = executable
+    for &request in python_versions {
+        let interpreter = find_requested_python(
+            request,
+            &Platform::current().unwrap(),
+            &Cache::temp().unwrap(),
+        )?
+        .ok_or(puffin_interpreter::Error::NoSuchPython(request.to_string()))?;
+        let name = interpreter
+            .sys_executable()
             .file_name()
             .expect("Discovered executable must have a filename");
-        symlink_file(&executable, bin.child(name))?;
+        symlink_file(interpreter.sys_executable(), bin.child(name))?;
     }
     Ok(bin.canonicalize()?)
 }

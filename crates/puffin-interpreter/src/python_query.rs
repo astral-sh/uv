@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use once_cell::sync::Lazy;
+use platform_host::Platform;
+use puffin_cache::Cache;
 use regex::Regex;
 use tracing::{info_span, instrument};
 
@@ -19,66 +21,121 @@ static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?mR)^ -(?:V:)?(\d).(\d+)-?(?:arm)?(?:\d*)\s*\*?\s*(.*)$").unwrap()
 });
 
-/// Find a user requested python version/interpreter.
+/// Find a python version/interpreter of a specific version.
 ///
 /// Supported formats:
-/// * `-p 3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on Linux/Mac).
-///   Specifying a patch version is not supported.
+/// * `-p 3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on
+///   Linux/Mac). Specifying a patch version is not supported.
 /// * `-p python3.10` or `-p python.exe` looks for a binary in `PATH`.
 /// * `-p /home/ferris/.local/bin/python3.10` uses this exact Python.
+///
+/// When the user passes a patch version (e.g. 3.12.1), we currently search for a matching minor
+/// version (e.g. `python3.12` on unix) and error when the version mismatches, as a binary with the
+/// patch version (e.g. `python3.12.1`) is often not in `PATH` and we make the simplifying
+/// assumption that the user has only this one patch version installed.
 #[instrument]
-pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
+pub fn find_requested_python(
+    request: &str,
+    platform: &Platform,
+    cache: &Cache,
+) -> Result<Option<Interpreter>, Error> {
     let versions = request
         .splitn(3, '.')
         .map(str::parse::<u8>)
         .collect::<Result<Vec<_>, _>>();
-    if let Ok(versions) = versions {
+    Ok(Some(if let Ok(versions) = versions {
         // `-p 3.10` or `-p 3.10.1`
         if cfg!(unix) {
-            let formatted = PathBuf::from(format!("python{request}"));
-            Interpreter::find_executable(&formatted)
-        } else if cfg!(windows) {
-            if let [major, minor] = versions.as_slice() {
-                if let Some(python_overwrite) = env::var_os("PUFFIN_TEST_PYTHON_PATH") {
-                    let executable_dir = env::split_paths(&python_overwrite).find(|path| {
-                        path.as_os_str()
-                            .to_str()
-                            // Good enough since we control the bootstrap directory
-                            .is_some_and(|path| path.contains(&format!("@{request}")))
-                    });
-                    return if let Some(path) = executable_dir {
-                        Ok(path.join(if cfg!(unix) {
-                            "python3"
-                        } else if cfg!(windows) {
-                            "python.exe"
-                        } else {
-                            unimplemented!("Only Windows and Unix are supported")
-                        }))
-                    } else {
-                        Err(Error::NoSuchPython {
-                            major: *major,
-                            minor: *minor,
-                        })
-                    };
+            if let [_major, _minor, requested_patch] = versions.as_slice() {
+                let formatted = PathBuf::from(format!("python{}.{}", versions[0], versions[1]));
+                let Some(executable) = Interpreter::find_executable(&formatted)? else {
+                    return Ok(None);
+                };
+                let interpreter = Interpreter::query(&executable, platform, cache)?;
+                if interpreter.python_patch() != *requested_patch {
+                    return Err(Error::PatchVersionMismatch(
+                        executable,
+                        request.to_string(),
+                        interpreter.python_version().clone(),
+                    ));
                 }
-
-                find_python_windows(*major, *minor)?.ok_or(Error::NoSuchPython {
-                    major: *major,
-                    minor: *minor,
-                })
+                interpreter
             } else {
-                Err(Error::PatchVersionRequestedWindows)
+                let formatted = PathBuf::from(format!("python{request}"));
+                let Some(executable) = Interpreter::find_executable(&formatted)? else {
+                    return Ok(None);
+                };
+                Interpreter::query(&executable, platform, cache)?
+            }
+        } else if cfg!(windows) {
+            if let Some(python_overwrite) = env::var_os("PUFFIN_TEST_PYTHON_PATH") {
+                let executable_dir = env::split_paths(&python_overwrite).find(|path| {
+                    path.as_os_str()
+                        .to_str()
+                        // Good enough since we control the bootstrap directory
+                        .is_some_and(|path| path.contains(&format!("@{request}")))
+                });
+                return if let Some(path) = executable_dir {
+                    let executable = path.join(if cfg!(unix) {
+                        "python3"
+                    } else if cfg!(windows) {
+                        "python.exe"
+                    } else {
+                        unimplemented!("Only Windows and Unix are supported")
+                    });
+                    Ok(Some(Interpreter::query(&executable, platform, cache)?))
+                } else {
+                    Ok(None)
+                };
+            }
+
+            match versions.as_slice() {
+                [major] => {
+                    let Some(executable) = installed_pythons_windows()?
+                        .into_iter()
+                        .find(|(major_, _minor, _path)| major_ == major)
+                        .map(|(_, _, path)| path)
+                    else {
+                        return Ok(None);
+                    };
+                    Interpreter::query(&executable, platform, cache)?
+                }
+                [major, minor] => {
+                    let Some(executable) = find_python_windows(*major, *minor)? else {
+                        return Ok(None);
+                    };
+                    Interpreter::query(&executable, platform, cache)?
+                }
+                [major, minor, requested_patch] => {
+                    let Some(executable) = find_python_windows(*major, *minor)? else {
+                        return Ok(None);
+                    };
+                    let interpreter = Interpreter::query(&executable, platform, cache)?;
+                    if interpreter.python_patch() != *requested_patch {
+                        return Err(Error::PatchVersionMismatch(
+                            executable,
+                            request.to_string(),
+                            interpreter.python_version().clone(),
+                        ));
+                    }
+                    interpreter
+                }
+                _ => unreachable!(),
             }
         } else {
             unimplemented!("Only Windows and Unix are supported")
         }
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        Interpreter::find_executable(request)
+        let Some(executable) = Interpreter::find_executable(request)? else {
+            return Ok(None);
+        };
+        Interpreter::query(&executable, platform, cache)?
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
-        Ok(fs_err::canonicalize(request)?)
-    }
+        let executable = fs_err::canonicalize(request)?;
+        Interpreter::query(&executable, platform, cache)?
+    }))
 }
 
 /// Pick a sensible default for the python a user wants when they didn't specify a version.
@@ -86,7 +143,7 @@ pub fn find_requested_python(request: &str) -> Result<PathBuf, Error> {
 /// We prefer the test overwrite `PUFFIN_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
 #[instrument]
-pub fn find_default_python() -> Result<PathBuf, Error> {
+pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpreter, Error> {
     let current_dir = env::current_dir()?;
     let python = if cfg!(unix) {
         which::which_in(
@@ -115,7 +172,9 @@ pub fn find_default_python() -> Result<PathBuf, Error> {
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
-    return Ok(fs_err::canonicalize(python)?);
+    let base_python = fs_err::canonicalize(python)?;
+    let interpreter = Interpreter::query(&base_python, platform, cache)?;
+    return Ok(interpreter);
 }
 
 /// Run `py --list-paths` to find the installed pythons.
@@ -192,8 +251,12 @@ pub(crate) fn find_python_windows(major: u8, minor: u8) -> Result<Option<PathBuf
 mod tests {
     use std::fmt::Debug;
 
-    use insta::{assert_display_snapshot, assert_snapshot};
+    use insta::assert_display_snapshot;
+    #[cfg(unix)]
+    use insta::assert_snapshot;
     use itertools::Itertools;
+    use platform_host::Platform;
+    use puffin_cache::Cache;
 
     use crate::python_query::find_requested_python;
     use crate::Error;
@@ -205,26 +268,49 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn no_such_python_version() {
+        let request = "3.1000";
+        let result = find_requested_python(
+            request,
+            &Platform::current().unwrap(),
+            &Cache::temp().unwrap(),
+        )
+        .unwrap()
+        .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
-            format_err(find_requested_python("3.1000")),
-            @"Couldn't find `3.1000` in PATH. Is this Python version installed?"
+            format_err(result),
+            @"No Python 3.1000 In `PATH`. Is Python 3.1000 installed?"
         );
     }
 
     #[test]
+    #[cfg(unix)]
     fn no_such_python_binary() {
+        let request = "python3.1000";
+        let result = find_requested_python(
+            request,
+            &Platform::current().unwrap(),
+            &Cache::temp().unwrap(),
+        )
+        .unwrap()
+        .ok_or(Error::NoSuchPython(request.to_string()));
         assert_display_snapshot!(
-            format_err(find_requested_python("python3.1000")),
-            @"Couldn't find `python3.1000` in PATH. Is this Python version installed?"
+            format_err(result),
+            @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
         );
     }
 
     #[cfg(unix)]
     #[test]
     fn no_such_python_path() {
+        let result = find_requested_python(
+            "/does/not/exists/python3.12",
+            &Platform::current().unwrap(),
+            &Cache::temp().unwrap(),
+        );
         assert_display_snapshot!(
-            format_err(find_requested_python("/does/not/exists/python3.12")), @r###"
+            format_err(result), @r###"
         failed to canonicalize path `/does/not/exists/python3.12`
           Caused by: No such file or directory (os error 2)
         "###);
@@ -233,6 +319,11 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn no_such_python_path() {
+        let result = find_requested_python(
+            r"C:\does\not\exists\python3.12",
+            &Platform::current().unwrap(),
+            &Cache::temp().unwrap(),
+        );
         insta::with_settings!({
             filters => vec![
                 // The exact message is host language dependent
@@ -240,7 +331,7 @@ mod tests {
             ]
         }, {
             assert_display_snapshot!(
-                format_err(find_requested_python(r"C:\does\not\exists\python3.12")), @r###"
+                format_err(result), @r###"
         failed to canonicalize path `C:\does\not\exists\python3.12`
           Caused by: The system cannot find the path specified. (os error 3)
         "###);

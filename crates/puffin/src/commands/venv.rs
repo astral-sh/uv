@@ -16,7 +16,7 @@ use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_fs::NormalizedDisplay;
 use puffin_installer::NoBinary;
-use puffin_interpreter::{find_default_python, find_requested_python, Interpreter};
+use puffin_interpreter::{find_default_python, find_requested_python, Error};
 use puffin_resolver::InMemoryIndex;
 use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
 
@@ -44,10 +44,6 @@ pub(crate) async fn venv(
 
 #[derive(Error, Debug, Diagnostic)]
 enum VenvError {
-    #[error("Failed to extract Python interpreter info")]
-    #[diagnostic(code(puffin::venv::interpreter))]
-    Interpreter(#[source] puffin_interpreter::Error),
-
     #[error("Failed to create virtualenv")]
     #[diagnostic(code(puffin::venv::creation))]
     Creation(#[source] gourgeist::Error),
@@ -75,15 +71,15 @@ async fn venv_impl(
     mut printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
-    let base_python = if let Some(python_request) = python_request {
-        find_requested_python(python_request).into_diagnostic()?
-    } else {
-        find_default_python().into_diagnostic()?
-    };
-
     let platform = Platform::current().into_diagnostic()?;
-    let interpreter =
-        Interpreter::query(&base_python, &platform, cache).map_err(VenvError::Interpreter)?;
+    let interpreter = if let Some(python_request) = python_request {
+        find_requested_python(python_request, &platform, cache)
+            .into_diagnostic()?
+            .ok_or(Error::NoSuchPython(python_request.to_string()))
+            .into_diagnostic()?
+    } else {
+        find_default_python(&platform, cache).into_diagnostic()?
+    };
 
     writeln!(
         printer,
