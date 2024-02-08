@@ -35,19 +35,20 @@ You can install CMake from the [installers](https://cmake.org/download/) or with
 
 ## Testing
 
-Testing Puffin requires multiple specific Python versions. Bootstrap them to `<project root>/bin`:
+Testing Puffin requires multiple specific Python versions. You can install them into
+`<project root>/bin` via our bootstrapping script:
 
 ```shell
 pipx run scripts/bootstrap/install.py
 ```
 
-Alternatively you can also install `zstandard` from pypi and run
+Alternatively, you can install `zstandard` from PyPI, then run:
 
 ```
 python3.12 scripts/bootstrap/install.py
 ```
 
-To run the tests we recommend [nextest](https://nexte.st/). Make sure to run the tests with `--all-features`, otherwise you'll miss most of our integration tests.
+For running tests, we recommend [nextest](https://nexte.st/).
 
 ## Running inside a docker container
 
