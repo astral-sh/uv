@@ -279,6 +279,19 @@ impl FlatDistributions {
     pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDistribution)> {
         self.0.iter()
     }
+
+    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDistribution> {
+        self.0.remove(version)
+    }
+}
+
+impl IntoIterator for FlatDistributions {
+    type IntoIter = std::collections::btree_map::IntoIter<Version, PrioritizedDistribution>;
+    type Item = (Version, PrioritizedDistribution);
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
 }
 
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDistribution> {
