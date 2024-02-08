@@ -265,7 +265,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 } else {
                     debug_assert!(
                         matches!(build_kind, BuildKind::Editable),
-                        "Only editable builds are excempt from 'no build' checks"
+                        "Only editable builds are exempt from 'no build' checks"
                     );
                 }
             }
