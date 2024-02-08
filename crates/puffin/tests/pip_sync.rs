@@ -329,7 +329,7 @@ fn link() -> Result<()> {
         .arg(context.cache_dir.path())
         .arg("--python")
         .arg("3.12")
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&context.temp_dir)
         .assert()
         .success();

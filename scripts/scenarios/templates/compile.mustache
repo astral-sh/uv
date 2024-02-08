@@ -32,7 +32,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&context.temp_dir);
     command
 }

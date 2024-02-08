@@ -33,7 +33,7 @@ fn create_venv() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -71,7 +71,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -111,7 +111,7 @@ fn seed() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -146,7 +146,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         .arg("3.15")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir);
     if cfg!(windows) {
         puffin_snapshot!(&mut command, @r###"
@@ -198,7 +198,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         .arg("3.8.0")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 1
@@ -236,7 +236,7 @@ fn create_venv_python_patch() -> Result<()> {
         .arg("3.12.1")
         .arg("--cache-dir")
         .arg(cache_dir.path())
-        .env("PUFFIN_PYTHON_PATH", bin)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
