@@ -261,7 +261,7 @@ struct PipCompileArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[clap(long, hide = true, conflicts_with = "only_binary")]
+    #[clap(long, conflicts_with = "only_binary")]
     no_build: bool,
 
     /// Only use pre-built wheels; don't build source distributions.
@@ -368,12 +368,7 @@ struct PipSyncArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[clap(
-        long,
-        hide = true,
-        conflicts_with = "no_binary",
-        conflicts_with = "only_binary"
-    )]
+    #[clap(long, conflicts_with = "no_binary", conflicts_with = "only_binary")]
     no_build: bool,
 
     /// Don't install pre-built wheels.
@@ -521,12 +516,7 @@ struct PipInstallArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[clap(
-        long,
-        hide = true,
-        conflicts_with = "no_binary",
-        conflicts_with = "only_binary"
-    )]
+    #[clap(long, conflicts_with = "no_binary", conflicts_with = "only_binary")]
     no_build: bool,
 
     /// Don't install pre-built wheels.
