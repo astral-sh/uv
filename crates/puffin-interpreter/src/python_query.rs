@@ -280,7 +280,7 @@ mod tests {
         .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
             format_err(result),
-            @"Couldn't find `3.1000` in PATH. Is this Python version installed?"
+            @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
         );
     }
 
@@ -297,7 +297,7 @@ mod tests {
         .ok_or(Error::NoSuchPython(request.to_string()));
         assert_display_snapshot!(
             format_err(result),
-            @"Couldn't find `python3.1000` in PATH. Is this Python version installed?"
+            @"No Python 3.1000 In `PATH`. Is Python 3.1000 installed?"
         );
     }
 
