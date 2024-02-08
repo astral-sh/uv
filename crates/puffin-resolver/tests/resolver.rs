@@ -10,7 +10,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
-use distribution_types::{IndexLocations, Resolution};
+use distribution_types::{IndexLocations, Resolution, SourceDist};
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
@@ -21,7 +21,9 @@ use puffin_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use puffin_traits::{BuildContext, BuildKind, NoBinary, SetupPyStrategy, SourceBuildTrait};
+use puffin_traits::{
+    BuildContext, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
+};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -61,8 +63,8 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    fn no_build(&self) -> bool {
-        false
+    fn no_build(&self) -> &NoBuild {
+        &NoBuild::None
     }
 
     fn no_binary(&self) -> &NoBinary {
@@ -94,6 +96,7 @@ impl BuildContext for DummyContext {
         _source: &'a Path,
         _subdirectory: Option<&'a Path>,
         _package_id: &'a str,
+        _dist: Option<&'a SourceDist>,
         _build_kind: BuildKind,
     ) -> Result<Self::SourceDistBuilder> {
         Ok(DummyBuilder)

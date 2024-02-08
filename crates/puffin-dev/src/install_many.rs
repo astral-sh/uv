@@ -25,7 +25,7 @@ use puffin_installer::{Downloader, NoBinary};
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::{DistFinder, InMemoryIndex};
-use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
+use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -66,6 +66,12 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let in_flight = InFlight::default();
     let tags = venv.interpreter().tags()?;
 
+    let no_build = if args.no_build {
+        NoBuild::All
+    } else {
+        NoBuild::None
+    };
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -76,7 +82,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &in_flight,
         venv.python_executable(),
         setup_py,
-        args.no_build,
+        &no_build,
         &NoBinary::None,
     );
 
@@ -129,7 +135,7 @@ async fn install_chunk(
         info!("Failed to find {} wheel(s)", failures.len());
     }
     let wheels_and_source_dist = resolution.len();
-    let resolution = if build_dispatch.no_build() {
+    let resolution = if !build_dispatch.no_build().is_none() {
         let only_wheels: FxHashMap<_, _> = resolution
             .into_iter()
             .filter(|(_, dist)| match dist {

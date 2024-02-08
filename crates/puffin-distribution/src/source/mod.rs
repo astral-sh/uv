@@ -27,7 +27,7 @@ use puffin_cache::{
 use puffin_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
-use puffin_traits::{BuildContext, BuildKind, SourceBuildTrait};
+use puffin_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 use pypi_types::Metadata21;
 
 use crate::error::Error;
@@ -823,7 +823,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<(String, WheelFilename, Metadata21), Error> {
         debug!("Building: {dist}");
 
-        if self.build_context.no_build() {
+        // Guard against build of source distributions when disabled
+        let no_build = match self.build_context.no_build() {
+            NoBuild::All => true,
+            NoBuild::None => false,
+            NoBuild::Packages(packages) => packages.contains(dist.name()),
+        };
+        if no_build {
             return Err(Error::NoBuild);
         }
 
@@ -837,6 +843,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 source_dist,
                 subdirectory,
                 &dist.to_string(),
+                Some(dist),
                 BuildKind::Wheel,
             )
             .await
@@ -878,6 +885,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 source_dist,
                 subdirectory,
                 &dist.to_string(),
+                Some(dist),
                 BuildKind::Wheel,
             )
             .await
@@ -923,6 +931,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 &editable.path,
                 None,
                 &editable.to_string(),
+                None,
                 BuildKind::Editable,
             )
             .await

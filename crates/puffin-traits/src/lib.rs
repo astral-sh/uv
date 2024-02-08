@@ -3,10 +3,11 @@
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::Result;
 
-use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution};
+use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution, SourceDist};
 use once_map::OnceMap;
 use pep508_rs::Requirement;
 use puffin_cache::Cache;
@@ -67,7 +68,7 @@ pub trait BuildContext: Sync {
     /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
     /// we can't build them
-    fn no_build(&self) -> bool;
+    fn no_build(&self) -> &NoBuild;
 
     /// Whether using pre-built wheels is disabled.
     fn no_binary(&self) -> &NoBinary;
@@ -98,11 +99,13 @@ pub trait BuildContext: Sync {
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
     ///
     /// `package_id` is for error reporting only.
+    /// `dist` is for safety checks and may be null for editable builds.
     fn setup_build<'a>(
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         package_id: &'a str,
+        dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a;
 }
@@ -164,6 +167,62 @@ impl Display for BuildKind {
 }
 
 #[derive(Debug, Clone)]
+pub enum PackageNameSpecifier {
+    All,
+    None,
+    Package(PackageName),
+}
+
+impl FromStr for PackageNameSpecifier {
+    type Err = puffin_normalize::InvalidNameError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            ":all:" => Ok(Self::All),
+            ":none:" => Ok(Self::None),
+            _ => Ok(Self::Package(PackageName::from_str(name)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PackageNameSpecifiers {
+    All,
+    None,
+    Packages(Vec<PackageName>),
+}
+
+impl PackageNameSpecifiers {
+    fn from_iter(specifiers: impl Iterator<Item = PackageNameSpecifier>) -> Self {
+        let mut packages = Vec::new();
+        let mut all: bool = false;
+
+        for specifier in specifiers {
+            match specifier {
+                PackageNameSpecifier::None => {
+                    packages.clear();
+                    all = false;
+                }
+                PackageNameSpecifier::All => {
+                    all = true;
+                }
+                PackageNameSpecifier::Package(name) => {
+                    packages.push(name);
+                }
+            }
+        }
+
+        if all {
+            Self::All
+        } else if packages.is_empty() {
+            Self::None
+        } else {
+            Self::Packages(packages)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum NoBinary {
     /// Allow installation of any wheel.
     None,
@@ -177,13 +236,117 @@ pub enum NoBinary {
 
 impl NoBinary {
     /// Determine the binary installation strategy to use.
-    pub fn from_args(no_binary: bool, no_binary_package: Vec<PackageName>) -> Self {
-        if no_binary {
-            Self::All
-        } else if !no_binary_package.is_empty() {
-            Self::Packages(no_binary_package)
-        } else {
-            Self::None
+    pub fn from_args(no_binary: Vec<PackageNameSpecifier>) -> Self {
+        let combined = PackageNameSpecifiers::from_iter(no_binary.into_iter());
+        match combined {
+            PackageNameSpecifiers::All => Self::All,
+            PackageNameSpecifiers::None => Self::None,
+            PackageNameSpecifiers::Packages(packages) => Self::Packages(packages),
         }
+    }
+}
+
+impl NoBinary {
+    /// Returns `true` if all wheels are allowed.
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum NoBuild {
+    /// Allow building wheels from any source distribution.
+    None,
+
+    /// Do not allow building wheels from any source distribution.
+    All,
+
+    /// Do not allow building wheels from the given package's source distributions.
+    Packages(Vec<PackageName>),
+}
+
+impl NoBuild {
+    /// Determine the build strategy to use.
+    pub fn from_args(only_binary: Vec<PackageNameSpecifier>, no_build: bool) -> Self {
+        if no_build {
+            Self::All
+        } else {
+            let combined = PackageNameSpecifiers::from_iter(only_binary.into_iter());
+            match combined {
+                PackageNameSpecifiers::All => Self::All,
+                PackageNameSpecifiers::None => Self::None,
+                PackageNameSpecifiers::Packages(packages) => Self::Packages(packages),
+            }
+        }
+    }
+}
+
+impl NoBuild {
+    /// Returns `true` if all builds are allowed.
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Error;
+
+    use super::*;
+
+    #[test]
+    fn no_build_from_args() -> Result<(), Error> {
+        assert_eq!(
+            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":all:")?], false),
+            NoBuild::All,
+        );
+        assert_eq!(
+            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":all:")?], true),
+            NoBuild::All,
+        );
+        assert_eq!(
+            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":none:")?], true),
+            NoBuild::All,
+        );
+        assert_eq!(
+            NoBuild::from_args(vec![PackageNameSpecifier::from_str(":none:")?], false),
+            NoBuild::None,
+        );
+        assert_eq!(
+            NoBuild::from_args(
+                vec![
+                    PackageNameSpecifier::from_str("foo")?,
+                    PackageNameSpecifier::from_str("bar")?
+                ],
+                false
+            ),
+            NoBuild::Packages(vec![
+                PackageName::from_str("foo")?,
+                PackageName::from_str("bar")?
+            ]),
+        );
+        assert_eq!(
+            NoBuild::from_args(
+                vec![
+                    PackageNameSpecifier::from_str("test")?,
+                    PackageNameSpecifier::All
+                ],
+                false
+            ),
+            NoBuild::All,
+        );
+        assert_eq!(
+            NoBuild::from_args(
+                vec![
+                    PackageNameSpecifier::from_str("foo")?,
+                    PackageNameSpecifier::from_str(":none:")?,
+                    PackageNameSpecifier::from_str("bar")?
+                ],
+                false
+            ),
+            NoBuild::Packages(vec![PackageName::from_str("bar")?]),
+        );
+
+        Ok(())
     }
 }

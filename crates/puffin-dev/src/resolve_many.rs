@@ -21,7 +21,7 @@ use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
+use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
@@ -82,6 +82,12 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     header_span.pb_set_length(total as u64);
     let _header_span_enter = header_span.enter();
 
+    let no_build = if args.no_build {
+        NoBuild::All
+    } else {
+        NoBuild::None
+    };
+
     let mut tasks = futures::stream::iter(requirements)
         .map(|requirement| {
             async {
@@ -102,7 +108,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     &in_flight,
                     venv.python_executable(),
                     setup_py,
-                    args.no_build,
+                    &no_build,
                     &NoBinary::None,
                 );
 

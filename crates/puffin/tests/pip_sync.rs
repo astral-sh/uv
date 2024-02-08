@@ -821,6 +821,7 @@ fn install_no_binary() -> Result<()> {
     command
         .arg("requirements.txt")
         .arg("--no-binary")
+        .arg(":all:")
         .arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the

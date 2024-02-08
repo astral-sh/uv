@@ -14,7 +14,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
+use puffin_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -72,7 +72,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &in_flight,
         venv.python_executable(),
         setup_py,
-        false,
+        &NoBuild::None,
         &NoBinary::None,
     );
 

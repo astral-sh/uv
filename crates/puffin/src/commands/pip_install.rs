@@ -29,7 +29,7 @@ use puffin_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use puffin_traits::{InFlight, SetupPyStrategy};
+use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
@@ -52,7 +52,7 @@ pub(crate) async fn pip_install(
     reinstall: &Reinstall,
     link_mode: LinkMode,
     setup_py: SetupPyStrategy,
-    no_build: bool,
+    no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,

@@ -17,7 +17,7 @@ use puffin_installer::{NoBinary, Reinstall};
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
-use puffin_traits::SetupPyStrategy;
+use puffin_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
@@ -259,8 +259,21 @@ struct PipCompileArgs {
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
     /// source distributions will be reused, but operations that require building distributions will
     /// exit with an error.
-    #[clap(long)]
+    ///
+    /// Alias for `--only-binary :all:`.
+    #[clap(long, hide = true, conflicts_with = "only_binary")]
     no_build: bool,
+
+    /// Only use pre-built wheels; don't build source distributions.
+    ///
+    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
+    ///
+    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
+    /// Clear previously specified packages with `:none:`.
+    #[clap(long, conflicts_with = "no_build")]
+    only_binary: Vec<PackageNameSpecifier>,
 
     /// The minimum Python version that should be supported by the compiled requirements (e.g.,
     /// `3.7` or `3.7.9`).
@@ -353,22 +366,36 @@ struct PipSyncArgs {
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
     /// source distributions will be reused, but operations that require building distributions will
     /// exit with an error.
-    #[clap(long)]
+    ///
+    /// Alias for `--only-binary :all:`.
+    #[clap(
+        long,
+        hide = true,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary"
+    )]
     no_build: bool,
 
     /// Don't install pre-built wheels.
     ///
-    /// When enabled, all installed packages will be installed from a source distribution. The resolver
+    /// The given packages will be installed from a source distribution. The resolver
     /// will still use pre-built wheels for metadata.
-    #[clap(long)]
-    no_binary: bool,
-
-    /// Don't install pre-built wheels for a specific package.
     ///
-    /// When enabled, the specified packages will be installed from a source distribution. The resolver
-    /// will still use pre-built wheels for metadata.
-    #[clap(long)]
-    no_binary_package: Vec<PackageName>,
+    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
+    /// Clear previously specified packages with `:none:`.
+    #[clap(long, conflicts_with = "no_build")]
+    no_binary: Vec<PackageNameSpecifier>,
+
+    /// Only use pre-built wheels; don't build source distributions.
+    ///
+    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
+    ///
+    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
+    /// Clear previously specified packages with `:none:`.
+    #[clap(long, conflicts_with = "no_build")]
+    only_binary: Vec<PackageNameSpecifier>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -492,22 +519,36 @@ struct PipInstallArgs {
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
     /// source distributions will be reused, but operations that require building distributions will
     /// exit with an error.
-    #[clap(long)]
+    ///
+    /// Alias for `--only-binary :all:`.
+    #[clap(
+        long,
+        hide = true,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary"
+    )]
     no_build: bool,
 
     /// Don't install pre-built wheels.
     ///
-    /// When enabled, all installed packages will be installed from a source distribution. The resolver
+    /// The given packages will be installed from a source distribution. The resolver
     /// will still use pre-built wheels for metadata.
-    #[clap(long)]
-    no_binary: bool,
-
-    /// Don't install pre-built wheels for a specific package.
     ///
-    /// When enabled, the specified packages will be installed from a source distribution. The resolver
-    /// will still use pre-built wheels for metadata.
-    #[clap(long)]
-    no_binary_package: Vec<PackageName>,
+    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
+    /// Clear previously specified packages with `:none:`.
+    #[clap(long, conflicts_with = "no_build")]
+    no_binary: Vec<PackageNameSpecifier>,
+
+    /// Only use pre-built wheels; don't build source distributions.
+    ///
+    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
+    /// source distributions will be reused, but operations that require building distributions will
+    /// exit with an error.
+    ///
+    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
+    /// Clear previously specified packages with `:none:`.
+    #[clap(long, conflicts_with = "no_build")]
+    only_binary: Vec<PackageNameSpecifier>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -741,6 +782,7 @@ async fn run() -> Result<ExitStatus> {
                 ExtrasSpecification::Some(&args.extra)
             };
             let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
+            let no_build = NoBuild::from_args(args.only_binary, args.no_build);
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -761,7 +803,7 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     SetupPyStrategy::Pep517
                 },
-                args.no_build,
+                &no_build,
                 args.python_version,
                 args.exclude_newer,
                 cache,
@@ -787,7 +829,8 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
-            let no_binary = NoBinary::from_args(args.no_binary, args.no_binary_package);
+            let no_binary = NoBinary::from_args(args.no_binary);
+            let no_build = NoBuild::from_args(args.only_binary, args.no_build);
             commands::pip_sync(
                 &sources,
                 &reinstall,
@@ -798,7 +841,7 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     SetupPyStrategy::Pep517
                 },
-                args.no_build,
+                &no_build,
                 &no_binary,
                 args.strict,
                 cache,
@@ -845,7 +888,8 @@ async fn run() -> Result<ExitStatus> {
                 ExtrasSpecification::Some(&args.extra)
             };
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
-            let no_binary = NoBinary::from_args(args.no_binary, args.no_binary_package);
+            let no_binary = NoBinary::from_args(args.no_binary);
+            let no_build = NoBuild::from_args(args.only_binary, args.no_build);
             let dependency_mode = if args.no_deps {
                 DependencyMode::Direct
             } else {
@@ -867,7 +911,7 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     SetupPyStrategy::Pep517
                 },
-                args.no_build,
+                &no_build,
                 &no_binary,
                 args.strict,
                 args.exclude_newer,

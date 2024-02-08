@@ -668,7 +668,11 @@ fn install_no_binary() {
     let context = TestContext::new("3.12");
 
     let mut command = command(&context);
-    command.arg("Flask").arg("--no-binary").arg("--strict");
+    command
+        .arg("Flask")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
@@ -703,9 +707,74 @@ fn install_no_binary_subset() {
 
     puffin_snapshot!(command(&context)
         .arg("Flask")
-        .arg("--no-binary-package")
+        .arg("--no-binary")
         .arg("click")
-        .arg("--no-binary-package")
+        .arg("--no-binary")
+        .arg("flask")
+        .arg("--strict"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + blinker==1.7.0
+         + click==8.1.7
+         + flask==3.0.0
+         + itsdangerous==2.1.2
+         + jinja2==3.1.2
+         + markupsafe==2.1.3
+         + werkzeug==3.0.1
+        "###
+    );
+
+    context.assert_command("import flask").success();
+}
+
+/// Install a package only using pre-built wheels.
+#[test]
+#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
+fn install_only_binary() {
+    let context = TestContext::new("3.12");
+
+    puffin_snapshot!(command(&context)
+        .arg("Flask")
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("--strict"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 7 packages in [TIME]
+        Downloaded 7 packages in [TIME]
+        Installed 7 packages in [TIME]
+         + blinker==1.7.0
+         + click==8.1.7
+         + flask==3.0.0
+         + itsdangerous==2.1.2
+         + jinja2==3.1.2
+         + markupsafe==2.1.3
+         + werkzeug==3.0.1
+        "###
+    );
+
+    context.assert_command("import flask").success();
+}
+
+/// Install a package only using pre-built wheels for a subset of packages.
+#[test]
+fn install_only_binary_subset() {
+    let context = TestContext::new("3.12");
+
+    puffin_snapshot!(command(&context)
+        .arg("Flask")
+        .arg("--only-binary")
+        .arg("click")
+        .arg("--only-binary")
         .arg("flask")
         .arg("--strict"), @r###"
         success: true
@@ -766,7 +835,11 @@ fn reinstall_no_binary() {
     // Running installation again with `--no-binary` should be a no-op
     // The first installation should use a pre-built wheel
     let mut command = crate::command(&context);
-    command.arg("Flask").arg("--no-binary").arg("--strict");
+    command
+        .arg("Flask")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
@@ -799,6 +872,7 @@ fn reinstall_no_binary() {
     command
         .arg("Flask")
         .arg("--no-binary")
+        .arg(":all:")
         .arg("--reinstall-package")
         .arg("Flask")
         .arg("--strict");
