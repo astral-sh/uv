@@ -1,4 +1,3 @@
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
@@ -33,7 +32,7 @@ impl VersionMap {
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
-        flat_index: Option<FlatDistributions>,
+        mut flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
     ) -> Self {
         // NOTE: We should experiment with refactoring the code
@@ -45,9 +44,7 @@ impl VersionMap {
         // up-front.
         let metadata = OwnedArchive::deserialize(&raw_metadata);
 
-        // If we have packages of the same name from find links, gives them priority, otherwise start empty
-        let mut version_map: BTreeMap<Version, PrioritizedDistribution> =
-            flat_index.map(Into::into).unwrap_or_default();
+        let mut version_map = BTreeMap::new();
 
         // Check if binaries are allowed for this package
         let no_binary = match no_binary {
@@ -58,6 +55,12 @@ impl VersionMap {
 
         // Collect compatible distributions.
         for SimpleMetadatum { version, files } in metadata {
+            // If we have packages of the same name from find links, give them
+            // priority, otherwise start with an empty priority dist.
+            let mut priority_dist = flat_index
+                .as_mut()
+                .and_then(|flat_index| flat_index.remove(&version))
+                .unwrap_or_default();
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
@@ -94,7 +97,7 @@ impl VersionMap {
                         // If pre-built binaries are disabled, skip this wheel
                         if no_binary {
                             continue;
-                        };
+                        }
 
                         // To be compatible, the wheel must both have compatible tags _and_ have a
                         // compatible Python requirement.
@@ -110,24 +113,7 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        match version_map.entry(version.clone()) {
-                            Entry::Occupied(mut entry) => {
-                                entry.get_mut().insert_built(
-                                    dist,
-                                    requires_python,
-                                    Some(hash),
-                                    priority,
-                                );
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(PrioritizedDistribution::from_built(
-                                    dist,
-                                    requires_python,
-                                    Some(hash),
-                                    priority,
-                                ));
-                            }
-                        }
+                        priority_dist.insert_built(dist, requires_python, Some(hash), priority);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let dist = Dist::from_registry(
@@ -135,25 +121,17 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        match version_map.entry(version.clone()) {
-                            Entry::Occupied(mut entry) => {
-                                entry
-                                    .get_mut()
-                                    .insert_source(dist, requires_python, Some(hash));
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(PrioritizedDistribution::from_source(
-                                    dist,
-                                    requires_python,
-                                    Some(hash),
-                                ));
-                            }
-                        }
+                        priority_dist.insert_source(dist, requires_python, Some(hash));
                     }
                 }
             }
+            version_map.insert(version, priority_dist);
         }
-
+        // Add any left over packages from the version map that we didn't visit
+        // above via `SimpleMetadata`.
+        if let Some(flat_index) = flat_index {
+            version_map.extend(flat_index.into_iter());
+        }
         Self(version_map)
     }
 

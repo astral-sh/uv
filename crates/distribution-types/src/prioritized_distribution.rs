@@ -13,10 +13,10 @@ pub struct DistRequiresPython {
 }
 
 // Boxed because `Dist` is large.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct PrioritizedDistribution(Box<PrioritizedDistributionInner>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 struct PrioritizedDistributionInner {
     /// An arbitrary source distribution for the package version.
     source: Option<DistRequiresPython>,
@@ -177,6 +177,14 @@ impl PrioritizedDistribution {
     /// Return the hashes for each distribution.
     pub fn hashes(&self) -> &[Hashes] {
         &self.0.hashes
+    }
+
+    /// Returns true if and only if this distribution does not contain any
+    /// source distributions or wheels.
+    pub fn is_empty(&self) -> bool {
+        self.0.source.is_none()
+            && self.0.compatible_wheel.is_none()
+            && self.0.incompatible_wheel.is_none()
     }
 }
 
