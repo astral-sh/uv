@@ -4,8 +4,6 @@
 
 [Rust](https://rustup.rs/), a C compiler, and CMake are required to build Puffin.
 
-Testing Puffin requires multiple specific Python versions. We provide a script to bootstrap development by downloading the required versions.
-
 ### Linux
 
 
@@ -35,31 +33,22 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake` (make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
 
-### Python
-
-Install required Python versions with the bootstrapping script:
-
-```
-scripts/bootstrap/install.sh
-```
-
-The installed Python binaries will be available in `<repo>/bin` and must be added to your path to be used. We
-provide a `.env` file with the proper environment variables for development. You may activate it with:
-
-```
-source .env
-```
-
-Or, if you use `direnv` to manage your environment:
-
-```
-echo "dotenv" >> .envrc
-direnv allow
-```
-
 ## Testing
 
-To run the tests we recommend [nextest](https://nexte.st/). Make sure to run the tests with `--all-features`, otherwise you'll miss most of our integration tests.
+Testing Puffin requires multiple specific Python versions. You can install them into
+`<project root>/bin` via our bootstrapping script:
+
+```shell
+pipx run scripts/bootstrap/install.py
+```
+
+Alternatively, you can install `zstandard` from PyPI, then run:
+
+```
+python3.12 scripts/bootstrap/install.py
+```
+
+For running tests, we recommend [nextest](https://nexte.st/).
 
 ## Running inside a docker container
 
