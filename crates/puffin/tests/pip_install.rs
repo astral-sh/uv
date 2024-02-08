@@ -669,7 +669,7 @@ fn install_no_binary() {
 
     let mut command = command(&context);
     command
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--no-binary")
         .arg(":all:")
         .arg("--strict");
@@ -679,25 +679,20 @@ fn install_no_binary() {
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
     puffin_snapshot!(command, @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+    "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 }
 
 /// Install a package without using pre-built wheels for a subset of packages.
@@ -706,31 +701,26 @@ fn install_no_binary_subset() {
     let context = TestContext::new("3.12");
 
     puffin_snapshot!(command(&context)
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--no-binary")
-        .arg("click")
+        .arg("jinja2")
         .arg("--no-binary")
-        .arg("flask")
+        .arg("markupsafe")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+    "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 }
 
 /// Install a package only using pre-built wheels.
@@ -740,29 +730,24 @@ fn install_only_binary() {
     let context = TestContext::new("3.12");
 
     puffin_snapshot!(command(&context)
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--only-binary")
         .arg(":all:")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+    "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 }
 
 /// Install a package only using pre-built wheels for a subset of packages.
@@ -771,31 +756,24 @@ fn install_only_binary_subset() {
     let context = TestContext::new("3.12");
 
     puffin_snapshot!(command(&context)
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--only-binary")
-        .arg("click")
-        .arg("--only-binary")
-        .arg("flask")
+        .arg("markupsafe")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+    "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 }
 
 /// Install a package without using pre-built wheels.
@@ -805,38 +783,33 @@ fn reinstall_no_binary() {
 
     // The first installation should use a pre-built wheel
     let mut command = command(&context);
-    command.arg("Flask").arg("--strict");
+    command.arg("jinja2").arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
     puffin_snapshot!(command, @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+    "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 
     // Running installation again with `--no-binary` should be a no-op
     // The first installation should use a pre-built wheel
     let mut command = crate::command(&context);
     command
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--no-binary")
         .arg(":all:")
         .arg("--strict");
@@ -855,7 +828,7 @@ fn reinstall_no_binary() {
         "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 
     // With `--reinstall`, `--no-binary` should have an affect
     let filters = if cfg!(windows) {
@@ -870,11 +843,11 @@ fn reinstall_no_binary() {
     };
     let mut command = crate::command(&context);
     command
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--no-binary")
         .arg(":all:")
         .arg("--reinstall-package")
-        .arg("Flask")
+        .arg("jinja2")
         .arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
@@ -882,19 +855,19 @@ fn reinstall_no_binary() {
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
     puffin_snapshot!(filters, command, @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Installed 1 package in [TIME]
-         - flask==3.0.0
-         + flask==3.0.0
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - jinja2==3.1.2
+     + jinja2==3.1.2
+    "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import jinja2").success();
 }
 
 /// Install a package into a virtual environment, and ensuring that the executable permissions
