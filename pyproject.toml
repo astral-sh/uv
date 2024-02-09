@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "puffin-alpha"
-version = "0.0.3"
+version = "0.0.4"
 authors = [{ name = "Puffin" }]
 requires-python = ">=3.8"
 keywords = []
