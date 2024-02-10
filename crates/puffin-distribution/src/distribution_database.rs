@@ -13,7 +13,7 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
-use puffin_client::{CacheControl, CachedClientError, RegistryClient};
+use puffin_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use puffin_fs::metadata_if_exists;
 use puffin_git::GitSource;
 use puffin_traits::{BuildContext, NoBinary, NoBuild};
@@ -58,7 +58,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             locks: Arc::new(Locks::default()),
             client,
             build_context,
-            builder: SourceDistCachedBuilder::new(build_context, client.cached_client(), tags),
+            builder: SourceDistCachedBuilder::new(build_context, client, tags),
         }
     }
 
@@ -169,11 +169,15 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 };
 
                 let req = self.client.cached_client().uncached().get(url).build()?;
-                let cache_control = CacheControl::from(
-                    self.cache
-                        .freshness(&http_entry, Some(wheel.name()))
-                        .map_err(Error::CacheRead)?,
-                );
+                let cache_control = match self.client.connectivity() {
+                    Connectivity::Online => CacheControl::from(
+                        self.cache
+                            .freshness(&http_entry, Some(wheel.name()))
+                            .map_err(Error::CacheRead)?,
+                    ),
+                    Connectivity::Offline => CacheControl::AllowStale,
+                };
+
                 let archive = self
                     .client
                     .cached_client()
@@ -232,11 +236,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .uncached()
                     .get(wheel.url.raw().clone())
                     .build()?;
-                let cache_control = CacheControl::from(
-                    self.cache
-                        .freshness(&http_entry, Some(wheel.name()))
-                        .map_err(Error::CacheRead)?,
-                );
+                let cache_control = match self.client.connectivity() {
+                    Connectivity::Online => CacheControl::from(
+                        self.cache
+                            .freshness(&http_entry, Some(wheel.name()))
+                            .map_err(Error::CacheRead)?,
+                    ),
+                    Connectivity::Offline => CacheControl::AllowStale,
+                };
                 let archive = self
                     .client
                     .cached_client()

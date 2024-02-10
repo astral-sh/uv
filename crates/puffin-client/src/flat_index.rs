@@ -21,7 +21,7 @@ use pypi_types::Hashes;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
-use crate::{Error, ErrorKind, RegistryClient};
+use crate::{Connectivity, Error, ErrorKind, RegistryClient};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -92,11 +92,14 @@ impl<'a> FlatIndexClient<'a> {
             "html",
             format!("{}.msgpack", cache_key::digest(&url.to_string())),
         );
-        let cache_control = CacheControl::from(
-            self.cache
-                .freshness(&cache_entry, None)
-                .map_err(ErrorKind::Io)?,
-        );
+        let cache_control = match self.client.connectivity() {
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, None)
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
 
         let cached_client = self.client.cached_client();
 
@@ -131,14 +134,22 @@ impl<'a> FlatIndexClient<'a> {
             .boxed()
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
-        let files = cached_client
+        let response = cached_client
             .get_serde(
                 flat_index_request,
                 &cache_entry,
                 cache_control,
                 parse_simple_response,
             )
-            .await?;
+            .await;
+        let files = match response {
+            Ok(files) => files,
+            Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline) => {
+                warn!("Remote `--find-links` entry was not available in the cache: {url}");
+                vec![]
+            }
+            Err(err) => return Err(err.into()),
+        };
         Ok(files
             .into_iter()
             .filter_map(|file| {

@@ -2563,6 +2563,7 @@ name = "puffin-client"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "async_http_range_reader",
  "async_zip",
  "cache-key",
@@ -2591,6 +2592,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "task-local-extensions",
  "tempfile",
  "thiserror",
  "tl",

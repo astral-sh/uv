@@ -20,7 +20,7 @@ use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use puffin_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_fs::Normalized;
 use puffin_installer::{Downloader, NoBinary};
@@ -59,6 +59,7 @@ pub(crate) async fn pip_compile(
     include_find_links: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
+    connectivity: Connectivity,
     no_build: &NoBuild,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
@@ -195,6 +196,7 @@ pub(crate) async fn pip_compile(
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
+        .connectivity(connectivity)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

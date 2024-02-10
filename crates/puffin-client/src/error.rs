@@ -6,6 +6,7 @@ use distribution_filename::{WheelFilename, WheelFilenameError};
 use puffin_normalize::PackageName;
 
 use crate::html;
+use crate::middleware::OfflineError;
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -135,4 +136,23 @@ pub enum ErrorKind {
 
     #[error("Writing to cache archive failed: {0}")]
     ArchiveWrite(#[source] crate::rkyvutil::SerializerError),
+
+    #[error("Network connectivity is disabled, but the requested data wasn't found in the cache")]
+    Offline,
+}
+
+impl ErrorKind {
+    pub(crate) fn from_middleware(err: reqwest_middleware::Error) -> Self {
+        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
+            if underlying.downcast_ref::<OfflineError>().is_some() {
+                return ErrorKind::Offline;
+            }
+        }
+
+        if let reqwest_middleware::Error::Reqwest(err) = err {
+            return ErrorKind::RequestError(err);
+        }
+
+        ErrorKind::RequestMiddlewareError(err)
+    }
 }

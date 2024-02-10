@@ -17,7 +17,9 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_host::Platform;
 use platform_tags::Tags;
 use puffin_cache::Cache;
-use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use puffin_client::{
+    Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder,
+};
 use puffin_dispatch::BuildDispatch;
 use puffin_fs::Normalized;
 use puffin_installer::{
@@ -52,6 +54,7 @@ pub(crate) async fn pip_install(
     reinstall: &Reinstall,
     link_mode: LinkMode,
     setup_py: SetupPyStrategy,
+    connectivity: Connectivity,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -138,6 +141,7 @@ pub(crate) async fn pip_install(
     // Instantiate a client.
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
+        .connectivity(connectivity)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

@@ -16,6 +16,7 @@ puffin-fs = { path = "../puffin-fs", features = ["tokio"] }
 puffin-normalize = { path = "../puffin-normalize" }
 pypi-types = { path = "../pypi-types" }
 
+async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
 chrono = { workspace = true }
@@ -32,6 +33,7 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+task-local-extensions = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tl = { workspace = true }

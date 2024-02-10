@@ -30,6 +30,8 @@ pub enum VersionsResponse {
     NotFound,
     /// The package was not found in the local registry
     NoIndex,
+    /// The package was not found in the cache and the network is not available.
+    Offline,
 }
 
 pub trait ResolverProvider: Send + Sync {
@@ -116,19 +118,15 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
 impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     for DefaultResolverProvider<'a, Context>
 {
-    fn index_locations(&self) -> &IndexLocations {
-        self.fetcher.index_locations()
-    }
-
-    /// Make a simple api request for the package and convert the result to a [`VersionMap`].
+    /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
     ) -> PackageVersionsResult {
         let result = self.client.simple(package_name).await;
 
-        // If the simple api request was successful, perform on the slow conversion to `VersionMap` on the tokio
-        // threadpool
+        // If the "Simple API" request was successful, convert to `VersionMap` on the tokio
+        // threadpool, since it can be slow.
         match result {
             Ok((index, metadata)) => {
                 let self_send = self.inner.clone();
@@ -164,6 +162,13 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                         Ok(VersionsResponse::NoIndex)
                     }
                 }
+                puffin_client::ErrorKind::Offline => {
+                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
+                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                    } else {
+                        Ok(VersionsResponse::Offline)
+                    }
+                }
                 kind => Err(kind.into()),
             },
         }
@@ -171,6 +176,10 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
 
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
         self.fetcher.get_or_build_wheel_metadata(dist).await
+    }
+
+    fn index_locations(&self) -> &IndexLocations {
+        self.fetcher.index_locations()
     }
 
     /// Set the [`puffin_distribution::Reporter`] to use for this installer.

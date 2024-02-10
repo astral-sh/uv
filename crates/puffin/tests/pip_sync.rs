@@ -2651,3 +2651,58 @@ fn find_links() -> Result<()> {
 
     Ok(())
 }
+
+/// Install without network access via the `--offline` flag.
+#[test]
+fn offline() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("black==23.10.1")?;
+
+    // Install with `--offline` with an empty cache.
+    puffin_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--offline"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Network connectivity is disabled, but the requested data wasn't found in the cache
+    "###
+    );
+
+    // Populate the cache.
+    puffin_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==23.10.1
+    "###
+    );
+
+    // Install with `--offline` with a populated cache.
+    let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
+
+    puffin_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--offline")
+        .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + black==23.10.1
+    "###
+    );
+
+    Ok(())
+}
