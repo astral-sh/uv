@@ -3,14 +3,24 @@ use std::fmt::Debug;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use task_local_extensions::Extensions;
+use url::Url;
 
 /// A custom error type for the offline middleware.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct OfflineError;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OfflineError {
+    url: Url,
+}
+
+impl OfflineError {
+    /// Returns the URL that caused the error.
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+}
 
 impl std::fmt::Display for OfflineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Offline")
+        write!(f, "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{}`", self.url)
     }
 }
 
@@ -23,10 +33,15 @@ pub(crate) struct OfflineMiddleware;
 impl Middleware for OfflineMiddleware {
     async fn handle(
         &self,
-        _req: Request,
+        req: Request,
         _extensions: &mut Extensions,
         _next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        Err(reqwest_middleware::Error::Middleware(OfflineError.into()))
+        Err(reqwest_middleware::Error::Middleware(
+            OfflineError {
+                url: req.url().clone(),
+            }
+            .into(),
+        ))
     }
 }

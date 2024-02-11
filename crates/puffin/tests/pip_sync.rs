@@ -2668,7 +2668,7 @@ fn offline() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Network connectivity is disabled, but the requested data wasn't found in the cache
+    error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `black`
     "###
     );
 

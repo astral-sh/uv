@@ -144,7 +144,7 @@ impl<'a> FlatIndexClient<'a> {
             .await;
         let files = match response {
             Ok(files) => files,
-            Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline) => {
+            Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline(_)) => {
                 warn!("Remote `--find-links` entry was not available in the cache: {url}");
                 vec![]
             }

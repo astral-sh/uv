@@ -125,7 +125,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     ) -> PackageVersionsResult {
         let result = self.client.simple(package_name).await;
 
-        // If the "Simple API" request was successful, convert to `VersionMap` on the tokio
+        // If the "Simple API" request was successful, convert to `VersionMap` on the Tokio
         // threadpool, since it can be slow.
         match result {
             Ok((index, metadata)) => {
@@ -162,7 +162,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                         Ok(VersionsResponse::NoIndex)
                     }
                 }
-                puffin_client::ErrorKind::Offline => {
+                puffin_client::ErrorKind::Offline(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
                         Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
                     } else {

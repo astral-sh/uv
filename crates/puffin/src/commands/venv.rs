@@ -25,7 +25,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps)]
+#[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
@@ -76,6 +76,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
+#[allow(clippy::too_many_arguments)]
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,

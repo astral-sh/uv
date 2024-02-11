@@ -158,7 +158,7 @@ impl RegistryClient {
             return match result {
                 Ok(metadata) => Ok((index.clone(), metadata)),
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
-                    ErrorKind::Offline => continue,
+                    ErrorKind::Offline(_) => continue,
                     ErrorKind::RequestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND) {
                             continue;
@@ -175,7 +175,7 @@ impl RegistryClient {
             Connectivity::Online => {
                 Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
             }
-            Connectivity::Offline => Err(ErrorKind::Offline.into()),
+            Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
         }
     }
 
