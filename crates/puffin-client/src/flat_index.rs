@@ -36,9 +36,9 @@ pub enum FlatIndexError {
 pub struct FlatIndexEntries {
     /// The list of `--find-links` entries.
     entries: Vec<(DistFilename, File, IndexUrl)>,
-    /// Any `--find-links` entries that failed to be read due to a lack of network connectivity and
-    /// an absence of a cached version.
-    offline: Vec<IndexUrl>,
+    /// Whether any `--find-links` entries could not be resolved due to a lack of network
+    /// connectivity.
+    offline: bool,
 }
 
 impl FlatIndexEntries {
@@ -46,27 +46,30 @@ impl FlatIndexEntries {
     fn from_entries(entries: Vec<(DistFilename, File, IndexUrl)>) -> Self {
         Self {
             entries,
-            offline: Vec::new(),
+            offline: false,
         }
     }
 
-    /// Create a [`FlatIndexEntries`] from a single `--find-links` URL.
-    fn offline(url: IndexUrl) -> Self {
+    /// Create a [`FlatIndexEntries`] to represent an offline `--find-links` entry.
+    fn offline() -> Self {
         Self {
             entries: Vec::new(),
-            offline: vec![url],
+            offline: true,
         }
     }
 
+    /// Extend this list of `--find-links` entries with another list.
     fn extend(&mut self, other: Self) {
         self.entries.extend(other.entries);
-        self.offline.extend(other.offline);
+        self.offline |= other.offline;
     }
 
+    /// Return the number of `--find-links` entries.
     fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Return `true` if there are no `--find-links` entries.
     fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -195,7 +198,7 @@ impl<'a> FlatIndexClient<'a> {
                 Ok(FlatIndexEntries::from_entries(files))
             }
             Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline(_)) => {
-                Ok(FlatIndexEntries::offline(IndexUrl::Url(url.clone())))
+                Ok(FlatIndexEntries::offline())
             }
             Err(err) => Err(err.into()),
         }
@@ -252,9 +255,9 @@ impl<'a> FlatIndexClient<'a> {
 pub struct FlatIndex {
     /// The list of [`FlatDistributions`] from the `--find-links` entries, indexed by package name.
     index: FxHashMap<PackageName, FlatDistributions>,
-    /// Any `--find-links` entries that failed to be read due to a lack of network connectivity and
-    /// an absence of a cached version.
-    offline: Vec<IndexUrl>,
+    /// Whether any `--find-links` entries could not be resolved due to a lack of network
+    /// connectivity.
+    offline: bool,
 }
 
 impl FlatIndex {
@@ -329,7 +332,7 @@ impl FlatIndex {
 
     /// Returns `true` if there are any offline `--find-links` entries.
     pub fn offline(&self) -> bool {
-        !self.offline.is_empty()
+        self.offline
     }
 }
 
