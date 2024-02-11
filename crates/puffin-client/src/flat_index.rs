@@ -32,7 +32,45 @@ pub enum FlatIndexError {
     FindLinksUrl(Url, #[source] Error),
 }
 
-type FlatIndexEntry = (DistFilename, File, IndexUrl);
+#[derive(Debug, Default, Clone)]
+pub struct FlatIndexEntries {
+    /// The list of `--find-links` entries.
+    entries: Vec<(DistFilename, File, IndexUrl)>,
+    /// Any `--find-links` entries that failed to be read due to a lack of network connectivity and
+    /// an absence of a cached version.
+    offline: Vec<IndexUrl>,
+}
+
+impl FlatIndexEntries {
+    /// Create a [`FlatIndexEntries`] from a list of `--find-links` entries.
+    fn from_entries(entries: Vec<(DistFilename, File, IndexUrl)>) -> Self {
+        Self {
+            entries,
+            offline: Vec::new(),
+        }
+    }
+
+    /// Create a [`FlatIndexEntries`] from a single `--find-links` URL.
+    fn offline(url: IndexUrl) -> Self {
+        Self {
+            entries: Vec::new(),
+            offline: vec![url],
+        }
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.entries.extend(other.entries);
+        self.offline.extend(other.offline);
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
 
 /// A client for reading distributions from `--find-links` entries (either local directories or
 /// remote HTML indexes).
@@ -53,7 +91,7 @@ impl<'a> FlatIndexClient<'a> {
     pub async fn fetch(
         &self,
         indexes: impl Iterator<Item = &FlatIndexLocation>,
-    ) -> Result<Vec<FlatIndexEntry>, FlatIndexError> {
+    ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
             .map(|index| async move {
                 let entries = match index {
@@ -74,11 +112,11 @@ impl<'a> FlatIndexClient<'a> {
                         index
                     );
                 }
-                Ok::<Vec<FlatIndexEntry>, FlatIndexError>(entries)
+                Ok::<FlatIndexEntries, FlatIndexError>(entries)
             })
             .buffered(16);
 
-        let mut results = Vec::new();
+        let mut results = FlatIndexEntries::default();
         while let Some(entries) = fetches.next().await.transpose()? {
             results.extend(entries);
         }
@@ -86,7 +124,7 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Read a flat remote index from a `--find-links` URL.
-    async fn read_from_url(&self, url: &Url) -> Result<Vec<FlatIndexEntry>, Error> {
+    async fn read_from_url(&self, url: &Url) -> Result<FlatIndexEntries, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
@@ -142,28 +180,29 @@ impl<'a> FlatIndexClient<'a> {
                 parse_simple_response,
             )
             .await;
-        let files = match response {
-            Ok(files) => files,
-            Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline(_)) => {
-                warn!("Remote `--find-links` entry was not available in the cache: {url}");
-                vec![]
+        match response {
+            Ok(files) => {
+                let files = files
+                    .into_iter()
+                    .filter_map(|file| {
+                        Some((
+                            DistFilename::try_from_normalized_filename(&file.filename)?,
+                            file,
+                            IndexUrl::Url(url.clone()),
+                        ))
+                    })
+                    .collect();
+                Ok(FlatIndexEntries::from_entries(files))
             }
-            Err(err) => return Err(err.into()),
-        };
-        Ok(files
-            .into_iter()
-            .filter_map(|file| {
-                Some((
-                    DistFilename::try_from_normalized_filename(&file.filename)?,
-                    file,
-                    IndexUrl::Url(url.clone()),
-                ))
-            })
-            .collect())
+            Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline(_)) => {
+                Ok(FlatIndexEntries::offline(IndexUrl::Url(url.clone())))
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Read a flat remote index from a `--find-links` directory.
-    fn read_from_directory(path: &PathBuf) -> Result<Vec<FlatIndexEntry>, std::io::Error> {
+    fn read_from_directory(path: &PathBuf) -> Result<FlatIndexEntries, std::io::Error> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
 
@@ -203,28 +242,36 @@ impl<'a> FlatIndexClient<'a> {
             };
             dists.push((filename, file, IndexUrl::Pypi));
         }
-        Ok(dists)
+        Ok(FlatIndexEntries::from_entries(dists))
     }
 }
 
 /// A set of [`PrioritizedDistribution`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
 #[derive(Debug, Clone, Default)]
-pub struct FlatIndex(FxHashMap<PackageName, FlatDistributions>);
+pub struct FlatIndex {
+    /// The list of [`FlatDistributions`] from the `--find-links` entries, indexed by package name.
+    index: FxHashMap<PackageName, FlatDistributions>,
+    /// Any `--find-links` entries that failed to be read due to a lack of network connectivity and
+    /// an absence of a cached version.
+    offline: Vec<IndexUrl>,
+}
 
 impl FlatIndex {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(entries: Vec<FlatIndexEntry>, tags: &Tags) -> Self {
-        let mut flat_index = FxHashMap::default();
-
+    pub fn from_entries(entries: FlatIndexEntries, tags: &Tags) -> Self {
         // Collect compatible distributions.
-        for (filename, file, index) in entries {
-            let distributions = flat_index.entry(filename.name().clone()).or_default();
-            Self::add_file(distributions, file, filename, tags, index);
+        let mut index = FxHashMap::default();
+        for (filename, file, url) in entries.entries {
+            let distributions = index.entry(filename.name().clone()).or_default();
+            Self::add_file(distributions, file, filename, tags, url);
         }
 
-        Self(flat_index)
+        // Collect offline entries.
+        let offline = entries.offline;
+
+        Self { index, offline }
     }
 
     fn add_file(
@@ -277,7 +324,12 @@ impl FlatIndex {
 
     /// Get the [`FlatDistributions`] for the given package name.
     pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
-        self.0.get(package_name)
+        self.index.get(package_name)
+    }
+
+    /// Returns `true` if there are any offline `--find-links` entries.
+    pub fn offline(&self) -> bool {
+        !self.offline.is_empty()
     }
 }
 
@@ -297,8 +349,8 @@ impl FlatDistributions {
 }
 
 impl IntoIterator for FlatDistributions {
-    type IntoIter = std::collections::btree_map::IntoIter<Version, PrioritizedDistribution>;
     type Item = (Version, PrioritizedDistribution);
+    type IntoIter = std::collections::btree_map::IntoIter<Version, PrioritizedDistribution>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()

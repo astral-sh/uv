@@ -158,6 +158,8 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 puffin_client::ErrorKind::NoIndex(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
                         Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                    } else if self.flat_index.offline() {
+                        Ok(VersionsResponse::Offline)
                     } else {
                         Ok(VersionsResponse::NoIndex)
                     }
