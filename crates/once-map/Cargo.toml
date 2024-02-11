@@ -14,5 +14,4 @@ workspace = true
 
 [dependencies]
 dashmap = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
