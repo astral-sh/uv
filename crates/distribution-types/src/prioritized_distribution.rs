@@ -227,7 +227,7 @@ pub enum ResolvableDist<'a> {
 
 impl<'a> ResolvableDist<'a> {
     /// Return the [`DistRequiresPython`] to use during resolution.
-    pub fn resolution_python(&self) -> &DistRequiresPython {
+    pub fn for_resolution(&self) -> &DistRequiresPython {
         match *self {
             ResolvableDist::SourceDist(sdist, _) => sdist,
             ResolvableDist::CompatibleWheel(wheel, _, _) => wheel,
@@ -240,7 +240,7 @@ impl<'a> ResolvableDist<'a> {
     }
 
     /// Return the [`DistRequiresPython`] to use during installation.
-    pub fn installation_python(&self) -> &DistRequiresPython {
+    pub fn for_installation(&self) -> &DistRequiresPython {
         match *self {
             ResolvableDist::SourceDist(sdist, _) => sdist,
             ResolvableDist::CompatibleWheel(wheel, _, _) => wheel,

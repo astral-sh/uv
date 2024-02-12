@@ -17,7 +17,7 @@ impl FilePins {
     pub(crate) fn insert(&mut self, candidate: &Candidate) {
         self.0.entry(candidate.name().clone()).or_default().insert(
             candidate.version().clone(),
-            candidate.install().dist.clone(),
+            candidate.installation_dist().dist.clone(),
         );
     }
 

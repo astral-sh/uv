@@ -248,13 +248,13 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the [`DistFile`] to use when resolving the package.
-    pub(crate) fn resolve(&self) -> &DistRequiresPython {
-        self.dist.resolution_python()
+    pub(crate) fn resolution_dist(&self) -> &DistRequiresPython {
+        self.dist.for_resolution()
     }
 
     /// Return the [`DistFile`] to use when installing the package.
-    pub(crate) fn install(&self) -> &DistRequiresPython {
-        self.dist.installation_python()
+    pub(crate) fn installation_dist(&self) -> &DistRequiresPython {
+        self.dist.for_installation()
     }
 
     /// If the candidate doesn't match the given Python requirement, return the version specifiers.
@@ -263,7 +263,7 @@ impl<'a> Candidate<'a> {
         requirement: &PythonRequirement,
     ) -> Option<&VersionSpecifiers> {
         // Validate the _installed_ file.
-        let requires_python = self.install().requires_python.as_ref()?;
+        let requires_python = self.installation_dist().requires_python.as_ref()?;
 
         // If the candidate doesn't support the target Python version, return the failing version
         // specifiers.
@@ -273,20 +273,20 @@ impl<'a> Candidate<'a> {
 
         // If the candidate is a source distribution, and doesn't support the installed Python
         // version, return the failing version specifiers, since we won't be able to build it.
-        if matches!(self.install().dist, Dist::Source(_)) {
+        if matches!(self.installation_dist().dist, Dist::Source(_)) {
             if !requires_python.contains(requirement.installed()) {
                 return Some(requires_python);
             }
         }
 
         // Validate the resolved file.
-        let requires_python = self.resolve().requires_python.as_ref()?;
+        let requires_python = self.resolution_dist().requires_python.as_ref()?;
 
         // If the candidate is a source distribution, and doesn't support the installed Python
         // version, return the failing version specifiers, since we won't be able to build it.
         // This isn't strictly necessary, since if `self.resolve()` is a source distribution, it
         // should be the same file as `self.install()` (validated above).
-        if matches!(self.resolve().dist, Dist::Source(_)) {
+        if matches!(self.resolution_dist().dist, Dist::Source(_)) {
             if !requires_python.contains(requirement.installed()) {
                 return Some(requires_python);
             }

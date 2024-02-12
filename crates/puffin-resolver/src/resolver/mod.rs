@@ -697,7 +697,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         extra,
                         candidate.version(),
                         candidate
-                            .resolve()
+                            .resolution_dist()
                             .dist
                             .filename()
                             .unwrap_or("unknown filename")
@@ -708,7 +708,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         candidate.name(),
                         candidate.version(),
                         candidate
-                            .resolve()
+                            .resolution_dist()
                             .dist
                             .filename()
                             .unwrap_or("unknown filename")
@@ -723,7 +723,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = candidate.resolve().dist.clone();
+                    let dist = candidate.resolution_dist().dist.clone();
                     request_sink.send(Request::Dist(dist)).await?;
                 }
 
@@ -1018,7 +1018,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = candidate.resolve().dist.clone();
+                    let dist = candidate.resolution_dist().dist.clone();
 
                     let (metadata, precise) = self
                         .provider
