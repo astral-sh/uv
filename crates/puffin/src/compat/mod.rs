@@ -3,6 +3,10 @@ use clap::{Args, ValueEnum};
 
 use puffin_warnings::warn_user;
 
+pub(crate) trait CompatArgs {
+    fn validate(&self) -> Result<()>;
+}
+
 /// Arguments for `pip-compile` compatibility.
 ///
 /// These represent a subset of the `pip-compile` interface that Puffin supports by default.
@@ -84,13 +88,13 @@ pub(crate) struct PipCompileCompatArgs {
     pip_args: Option<String>,
 }
 
-impl PipCompileCompatArgs {
+impl CompatArgs for PipCompileCompatArgs {
     /// Validate the arguments passed for `pip-compile` compatibility.
     ///
     /// This method will warn when an argument is passed that has no effect but matches Puffin's
     /// behavior. If an argument is passed that does _not_ match Puffin's behavior (e.g.,
     /// `--no-build-isolation`), this method will return an error.
-    pub(crate) fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.allow_unsafe {
             warn_user!(
                 "pip-compile's `--allow-unsafe` has no effect (Puffin can safely pin `pip` and other packages)."
@@ -281,13 +285,13 @@ pub(crate) struct PipSyncCompatArgs {
     pip_args: Option<String>,
 }
 
-impl PipSyncCompatArgs {
+impl CompatArgs for PipSyncCompatArgs {
     /// Validate the arguments passed for `pip-sync` compatibility.
     ///
     /// This method will warn when an argument is passed that has no effect but matches Puffin's
     /// behavior. If an argument is passed that does _not_ match Puffin's behavior, this method will
     /// return an error.
-    pub(crate) fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.ask {
             return Err(anyhow!(
                 "pip-sync's `--ask` is unsupported (Puffin never asks for confirmation)."
@@ -348,4 +352,65 @@ enum Resolver {
 enum AnnotationStyle {
     Line,
     Split,
+}
+
+/// Arguments for `venv` compatibility.
+///
+/// These represent a subset of the `virtualenv` interface that Puffin supports by default.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct VenvCompatArgs {
+    #[clap(long, hide = true)]
+    clear: bool,
+
+    #[clap(long, hide = true)]
+    no_seed: bool,
+
+    #[clap(long, hide = true)]
+    no_pip: bool,
+
+    #[clap(long, hide = true)]
+    no_setuptools: bool,
+
+    #[clap(long, hide = true)]
+    no_wheel: bool,
+}
+
+impl CompatArgs for VenvCompatArgs {
+    /// Validate the arguments passed for `venv` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches Puffin's
+    /// behavior. If an argument is passed that does _not_ match Puffin's behavior, this method will
+    /// return an error.
+    fn validate(&self) -> Result<()> {
+        if self.clear {
+            warn_user!(
+                "virtualenv's `--clear` has no effect (Puffin always clears the virtual environment)."
+            );
+        }
+
+        if self.no_seed {
+            warn_user!(
+                "virtualenv's `--no-seed` has no effect (Puffin omits seed packages by default)."
+            );
+        }
+
+        if self.no_pip {
+            warn_user!("virtualenv's `--no-pip` has no effect (Puffin omits `pip` by default).");
+        }
+
+        if self.no_setuptools {
+            warn_user!(
+                "virtualenv's `--no-setuptools` has no effect (Puffin omits `setuptools` by default)."
+            );
+        }
+
+        if self.no_wheel {
+            warn_user!(
+                "virtualenv's `--no-wheel` has no effect (Puffin omits `wheel` by default)."
+            );
+        }
+
+        Ok(())
+    }
 }
