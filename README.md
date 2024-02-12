@@ -24,8 +24,8 @@ Puffin is backed by [Astral](https://astral.sh), the creators of [Ruff](https://
 - 🤝 Support for a wide range of advanced `pip` features, including: editable installs, Git
   dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
   HTML and JSON indexes, and more.
-- 🧰 Novel resolution features such as override of transitive dependency versions and a lowest
-  compatible version resolution strategy.
+- 🧰 Novel features such as [dependency version overrides](#dependency-overrides] and
+   [alternative resolution strategies](#resolution-strategy).
 - ⁉️ Best-in-class error messages with a conflict-tracking resolver.
 
 ## Getting Started
