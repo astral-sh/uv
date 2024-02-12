@@ -18,6 +18,7 @@ fn create_venv() -> Result<()> {
     let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
+    // Create a virtual environment at `.venv`.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
     let filters = &[
         (
@@ -35,6 +36,39 @@ fn create_venv() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin.clone())
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python [VERSION] interpreter at [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    "###
+    );
+
+    venv.assert(predicates::path::is_dir());
+
+    // Create a virtual environment at the same location, which should replace it.
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filters = &[
+        (
+            r"Using Python 3\.\d+\.\d+ interpreter at .+",
+            "Using Python [VERSION] interpreter at [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+    ];
+    puffin_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -75,6 +109,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -117,6 +152,7 @@ fn seed() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -154,6 +190,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir);
     if cfg!(windows) {
@@ -208,6 +245,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
@@ -248,6 +286,7 @@ fn create_venv_python_patch() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -261,6 +300,146 @@ fn create_venv_python_patch() -> Result<()> {
     );
 
     venv.assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
+fn file_exists() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+
+    // Create a file at `.venv`. Creating a virtualenv at the same path should fail.
+    venv.touch()?;
+
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filters = &[
+        (
+            r"Using Python 3\.\d+\.\d+ interpreter at .+",
+            "Using Python [VERSION] interpreter at [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+    ];
+    puffin_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python [VERSION] interpreter at [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    puffin::venv::creation
+
+      × Failed to create virtualenv
+      ╰─▶ File exists at `/home/ferris/project/.venv`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn empty_dir_exists() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+
+    // Create an empty directory at `.venv`. Creating a virtualenv at the same path should succeed.
+    venv.create_dir_all()?;
+
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filters = &[
+        (
+            r"Using Python 3\.\d+\.\d+ interpreter at .+",
+            "Using Python [VERSION] interpreter at [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+    ];
+    puffin_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python [VERSION] interpreter at [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    "###
+    );
+
+    venv.assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
+fn non_empty_dir_exists() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+
+    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail.
+    venv.create_dir_all()?;
+    venv.child("file").touch()?;
+
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filters = &[
+        (
+            r"Using Python 3\.\d+\.\d+ interpreter at .+",
+            "Using Python [VERSION] interpreter at [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+    ];
+    puffin_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_NO_WRAP", "1")
+        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .current_dir(&temp_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python [VERSION] interpreter at [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    puffin::venv::creation
+
+      × Failed to create virtualenv
+      ╰─▶ The directory `/home/ferris/project/.venv` exists, but it's not a virtualenv
+    "###
+    );
 
     Ok(())
 }
