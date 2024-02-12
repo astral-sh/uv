@@ -814,7 +814,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             return Ok(Dependencies::Available(constraints));
                         }
                         UnavailableVersion::Yanked(_) => {
-                            // It's okay to retrieve dependencies from "allowed" yanked packages
+                            // It's okay to retrieve dependencies from yanked packages,
+                            // but we should only do so for "allowed" yanks
+                            debug_assert!(
+                                self.allowed_yanks.allowed(package_name, version),
+                                "Dependencies should not need to be retrieved for disallowed yanked versions"
+                            );
                         }
                     }
                 }
