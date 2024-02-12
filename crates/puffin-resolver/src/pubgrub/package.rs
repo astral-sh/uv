@@ -105,6 +105,6 @@ impl std::fmt::Display for PubGrubPackage {
 
 impl PubGrubPackage {
     pub fn package_id(&self, version: &Version) -> PackageId {
-        PackageId::new(format!("{}=={}", self, version))
+        PackageId::new(format!("{self}=={version}"))
     }
 }

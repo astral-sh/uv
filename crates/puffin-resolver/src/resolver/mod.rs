@@ -671,7 +671,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 if candidate.yanked().is_yanked() {
                     if self
                         .allowed_yanks
-                        .allowed(package_name, &candidate.version())
+                        .allowed(package_name, candidate.version())
                     {
                         warn!("Allowing yanked version: {}", candidate.package_id());
                     } else {
@@ -1009,7 +1009,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 };
 
                 // If the version is incompatible, short-circuit.
-                if let Some(_) = candidate.validate_python(&self.python_requirement) {
+                if candidate
+                    .validate_python(&self.python_requirement)
+                    .is_some()
+                {
                     return Ok(None);
                 }
 
