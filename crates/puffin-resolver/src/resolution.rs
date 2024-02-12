@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
@@ -255,22 +256,70 @@ impl<'a> DisplayResolutionGraph<'a> {
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Collect and sort all packages.
+        #[derive(Debug)]
+        enum Node<'a> {
+            /// A node linked to an editable distribution.
+            Editable(&'a PackageName, &'a LocalEditable),
+            /// A node linked to a non-editable distribution.
+            Distribution(&'a PackageName, &'a Dist),
+        }
+
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+        enum NodeKey<'a> {
+            /// A node linked to an editable distribution, sorted by verbatim representation.
+            Editable(Cow<'a, str>),
+            /// A node linked to a non-editable distribution, sorted by package name.
+            Distribution(&'a PackageName),
+        }
+
+        impl<'a> Node<'a> {
+            /// Return the name of the package.
+            fn name(&self) -> &'a PackageName {
+                match self {
+                    Node::Editable(name, _) => name,
+                    Node::Distribution(name, _) => name,
+                }
+            }
+
+            /// Return a comparable key for the node.
+            fn key(&self) -> NodeKey<'a> {
+                match self {
+                    Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
+                    Node::Distribution(name, _) => NodeKey::Distribution(name),
+                }
+            }
+        }
+
+        // Collect all packages.
         let mut nodes = self
             .resolution
             .petgraph
             .node_indices()
-            .map(|node| (node, &self.resolution.petgraph[node]))
+            .map(|index| {
+                let dist = &self.resolution.petgraph[index];
+                let name = dist.name();
+                let node = if let Some((editable, _)) = self.resolution.editables.get(name) {
+                    Node::Editable(name, editable)
+                } else {
+                    Node::Distribution(name, dist)
+                };
+                (index, node)
+            })
             .collect::<Vec<_>>();
-        nodes.sort_unstable_by_key(|(_, package)| package.name());
+
+        // Sort the nodes by name, but with editable packages first.
+        nodes.sort_unstable_by_key(|(index, node)| (node.key(), *index));
 
         // Print out the dependency graph.
-        for (index, dist) in nodes {
+        for (index, node) in nodes {
             // Display the node itself.
-            if let Some((editable, _)) = self.resolution.editables.get(dist.name()) {
-                write!(f, "-e {}", editable.verbatim())?;
-            } else {
-                write!(f, "{}", dist.verbatim())?;
+            match node {
+                Node::Distribution(_, dist) => {
+                    write!(f, "{}", dist.verbatim())?;
+                }
+                Node::Editable(_, editable) => {
+                    write!(f, "-e {}", editable.verbatim())?;
+                }
             }
 
             // Display the distribution hashes, if any.
@@ -278,7 +327,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 if let Some(hashes) = self
                     .resolution
                     .hashes
-                    .get(dist.name())
+                    .get(node.name())
                     .filter(|hashes| !hashes.is_empty())
                 {
                     for hash in hashes {
