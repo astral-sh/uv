@@ -14,7 +14,6 @@ use puffin_warnings::warn_user_once;
 use pypi_types::{Hashes, Yanked};
 
 use crate::python_requirement::PythonRequirement;
-use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default, Clone)]
@@ -30,7 +29,6 @@ impl VersionMap {
         index: &IndexUrl,
         tags: &Tags,
         python_requirement: &PythonRequirement,
-        allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
         mut flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
@@ -80,14 +78,14 @@ impl VersionMap {
                     }
                 }
 
-                // When resolving, exclude yanked files.
-                if file.yanked.as_ref().is_some_and(Yanked::is_yanked) {
-                    if allowed_yanks.allowed(package_name, &version) {
-                        warn!("Allowing yanked version: {}", file.filename);
-                    } else {
-                        continue;
-                    }
-                }
+                // It is possible for files to have a different yank status per the specification but
+                // in practice this should not ever happen. If any file is yanked, the version
+                // will be marked as yanked.
+                let yanked = if let Some(ref yanked) = file.yanked {
+                    yanked.clone()
+                } else {
+                    Yanked::Bool(false)
+                };
 
                 // Prioritize amongst all available files.
                 let requires_python = file.requires_python.clone();
@@ -113,7 +111,13 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        priority_dist.insert_built(dist, requires_python, Some(hash), priority);
+                        priority_dist.insert_built(
+                            dist,
+                            requires_python,
+                            Some(hash),
+                            priority,
+                            yanked,
+                        );
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let dist = Dist::from_registry(
@@ -121,7 +125,7 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        priority_dist.insert_source(dist, requires_python, Some(hash));
+                        priority_dist.insert_source(dist, requires_python, Some(hash), yanked);
                     }
                 }
             }

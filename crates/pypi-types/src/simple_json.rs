@@ -108,6 +108,12 @@ impl Yanked {
     }
 }
 
+impl Default for Yanked {
+    fn default() -> Self {
+        Self::Bool(false)
+    }
+}
+
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client, we

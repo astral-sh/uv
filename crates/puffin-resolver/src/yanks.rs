@@ -7,7 +7,7 @@ use puffin_normalize::PackageName;
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
 #[derive(Debug, Default)]
-pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
+pub(crate) struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 
 impl AllowedYanks {
     /// Returns `true` if the given package version is allowed, even if it's marked as yanked by

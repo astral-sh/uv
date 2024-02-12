@@ -1,4 +1,5 @@
 use pubgrub::range::Range;
+use pypi_types::Yanked;
 use rustc_hash::FxHashMap;
 
 use distribution_types::{Dist, DistributionMetadata, Name};
@@ -248,16 +249,19 @@ impl<'a> Candidate<'a> {
 
     /// Return the [`DistFile`] to use when resolving the package.
     pub(crate) fn resolve(&self) -> &DistRequiresPython {
-        self.dist.resolve()
+        self.dist.resolution_python()
     }
 
     /// Return the [`DistFile`] to use when installing the package.
     pub(crate) fn install(&self) -> &DistRequiresPython {
-        self.dist.install()
+        self.dist.installation_python()
     }
 
-    /// If the candidate doesn't match the given requirement, return the version specifiers.
-    pub(crate) fn validate(&self, requirement: &PythonRequirement) -> Option<&VersionSpecifiers> {
+    /// If the candidate doesn't match the given Python requirement, return the version specifiers.
+    pub(crate) fn validate_python(
+        &self,
+        requirement: &PythonRequirement,
+    ) -> Option<&VersionSpecifiers> {
         // Validate the _installed_ file.
         let requires_python = self.install().requires_python.as_ref()?;
 
@@ -289,6 +293,10 @@ impl<'a> Candidate<'a> {
         }
 
         None
+    }
+
+    pub(crate) fn yanked(&self) -> &Yanked {
+        return self.dist.yanked();
     }
 }
 
